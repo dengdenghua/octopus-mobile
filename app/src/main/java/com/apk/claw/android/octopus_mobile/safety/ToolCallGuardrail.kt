@@ -123,6 +123,10 @@ class ToolCallGuardrailController(
             return handleFailure(sig, toolName, result)
         }
 
+        // 成功调用 → 清除该签名/工具的历史失败计数（一次成功即打断失败连击）
+        exactFailureCounts.remove(sig)
+        sameToolFailureCounts.remove(toolName)
+
         // 预检查：若相同签名已多次失败，本次调用应被阻止（防止死循环重试）
         val priorExactCount = exactFailureCounts[sig] ?: 0
         if (config.hardStopEnabled && priorExactCount >= config.exactFailureBlockAfter) {

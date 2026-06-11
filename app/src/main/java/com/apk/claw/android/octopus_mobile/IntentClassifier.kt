@@ -40,7 +40,7 @@ object IntentClassifier {
         "网址", "url", "链接", "页面", "网页版", "web版", "web版",
         "搜索网页", "网页搜索", "网上", "上网", "浏览网页",
         "chrome", "firefox", "gecko", "webview", "web视图",
-        "html", "dom", "css", "javascript", "js执行",
+        "html", "dom", "css", "javascript", "js执行", "执行js",
         "截图网页", "网页截图", "保存网页", "下载网页",
         // 英文
         "webpage", "website", "browser", "open url", "visit url", "go to url",
