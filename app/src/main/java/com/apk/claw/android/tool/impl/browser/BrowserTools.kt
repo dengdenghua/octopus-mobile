@@ -51,7 +51,7 @@ class GetDomTool(
 
     override fun execute(params: Map<String, Any>): ToolResult {
         val selector = optionalString(params, "selector", "body")
-        val attribute = optionalString(params, "selector", "innerText")
+        val attribute = optionalString(params, "attribute", "innerText")
 
         var result: String? = null
         var completed = false

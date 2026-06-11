@@ -72,6 +72,42 @@ class ToolCallGuardrailController(
         totalCalls = 0
     }
 
+    // ── 执行前只读预检 ────────────────────────────────
+
+    /**
+     * 执行前预检：若该调用的历史失败已达硬停阈值，则返回 BLOCK/HALT。
+     *
+     * 与 [observe] 的区别：**只读，不修改任何计数**。供 ToolRegistry 在执行前调用，
+     * 避免「预检 + 结果观察」对同一次调用重复计数（尤其是幂等工具的 no-progress 计数）。
+     */
+    fun precheck(toolName: String, args: Map<String, Any>? = null): GuardrailDecision {
+        val sig = ToolCallSignature.fromCall(toolName, args)
+
+        val priorExactCount = exactFailureCounts[sig] ?: 0
+        if (config.hardStopEnabled && priorExactCount >= config.exactFailureBlockAfter) {
+            Log.w(TAG, "PRE-BLOCK: $toolName exact same call failed ${priorExactCount}x previously")
+            onBlock?.invoke(toolName, "exact_failure_block: ${priorExactCount}x")
+            return GuardrailDecision(
+                action = GuardrailAction.BLOCK,
+                code = "exact_failure_block",
+                message = "完全相同的调用失败了 ${priorExactCount} 次，已阻止以防止死循环",
+                toolName = toolName, count = priorExactCount, signature = sig,
+            )
+        }
+        val priorSameCount = sameToolFailureCounts[toolName] ?: 0
+        if (config.hardStopEnabled && priorSameCount >= config.sameToolFailureHaltAfter) {
+            Log.w(TAG, "PRE-HALT: $toolName failed ${priorSameCount}x total previously")
+            onBlock?.invoke(toolName, "same_tool_halt: ${priorSameCount}x")
+            return GuardrailDecision(
+                action = GuardrailAction.HALT,
+                code = "same_tool_halt",
+                message = "工具 '$toolName' 已失败 ${priorSameCount} 次，暂停执行",
+                toolName = toolName, count = priorSameCount, signature = sig,
+            )
+        }
+        return GuardrailDecision(action = GuardrailAction.ALLOW, toolName = toolName)
+    }
+
     // ── 核心：观察一次工具调用 ────────────────────────
 
     fun observe(

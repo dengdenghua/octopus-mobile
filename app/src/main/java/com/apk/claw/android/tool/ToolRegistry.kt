@@ -185,8 +185,8 @@ object ToolRegistry {
             }
         }
 
-        // ── 护栏检查（重复失败 / 无进展）──
-        val preCheck = guardrail.observe(name, params, failed = false)
+        // ── 护栏预检（只读，重复失败 / 同工具失败达阈值则拦截）──
+        val preCheck = guardrail.precheck(name, params)
         if (preCheck.shouldHalt) {
             eventBus?.publish(EventBus.ToolBlockedEvent(name, preCheck.message, "guardrail"))
             return ToolResult.error("护栏拦截: ${preCheck.message}")
@@ -199,20 +199,23 @@ object ToolRegistry {
             ToolResult.error("Tool execution failed: ${e.message}")
         }
 
-        // ── 护栏观察结果 ──
-        if (!result.isSuccess) {
+        // ── 护栏观察结果（每次调用只在此处记录一次，避免重复计数）──
+        val finalResult: ToolResult = if (!result.isSuccess) {
             val failCheck = guardrail.observe(name, params, result.data ?: result.error, failed = true)
             if (failCheck.action == GuardrailAction.WARN) {
-                // 警告但不阻止，附加到结果
-                return ToolResult.success("${result.error} [⚠️ ${failCheck.message}]")
+                // 警告但不阻止后续执行：保持失败语义，仅把警告附加到错误信息
+                ToolResult.error("${result.error} [⚠️ ${failCheck.message}]")
+            } else {
+                result
             }
         } else {
             guardrail.observe(name, params, result.data, failed = false)
+            result
         }
 
-        // ── 自进化打分 ──
-        turnScorer?.record(name, success = result.isSuccess, reason = result.data ?: result.error ?: "")
+        // ── 自进化打分（无论是否 WARN 都记录）──
+        turnScorer?.record(name, success = finalResult.isSuccess, reason = finalResult.data ?: finalResult.error ?: "")
 
-        return result
+        return finalResult
     }
 }
