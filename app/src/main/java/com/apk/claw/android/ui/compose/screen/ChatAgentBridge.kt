@@ -5,6 +5,7 @@ import android.os.Looper
 import com.apk.claw.android.agent.AgentCallback
 import com.apk.claw.android.agent.AgentConfig
 import com.apk.claw.android.agent.DefaultAgentService
+import com.apk.claw.android.tool.ToolRegistry
 import com.apk.claw.android.tool.ToolResult
 import com.apk.claw.android.utils.KVUtils
 
@@ -33,7 +34,7 @@ object ChatAgentBridge {
 
     private fun buildConfig(): AgentConfig {
         var baseUrl = KVUtils.getLlmBaseUrl().trim()
-        if (baseUrl.isEmpty()) baseUrl = "https://api.openai.com/v1"
+        if (baseUrl.isEmpty()) baseUrl = "https://api.deepseek.com/v1"
         return AgentConfig.Builder()
             .apiKey(KVUtils.getLlmApiKey())
             .baseUrl(baseUrl)
@@ -73,7 +74,9 @@ object ChatAgentBridge {
                 round: Int, toolId: String, toolName: String, parameters: String, result: ToolResult
             ) {
                 val summary = if (result.isSuccess) "✓ " + (result.data ?: "") else "✗ " + (result.error ?: "")
-                main.post { onTool("🔧", toolName, parameters, summary.take(48)) }
+                val icon = iconFor(toolName)
+                val friendly = ToolRegistry.getInstance().getDisplayName(toolName)
+                main.post { onTool(icon, friendly, parameters, summary.take(48)) }
             }
 
             override fun onComplete(round: Int, finalAnswer: String, totalTokens: Int) {
@@ -88,5 +91,27 @@ object ChatAgentBridge {
                 main.post { onError("检测到系统弹窗，已暂停（需手动处理）") }
             }
         })
+    }
+
+    /** 工具名 → 直观图标(未命中用通用扳手)。 */
+    private fun iconFor(tool: String): String = when {
+        tool.contains("screenshot") -> "📸"
+        tool.contains("screen") || tool.contains("window") || tool.contains("node") || tool.contains("find") -> "🔍"
+        tool.startsWith("tap") || tool.contains("click") -> "👆"
+        tool.contains("long_press") -> "✊"
+        tool.contains("swipe") || tool.contains("scroll") -> "👋"
+        tool.contains("input") || tool.contains("text") -> "⌨️"
+        tool.contains("installed_apps") || tool.contains("usage") -> "📋"
+        tool.contains("open_app") || tool.contains("launch") || tool.contains("store") -> "📱"
+        tool.contains("home") -> "🏠"
+        tool.contains("back") -> "↩️"
+        tool.contains("key") || tool.contains("recent") -> "⎋"
+        tool.contains("browser") || tool.contains("navigate") -> "🌐"
+        tool.contains("sms") || tool.contains("send") || tool.contains("file") -> "📤"
+        tool.contains("calendar") -> "📅"
+        tool.contains("clipboard") -> "📋"
+        tool.contains("wait") -> "⏳"
+        tool.contains("finish") -> "✅"
+        else -> "🔧"
     }
 }

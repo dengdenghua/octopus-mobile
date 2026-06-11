@@ -129,7 +129,7 @@
     <string name="llm_config_api_key">API Key</string>
     <string name="llm_config_api_key_hint">例: sk-xxx（OpenAI）またはプロバイダーのKey</string>
     <string name="llm_config_base_url">Base URL</string>
-    <string name="llm_config_base_url_hint">例: https://api.openai.com/v1（空欄の場合はOpenAIデフォルト）</string>
+    <string name="llm_config_base_url_hint">例: https://api.deepseek.com/v1（空欄の場合はDeepSeekデフォルト）</string>
     <string name="llm_config_model_name">モデル名</string>
     <string name="llm_config_model_name_hint">例: gpt-4o、gpt-4o-mini、claude-3-5-sonnet</string>
     <string name="llm_config_saved">LLM設定を保存しました</string>

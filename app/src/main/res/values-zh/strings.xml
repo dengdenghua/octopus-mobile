@@ -144,7 +144,7 @@
     <string name="llm_config_api_key">API Key</string>
     <string name="llm_config_api_key_hint">如 sk-xxx（OpenAI）或其它服务商的 Key</string>
     <string name="llm_config_base_url">Base URL</string>
-    <string name="llm_config_base_url_hint">如 https://api.openai.com/v1（留空则使用 OpenAI 默认）</string>
+    <string name="llm_config_base_url_hint">如 https://api.deepseek.com/v1（留空则使用 DeepSeek 默认）</string>
     <string name="llm_config_model_name">模型名称</string>
     <string name="llm_config_model_name_hint">如 gpt-4o、gpt-4o-mini、claude-3-5-sonnet</string>
     <string name="llm_config_saved">LLM 配置已保存</string>

@@ -102,7 +102,7 @@ class AppViewModel : ViewModel() {
 
     fun getAgentConfig(): AgentConfig {
         var baseUrl = KVUtils.getLlmBaseUrl().trim()
-        if (baseUrl.isEmpty()) baseUrl = "https://api.openai.com/v1"
+        if (baseUrl.isEmpty()) baseUrl = "https://api.deepseek.com/v1"
         // 从 LessonStore 注入已有教训到 dynamicPromptSuffix
         val promptSuffix = lessonStore?.buildPromptSection() ?: ""
         // 从 MemoryStore 注入跨会话记忆到 memoryPromptSuffix
@@ -110,7 +110,7 @@ class AppViewModel : ViewModel() {
         return AgentConfig.Builder()
             .apiKey(KVUtils.getLlmApiKey())
             .baseUrl(baseUrl)
-            .modelName(KVUtils.getLlmModelName())
+            .modelName(KVUtils.getLlmModelName().ifBlank { "deepseek-chat" })
             .temperature(0.1)
             .maxIterations(60)
             .dynamicPromptSuffix(promptSuffix)

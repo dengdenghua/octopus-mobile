@@ -144,7 +144,7 @@ For these, install Shizuku — a safe, open-source helper.</string>
     <string name="llm_config_api_key">API Key</string>
     <string name="llm_config_api_key_hint">e.g. sk-xxx (OpenAI) or your provider key</string>
     <string name="llm_config_base_url">Base URL</string>
-    <string name="llm_config_base_url_hint">e.g. https://api.openai.com/v1 (leave empty for OpenAI default)</string>
+    <string name="llm_config_base_url_hint">e.g. https://api.deepseek.com/v1 (leave empty for DeepSeek default)</string>
     <string name="llm_config_model_name">Model Name</string>
     <string name="llm_config_model_name_hint">e.g. gpt-4o, gpt-4o-mini, claude-3-5-sonnet</string>
     <string name="llm_config_saved">LLM configuration saved</string>
