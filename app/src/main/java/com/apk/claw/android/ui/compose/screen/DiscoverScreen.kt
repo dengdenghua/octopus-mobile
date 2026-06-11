@@ -14,10 +14,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.apk.claw.android.R
 
 // 颜色常量
 private val PrimaryColor = Color(0xFF6C5CE7)
@@ -66,7 +68,7 @@ fun DiscoverScreen() {
             value = searchText,
             onValueChange = { searchText = it },
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("搜索或输入指令...", color = TextMuted) },
+            placeholder = { Text(stringResource(R.string.discover_search_hint), color = TextMuted) },
             leadingIcon = { Icon(Icons.Default.Search, null, tint = TextMuted) },
             trailingIcon = {
                 // 发送按钮
@@ -97,14 +99,14 @@ fun DiscoverScreen() {
 
         // 快捷入口 4x2 网格
         val shortcuts = listOf(
-            "🌐" to "浏览器",
-            "☁️" to "网盘",
-            "🎬" to "视频",
-            "🧩" to "插件",
-            "🖥" to "投屏",
-            "📱" to "多窗口",
-            "💾" to "记忆",
-            "🧬" to "自进化",
+            "🌐" to stringResource(R.string.discover_shortcut_browser),
+            "☁️" to stringResource(R.string.discover_shortcut_clouddrive),
+            "🎬" to stringResource(R.string.discover_shortcut_video),
+            "🧩" to stringResource(R.string.discover_shortcut_plugin),
+            "🖥" to stringResource(R.string.discover_shortcut_cast),
+            "📱" to stringResource(R.string.discover_shortcut_multiwindow),
+            "💾" to stringResource(R.string.discover_shortcut_memory),
+            "🧬" to stringResource(R.string.discover_shortcut_evolution),
         )
 
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -126,7 +128,11 @@ fun DiscoverScreen() {
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            listOf("🌤 查天气" to "智能", "📦 整理网盘" to "效率", "▶️ 继续看剧" to "推荐").forEach { (text, tag) ->
+            listOf(
+                stringResource(R.string.discover_suggest_weather) to "smart",
+                stringResource(R.string.discover_suggest_organize) to "efficiency",
+                stringResource(R.string.discover_suggest_resume) to "recommended",
+            ).forEach { (text, tag) ->
                 SuggestionChip(text, tag)
             }
         }
@@ -140,9 +146,9 @@ fun DiscoverScreen() {
         ) {
             Text("🧬 82%", color = TextMuted, fontSize = 10.sp)
             Spacer(modifier = Modifier.width(16.dp))
-            Text("💾 5 条记忆", color = TextMuted, fontSize = 10.sp)
+            Text(stringResource(R.string.discover_status_memory), color = TextMuted, fontSize = 10.sp)
             Spacer(modifier = Modifier.width(16.dp))
-            Text("🔔 2 条规则", color = TextMuted, fontSize = 10.sp)
+            Text(stringResource(R.string.discover_status_rules), color = TextMuted, fontSize = 10.sp)
         }
         Spacer(modifier = Modifier.height(16.dp))
     }

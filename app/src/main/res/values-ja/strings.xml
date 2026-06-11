@@ -239,4 +239,20 @@
     <string name="input_dialog_need_more">%d文字以上入力してください</string>
     <string name="input_dialog_need_less">%d文字以内で入力してください</string>
     <string name="input_dialog_no_zero">ゼロ以外の値を入力してください</string>
+
+    <!-- DiscoverScreen (Compose) -->
+    <string name="discover_search_hint">検索またはコマンドを入力…</string>
+    <string name="discover_shortcut_browser">ブラウザ</string>
+    <string name="discover_shortcut_clouddrive">クラウド</string>
+    <string name="discover_shortcut_video">ビデオ</string>
+    <string name="discover_shortcut_plugin">プラグイン</string>
+    <string name="discover_shortcut_cast">画面投影</string>
+    <string name="discover_shortcut_multiwindow">マルチウィンドウ</string>
+    <string name="discover_shortcut_memory">メモリ</string>
+    <string name="discover_shortcut_evolution">自己進化</string>
+    <string name="discover_suggest_weather">🌤 天気</string>
+    <string name="discover_suggest_organize">📦 ドライブ整理</string>
+    <string name="discover_suggest_resume">▶️ 視聴を再開</string>
+    <string name="discover_status_memory">💾 記憶 5 件</string>
+    <string name="discover_status_rules">🔔 ルール 2 件</string>
 </resources>

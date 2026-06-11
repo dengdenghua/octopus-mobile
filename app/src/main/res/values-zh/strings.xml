@@ -274,4 +274,20 @@
     <string name="input_dialog_need_more">至少输入%d个字符</string>
     <string name="input_dialog_need_less">最多输入%d个字符</string>
     <string name="input_dialog_no_zero">请输入非零数值</string>
+
+    <!-- DiscoverScreen (Compose) -->
+    <string name="discover_search_hint">搜索或输入指令...</string>
+    <string name="discover_shortcut_browser">浏览器</string>
+    <string name="discover_shortcut_clouddrive">网盘</string>
+    <string name="discover_shortcut_video">视频</string>
+    <string name="discover_shortcut_plugin">插件</string>
+    <string name="discover_shortcut_cast">投屏</string>
+    <string name="discover_shortcut_multiwindow">多窗口</string>
+    <string name="discover_shortcut_memory">记忆</string>
+    <string name="discover_shortcut_evolution">自进化</string>
+    <string name="discover_suggest_weather">🌤 查天气</string>
+    <string name="discover_suggest_organize">📦 整理网盘</string>
+    <string name="discover_suggest_resume">▶️ 继续看剧</string>
+    <string name="discover_status_memory">💾 5 条记忆</string>
+    <string name="discover_status_rules">🔔 2 条规则</string>
 </resources>

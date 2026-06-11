@@ -279,4 +279,20 @@ For these, install Shizuku — a safe, open-source helper.</string>
     <string name="input_dialog_need_more">Enter at least %d characters</string>
     <string name="input_dialog_need_less">Enter at most %d characters</string>
     <string name="input_dialog_no_zero">Please enter a non-zero value</string>
+
+    <!-- DiscoverScreen (Compose) -->
+    <string name="discover_search_hint">Search or enter a command…</string>
+    <string name="discover_shortcut_browser">Browser</string>
+    <string name="discover_shortcut_clouddrive">Cloud Drive</string>
+    <string name="discover_shortcut_video">Video</string>
+    <string name="discover_shortcut_plugin">Plugins</string>
+    <string name="discover_shortcut_cast">Screen Cast</string>
+    <string name="discover_shortcut_multiwindow">Multi-Window</string>
+    <string name="discover_shortcut_memory">Memory</string>
+    <string name="discover_shortcut_evolution">Self-Evolution</string>
+    <string name="discover_suggest_weather">🌤 Weather</string>
+    <string name="discover_suggest_organize">📦 Organize Drive</string>
+    <string name="discover_suggest_resume">▶️ Continue Watching</string>
+    <string name="discover_status_memory">💾 5 memories</string>
+    <string name="discover_status_rules">🔔 2 rules</string>
 </resources>
