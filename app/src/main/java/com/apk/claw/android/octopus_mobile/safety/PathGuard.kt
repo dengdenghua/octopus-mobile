@@ -111,7 +111,7 @@ object PathGuard {
 
         // 敏感路径检查
         if (!allowSensitive) {
-            val sensitiveReason = checkSensitive(resolved)
+            val sensitiveReason = checkSensitive(resolved, path)
             if (sensitiveReason != null) {
                 return PathVerdict(
                     false, path, resolved = resolved,
@@ -151,12 +151,16 @@ object PathGuard {
         return false
     }
 
-    private fun checkSensitive(resolved: String): String? {
+    private fun checkSensitive(resolved: String, raw: String = resolved): String? {
         val normalized = resolved.replace("\\", "/").lowercase()
+        val normalizedRaw = raw.replace("\\", "/").lowercase()
 
-        // 绝对路径前缀检查
+        // 绝对路径前缀检查（同时比对原始路径与规范化路径）。
+        // canonicalPath 会把 /etc 解析成 /private/etc(macOS)或 /system/etc
+        // (Android 部分系统)，只查 resolved 会漏掉 /etc/passwd 等敏感前缀。
         for (prefix in SENSITIVE_ABS_PREFIXES) {
-            if (normalized.startsWith(prefix.lowercase())) {
+            val p = prefix.lowercase()
+            if (normalized.startsWith(p) || normalizedRaw.startsWith(p)) {
                 return "sensitive_abs_path: $prefix"
             }
         }

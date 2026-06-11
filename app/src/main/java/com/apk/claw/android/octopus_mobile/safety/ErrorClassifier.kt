@@ -87,7 +87,8 @@ object ErrorClassifier {
         Regex("safety", RegexOption.IGNORE_CASE),
         Regex("policy", RegexOption.IGNORE_CASE),
         Regex("flagged", RegexOption.IGNORE_CASE),
-        Regex("refused", RegexOption.IGNORE_CASE),
+        // NOTE: 不要用裸 "refused" —— 会误吞 "ECONNREFUSED" / "connection refused"
+        // 等网络错误（应归类 NETWORK 重试，而非 CONTENT_FILTER 终止）。
         Regex("内容过滤|安全策略|被标记", RegexOption.IGNORE_CASE),
     )
 
