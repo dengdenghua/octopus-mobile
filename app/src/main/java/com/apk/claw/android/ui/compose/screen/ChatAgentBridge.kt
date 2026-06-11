@@ -28,6 +28,9 @@ object ChatAgentBridge {
     /** 是否已配置可用的 LLM（有 API Key 即认为可跑）。 */
     fun isConfigured(): Boolean = KVUtils.getLlmApiKey().isNotBlank()
 
+    /** 中断当前正在运行的任务。 */
+    fun cancel() = service.cancel()
+
     private fun buildConfig(): AgentConfig {
         var baseUrl = KVUtils.getLlmBaseUrl().trim()
         if (baseUrl.isEmpty()) baseUrl = "https://api.openai.com/v1"

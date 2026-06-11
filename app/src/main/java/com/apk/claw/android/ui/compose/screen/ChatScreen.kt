@@ -84,25 +84,32 @@ fun ChatScreen() {
 
     var inputText by remember { mutableStateOf("") }
     var remoteMode by remember { mutableStateOf(true) }
+    var isRunning by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val ackText = stringResource(R.string.chat_ack)
-    // 发送指令：追加用户消息后，若已配置 LLM 则真正驱动 Agent，否则给占位回执
+    val thinkingText = stringResource(R.string.chat_thinking)
     val scrollEnd = { scope.launch { listState.animateScrollToItem(messages.size) }; Unit }
+
+    // 发送指令：配置了 LLM 则真正驱动 Agent;运行期间显示「思考中」、发送键变停止键
     val send = {
         val t = inputText.trim()
-        if (t.isNotEmpty()) {
+        if (t.isNotEmpty() && !isRunning) {
             messages.add(ChatMessage.UserMessage(t))
             inputText = ""
             scrollEnd()
             if (ChatAgentBridge.isConfigured()) {
-                // 真实 Agent：LLM(DeepSeek/OpenAI) + 设备工具执行，结果流式回灌对话
+                isRunning = true
+                val thinking = ChatMessage.Thinking(thinkingText)
+                val showThinking = { if (!messages.contains(thinking)) { messages.add(thinking); scrollEnd() } }
+                val hideThinking = { messages.remove(thinking) }
+                showThinking()
                 ChatAgentBridge.run(
                     prompt = t,
-                    onTool = { icon, name, args, res -> messages.add(ChatMessage.ToolCall(icon, name, args, res)); scrollEnd() },
-                    onText = { txt -> messages.add(ChatMessage.AgentMessage(txt)); scrollEnd() },
-                    onDone = { ans -> messages.add(ChatMessage.AgentMessage(ans)); scrollEnd() },
-                    onError = { e -> messages.add(ChatMessage.AgentMessage("⚠️ $e")); scrollEnd() },
+                    onTool = { icon, name, args, res -> hideThinking(); messages.add(ChatMessage.ToolCall(icon, name, args, res)); showThinking() },
+                    onText = { txt -> hideThinking(); messages.add(ChatMessage.AgentMessage(txt)); showThinking() },
+                    onDone = { ans -> hideThinking(); messages.add(ChatMessage.AgentMessage(ans)); isRunning = false; scrollEnd() },
+                    onError = { e -> hideThinking(); messages.add(ChatMessage.AgentMessage("⚠️ $e")); isRunning = false; scrollEnd() },
                 )
             } else {
                 messages.add(ChatMessage.AgentMessage(ackText))
@@ -110,6 +117,7 @@ fun ChatScreen() {
             }
         }
     }
+    val stop = { ChatAgentBridge.cancel() }
 
     Column(modifier = Modifier.fillMaxSize().background(BackgroundColor)) {
         // 顶部栏
@@ -238,18 +246,20 @@ fun ChatScreen() {
                 )
                 Spacer(modifier = Modifier.width(10.dp))
                 // 发送按钮
+                // 运行中=红色停止键(可中断);否则=发送键(无输入时淡化)
+                val btnActive = isRunning || inputText.isNotBlank()
                 Box(
                     modifier = Modifier
                         .size(40.dp)
-                        // 输入为空时淡化发送键
                         .background(
-                            PrimaryColor.copy(alpha = if (inputText.isNotBlank()) 1f else 0.35f),
+                            (if (isRunning) Color(0xFFFF453B) else PrimaryColor)
+                                .copy(alpha = if (btnActive) 1f else 0.35f),
                             RoundedCornerShape(20.dp)
                         )
-                        .clickable(onClick = send),
+                        .clickable(onClick = if (isRunning) stop else send),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("➤", color = Color.White, fontSize = 16.sp)
+                    Text(if (isRunning) "■" else "➤", color = Color.White, fontSize = 16.sp)
                 }
             }
         }

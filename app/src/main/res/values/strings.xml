@@ -333,6 +333,7 @@ For these, install Shizuku — a safe, open-source helper.</string>
     <string name="chat_local">🏠 Local</string>
     <string name="chat_input_hint">Enter a command…</string>
     <string name="chat_ack">Received — running on the device…</string>
+    <string name="chat_thinking">Thinking</string>
 
     <!-- DeviceScreen (Compose) -->
     <string name="device_title">🖥 Devices</string>

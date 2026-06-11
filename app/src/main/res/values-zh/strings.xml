@@ -328,6 +328,7 @@
     <string name="chat_local">🏠 本地</string>
     <string name="chat_input_hint">输入指令...</string>
     <string name="chat_ack">收到，正在设备上执行…</string>
+    <string name="chat_thinking">思考中</string>
 
     <!-- DeviceScreen (Compose) -->
     <string name="device_title">🖥 设备</string>
