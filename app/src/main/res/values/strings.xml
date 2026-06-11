@@ -330,7 +330,9 @@ For these, install Shizuku — a safe, open-source helper.</string>
 
     <!-- ChatScreen (Compose) -->
     <string name="chat_remote">🌐 Remote</string>
+    <string name="chat_local">🏠 Local</string>
     <string name="chat_input_hint">Enter a command…</string>
+    <string name="chat_ack">Received — running on the device…</string>
 
     <!-- DeviceScreen (Compose) -->
     <string name="device_title">🖥 Devices</string>

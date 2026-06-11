@@ -6,7 +6,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -16,9 +19,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.apk.claw.android.R
+import kotlinx.coroutines.launch
 
 // 颜色
 private val PrimaryColor = Color(0xFF6C5CE7)
@@ -78,6 +83,20 @@ fun ChatScreen() {
     }
 
     var inputText by remember { mutableStateOf("") }
+    var remoteMode by remember { mutableStateOf(true) }
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    val ackText = stringResource(R.string.chat_ack)
+    // 发送指令：追加用户消息 + Agent 占位回执，清空输入并滚到底部
+    val send = {
+        val t = inputText.trim()
+        if (t.isNotEmpty()) {
+            messages.add(ChatMessage.UserMessage(t))
+            messages.add(ChatMessage.AgentMessage(ackText))
+            inputText = ""
+            scope.launch { listState.animateScrollToItem(messages.size) }
+        }
+    }
 
     Column(modifier = Modifier.fillMaxSize().background(BackgroundColor)) {
         // 顶部栏
@@ -90,10 +109,10 @@ fun ChatScreen() {
                     Surface(
                         shape = RoundedCornerShape(10.dp),
                         color = PrimaryColor.copy(alpha = 0.12f),
-                        modifier = Modifier.clickable { /* 切换模式 */ }
+                        modifier = Modifier.clickable { remoteMode = !remoteMode }
                     ) {
                         Text(
-                            stringResource(R.string.chat_remote),
+                            stringResource(if (remoteMode) R.string.chat_remote else R.string.chat_local),
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
                             fontSize = 10.sp,
                             fontWeight = FontWeight.SemiBold,
@@ -160,6 +179,7 @@ fun ChatScreen() {
 
         // 消息列表
         LazyColumn(
+            state = listState,
             modifier = Modifier.weight(1f).padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
@@ -200,6 +220,8 @@ fun ChatScreen() {
                     ),
                     singleLine = true,
                     textStyle = TextStyle(fontSize = 14.sp),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                    keyboardActions = KeyboardActions(onSend = { send() }),
                 )
                 Spacer(modifier = Modifier.width(10.dp))
                 // 发送按钮
@@ -207,7 +229,7 @@ fun ChatScreen() {
                     modifier = Modifier
                         .size(40.dp)
                         .background(PrimaryColor, RoundedCornerShape(20.dp))
-                        .clickable { /* 发送 */ },
+                        .clickable(onClick = send),
                     contentAlignment = Alignment.Center
                 ) {
                     Text("➤", color = Color.White, fontSize = 16.sp)

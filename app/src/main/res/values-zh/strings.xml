@@ -325,7 +325,9 @@
 
     <!-- ChatScreen (Compose) -->
     <string name="chat_remote">🌐 远程</string>
+    <string name="chat_local">🏠 本地</string>
     <string name="chat_input_hint">输入指令...</string>
+    <string name="chat_ack">收到，正在设备上执行…</string>
 
     <!-- DeviceScreen (Compose) -->
     <string name="device_title">🖥 设备</string>

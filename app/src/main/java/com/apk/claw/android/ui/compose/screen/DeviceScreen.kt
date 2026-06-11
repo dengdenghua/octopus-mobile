@@ -3,15 +3,18 @@ package com.apk.claw.android.ui.compose.screen
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -42,6 +45,7 @@ data class DeviceInfo(
 fun DeviceScreen() {
     var selectedDeviceId by remember { mutableStateOf("local") }
     var browserTab by remember { mutableStateOf(0) } // 0=tabs, 1=extensions
+    var visionOn by remember { mutableStateOf(true) }
 
     val devices = remember {
         listOf(
@@ -128,8 +132,20 @@ fun DeviceScreen() {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(stringResource(R.string.device_vision), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = TextSecondary)
                             Spacer(modifier = Modifier.weight(1f))
-                            // 开关
-                            Box(modifier = Modifier.size(30.dp, 16.dp).background(PrimaryColor, RoundedCornerShape(8.dp)))
+                            // 开关（可点击切换）
+                            Box(
+                                modifier = Modifier
+                                    .size(30.dp, 16.dp)
+                                    .background(
+                                        if (visionOn) PrimaryColor else TextMuted.copy(alpha = 0.4f),
+                                        RoundedCornerShape(8.dp)
+                                    )
+                                    .clickable { visionOn = !visionOn }
+                                    .padding(2.dp),
+                                contentAlignment = if (visionOn) Alignment.CenterEnd else Alignment.CenterStart,
+                            ) {
+                                Box(modifier = Modifier.size(12.dp).background(Color.White, CircleShape))
+                            }
                         }
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(stringResource(R.string.device_vision_desc), fontSize = 10.sp, color = TextMuted, lineHeight = 14.sp)
@@ -173,6 +189,7 @@ private fun DeviceCard(device: DeviceInfo, selected: Boolean, onClick: () -> Uni
 
 @Composable
 private fun DeviceDetailCard(device: DeviceInfo) {
+    val context = LocalContext.current
     Surface(
         shape = RoundedCornerShape(14.dp),
         color = SurfaceColor,
@@ -194,7 +211,9 @@ private fun DeviceDetailCard(device: DeviceInfo) {
                     "⬅️" to stringResource(R.string.ctrl_back),
                 ).forEach { (icon, label) ->
                     Column(
-                        modifier = Modifier.weight(1f).background(SurfaceVariantColor, RoundedCornerShape(8.dp)).clickable { }.padding(vertical = 8.dp),
+                        modifier = Modifier.weight(1f).background(SurfaceVariantColor, RoundedCornerShape(8.dp))
+                            .clickable { Toast.makeText(context, "$label → ${device.name}", Toast.LENGTH_SHORT).show() }
+                            .padding(vertical = 8.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
                         Text(icon, fontSize = 16.sp)

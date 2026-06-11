@@ -1,5 +1,6 @@
 package com.apk.claw.android.ui.compose.screen
 
+import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -12,6 +13,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -34,6 +36,7 @@ private val BorderColor = Color(0xFF2A2A40)
 
 @Composable
 fun SettingsScreen() {
+    val context = LocalContext.current
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(BackgroundColor).padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -112,8 +115,11 @@ fun SettingsScreen() {
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         row.forEach { (iconName, connected) ->
                             val (icon, name) = iconName
+                            val statusText = if (connected) stringResource(R.string.status_connected) else stringResource(R.string.status_not_configured)
                             Surface(
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier.weight(1f).clickable {
+                                    Toast.makeText(context, "$name · $statusText", Toast.LENGTH_SHORT).show()
+                                },
                                 shape = RoundedCornerShape(10.dp),
                                 color = SurfaceVariantColor,
                                 border = if (connected) BorderStroke(1.dp, SuccessColor.copy(alpha = 0.2f)) else BorderStroke(1.dp, Color.Transparent),
@@ -145,7 +151,9 @@ fun SettingsScreen() {
                     stringResource(R.string.settings_plugin_mgmt) to stringResource(R.string.settings_val_plugins_loaded),
                 ).forEach { (label, value) ->
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                        modifier = Modifier.fillMaxWidth()
+                            .clickable { Toast.makeText(context, "$label · $value", Toast.LENGTH_SHORT).show() }
+                            .padding(vertical = 6.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
                         Text(label, fontSize = 13.sp, color = TextPrimary)

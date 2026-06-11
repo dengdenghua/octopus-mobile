@@ -290,7 +290,9 @@
 
     <!-- ChatScreen (Compose) -->
     <string name="chat_remote">🌐 リモート</string>
+    <string name="chat_local">🏠 ローカル</string>
     <string name="chat_input_hint">コマンドを入力…</string>
+    <string name="chat_ack">受け付けました。デバイスで実行中…</string>
 
     <!-- DeviceScreen (Compose) -->
     <string name="device_title">🖥 デバイス</string>
