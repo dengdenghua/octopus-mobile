@@ -17,11 +17,19 @@ octopus_mobile/
 
 ## Phase 状态
 
-| 文件 | Phase 0 | Phase 1 | Phase 2+ |
-|---|---|---|---|
-| `Protocol.kt` | ✅ 骨架（sealed class + 工厂方法）| 🔧 接入真实 JSON 解析 | - |
-| `OctopusMobileClient.kt` | ✅ 骨架（WebSocket 监听器）| 🔧 接入 ToolCallDispatcher / HeartbeatReporter | 增强容错/重连 |
-| `StartupMode.kt` | ✅ 决策逻辑 | 🔧 接入 ClawApplication | - |
+> **更新（已脱离 Phase 0 骨架）**：本层已在 App 启动时全量接线 ——
+> `ClawApplication.onCreate()` → `AppViewModel.initOctopusMobile()` 会创建
+> `OctopusMobileClient` / `ToolCallDispatcher` / `HeartbeatReporter` /
+> `ScreenStreamer` / `DualConfigWriter` 并按配置自动连接 Runtime。
+> 下表的「Phase 1」列已大部分落地，详见下方实施清单。
+
+| 文件 | 实现状态 |
+|---|---|
+| `Protocol.kt` | ✅ JSON-RPC 2.0 envelope（sealed class + 工厂方法 + 标准错误码） |
+| `OctopusMobileClient.kt` | ✅ OkHttp WebSocket，已接 ToolCallDispatcher / HeartbeatReporter，含全抖动退避重连 |
+| `StartupMode.kt` | ✅ LOCAL/RPC/DUAL 决策逻辑，已由 ClawApplication 调用 |
+| `ToolCallDispatcher.kt` | ✅ tool/execute → 本地 ToolRegistry 路由（响应 32KB 截断） |
+| `ConnectionStateMachine.kt` | ✅ 7 态严格 FSM + 退避 |
 
 ## 设计原则
 
@@ -46,13 +54,14 @@ Phase 1 计划用 Robolectric 做单元测试 + 真机/模拟器做集成测试�
 
 ## Phase 1 实施清单
 
-- [ ] 替换 `JsonValue` 占位为 Moshi/Gson
-- [ ] 接入 `ToolCallDispatcher`（接收 tool/execute → 路由到 BaseTool）
-- [ ] 接入 `HeartbeatReporter`（30s 心跳）
-- [ ] 接入 `ScreenStreamer`（屏幕状态增量上报）
-- [ ] 接入 `DualConfigWriter`（MMKV ↔ Runtime 双写）
-- [ ] 修改 `ClawApplication.kt` 调用 `StartupModeResolver.resolve()`
-- [ ] 接入 `SKILL.md` 导出器（让 Octopus Mobile 把 30 个 BaseTool 转 SKILL.md 上传 Runtime）
+- [x] 接入 `ToolCallDispatcher`（接收 tool/execute → 路由到 BaseTool）
+- [x] 接入 `HeartbeatReporter`（心跳）
+- [x] 接入 `ScreenStreamer`（屏幕状态增量上报）
+- [x] 接入 `DualConfigWriter`（MMKV ↔ Runtime 双写）
+- [x] `ClawApplication.kt` 启动时调用初始化（`initOctopusMobile()`）
+- [x] `SKILL.md` 导出器（`SkillExporter.kt`）
+- [ ] 复核 `Protocol.kt` 的 JSON 解析覆盖度（Gson）
+- [ ] 真机/模拟器端到端联调与容错增强
 
 ## 相关文档
 

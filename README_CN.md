@@ -268,6 +268,27 @@ cd octopus-mobile
 | [EasyFloat](https://github.com/princekin-f/EasyFloat) | 2.0.4 | 悬浮窗 |
 | [MultiType](https://github.com/drakeet/MultiType) | 4.3.0 | RecyclerView 多类型适配器 |
 
+## 实现状态 / 路线图
+
+> 本项目能力范围很广，核心 Agent 链路成熟稳定，部分外围能力仍在推进中。下表标注各模块的真实实现状态，避免文档与代码脱节。
+
+| 模块 | 状态 | 备注 |
+|------|------|------|
+| Agent 循环 / 上下文压缩 / 死循环检测 | ✅ 完整 | 核心链路，质量稳定 |
+| 安全护栏 + SafetyGate（PII/密钥扫描） | ✅ 已接入 ToolRegistry | 每次工具执行被前置预检 + 结果观察 |
+| 消息渠道（钉钉/飞书/QQ/Discord/Telegram/微信） | ✅ 完整 | TaskOrchestrator 已升级为优先级任务队列 + 抢占（非简单单任务锁） |
+| 自进化 L1 打分（TurnScorer）/ L2 反思（deepReflect） | ✅ 运行中 | 失败教训持久化到 MMKV 并注入系统提示词 |
+| RPC 远控层（octopus_mobile，作为母体"触手"） | ✅ 启动时已全量接线 | `ClawApplication` → `initOctopusMobile()` 自动初始化并按配置连接 Runtime |
+| 无障碍服务（手势/读屏/截图/保活） | ✅ 完整 | 存在节点未 recycle、latch 阻塞等可靠性待优化项 |
+| 浏览器自动化（GeckoView/WebView） | ⚠️ 部分受限 | GeckoView 151 移除了 `evaluateJavascript`，`get_dom/click/type/evaluate` 暂失效，待改用 WebExtension `scripting.executeScript` 转发 |
+| Shizuku shell 提权 | ⚠️ 当前受限 | `exec()` 暂回退到 app 进程 `Runtime.exec()`（`Shizuku.newProcess` 在 13.1.5 已 @hide），需绑定 `IUserService` 才能真正以 shell 身份执行；手势有 `dispatchGesture` 回退仍可用 |
+| 投屏 / 外接屏 Agent 工作台（Presentation API） | ⚠️ 可用但不完整 | 外屏检测/渲染/REST 已通；运行窗口跟踪与部分 dock 操作未实现 |
+| 自进化 L3 deepEvolve / CanaryManager 灰度 | 💤 已实现未接线 | 代码完整，暂无调用入口 |
+| 插件系统（DexClassLoader 动态加载） | 💤 休眠 | 仅在插件管理页手动触发，启动不自动 `loadAll()`；SafetyGate 仅扫 manifest 不扫 .dex |
+| mpv 媒体播放（MpvController） | 🔴 STUB | 依赖库类名变更后尚未移植，播放方法均为 noop；媒体扫描（本地/WebDAV/网盘）可正常工作 |
+
+图例：✅ 完整可用 · ⚠️ 部分可用/受限 · 💤 已实现但未接线 · 🔴 占位待实现
+
 ## License
 
 ```
