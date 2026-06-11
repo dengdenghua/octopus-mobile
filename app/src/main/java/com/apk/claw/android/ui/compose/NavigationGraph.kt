@@ -95,7 +95,15 @@ fun OctopusNavHost(
         startDestination = Screen.Discover.route,
         modifier = modifier
     ) {
-        composable(Screen.Discover.route) { DiscoverScreen() }
+        composable(Screen.Discover.route) {
+            DiscoverScreen(onNavigate = { route ->
+                navController.navigate(route) {
+                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            })
+        }
         composable(Screen.Chat.route) { ChatScreen() }
         composable(Screen.Device.route) { DeviceScreen() }
         composable(Screen.Settings.route) { SettingsScreen() }
