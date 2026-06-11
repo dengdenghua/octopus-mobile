@@ -62,24 +62,9 @@ private fun nextId(): Long = chatIdCounter.incrementAndGet()
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen() {
-    // 示例对话数据
+    // 对话历史：优先读持久化，首启无历史时回退演示数据
     val messages = remember {
-        mutableStateListOf(
-            ChatMessage.UserMessage("打开微信发消息给小明"),
-            ChatMessage.Thinking("正在分析屏幕..."),
-            ChatMessage.ToolCall("📱", "get_screen_info", "", "✓ 主屏幕"),
-            ChatMessage.ToolCall("📱", "open_app", "com.tencent.mm", "✓"),
-            ChatMessage.ToolCall("👆", "tap", "(540, 380)", "✓ 搜索"),
-            ChatMessage.ToolCall("⌨️", "input_text", "(\"小明\")", "✓"),
-            ChatMessage.ToolCall("👆", "tap", "(270, 280)", "✓ 小明"),
-            ChatMessage.ToolCall("⌨️", "input_text", "(\"你好，今晚一起吃饭吗？\")", "✓"),
-            ChatMessage.ToolCall("👆", "tap", "(980, 1820)", "✓ 发送"),
-            ChatMessage.AgentMessage("已打开微信并找到小明的对话，消息\"你好，今晚一起吃饭吗？\"已发送成功。"),
-            ChatMessage.UserMessage("帮我看看明天的天气"),
-            ChatMessage.ToolCall("📱", "open_app", "com.miui.weather", "✓"),
-            ChatMessage.ToolCall("📱", "get_screen_info", "", "✓ 天气详情"),
-            ChatMessage.AgentMessage("明天北京天气：晴转多云，最高 28°C，最低 16°C，空气质量良好。"),
-        )
+        mutableStateListOf<ChatMessage>().apply { addAll(ChatStore.load() ?: demoSeed()) }
     }
 
     var inputText by remember { mutableStateOf("") }
@@ -90,6 +75,7 @@ fun ChatScreen() {
     val ackText = stringResource(R.string.chat_ack)
     val thinkingText = stringResource(R.string.chat_thinking)
     val scrollEnd = { scope.launch { listState.animateScrollToItem(messages.size) }; Unit }
+    val persist = { ChatStore.save(messages) }
 
     // 发送指令：配置了 LLM 则真正驱动 Agent;运行期间显示「思考中」、发送键变停止键
     val send = {
@@ -97,7 +83,7 @@ fun ChatScreen() {
         if (t.isNotEmpty() && !isRunning) {
             messages.add(ChatMessage.UserMessage(t))
             inputText = ""
-            scrollEnd()
+            scrollEnd(); persist()
             if (ChatAgentBridge.isConfigured()) {
                 isRunning = true
                 val thinking = ChatMessage.Thinking(thinkingText)
@@ -106,14 +92,14 @@ fun ChatScreen() {
                 showThinking()
                 ChatAgentBridge.run(
                     prompt = t,
-                    onTool = { icon, name, args, res -> hideThinking(); messages.add(ChatMessage.ToolCall(icon, name, args, res)); showThinking() },
-                    onText = { txt -> hideThinking(); messages.add(ChatMessage.AgentMessage(txt)); showThinking() },
-                    onDone = { ans -> hideThinking(); messages.add(ChatMessage.AgentMessage(ans)); isRunning = false; scrollEnd() },
-                    onError = { e -> hideThinking(); messages.add(ChatMessage.AgentMessage("⚠️ $e")); isRunning = false; scrollEnd() },
+                    onTool = { icon, name, args, res -> hideThinking(); messages.add(ChatMessage.ToolCall(icon, name, args, res)); showThinking(); persist() },
+                    onText = { txt -> hideThinking(); messages.add(ChatMessage.AgentMessage(txt)); showThinking(); persist() },
+                    onDone = { ans -> hideThinking(); messages.add(ChatMessage.AgentMessage(ans)); isRunning = false; scrollEnd(); persist() },
+                    onError = { e -> hideThinking(); messages.add(ChatMessage.AgentMessage("⚠️ $e")); isRunning = false; scrollEnd(); persist() },
                 )
             } else {
                 messages.add(ChatMessage.AgentMessage(ackText))
-                scrollEnd()
+                scrollEnd(); persist()
             }
         }
     }
@@ -265,6 +251,23 @@ fun ChatScreen() {
         }
     }
 }
+
+/** 首次启动（无持久化历史）时展示的演示对话。 */
+private fun demoSeed(): List<ChatMessage> = listOf(
+    ChatMessage.UserMessage("打开微信发消息给小明"),
+    ChatMessage.ToolCall("🔍", "get_screen_info", "", "✓ 主屏幕"),
+    ChatMessage.ToolCall("📱", "open_app", "com.tencent.mm", "✓"),
+    ChatMessage.ToolCall("👆", "tap", "(540, 380)", "✓ 搜索"),
+    ChatMessage.ToolCall("⌨️", "input_text", "(\"小明\")", "✓"),
+    ChatMessage.ToolCall("👆", "tap", "(270, 280)", "✓ 小明"),
+    ChatMessage.ToolCall("⌨️", "input_text", "(\"你好，今晚一起吃饭吗？\")", "✓"),
+    ChatMessage.ToolCall("👆", "tap", "(980, 1820)", "✓ 发送"),
+    ChatMessage.AgentMessage("已打开微信并找到小明的对话，消息\"你好，今晚一起吃饭吗？\"已发送成功。"),
+    ChatMessage.UserMessage("帮我看看明天的天气"),
+    ChatMessage.ToolCall("📱", "open_app", "com.miui.weather", "✓"),
+    ChatMessage.ToolCall("🔍", "get_screen_info", "", "✓ 天气详情"),
+    ChatMessage.AgentMessage("明天北京天气：晴转多云，最高 28°C，最低 16°C，空气质量良好。"),
+)
 
 @Composable
 private fun UserBubble(text: String) {
