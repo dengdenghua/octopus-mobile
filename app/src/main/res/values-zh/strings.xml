@@ -290,4 +290,10 @@
     <string name="discover_suggest_resume">▶️ 继续看剧</string>
     <string name="discover_status_memory">💾 5 条记忆</string>
     <string name="discover_status_rules">🔔 2 条规则</string>
+
+    <!-- Bottom navigation -->
+    <string name="nav_discover">发现</string>
+    <string name="nav_chat">对话</string>
+    <string name="nav_device">设备</string>
+    <string name="nav_settings">设置</string>
 </resources>

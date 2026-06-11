@@ -255,4 +255,10 @@
     <string name="discover_suggest_resume">▶️ 視聴を再開</string>
     <string name="discover_status_memory">💾 記憶 5 件</string>
     <string name="discover_status_rules">🔔 ルール 2 件</string>
+
+    <!-- Bottom navigation -->
+    <string name="nav_discover">発見</string>
+    <string name="nav_chat">チャット</string>
+    <string name="nav_device">デバイス</string>
+    <string name="nav_settings">設定</string>
 </resources>

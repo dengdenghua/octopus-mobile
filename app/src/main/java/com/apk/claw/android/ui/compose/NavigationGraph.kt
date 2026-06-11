@@ -13,6 +13,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -49,8 +50,8 @@ fun OctopusApp() {
             ) {
                 Screen.bottomBar.forEach { screen ->
                     NavigationBarItem(
-                        icon = { Icon(screen.icon, contentDescription = screen.label) },
-                        label = { Text(screen.label, style = TextStyle(fontSize = 11.sp)) },
+                        icon = { Icon(screen.icon, contentDescription = stringResource(screen.labelRes)) },
+                        label = { Text(stringResource(screen.labelRes), style = TextStyle(fontSize = 11.sp)) },
                         selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true,
                         onClick = {
                             navController.navigate(screen.route) {

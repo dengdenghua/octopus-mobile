@@ -295,4 +295,10 @@ For these, install Shizuku — a safe, open-source helper.</string>
     <string name="discover_suggest_resume">▶️ Continue Watching</string>
     <string name="discover_status_memory">💾 5 memories</string>
     <string name="discover_status_rules">🔔 2 rules</string>
+
+    <!-- Bottom navigation -->
+    <string name="nav_discover">Discover</string>
+    <string name="nav_chat">Chat</string>
+    <string name="nav_device">Device</string>
+    <string name="nav_settings">Settings</string>
 </resources>
