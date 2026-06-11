@@ -343,4 +343,9 @@
     <string name="device_tabs">标签页</string>
     <string name="device_extensions">扩展</string>
     <string name="badge_active">活跃</string>
+
+    <!-- 补全缺失的工具名翻译 -->
+    <string name="tool_name_current_time">当前时间</string>
+    <string name="tool_name_device_info">设备信息</string>
+    <string name="tool_name_hello_world">你好世界</string>
 </resources>

@@ -308,4 +308,23 @@
     <string name="device_tabs">タブ</string>
     <string name="device_extensions">拡張機能</string>
     <string name="badge_active">アクティブ</string>
+
+    <!-- 不足していたツール名の翻訳を補完 -->
+    <string name="tool_name_backup_app">アプリバックアップ</string>
+    <string name="tool_name_browse_files">ファイル閲覧</string>
+    <string name="tool_name_current_time">現在時刻</string>
+    <string name="tool_name_device_info">デバイス情報</string>
+    <string name="tool_name_file_ops">ファイル操作</string>
+    <string name="tool_name_get_usage_stats">アプリ使用状況</string>
+    <string name="tool_name_get_window_info">ウィンドウ情報取得</string>
+    <string name="tool_name_hello_world">ハローワールド</string>
+    <string name="tool_name_launch_freeform">ポップアップで起動</string>
+    <string name="tool_name_media_player">メディアプレーヤー</string>
+    <string name="tool_name_navigate">スマートナビ</string>
+    <string name="tool_name_read_calendar">カレンダー読み取り</string>
+    <string name="tool_name_read_sms">SMS 読み取り</string>
+    <string name="tool_name_resize_window">ウィンドウサイズ変更</string>
+    <string name="tool_name_search_files">ファイル検索</string>
+    <string name="tool_name_send_intent">インテント送信</string>
+    <string name="tool_name_send_sms">SMS 送信</string>
 </resources>
