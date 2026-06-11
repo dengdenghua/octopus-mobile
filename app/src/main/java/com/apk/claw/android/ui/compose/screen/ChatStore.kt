@@ -13,6 +13,8 @@ import com.google.gson.reflect.TypeToken
 object ChatStore {
 
     private const val KEY = "chat_history_v1"
+    /** 持久化保留的最大消息条数，避免 MMKV 无限增长。 */
+    private const val MAX_KEEP = 200
     private val gson = Gson()
 
     /** 扁平 DTO：用 type 区分消息种类，避免 sealed class 的多态序列化问题。 */
@@ -25,7 +27,7 @@ object ChatStore {
     )
 
     fun save(messages: List<ChatMessage>) {
-        val dtos = messages.mapNotNull { m ->
+        val dtos = messages.takeLast(MAX_KEEP).mapNotNull { m ->
             when (m) {
                 is ChatMessage.UserMessage -> Dto("user", m.text)
                 is ChatMessage.AgentMessage -> Dto("agent", m.text)

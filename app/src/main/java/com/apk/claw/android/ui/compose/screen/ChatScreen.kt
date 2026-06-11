@@ -105,6 +105,11 @@ fun ChatScreen() {
     }
     val stop = { ChatAgentBridge.cancel() }
 
+    // 进入对话页时滚到底部，直接看到最新消息（历史加载后默认在顶部）
+    LaunchedEffect(Unit) {
+        if (messages.isNotEmpty()) listState.scrollToItem(messages.size)
+    }
+
     Column(modifier = Modifier.fillMaxSize().background(BackgroundColor)) {
         // 顶部栏
         TopAppBar(
