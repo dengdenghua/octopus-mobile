@@ -21,17 +21,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.apk.claw.android.R
 
-private val PrimaryColor = Color(0xFF6C5CE7)
-private val SuccessColor = Color(0xFF00D2A0)
-private val WarningColor = Color(0xFFFFC048)
-private val ErrorColor = Color(0xFFFF5C72)
-private val SurfaceColor = Color(0xFF1A1A28)
-private val SurfaceVariantColor = Color(0xFF12121A)
-private val BackgroundColor = Color(0xFF0A0A0F)
-private val TextPrimary = Color(0xFFE8E8F0)
-private val TextSecondary = Color(0xFF8888A8)
-private val TextMuted = Color(0xFF55556A)
-private val BorderColor = Color(0xFF2A2A40)
+private val PrimaryColor = Color(0xFF0A84FF)
+private val SuccessColor = Color(0xFF30D158)
+private val WarningColor = Color(0xFFFF9F0A)
+private val ErrorColor = Color(0xFFFF453B)
+private val SurfaceColor = Color(0xFF1C1C1E)
+private val SurfaceVariantColor = Color(0xFF2C2C2E)
+private val BackgroundColor = Color(0xFF000000)
+private val TextPrimary = Color(0xFFFFFFFF)
+private val TextSecondary = Color(0xFF98989D)
+private val TextMuted = Color(0xFF8E8E93)
+private val BorderColor = Color(0xFF38383A)
 
 data class DeviceInfo(
     val id: String, val name: String, val type: String,
@@ -135,7 +135,7 @@ fun DeviceScreen(onMessage: (String) -> Unit = {}) {
                                 modifier = Modifier
                                     .size(30.dp, 16.dp)
                                     .background(
-                                        if (visionOn) PrimaryColor else TextMuted.copy(alpha = 0.4f),
+                                        if (visionOn) SuccessColor else TextMuted.copy(alpha = 0.4f),
                                         RoundedCornerShape(8.dp)
                                     )
                                     .clickable { visionOn = !visionOn }

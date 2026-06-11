@@ -11,20 +11,20 @@ import androidx.core.view.WindowCompat
 
 // 颜色定义 - 深色主题
 private val DarkColorScheme = darkColorScheme(
-    primary = Color(0xFF6C5CE7),
+    primary = Color(0xFF0A84FF),
     onPrimary = Color.White,
-    primaryContainer = Color(0xFF1E1E36),
-    secondary = Color(0xFF00D2A0),
+    primaryContainer = Color(0xFF1C1C1E),
+    secondary = Color(0xFF30D158),
     secondaryContainer = Color(0xFF0A2A20),
-    tertiary = Color(0xFFFFC048),
-    background = Color(0xFF0A0A0F),
-    surface = Color(0xFF12121A),
-    surfaceVariant = Color(0xFF1A1A28),
-    onBackground = Color(0xFFE8E8F0),
-    onSurface = Color(0xFFE8E8F0),
-    onSurfaceVariant = Color(0xFF8888A8),
-    error = Color(0xFFFF5C72),
-    outline = Color(0xFF2A2A40),
+    tertiary = Color(0xFFFF9F0A),
+    background = Color(0xFF000000),
+    surface = Color(0xFF2C2C2E),
+    surfaceVariant = Color(0xFF1C1C1E),
+    onBackground = Color(0xFFFFFFFF),
+    onSurface = Color(0xFFFFFFFF),
+    onSurfaceVariant = Color(0xFF98989D),
+    error = Color(0xFFFF453B),
+    outline = Color(0xFF38383A),
 )
 
 @Composable

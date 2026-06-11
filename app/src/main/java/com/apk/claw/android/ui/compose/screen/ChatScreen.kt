@@ -26,17 +26,17 @@ import com.apk.claw.android.R
 import kotlinx.coroutines.launch
 
 // 颜色
-private val PrimaryColor = Color(0xFF6C5CE7)
-private val SuccessColor = Color(0xFF00D2A0)
-private val WarningColor = Color(0xFFFFC048)
-private val BackgroundColor = Color(0xFF0A0A0F)
-private val SurfaceColor = Color(0xFF1A1A28)
-private val TextPrimary = Color(0xFFE8E8F0)
-private val TextSecondary = Color(0xFF8888A8)
-private val TextMuted = Color(0xFF55556A)
-private val BorderColor = Color(0xFF2A2A40)
-private val AgentBubbleColor = Color(0xFF1E1E36)
-private val UserBubbleColor = Color(0xFF6C5CE7)
+private val PrimaryColor = Color(0xFF0A84FF)
+private val SuccessColor = Color(0xFF30D158)
+private val WarningColor = Color(0xFFFF9F0A)
+private val BackgroundColor = Color(0xFF000000)
+private val SurfaceColor = Color(0xFF1C1C1E)
+private val TextPrimary = Color(0xFFFFFFFF)
+private val TextSecondary = Color(0xFF98989D)
+private val TextMuted = Color(0xFF8E8E93)
+private val BorderColor = Color(0xFF38383A)
+private val AgentBubbleColor = Color(0xFF1C1C1E)
+private val UserBubbleColor = Color(0xFF0A84FF)
 
 // 消息数据模型
 sealed class ChatMessage {
