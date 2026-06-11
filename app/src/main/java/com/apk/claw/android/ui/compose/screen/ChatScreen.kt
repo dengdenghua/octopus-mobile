@@ -135,56 +135,30 @@ fun ChatScreen() {
                     }
                 }
             },
+            actions = {
+                // 清空对话(同时清持久化)
+                IconButton(onClick = {
+                    if (!isRunning) { messages.clear(); ChatStore.clear() }
+                }) {
+                    Text("🗑️", fontSize = 16.sp)
+                }
+            },
             colors = TopAppBarDefaults.topAppBarColors(
                 containerColor = BackgroundColor,
                 titleContentColor = TextPrimary,
             )
         )
 
-        // 任务队列条
-        Surface(
-            modifier = Modifier.padding(horizontal = 16.dp),
-            shape = RoundedCornerShape(12.dp),
-            color = PrimaryColor.copy(alpha = 0.08f),
-            border = BorderStroke(1.dp, PrimaryColor.copy(alpha = 0.15f)),
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text("▶", fontSize = 10.sp, color = PrimaryColor)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("打开微信发消息", fontSize = 12.sp, color = TextPrimary, modifier = Modifier.weight(1f))
-                Surface(shape = RoundedCornerShape(6.dp), color = PrimaryColor.copy(alpha = 0.15f)) {
-                    Text(
-                        "轮次 3",
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                        fontSize = 10.sp,
-                        color = PrimaryColor,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
+        // 消息列表 / 空状态
+        if (messages.none { it !is ChatMessage.Thinking }) {
+            Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Text(
+                    stringResource(R.string.chat_empty_hint),
+                    fontSize = 13.sp,
+                    color = TextMuted,
+                )
             }
-        }
-        Spacer(modifier = Modifier.height(4.dp))
-        // 排队提示
-        Surface(
-            modifier = Modifier.padding(horizontal = 16.dp),
-            shape = RoundedCornerShape(10.dp),
-            color = WarningColor.copy(alpha = 0.06f),
-            border = BorderStroke(1.dp, WarningColor.copy(alpha = 0.1f)),
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text("⏳", fontSize = 12.sp)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("查明天天气 · 排队中", fontSize = 11.sp, color = TextMuted)
-            }
-        }
-
-        // 消息列表
+        } else
         LazyColumn(
             state = listState,
             modifier = Modifier.weight(1f).padding(horizontal = 16.dp),
