@@ -1,8 +1,12 @@
 package com.apk.claw.android.ui.compose.screen
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,6 +19,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
@@ -85,7 +90,11 @@ fun DiscoverScreen(onNavigate: (String) -> Unit = {}) {
                 Box(
                     modifier = Modifier
                         .size(34.dp)
-                        .background(PrimaryColor, CircleShape)
+                        // 输入为空时按钮淡化，提示「无内容可发送」
+                        .background(
+                            PrimaryColor.copy(alpha = if (searchText.isNotBlank()) 1f else 0.35f),
+                            CircleShape
+                        )
                         .clickable(onClick = submit),
                     contentAlignment = Alignment.Center
                 ) {
@@ -170,9 +179,19 @@ fun DiscoverScreen(onNavigate: (String) -> Unit = {}) {
 // 快捷入口项
 @Composable
 private fun ShortcutItem(icon: String, name: String, onClick: () -> Unit = {}) {
+    // 按下时轻微缩放，提供「跟手」的触感反馈
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) 0.90f else 1f, label = "tileScale")
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.clickable(onClick = onClick)
+        modifier = Modifier
+            .scale(scale)
+            .clickable(
+                interactionSource = interaction,
+                indication = LocalIndication.current,
+                onClick = onClick,
+            )
     ) {
         Box(
             modifier = Modifier

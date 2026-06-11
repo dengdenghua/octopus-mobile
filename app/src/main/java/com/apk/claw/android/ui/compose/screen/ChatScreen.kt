@@ -228,7 +228,11 @@ fun ChatScreen() {
                 Box(
                     modifier = Modifier
                         .size(40.dp)
-                        .background(PrimaryColor, RoundedCornerShape(20.dp))
+                        // 输入为空时淡化发送键
+                        .background(
+                            PrimaryColor.copy(alpha = if (inputText.isNotBlank()) 1f else 0.35f),
+                            RoundedCornerShape(20.dp)
+                        )
                         .clickable(onClick = send),
                     contentAlignment = Alignment.Center
                 ) {
