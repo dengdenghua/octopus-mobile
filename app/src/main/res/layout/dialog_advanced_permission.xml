@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_dialog_alert"
+    android:orientation="vertical"
+    android:paddingHorizontal="24pt"
+    android:paddingTop="24pt"
+    android:paddingBottom="20pt">
+
+    <!-- 标题 -->
+    <TextView
+        android:id="@+id/tvAdvancedTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:text="@string/advanced_dialog_title"
+        android:textColor="@color/colorTextPrimary"
+        android:textSize="17pt"
+        android:textStyle="bold" />
+
+    <!-- 状态条 -->
+    <TextView
+        android:id="@+id/tvAdvancedStatus"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14pt"
+        android:gravity="center"
+        android:paddingVertical="8pt"
+        android:textSize="13pt" />
+
+    <!-- 介绍 -->
+    <TextView
+        android:id="@+id/tvAdvancedIntro"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12pt"
+        android:lineSpacingExtra="3pt"
+        android:text="@string/advanced_dialog_intro"
+        android:textColor="@color/colorTextSecondary"
+        android:textSize="13pt" />
+
+    <!-- 步骤 -->
+    <TextView
+        android:id="@+id/tvAdvancedSteps"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12pt"
+        android:lineSpacingExtra="3pt"
+        android:text="@string/advanced_dialog_steps"
+        android:textColor="@color/colorTextTertiary"
+        android:textSize="13pt" />
+
+    <!-- 主操作按钮（打开 / 安装） -->
+    <com.apk.claw.android.widget.KButton
+        android:id="@+id/btnAdvancedPrimary"
+        android:layout_width="match_parent"
+        android:layout_height="44pt"
+        android:layout_marginTop="20pt"
+        android:textSize="15pt" />
+
+    <!-- 次操作：了解更多 -->
+    <com.apk.claw.android.widget.KButton
+        android:id="@+id/btnAdvancedLearnMore"
+        android:layout_width="match_parent"
+        android:layout_height="44pt"
+        android:layout_marginTop="8pt"
+        android:text="@string/advanced_action_learn_more"
+        android:textSize="14pt" />
+
+    <!-- 关闭 -->
+    <com.apk.claw.android.widget.KButton
+        android:id="@+id/btnAdvancedClose"
+        android:layout_width="match_parent"
+        android:layout_height="40pt"
+        android:layout_marginTop="4pt"
+        android:text="@string/advanced_action_close"
+        android:textSize="14pt" />
+
+</LinearLayout>

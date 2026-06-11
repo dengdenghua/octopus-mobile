@@ -1,0 +1,297 @@
+package com.apk.claw.android.ui.cast
+
+import android.app.AlertDialog
+import android.graphics.Color
+import android.graphics.Typeface
+import android.os.Bundle
+import android.view.Gravity
+import android.view.View
+import android.view.ViewGroup.LayoutParams.MATCH_PARENT
+import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+import android.widget.EditText
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.TextView
+import android.widget.Toast
+import com.apk.claw.android.R
+import com.apk.claw.android.base.BaseActivity
+import com.apk.claw.android.cast.ScreenCastService
+import com.apk.claw.android.octopus_mobile.DeviceRemoteControl
+import com.apk.claw.android.widget.CommonToolbar
+import com.apk.claw.android.widget.KButton
+import com.apk.claw.android.widget.MenuGroup
+import com.apk.claw.android.widget.MjpegImageView
+
+/**
+ * 投屏控制面板
+ *
+ * - 状态卡片：投屏状态 + 外接显示器信息 + 开始/停止按钮
+ * - MjpegImageView 远程屏幕预览
+ * - 远程操作 MenuGroup
+ * - 在外接屏启动 App MenuGroup
+ */
+class ScreenCastActivity : BaseActivity() {
+
+    companion object {
+        private const val TAG = "ScreenCastActivity"
+    }
+
+    private val castService get() = ScreenCastService.getInstance(this)
+    private val remoteControl = DeviceRemoteControl()
+
+    private lateinit var tvCastStatus: TextView
+    private lateinit var tvDisplayInfo: TextView
+    private lateinit var btnToggle: KButton
+    private lateinit var mjpegView: MjpegImageView
+    private lateinit var etStreamUrl: EditText
+    private lateinit var btnPreview: KButton
+    private lateinit var remoteGroup: MenuGroup
+    private lateinit var launchGroup: MenuGroup
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        val root = buildLayout()
+        setContentView(root)
+        refreshStatus()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        refreshStatus()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        mjpegView.stop()
+    }
+
+    // ── 布局构建 ─────────────────────────────────────
+
+    private fun buildLayout(): ScrollView {
+        val dp16 = dp(16)
+        val dp8 = dp(8)
+        val dp12 = dp(12)
+        val dp4 = dp(4)
+
+        val scrollView = ScrollView(this).apply {
+            layoutParams = android.widget.FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT)
+            isFillViewport = true
+        }
+
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
+        }
+
+        // Toolbar
+        content.addView(CommonToolbar(this@ScreenCastActivity).apply {
+            setTitle("投屏控制")
+            showBackButton(true) { finish() }
+        })
+
+        val padding = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp16, dp8, dp16, dp16)
+            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
+        }
+
+        // ── 状态卡片 ──
+        val statusCard = MenuGroup(this).apply {
+            setTitle("投屏状态")
+            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = dp12 }
+        }
+
+        // 状态行
+        tvCastStatus = TextView(this).apply {
+            text = "● 未投屏"
+            setTextColor(Color.GRAY)
+            textSize = 18f
+            typeface = Typeface.DEFAULT_BOLD
+            setPadding(dp8, dp8, dp8, dp4)
+        }
+        // 添加到 statusCard 之前（因为 MenuGroup 内部结构不适合放自定义子 View）
+        padding.addView(statusCard)
+
+        // 显示器信息
+        tvDisplayInfo = TextView(this).apply {
+            textSize = 14f
+            setTextColor(Color.parseColor("#666666"))
+            setPadding(dp8, 0, dp8, dp8)
+            text = castService.displayManager.getExternalDisplayInfo()
+        }
+        padding.addView(tvDisplayInfo)
+
+        // 开始/停止按钮
+        btnToggle = KButton(this).apply {
+            text = if (castService.isCasting) "停止投屏" else "开始投屏"
+            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = dp12 }
+            setOnClickListener {
+                if (castService.isCasting) {
+                    castService.stop()
+                } else {
+                    castService.start()
+                }
+                refreshStatus()
+            }
+        }
+        padding.addView(btnToggle)
+
+        // ── MJPEG 远程屏幕预览 ──
+        val previewLabel = TextView(this).apply {
+            text = "远程屏幕预览"
+            textSize = 14f
+            typeface = Typeface.DEFAULT_BOLD
+            setPadding(0, 0, 0, dp4)
+        }
+        padding.addView(previewLabel)
+
+        mjpegView = MjpegImageView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, dp(240)).apply { bottomMargin = dp8 }
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            setBackgroundColor(Color.parseColor("#F0F0F0"))
+        }
+        padding.addView(mjpegView)
+
+        // 流地址输入 + 预览按钮
+        val streamRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = dp12 }
+        }
+        etStreamUrl = EditText(this).apply {
+            hint = "http://192.168.x.x:8080/api/screen/stream?quality=40&fps=5"
+            textSize = 12f
+            layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f)
+            setSingleLine(true)
+            setPadding(dp8, dp8, dp8, dp8)
+        }
+        streamRow.addView(etStreamUrl)
+
+        btnPreview = KButton(this).apply {
+            text = "预览"
+            layoutParams = LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginStart = dp8 }
+            setOnClickListener {
+                val url = etStreamUrl.text.toString().trim()
+                if (url.isNotEmpty()) {
+                    mjpegView.start(url)
+                    Toast.makeText(this@ScreenCastActivity, "正在连接...", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+        streamRow.addView(btnPreview)
+        padding.addView(streamRow)
+
+        // ── 远程操作 ──
+        remoteGroup = MenuGroup(this).apply {
+            setTitle("远程操作")
+            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = dp12 }
+        }
+        remoteGroup.addMenuItem(R.drawable.ic_settings, "Home", { sendLocalAction("home") }, showDivider = true)
+        remoteGroup.addMenuItem(R.drawable.ic_back, "Back", { sendLocalAction("back") }, showDivider = true)
+        remoteGroup.addMenuItem(R.drawable.ic_settings, "截屏", { captureLocalScreen() }, showDivider = true)
+        remoteGroup.addMenuItem(R.drawable.ic_settings, "输入文本", { showInputDialog() }, showDivider = false)
+        padding.addView(remoteGroup)
+
+        // ── 在外接屏启动 App ──
+        launchGroup = MenuGroup(this).apply {
+            setTitle("在外接屏启动")
+            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = dp12 }
+        }
+        launchGroup.addMenuItem(R.drawable.ic_settings, "微信", { launchOnCast("com.tencent.mm") }, showDivider = true)
+        launchGroup.addMenuItem(R.drawable.ic_browser, "浏览器", { launchOnCast("com.android.chrome") }, showDivider = true)
+        launchGroup.addMenuItem(R.drawable.ic_settings, "自定义包名", { showPackageInputDialog() }, showDivider = false)
+        padding.addView(launchGroup)
+
+        content.addView(padding)
+        scrollView.addView(content)
+        return scrollView
+    }
+
+    // ── 状态刷新 ─────────────────────────────────────
+
+    private fun refreshStatus() {
+        val casting = castService.isCasting
+        tvCastStatus.text = if (casting) "● 投屏中" else "○ 未投屏"
+        tvCastStatus.setTextColor(if (casting) Color.parseColor("#4CAF50") else Color.GRAY)
+        tvDisplayInfo.text = castService.displayManager.getExternalDisplayInfo()
+        btnToggle.text = if (casting) "停止投屏" else "开始投屏"
+    }
+
+    // ── 远程操作（本地设备通过 AccessibilityService） ──
+
+    private fun sendLocalAction(action: String) {
+        // 通过 AccessibilityService 发送本地按键
+        val service = com.apk.claw.android.service.ClawAccessibilityService.getInstance()
+        if (service == null) {
+            Toast.makeText(this, "无障碍服务未运行", Toast.LENGTH_SHORT).show()
+            return
+        }
+        when (action) {
+            "home" -> service.pressHome()
+            "back" -> service.pressBack()
+            "recent" -> service.openRecentApps()
+        }
+        Toast.makeText(this, "$action 已发送", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun captureLocalScreen() {
+        // 通过 ScreenCaptureManager 截取本地屏幕
+        Toast.makeText(this, "截屏功能需通过 ConfigServer API 使用", Toast.LENGTH_LONG).show()
+    }
+
+    private fun showInputDialog() {
+        val et = EditText(this).apply {
+            hint = "输入文本"
+            setPadding(dp(16), dp(12), dp(16), dp(12))
+        }
+        AlertDialog.Builder(this)
+            .setTitle("输入文本")
+            .setView(et)
+            .setPositiveButton("发送") { _, _ ->
+                val text = et.text.toString()
+                if (text.isNotEmpty()) {
+                    val service = com.apk.claw.android.service.ClawAccessibilityService.getInstance()
+                    service?.let {
+                        // 通过剪贴板 + 粘贴实现文本输入
+                        val clipboard = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("input", text))
+                        Toast.makeText(this, "文本已复制到剪贴板", Toast.LENGTH_SHORT).show()
+                    } ?: Toast.makeText(this, "无障碍服务未运行", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    // ── 在外接屏启动 ─────────────────────────────────
+
+    private fun launchOnCast(packageName: String) {
+        val ok = castService.launchAppOnExternalDisplay(packageName)
+        Toast.makeText(
+            this,
+            if (ok) "已启动 $packageName 到外接屏" else "启动失败（需先开始投屏）",
+            Toast.LENGTH_SHORT
+        ).show()
+    }
+
+    private fun showPackageInputDialog() {
+        val et = EditText(this).apply {
+            hint = "com.example.app"
+            setPadding(dp(16), dp(12), dp(16), dp(12))
+        }
+        AlertDialog.Builder(this)
+            .setTitle("输入包名")
+            .setView(et)
+            .setPositiveButton("启动") { _, _ ->
+                val pkg = et.text.toString().trim()
+                if (pkg.isNotEmpty()) launchOnCast(pkg)
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    // ── 辅助 ─────────────────────────────────────────
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+}

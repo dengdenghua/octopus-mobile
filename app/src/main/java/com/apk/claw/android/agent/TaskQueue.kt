@@ -1,0 +1,126 @@
+package com.apk.claw.android.agent
+
+import android.util.Log
+import com.apk.claw.android.channel.Channel
+import java.util.concurrent.PriorityBlockingQueue
+
+/**
+ * 任务队列 —— 支持优先级调度和后台任务.
+ *
+ * 替代 TaskOrchestrator 中的单任务锁模型：
+ *  - 高优先级任务可以抢占正在执行的低优先级任务
+ *  - 后台任务（如下载文件）不阻塞前台任务
+ *  - 被抢占的任务可以暂停并稍后恢复
+ */
+class TaskQueue {
+
+    data class QueuedTask(
+        val id: String,
+        val task: String,
+        val channel: Channel,
+        val messageId: String,
+        val priority: TaskPriority = TaskPriority.NORMAL,
+        val isBackground: Boolean = false,  // 后台任务不阻塞队列
+        val createdAt: Long = System.currentTimeMillis(),
+        var status: TaskStatus = TaskStatus.QUEUED,
+    ) : Comparable<QueuedTask> {
+        override fun compareTo(other: QueuedTask): Int {
+            // 优先级高的先执行；同优先级按创建时间排序
+            val priorityCmp = other.priority.level.compareTo(this.priority.level)
+            return if (priorityCmp != 0) priorityCmp else this.createdAt.compareTo(other.createdAt)
+        }
+    }
+
+    enum class TaskPriority(val level: Int) {
+        LOW(0),
+        NORMAL(1),
+        HIGH(2),
+        URGENT(3)
+    }
+
+    enum class TaskStatus {
+        QUEUED,       // 排队中
+        RUNNING,      // 执行中
+        PAUSED,       // 被暂停（被高优先级任务抢占）
+        COMPLETED,    // 已完成
+        FAILED,       // 失败
+        CANCELLED     // 被取消
+    }
+
+    companion object {
+        private const val TAG = "TaskQueue"
+        private const val MAX_QUEUE_SIZE = 10
+    }
+
+    private val queue = PriorityBlockingQueue<QueuedTask>()
+    private val pausedTasks = mutableMapOf<String, QueuedTask>()  // 被暂停的任务
+
+    /** 入队一个任务 */
+    fun enqueue(task: QueuedTask): Boolean {
+        if (queue.size >= MAX_QUEUE_SIZE) {
+            Log.w(TAG, "Queue is full, rejecting task: ${task.id}")
+            return false
+        }
+        queue.add(task)
+        Log.i(TAG, "Task enqueued: id=${task.id}, priority=${task.priority}, queueSize=${queue.size}")
+        return true
+    }
+
+    /** 取出下一个要执行的任务（阻塞直到有任务） */
+    fun dequeue(): QueuedTask? = queue.poll()
+
+    /** 查看队首任务但不移除 */
+    fun peek(): QueuedTask? = queue.peek()
+
+    /** 当前队列大小 */
+    fun size(): Int = queue.size
+
+    /** 队列是否为空 */
+    fun isEmpty(): Boolean = queue.isEmpty()
+
+    /** 是否有后台任务在队列中 */
+    fun hasBackgroundTasks(): Boolean = queue.any { it.isBackground }
+
+    /** 暂停一个任务（被高优先级抢占时） */
+    fun pauseTask(taskId: String): QueuedTask? {
+        val task = queue.find { it.id == taskId }
+        if (task != null) {
+            queue.remove(task)
+            val paused = task.copy(status = TaskStatus.PAUSED)
+            pausedTasks[taskId] = paused
+            Log.i(TAG, "Task paused: $taskId")
+            return paused
+        }
+        return null
+    }
+
+    /** 恢复一个被暂停的任务 */
+    fun resumeTask(taskId: String): Boolean {
+        val task = pausedTasks.remove(taskId) ?: return false
+        val resumed = task.copy(status = TaskStatus.QUEUED)
+        queue.add(resumed)
+        Log.i(TAG, "Task resumed: $taskId")
+        return true
+    }
+
+    /** 取消一个任务 */
+    fun cancelTask(taskId: String): Boolean {
+        val removed = queue.removeIf { it.id == taskId }
+        val pausedRemoved = pausedTasks.remove(taskId) != null
+        return removed || pausedRemoved
+    }
+
+    /** 获取所有排队中的任务 */
+    fun getQueuedTasks(): List<QueuedTask> = queue.toList().sorted()
+
+    /** 获取所有被暂停的任务 */
+    fun getPausedTasks(): List<QueuedTask> = pausedTasks.values.toList()
+
+    /** 判断新任务是否应该抢占当前任务 */
+    fun shouldPreempt(newTask: QueuedTask, currentTask: QueuedTask?): Boolean {
+        if (currentTask == null) return false
+        if (currentTask.isBackground) return false  // 后台任务不抢占
+        if (newTask.isBackground) return false      // 后台任务不抢占前台
+        return newTask.priority.level > currentTask.priority.level
+    }
+}

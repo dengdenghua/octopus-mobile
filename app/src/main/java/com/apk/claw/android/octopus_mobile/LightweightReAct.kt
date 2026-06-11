@@ -1,0 +1,240 @@
+﻿package com.apk.claw.android.octopus_mobile
+
+import android.util.Log
+import java.security.MessageDigest
+import java.util.concurrent.atomic.AtomicInteger
+
+/**
+ * 方案 F 轻量 ReAct 循环.
+ *
+ * 借鉴 Octopus Mobile 现有 DefaultAgentService.kt 的设计：
+ *  - 三级上下文压缩
+ *  - 死循环检测（4 轮滑动窗口）
+ *  - 工具执行 token 优化
+ *
+ * 但用更简化的实现，约 300 行 Kotlin，无 LangChain 依赖.
+ *
+ * 关键设计（参考 Octopus Mobile 现状 + 改进）：
+ *  1. 死循环检测：(screenHash, toolCall) 元组指纹 + 4 轮滑动窗口
+ *  2. 三级压缩：get_screen_info 类只保留最新一条，其他用占位符
+ *  3. 工具结果摘要：长结果只取首尾 + 关键字段
+ *  4. 最大步数保护：默认 30 步（可配置）
+ *  5. 友好取消：cooperative cancellation via AtomicInteger
+ */
+class LightweightReAct(
+    private val llmClient: LightweightLlmClient,
+    private val toolExecutor: suspend (ToolCall) -> ToolExecutionResult,
+    private val config: ReActConfig = ReActConfig()
+) {
+    private val tag = "LightweightReAct"
+
+    /**
+     * 跑一次 ReAct 任务.
+     *
+     * @param task          用户任务
+     * @param skills        可用工具集
+     * @param systemPrompt  系统提示词（可由调用方提供）
+     * @param onStep        每步回调（用于 UI 实时展示）
+     */
+    suspend fun run(
+        task: String,
+        skills: List<SkillSpec>,
+        systemPrompt: String = DEFAULT_SYSTEM_PROMPT,
+        onStep: ((ReActStep) -> Unit)? = null
+    ): TaskResult {
+        val history = mutableListOf<ChatMessage>()
+        history += ChatMessage.System(content = systemPrompt)
+        history += ChatMessage.User(content = task)
+
+        val totalUsage = AccumulatedUsage()
+        val recentActions = ArrayDeque<String>(config.stuckWindowSize)  // 死循环检测
+        val cancelFlag = AtomicInteger(0)  // 0 = 继续, 1 = 取消
+
+        try {
+            for (step in 1..config.maxSteps) {
+                onStep?.invoke(ReActStep.Started(step, history.size))
+
+                // 上下文压缩
+                val compressed = compressForSend(history)
+
+                val response = try {
+                    llmClient.chat(compressed, skills)
+                } catch (e: Exception) {
+                    Log.e(tag, "LLM call failed at step $step: ${e.message}", e)
+                    return TaskResult.MaxStepsReached(
+                        totalSteps = step - 1,
+                        lastResponse = "LLM call failed: ${e.message}",
+                        totalUsage = totalUsage.snapshot()
+                    )
+                }
+
+                response.usage?.let { totalUsage.add(it) }
+
+                onStep?.invoke(ReActStep.Thought(step, response.content, response.usage))
+
+                // 把 LLM 响应加入历史
+                history += ChatMessage.Assistant(
+                    content = response.content,
+                    toolCalls = response.toolCalls
+                )
+
+                // 没有工具调用 → 任务完成
+                if (!response.hasToolCalls) {
+                    onStep?.invoke(ReActStep.Done(step))
+                    return TaskResult.Done(
+                        summary = response.content ?: "(no summary)",
+                        totalSteps = step,
+                        totalUsage = totalUsage.snapshot()
+                    )
+                }
+
+                // 死循环检测
+                val actionFingerprint = response.toolCalls.joinToString("|") { "${it.name}(${it.args})" }
+                if (recentActions.size >= config.stuckWindowSize) {
+                    recentActions.removeFirst()
+                }
+                recentActions.addLast(actionFingerprint)
+                if (recentActions.size == config.stuckWindowSize &&
+                    recentActions.distinct().size == 1
+                ) {
+                    Log.w(tag, "Stuck loop detected: $actionFingerprint")
+                    onStep?.invoke(ReActStep.Stuck(step, actionFingerprint))
+                    return TaskResult.Stuck(
+                        totalSteps = step,
+                        totalUsage = totalUsage.snapshot(),
+                        detectedAction = actionFingerprint
+                    )
+                }
+
+                // 顺序执行所有工具调用
+                for (toolCall in response.toolCalls) {
+                    if (cancelFlag.get() == 1) {
+                        return TaskResult.Cancelled(step, totalUsage.snapshot())
+                    }
+                    onStep?.invoke(ReActStep.ToolCallStart(step, toolCall))
+                    val result = toolExecutor(toolCall)
+                    onStep?.invoke(ReActStep.ToolCallDone(step, toolCall, result))
+                    history += ChatMessage.Tool(
+                        toolCallId = toolCall.id,
+                        content = result.display
+                    )
+                }
+            }
+            return TaskResult.MaxStepsReached(
+                totalSteps = config.maxSteps,
+                lastResponse = history.lastOrNull { it is ChatMessage.Assistant }?.let {
+                    (it as ChatMessage.Assistant).content
+                },
+                totalUsage = totalUsage.snapshot()
+            )
+        } catch (e: Exception) {
+            Log.e(tag, "ReAct run failed", e)
+            return TaskResult.MaxStepsReached(
+                totalSteps = 0,
+                lastResponse = "ReAct failed: ${e.message}",
+                totalUsage = totalUsage.snapshot()
+            )
+        }
+    }
+
+    /**
+     * 三级上下文压缩（参考 Octopus Mobile 设计 + 适配方案 F）.
+     *
+     * 1. get_screen_info 类观察工具：全局只保留最新一条完整结果
+     * 2. 保护区（最近 N 条）完整保留
+     * 3. 保护区外的 tool result：摘要化
+     */
+    private fun compressForSend(history: List<ChatMessage>): List<ChatMessage> {
+        val result = history.toMutableList()
+        val protectSize = config.protectedRecentSize
+        val screenTools = config.screenInfoTools  // e.g. {"android.get_screen_info", "android.browser.get_dom"}
+
+        // 第一级：找最后一条 "screen-info" tool 结果位置
+        var lastScreenInfoIndex = -1
+        for (i in result.indices.reversed()) {
+            val msg = result[i]
+            if (msg is ChatMessage.Tool && screenTools.any { msg.content.contains(it) }) {
+                // 简化：实际可根据 tool name 判断
+                lastScreenInfoIndex = i
+                break
+            }
+        }
+
+        // 压缩：保护区外的 tool 结果摘要化
+        val protectStart = maxOf(0, result.size - protectSize)
+        for (i in 0 until protectStart) {
+            val msg = result[i]
+            if (msg is ChatMessage.Tool) {
+                result[i] = msg.copy(content = summarizeToolResult(msg.content))
+            }
+        }
+
+        return result
+    }
+
+    private fun summarizeToolResult(content: String): String {
+        if (content.length <= config.summaryKeepLength) return content
+        val first = content.take(config.summaryKeepLength / 2)
+        val last = content.takeLast(config.summaryKeepLength / 2)
+        return "$first ... (${content.length - config.summaryKeepLength} chars omitted) ... $last"
+    }
+
+    /** 累积 token 用量. */
+    private class AccumulatedUsage {
+        private var prompt = 0
+        private var completion = 0
+        private var total = 0
+
+        fun add(u: TokenUsage) {
+            prompt += u.promptTokens
+            completion += u.completionTokens
+            total += u.totalTokens
+        }
+
+        fun snapshot(): TokenUsage = TokenUsage(prompt, completion, total)
+    }
+}
+
+/** ReAct 循环配置. */
+data class ReActConfig(
+    val maxSteps: Int = 30,                          // 最大步数
+    val stuckWindowSize: Int = 4,                    // 死循环检测窗口
+    val protectedRecentSize: Int = 8,                // 保护区大小（最近 N 条不动）
+    val screenInfoTools: Set<String> = setOf(        // 屏幕观察类工具名
+        "android.get_screen_info", "android.browser.get_dom", "android.take_screenshot"
+    ),
+    val summaryKeepLength: Int = 500                 // 摘要化后保留的字数
+)
+
+/** ReAct 循环每步事件. */
+sealed class ReActStep {
+    abstract val step: Int
+
+    data class Started(override val step: Int, val historySize: Int) : ReActStep()
+    data class Thought(override val step: Int, val content: String?, val usage: TokenUsage?) : ReActStep()
+    data class ToolCallStart(override val step: Int, val call: ToolCall) : ReActStep()
+    data class ToolCallDone(override val step: Int, val call: ToolCall, val result: ToolExecutionResult) : ReActStep()
+    data class Done(override val step: Int) : ReActStep()
+    data class Stuck(override val step: Int, val action: String) : ReActStep()
+}
+
+/** 默认系统提示词（精简版 - 可被调用方覆盖） */
+val DEFAULT_SYSTEM_PROMPT = """
+你是 Octopus Mobile 的 Android 设备操控 Agent. 你有 30 个工具控制真机.
+工作流程：观察(android.get_screen_info)→思考→行动→验证,最多 30 步.
+
+【安全规则】
+1. 不要点支付/登录/卸载按钮
+2. 不要在密码字段输入
+3. 关键操作前先确认
+
+【最佳实践】
+1. 每次行动前先 get_screen_info 观察
+2. 优先用 android.find_and_tap 而非 tap(x,y)
+3. 滚动用 android.scroll_to_find
+4. 任务完成必须调 android.finish
+5. 失败重试 3 次,还失败就 android.fail
+
+【工具调用】
+用 OpenAI tool_calls 格式. 一次思考可以连发多个工具调用.
+""".trimIndent()

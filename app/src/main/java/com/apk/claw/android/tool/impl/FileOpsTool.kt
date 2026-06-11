@@ -1,0 +1,138 @@
+package com.apk.claw.android.tool.impl
+
+import com.apk.claw.android.shizuku.ShizukuShellService
+import com.apk.claw.android.tool.BaseTool
+import com.apk.claw.android.tool.ToolParameter
+import com.apk.claw.android.tool.ToolResult
+
+/**
+ * 文件操作工具 —— 复制/移动/删除/创建目录。
+ *
+ * 所有操作通过 Shizuku shell 执行，可以操作 /sdcard/ 下的任意文件。
+ * 需要用户确认操作安全性（尤其是删除操作）。
+ */
+class FileOpsTool : BaseTool() {
+
+    override fun getName(): String = "file_ops"
+
+    override fun getDisplayName(): String = if (useChineseDescription) "文件操作" else "File Operations"
+
+    override fun getParameters(): List<ToolParameter> = listOf(
+        ToolParameter(
+            "action",
+            "string",
+            "Operation: 'copy', 'move', 'delete', 'mkdir', 'read' (read text file).",
+            true
+        ),
+        ToolParameter(
+            "source",
+            "string",
+            "Source file/directory path. Required for copy/move/delete/read.",
+            false
+        ),
+        ToolParameter(
+            "destination",
+            "string",
+            "Destination path. Required for copy/move.",
+            false
+        ),
+        ToolParameter(
+            "max_lines",
+            "integer",
+            "Optional: max lines to return for 'read' action. Default 100.",
+            false
+        )
+    )
+
+    override fun execute(params: Map<String, Any>): ToolResult {
+        val action = requireString(params, "action")
+        val source = optionalString(params, "source", "")
+
+        // 路径安全检查
+        if (source.startsWith("/data/data/") || source.startsWith("/data/system/") ||
+            optionalString(params, "destination", "").startsWith("/data/data/") ||
+            optionalString(params, "destination", "").startsWith("/data/system/")) {
+            return ToolResult.error("Access denied: /data/data/ and /data/system/ require root.")
+        }
+
+        return when (action) {
+            "copy" -> {
+                if (source.isEmpty()) return ToolResult.error("source is required for copy.")
+                val dest = requireString(params, "destination")
+                val ok = ShizukuShellService.copyFile(source, dest)
+                    ?: return ToolResult.error("Shizuku not available.")
+                if (ok) ToolResult.success("Copied: $source -> $dest")
+                else ToolResult.error("Failed to copy $source to $dest")
+            }
+            "move" -> {
+                if (source.isEmpty()) return ToolResult.error("source is required for move.")
+                val dest = requireString(params, "destination")
+                val ok = ShizukuShellService.moveFile(source, dest)
+                    ?: return ToolResult.error("Shizuku not available.")
+                if (ok) ToolResult.success("Moved: $source -> $dest")
+                else ToolResult.error("Failed to move $source to $dest")
+            }
+            "delete" -> {
+                if (source.isEmpty()) return ToolResult.error("source is required for delete.")
+                val ok = ShizukuShellService.deleteFile(source)
+                    ?: return ToolResult.error("Shizuku not available.")
+                if (ok) ToolResult.success("Deleted: $source")
+                else ToolResult.error("Failed to delete $source")
+            }
+            "mkdir" -> {
+                if (source.isEmpty()) return ToolResult.error("source (directory path) is required for mkdir.")
+                val ok = ShizukuShellService.createDirectory(source)
+                    ?: return ToolResult.error("Shizuku not available.")
+                if (ok) ToolResult.success("Created directory: $source")
+                else ToolResult.error("Failed to create directory $source")
+            }
+            "read" -> {
+                if (source.isEmpty()) return ToolResult.error("source is required for read.")
+                val maxLines = optionalInt(params, "max_lines", 100)
+                val content = ShizukuShellService.readFile(source, maxLines)
+                    ?: return ToolResult.error("Shizuku not available.")
+                if (content.startsWith("Error:")) {
+                    ToolResult.error(content)
+                } else {
+                    ToolResult.success("File: $source (max $maxLines lines)\n$content")
+                }
+            }
+            else -> ToolResult.error("Unknown action: $action. Use 'copy', 'move', 'delete', 'mkdir', or 'read'.")
+        }
+    }
+
+    override fun getDescriptionEN(): String = """
+        Perform file operations using Shizuku shell access.
+        Can operate on any file under /sdcard/ including /sdcard/Android/data/.
+        
+        Actions:
+        - copy: Copy file/directory (source + destination required)
+        - move: Move/rename file/directory (source + destination required)
+        - delete: Delete file/directory (source required, use with caution!)
+        - mkdir: Create directory (source = directory path)
+        - read: Read text file content (source required, returns up to max_lines)
+        
+        Examples:
+        - Copy photo: action="copy", source="/sdcard/DCIM/Camera/photo.jpg", destination="/sdcard/Backup/"
+        - Rename: action="move", source="/sdcard/Download/old.pdf", destination="/sdcard/Download/new.pdf"
+        - Read config: action="read", source="/sdcard/config.json", max_lines=50
+    """.trimIndent()
+
+    override fun getDescriptionCN(): String = """
+        使用 Shizuku shell 权限执行文件操作。
+        可以操作 /sdcard/ 下的任何文件，包括 /sdcard/Android/data/。
+        
+        操作：
+        - copy: 复制文件/目录（需要 source + destination）
+        - move: 移动/重命名文件/目录（需要 source + destination）
+        - delete: 删除文件/目录（需要 source，谨慎使用！）
+        - mkdir: 创建目录（source = 目录路径）
+        - read: 读取文本文件内容（需要 source，最多返回 max_lines 行）
+        
+        示例：
+        - 复制照片: action="copy", source="/sdcard/DCIM/Camera/photo.jpg", destination="/sdcard/Backup/"
+        - 重命名: action="move", source="/sdcard/Download/old.pdf", destination="/sdcard/Download/new.pdf"
+        - 读配置: action="read", source="/sdcard/config.json", max_lines=50
+    """.trimIndent()
+}
+

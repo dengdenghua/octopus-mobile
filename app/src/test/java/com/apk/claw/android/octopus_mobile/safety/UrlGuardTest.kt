@@ -1,0 +1,89 @@
+package com.apk.claw.android.octopus_mobile.safety
+
+import org.junit.Assert.*
+import org.junit.Test
+
+/**
+ * UrlGuard 测试 —— SSRF 防护.
+ */
+class UrlGuardTest {
+
+    @Test
+    fun `allows safe url`() {
+        assertTrue(UrlGuard.isSafeUrl("https://example.com/path"))
+        assertTrue(UrlGuard.isSafeUrl("http://api.example.com/v1/data"))
+    }
+
+    @Test
+    fun `blocks private ip 10x`() {
+        assertFalse(UrlGuard.isSafeUrl("http://10.0.0.1/secret"))
+        assertFalse(UrlGuard.isSafeUrl("http://10.255.255.255/"))
+    }
+
+    @Test
+    fun `blocks private ip 172x`() {
+        assertFalse(UrlGuard.isSafeUrl("http://172.16.0.1/"))
+        assertFalse(UrlGuard.isSafeUrl("http://172.31.255.255/"))
+        assertTrue(UrlGuard.isSafeUrl("http://172.15.0.1/"))  // 172.15 不是私有
+        assertTrue(UrlGuard.isSafeUrl("http://172.32.0.1/"))  // 172.32 不是私有
+    }
+
+    @Test
+    fun `blocks private ip 192168x`() {
+        assertFalse(UrlGuard.isSafeUrl("http://192.168.1.1/"))
+    }
+
+    @Test
+    fun `blocks loopback`() {
+        assertFalse(UrlGuard.isSafeUrl("http://127.0.0.1/"))
+        assertFalse(UrlGuard.isSafeUrl("http://localhost/"))
+    }
+
+    @Test
+    fun `blocks AWS metadata`() {
+        assertFalse(UrlGuard.isSafeUrl("http://169.254.169.254/latest/meta-data/"))
+    }
+
+    @Test
+    fun `blocks metadata domain`() {
+        assertFalse(UrlGuard.isSafeUrl("http://metadata.google.internal/"))
+    }
+
+    @Test
+    fun `blocks local suffix`() {
+        assertFalse(UrlGuard.isSafeUrl("http://myapp.local/"))
+        assertFalse(UrlGuard.isSafeUrl("http://service.internal/"))
+    }
+
+    @Test
+    fun `blocks file protocol`() {
+        assertFalse(UrlGuard.isSafeUrl("file:///etc/passwd"))
+    }
+
+    @Test
+    fun `blocks ftp protocol`() {
+        assertFalse(UrlGuard.isSafeUrl("ftp://example.com/file"))
+    }
+
+    @Test
+    fun `verdict includes reason`() {
+        val v = UrlGuard.check("http://127.0.0.1/")
+        assertFalse(v.allow)
+        assertEquals("private_ip: 127.0.0.1", v.reason)
+    }
+
+    @Test
+    fun `allowPrivate bypasses private check`() {
+        assertTrue(UrlGuard.isSafeUrl("http://192.168.1.1/", allowPrivate = true))
+    }
+
+    @Test
+    fun `empty url blocked`() {
+        assertFalse(UrlGuard.isSafeUrl(""))
+    }
+
+    @Test
+    fun `malformed url blocked`() {
+        assertFalse(UrlGuard.isSafeUrl("not a url"))
+    }
+}
