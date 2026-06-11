@@ -12,11 +12,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.apk.claw.android.R
 
 // 颜色
 private val PrimaryColor = Color(0xFF6C5CE7)
@@ -91,7 +93,7 @@ fun ChatScreen() {
                         modifier = Modifier.clickable { /* 切换模式 */ }
                     ) {
                         Text(
-                            "🌐 远程",
+                            stringResource(R.string.chat_remote),
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
                             fontSize = 10.sp,
                             fontWeight = FontWeight.SemiBold,
@@ -103,7 +105,7 @@ fun ChatScreen() {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(modifier = Modifier.size(8.dp).background(SuccessColor, RoundedCornerShape(4.dp)))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("在线", fontSize = 11.sp, color = TextSecondary)
+                        Text(stringResource(R.string.status_online), fontSize = 11.sp, color = TextSecondary)
                     }
                 }
             },
@@ -185,7 +187,7 @@ fun ChatScreen() {
                     value = inputText,
                     onValueChange = { inputText = it },
                     modifier = Modifier.weight(1f),
-                    placeholder = { Text("输入指令...", color = TextMuted) },
+                    placeholder = { Text(stringResource(R.string.chat_input_hint), color = TextMuted) },
                     shape = RoundedCornerShape(24.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = PrimaryColor,

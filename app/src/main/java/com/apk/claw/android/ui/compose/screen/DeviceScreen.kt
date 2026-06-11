@@ -12,11 +12,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.apk.claw.android.R
 
 private val PrimaryColor = Color(0xFF6C5CE7)
 private val SuccessColor = Color(0xFF00D2A0)
@@ -62,9 +64,9 @@ fun DeviceScreen() {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("🖥 设备", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                Text(stringResource(R.string.device_title), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
                 val onlineCount = devices.count { it.status == "online" }
-                Text("$onlineCount/${devices.size} 在线", fontSize = 11.sp, color = TextMuted)
+                Text(stringResource(R.string.device_online_count, onlineCount, devices.size), fontSize = 11.sp, color = TextMuted)
             }
         }
 
@@ -105,13 +107,13 @@ fun DeviceScreen() {
                     border = BorderStroke(1.dp, BorderColor),
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
-                        Text("🖥 投屏", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = TextSecondary)
+                        Text(stringResource(R.string.device_cast), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = TextSecondary)
                         Spacer(modifier = Modifier.height(8.dp))
                         Box(
                             modifier = Modifier.fillMaxWidth().height(48.dp).background(SurfaceVariantColor, RoundedCornerShape(8.dp)),
                             contentAlignment = Alignment.Center,
                         ) {
-                            Text("📺 未连接", fontSize = 10.sp, color = TextMuted)
+                            Text(stringResource(R.string.device_cast_disconnected), fontSize = 10.sp, color = TextMuted)
                         }
                     }
                 }
@@ -124,13 +126,13 @@ fun DeviceScreen() {
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("👁️ 视觉", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = TextSecondary)
+                            Text(stringResource(R.string.device_vision), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = TextSecondary)
                             Spacer(modifier = Modifier.weight(1f))
                             // 开关
                             Box(modifier = Modifier.size(30.dp, 16.dp).background(PrimaryColor, RoundedCornerShape(8.dp)))
                         }
                         Spacer(modifier = Modifier.height(6.dp))
-                        Text("VLM 多模态分析\n系统弹窗自动降级", fontSize = 10.sp, color = TextMuted, lineHeight = 14.sp)
+                        Text(stringResource(R.string.device_vision_desc), fontSize = 10.sp, color = TextMuted, lineHeight = 14.sp)
                     }
                 }
             }
@@ -156,14 +158,14 @@ private fun DeviceCard(device: DeviceInfo, selected: Boolean, onClick: () -> Uni
                 if (device.isLocal) {
                     Spacer(modifier = Modifier.width(4.dp))
                     Surface(shape = RoundedCornerShape(4.dp), color = SuccessColor.copy(alpha = 0.15f)) {
-                        Text("本机", modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp), fontSize = 8.sp, color = SuccessColor, fontWeight = FontWeight.SemiBold)
+                        Text(stringResource(R.string.device_this_device), modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp), fontSize = 8.sp, color = SuccessColor, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
             Spacer(modifier = Modifier.height(4.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(device.model, fontSize = 10.sp, color = TextMuted)
-                Text(if (device.status == "online") "在线" else "离线", fontSize = 10.sp, color = if (device.status == "online") SuccessColor else TextMuted)
+                Text(if (device.status == "online") stringResource(R.string.status_online) else stringResource(R.string.status_offline), fontSize = 10.sp, color = if (device.status == "online") SuccessColor else TextMuted)
             }
         }
     }
@@ -184,7 +186,13 @@ private fun DeviceDetailCard(device: DeviceInfo) {
             Spacer(modifier = Modifier.height(10.dp))
             // 远程控制按钮
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf("📸" to "截图", "👆" to "点击", "📱" to "打开", "🏠" to "Home", "⬅️" to "返回").forEach { (icon, label) ->
+                listOf(
+                    "📸" to stringResource(R.string.ctrl_screenshot),
+                    "👆" to stringResource(R.string.ctrl_tap),
+                    "📱" to stringResource(R.string.ctrl_open),
+                    "🏠" to "Home",
+                    "⬅️" to stringResource(R.string.ctrl_back),
+                ).forEach { (icon, label) ->
                     Column(
                         modifier = Modifier.weight(1f).background(SurfaceVariantColor, RoundedCornerShape(8.dp)).clickable { }.padding(vertical = 8.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -233,7 +241,7 @@ private fun BrowserCard(selectedTab: Int, onTabChange: (Int) -> Unit) {
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("🌐 浏览器", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = TextSecondary)
+                Text(stringResource(R.string.device_browser), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = TextSecondary)
                 Spacer(modifier = Modifier.weight(1f))
                 Surface(shape = RoundedCornerShape(4.dp), color = SuccessColor.copy(alpha = 0.15f)) {
                     Text("GeckoView 151", modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), fontSize = 8.sp, color = SuccessColor, fontWeight = FontWeight.SemiBold)
@@ -242,7 +250,7 @@ private fun BrowserCard(selectedTab: Int, onTabChange: (Int) -> Unit) {
             Spacer(modifier = Modifier.height(10.dp))
             // Tab 切换
             Row(modifier = Modifier.fillMaxWidth().background(SurfaceVariantColor, RoundedCornerShape(12.dp)).padding(3.dp)) {
-                listOf("标签页", "扩展").forEachIndexed { index, label ->
+                listOf(stringResource(R.string.device_tabs), stringResource(R.string.device_extensions)).forEachIndexed { index, label ->
                     Surface(
                         modifier = Modifier.weight(1f).clickable { onTabChange(index) },
                         shape = RoundedCornerShape(10.dp),
@@ -267,7 +275,7 @@ private fun BrowserCard(selectedTab: Int, onTabChange: (Int) -> Unit) {
                             Text(title, fontSize = 11.sp, color = TextPrimary, modifier = Modifier.weight(1f))
                             if (i == 0) {
                                 Surface(shape = RoundedCornerShape(4.dp), color = PrimaryColor.copy(alpha = 0.15f)) {
-                                    Text("活跃", modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp), fontSize = 8.sp, color = PrimaryColor, fontWeight = FontWeight.SemiBold)
+                                    Text(stringResource(R.string.badge_active), modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp), fontSize = 8.sp, color = PrimaryColor, fontWeight = FontWeight.SemiBold)
                                 }
                             }
                         }

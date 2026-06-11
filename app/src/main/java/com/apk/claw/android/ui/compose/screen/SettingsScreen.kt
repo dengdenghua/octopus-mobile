@@ -12,11 +12,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.apk.claw.android.R
 
 private val PrimaryColor = Color(0xFF6C5CE7)
 private val SuccessColor = Color(0xFF00D2A0)
@@ -38,16 +40,16 @@ fun SettingsScreen() {
     ) {
         // 标题
         item {
-            Text("⚙ 设置", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = TextPrimary, modifier = Modifier.padding(top = 8.dp, bottom = 4.dp))
+            Text("⚙ " + stringResource(R.string.settings_title), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = TextPrimary, modifier = Modifier.padding(top = 8.dp, bottom = 4.dp))
         }
 
         // 权限状态
         item {
-            SettingsCard("权限状态") {
+            SettingsCard(stringResource(R.string.settings_section_permissions)) {
                 val perms = listOf(
-                    "无障碍" to true, "通知" to true,
-                    "悬浮窗" to true, "电池" to true,
-                    "存储" to true, "Shizuku" to false,
+                    stringResource(R.string.perm_accessibility) to true, stringResource(R.string.perm_notification) to true,
+                    stringResource(R.string.perm_overlay) to true, stringResource(R.string.perm_battery) to true,
+                    stringResource(R.string.perm_storage) to true, "Shizuku" to false,
                 )
                 // 2 列网格
                 perms.chunked(2).forEach { row ->
@@ -73,7 +75,7 @@ fun SettingsScreen() {
 
         // 模型配置
         item {
-            SettingsCard("模型配置") {
+            SettingsCard(stringResource(R.string.settings_section_model)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("gpt-4o", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
                     Spacer(modifier = Modifier.width(4.dp))
@@ -88,7 +90,7 @@ fun SettingsScreen() {
                         Text("VLM ✓", modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), fontSize = 10.sp, color = PrimaryColor, fontWeight = FontWeight.SemiBold)
                     }
                     Surface(shape = RoundedCornerShape(6.dp), color = SuccessColor.copy(alpha = 0.15f)) {
-                        Text("本地降级 ✓", modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), fontSize = 10.sp, color = SuccessColor, fontWeight = FontWeight.SemiBold)
+                        Text(stringResource(R.string.settings_local_fallback), modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), fontSize = 10.sp, color = SuccessColor, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
@@ -96,14 +98,14 @@ fun SettingsScreen() {
 
         // 消息渠道
         item {
-            SettingsCard("消息渠道") {
+            SettingsCard(stringResource(R.string.settings_section_channels)) {
                 val channels = listOf(
-                    "💬" to "钉钉" to true,
-                    "🐦" to "飞书" to false,
+                    "💬" to stringResource(R.string.channel_dingtalk) to true,
+                    "🐦" to stringResource(R.string.channel_feishu) to false,
                     "🐧" to "QQ" to false,
                     "🎮" to "Discord" to true,
                     "✈️" to "Telegram" to true,
-                    "💚" to "微信" to false,
+                    "💚" to stringResource(R.string.channel_wechat) to false,
                 )
                 // 3 列网格
                 channels.chunked(3).forEach { row ->
@@ -122,7 +124,7 @@ fun SettingsScreen() {
                                 ) {
                                     Text(icon, fontSize = 14.sp)
                                     Text(name, fontSize = 11.sp, color = TextSecondary)
-                                    Text(if (connected) "已连接" else "未配置", fontSize = 9.sp, color = if (connected) SuccessColor else TextMuted, fontWeight = FontWeight.SemiBold)
+                                    Text(if (connected) stringResource(R.string.status_connected) else stringResource(R.string.status_not_configured), fontSize = 9.sp, color = if (connected) SuccessColor else TextMuted, fontWeight = FontWeight.SemiBold)
                                 }
                             }
                         }
@@ -134,13 +136,13 @@ fun SettingsScreen() {
 
         // 其他设置
         item {
-            SettingsCard("其他") {
+            SettingsCard(stringResource(R.string.settings_section_other)) {
                 listOf(
-                    "局域网配置" to "192.168.1.105:9527",
-                    "设备管理" to "2 台设备",
-                    "浏览器引擎" to "GeckoView 151",
-                    "投屏控制" to "未连接",
-                    "插件管理" to "3 个已加载",
+                    stringResource(R.string.settings_lan_config) to "192.168.1.105:9527",
+                    stringResource(R.string.settings_device_mgmt) to stringResource(R.string.settings_val_devices),
+                    stringResource(R.string.settings_browser_engine) to "GeckoView 151",
+                    stringResource(R.string.settings_cast_control) to stringResource(R.string.status_not_connected),
+                    stringResource(R.string.settings_plugin_mgmt) to stringResource(R.string.settings_val_plugins_loaded),
                 ).forEach { (label, value) ->
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),

@@ -301,4 +301,51 @@ For these, install Shizuku — a safe, open-source helper.</string>
     <string name="nav_chat">Chat</string>
     <string name="nav_device">Device</string>
     <string name="nav_settings">Settings</string>
+
+    <!-- SettingsScreen (Compose) -->
+    <string name="settings_section_permissions">Permissions</string>
+    <string name="perm_accessibility">Accessibility</string>
+    <string name="perm_notification">Notifications</string>
+    <string name="perm_overlay">Overlay</string>
+    <string name="perm_battery">Battery</string>
+    <string name="perm_storage">Storage</string>
+    <string name="settings_section_model">Model</string>
+    <string name="settings_local_fallback">Local Fallback ✓</string>
+    <string name="settings_section_channels">Channels</string>
+    <string name="status_connected">Connected</string>
+    <string name="status_not_configured">Not configured</string>
+    <string name="status_not_connected">Not connected</string>
+    <string name="settings_section_other">Other</string>
+    <string name="settings_lan_config">LAN Config</string>
+    <string name="settings_device_mgmt">Device Management</string>
+    <string name="settings_val_devices">2 devices</string>
+    <string name="settings_browser_engine">Browser Engine</string>
+    <string name="settings_cast_control">Screen Cast</string>
+    <string name="settings_plugin_mgmt">Plugin Management</string>
+    <string name="settings_val_plugins_loaded">3 loaded</string>
+
+    <!-- Shared status -->
+    <string name="status_online">Online</string>
+    <string name="status_offline">Offline</string>
+
+    <!-- ChatScreen (Compose) -->
+    <string name="chat_remote">🌐 Remote</string>
+    <string name="chat_input_hint">Enter a command…</string>
+
+    <!-- DeviceScreen (Compose) -->
+    <string name="device_title">🖥 Devices</string>
+    <string name="device_online_count">%1$d/%2$d online</string>
+    <string name="device_cast">🖥 Screen Cast</string>
+    <string name="device_cast_disconnected">📺 Not connected</string>
+    <string name="device_vision">👁️ Vision</string>
+    <string name="device_vision_desc">VLM multimodal analysis\nAuto-fallback on system dialogs</string>
+    <string name="device_this_device">This device</string>
+    <string name="ctrl_screenshot">Screenshot</string>
+    <string name="ctrl_tap">Tap</string>
+    <string name="ctrl_open">Open</string>
+    <string name="ctrl_back">Back</string>
+    <string name="device_browser">🌐 Browser</string>
+    <string name="device_tabs">Tabs</string>
+    <string name="device_extensions">Extensions</string>
+    <string name="badge_active">Active</string>
 </resources>

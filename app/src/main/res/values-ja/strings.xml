@@ -261,4 +261,51 @@
     <string name="nav_chat">チャット</string>
     <string name="nav_device">デバイス</string>
     <string name="nav_settings">設定</string>
+
+    <!-- SettingsScreen (Compose) -->
+    <string name="settings_section_permissions">権限の状態</string>
+    <string name="perm_accessibility">ユーザー補助</string>
+    <string name="perm_notification">通知</string>
+    <string name="perm_overlay">オーバーレイ</string>
+    <string name="perm_battery">バッテリー</string>
+    <string name="perm_storage">ストレージ</string>
+    <string name="settings_section_model">モデル設定</string>
+    <string name="settings_local_fallback">ローカルフォールバック ✓</string>
+    <string name="settings_section_channels">メッセージチャネル</string>
+    <string name="status_connected">接続済み</string>
+    <string name="status_not_configured">未設定</string>
+    <string name="status_not_connected">未接続</string>
+    <string name="settings_section_other">その他</string>
+    <string name="settings_lan_config">LAN 設定</string>
+    <string name="settings_device_mgmt">デバイス管理</string>
+    <string name="settings_val_devices">2 台</string>
+    <string name="settings_browser_engine">ブラウザエンジン</string>
+    <string name="settings_cast_control">画面投影</string>
+    <string name="settings_plugin_mgmt">プラグイン管理</string>
+    <string name="settings_val_plugins_loaded">3 件読み込み済み</string>
+
+    <!-- Shared status -->
+    <string name="status_online">オンライン</string>
+    <string name="status_offline">オフライン</string>
+
+    <!-- ChatScreen (Compose) -->
+    <string name="chat_remote">🌐 リモート</string>
+    <string name="chat_input_hint">コマンドを入力…</string>
+
+    <!-- DeviceScreen (Compose) -->
+    <string name="device_title">🖥 デバイス</string>
+    <string name="device_online_count">%1$d/%2$d オンライン</string>
+    <string name="device_cast">🖥 画面投影</string>
+    <string name="device_cast_disconnected">📺 未接続</string>
+    <string name="device_vision">👁️ ビジョン</string>
+    <string name="device_vision_desc">VLM マルチモーダル解析\nシステムダイアログ時に自動フォールバック</string>
+    <string name="device_this_device">本機</string>
+    <string name="ctrl_screenshot">スクショ</string>
+    <string name="ctrl_tap">タップ</string>
+    <string name="ctrl_open">開く</string>
+    <string name="ctrl_back">戻る</string>
+    <string name="device_browser">🌐 ブラウザ</string>
+    <string name="device_tabs">タブ</string>
+    <string name="device_extensions">拡張機能</string>
+    <string name="badge_active">アクティブ</string>
 </resources>

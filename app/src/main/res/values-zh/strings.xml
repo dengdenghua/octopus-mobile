@@ -296,4 +296,51 @@
     <string name="nav_chat">对话</string>
     <string name="nav_device">设备</string>
     <string name="nav_settings">设置</string>
+
+    <!-- SettingsScreen (Compose) -->
+    <string name="settings_section_permissions">权限状态</string>
+    <string name="perm_accessibility">无障碍</string>
+    <string name="perm_notification">通知</string>
+    <string name="perm_overlay">悬浮窗</string>
+    <string name="perm_battery">电池</string>
+    <string name="perm_storage">存储</string>
+    <string name="settings_section_model">模型配置</string>
+    <string name="settings_local_fallback">本地降级 ✓</string>
+    <string name="settings_section_channels">消息渠道</string>
+    <string name="status_connected">已连接</string>
+    <string name="status_not_configured">未配置</string>
+    <string name="status_not_connected">未连接</string>
+    <string name="settings_section_other">其他</string>
+    <string name="settings_lan_config">局域网配置</string>
+    <string name="settings_device_mgmt">设备管理</string>
+    <string name="settings_val_devices">2 台设备</string>
+    <string name="settings_browser_engine">浏览器引擎</string>
+    <string name="settings_cast_control">投屏控制</string>
+    <string name="settings_plugin_mgmt">插件管理</string>
+    <string name="settings_val_plugins_loaded">3 个已加载</string>
+
+    <!-- Shared status -->
+    <string name="status_online">在线</string>
+    <string name="status_offline">离线</string>
+
+    <!-- ChatScreen (Compose) -->
+    <string name="chat_remote">🌐 远程</string>
+    <string name="chat_input_hint">输入指令...</string>
+
+    <!-- DeviceScreen (Compose) -->
+    <string name="device_title">🖥 设备</string>
+    <string name="device_online_count">%1$d/%2$d 在线</string>
+    <string name="device_cast">🖥 投屏</string>
+    <string name="device_cast_disconnected">📺 未连接</string>
+    <string name="device_vision">👁️ 视觉</string>
+    <string name="device_vision_desc">VLM 多模态分析\n系统弹窗自动降级</string>
+    <string name="device_this_device">本机</string>
+    <string name="ctrl_screenshot">截图</string>
+    <string name="ctrl_tap">点击</string>
+    <string name="ctrl_open">打开</string>
+    <string name="ctrl_back">返回</string>
+    <string name="device_browser">🌐 浏览器</string>
+    <string name="device_tabs">标签页</string>
+    <string name="device_extensions">扩展</string>
+    <string name="badge_active">活跃</string>
 </resources>
