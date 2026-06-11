@@ -11,10 +11,15 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import android.content.Intent
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import com.apk.claw.android.ui.settings.ChannelConfigActivity
+import com.apk.claw.android.ui.settings.LlmConfigActivity
+import com.apk.claw.android.utils.KVUtils
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -34,6 +39,7 @@ private val BorderColor = Color(0xFF38383A)
 
 @Composable
 fun SettingsScreen(onMessage: (String) -> Unit = {}) {
+    val context = LocalContext.current
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(BackgroundColor).padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -73,17 +79,23 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
             }
         }
 
-        // 模型配置
+        // 模型配置（点击进入真实 LLM 配置页）
         item {
-            SettingsCard(stringResource(R.string.settings_section_model)) {
+            val model = KVUtils.getLlmModelName().ifBlank { "—" }
+            val baseUrl = KVUtils.getLlmBaseUrl().ifBlank { "未配置" }
+            val apiKey = KVUtils.getLlmApiKey()
+            val keyMasked = if (apiKey.length >= 8) apiKey.take(5) + "••••" + apiKey.takeLast(4) else if (apiKey.isBlank()) "未配置" else "已设置"
+            SettingsCard(stringResource(R.string.settings_section_model), onClick = {
+                context.startActivity(Intent(context, LlmConfigActivity::class.java))
+            }) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("gpt-4o", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("· OpenAI", fontSize = 11.sp, color = TextMuted)
+                    Text(model, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                    Spacer(modifier = Modifier.weight(1f))
+                    Text("›", fontSize = 18.sp, color = TextMuted)
                 }
                 Spacer(modifier = Modifier.height(6.dp))
-                Text("Base URL: https://api.openai.com/v1", fontSize = 11.sp, color = TextMuted)
-                Text("API Key: sk-••••••••••••3f7a", fontSize = 11.sp, color = TextMuted)
+                Text("Base URL: $baseUrl", fontSize = 11.sp, color = TextMuted)
+                Text("API Key: $keyMasked", fontSize = 11.sp, color = TextMuted)
                 Spacer(modifier = Modifier.height(6.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Surface(shape = RoundedCornerShape(6.dp), color = PrimaryColor.copy(alpha = 0.15f)) {
@@ -98,7 +110,9 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
 
         // 消息渠道
         item {
-            SettingsCard(stringResource(R.string.settings_section_channels)) {
+            SettingsCard(stringResource(R.string.settings_section_channels), onClick = {
+                context.startActivity(Intent(context, ChannelConfigActivity::class.java))
+            }) {
                 val channels = listOf(
                     "💬" to stringResource(R.string.channel_dingtalk) to true,
                     "🐦" to stringResource(R.string.channel_feishu) to false,
@@ -173,11 +187,12 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
 }
 
 @Composable
-private fun SettingsCard(title: String, content: @Composable ColumnScope.() -> Unit) {
+private fun SettingsCard(title: String, onClick: (() -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
     Surface(
         shape = RoundedCornerShape(16.dp),
         color = SurfaceColor,
         border = BorderStroke(1.dp, BorderColor),
+        modifier = if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier,
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextSecondary, letterSpacing = 0.5.sp)

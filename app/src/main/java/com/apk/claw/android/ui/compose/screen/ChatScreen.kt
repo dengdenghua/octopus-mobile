@@ -87,14 +87,27 @@ fun ChatScreen() {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val ackText = stringResource(R.string.chat_ack)
-    // 发送指令：追加用户消息 + Agent 占位回执，清空输入并滚到底部
+    // 发送指令：追加用户消息后，若已配置 LLM 则真正驱动 Agent，否则给占位回执
+    val scrollEnd = { scope.launch { listState.animateScrollToItem(messages.size) }; Unit }
     val send = {
         val t = inputText.trim()
         if (t.isNotEmpty()) {
             messages.add(ChatMessage.UserMessage(t))
-            messages.add(ChatMessage.AgentMessage(ackText))
             inputText = ""
-            scope.launch { listState.animateScrollToItem(messages.size) }
+            scrollEnd()
+            if (ChatAgentBridge.isConfigured()) {
+                // 真实 Agent：LLM(DeepSeek/OpenAI) + 设备工具执行，结果流式回灌对话
+                ChatAgentBridge.run(
+                    prompt = t,
+                    onTool = { icon, name, args, res -> messages.add(ChatMessage.ToolCall(icon, name, args, res)); scrollEnd() },
+                    onText = { txt -> messages.add(ChatMessage.AgentMessage(txt)); scrollEnd() },
+                    onDone = { ans -> messages.add(ChatMessage.AgentMessage(ans)); scrollEnd() },
+                    onError = { e -> messages.add(ChatMessage.AgentMessage("⚠️ $e")); scrollEnd() },
+                )
+            } else {
+                messages.add(ChatMessage.AgentMessage(ackText))
+                scrollEnd()
+            }
         }
     }
 
