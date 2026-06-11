@@ -1,6 +1,5 @@
 package com.apk.claw.android.ui.compose.screen
 
-import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -13,7 +12,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -35,8 +33,7 @@ private val TextMuted = Color(0xFF55556A)
 private val BorderColor = Color(0xFF2A2A40)
 
 @Composable
-fun SettingsScreen() {
-    val context = LocalContext.current
+fun SettingsScreen(onMessage: (String) -> Unit = {}) {
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(BackgroundColor).padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -118,7 +115,7 @@ fun SettingsScreen() {
                             val statusText = if (connected) stringResource(R.string.status_connected) else stringResource(R.string.status_not_configured)
                             Surface(
                                 modifier = Modifier.weight(1f).clickable {
-                                    Toast.makeText(context, "$name · $statusText", Toast.LENGTH_SHORT).show()
+                                    onMessage("$name · $statusText")
                                 },
                                 shape = RoundedCornerShape(10.dp),
                                 color = SurfaceVariantColor,
@@ -152,7 +149,7 @@ fun SettingsScreen() {
                 ).forEach { (label, value) ->
                     Row(
                         modifier = Modifier.fillMaxWidth()
-                            .clickable { Toast.makeText(context, "$label · $value", Toast.LENGTH_SHORT).show() }
+                            .clickable { onMessage("$label · $value") }
                             .padding(vertical = 6.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {

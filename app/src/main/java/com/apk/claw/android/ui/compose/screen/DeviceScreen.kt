@@ -3,7 +3,6 @@ package com.apk.claw.android.ui.compose.screen
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -14,7 +13,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -42,7 +40,7 @@ data class DeviceInfo(
 )
 
 @Composable
-fun DeviceScreen() {
+fun DeviceScreen(onMessage: (String) -> Unit = {}) {
     var selectedDeviceId by remember { mutableStateOf("local") }
     var browserTab by remember { mutableStateOf(0) } // 0=tabs, 1=extensions
     var visionOn by remember { mutableStateOf(true) }
@@ -91,7 +89,7 @@ fun DeviceScreen() {
         // 选中设备详情
         if (selected != null) {
             item {
-                DeviceDetailCard(selected)
+                DeviceDetailCard(selected, onMessage)
             }
         }
 
@@ -188,8 +186,7 @@ private fun DeviceCard(device: DeviceInfo, selected: Boolean, onClick: () -> Uni
 }
 
 @Composable
-private fun DeviceDetailCard(device: DeviceInfo) {
-    val context = LocalContext.current
+private fun DeviceDetailCard(device: DeviceInfo, onMessage: (String) -> Unit = {}) {
     Surface(
         shape = RoundedCornerShape(14.dp),
         color = SurfaceColor,
@@ -212,7 +209,7 @@ private fun DeviceDetailCard(device: DeviceInfo) {
                 ).forEach { (icon, label) ->
                     Column(
                         modifier = Modifier.weight(1f).background(SurfaceVariantColor, RoundedCornerShape(8.dp))
-                            .clickable { Toast.makeText(context, "$label → ${device.name}", Toast.LENGTH_SHORT).show() }
+                            .clickable { onMessage("$label → ${device.name}") }
                             .padding(vertical = 8.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {

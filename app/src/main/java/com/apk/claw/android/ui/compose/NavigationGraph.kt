@@ -9,9 +9,13 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
@@ -27,6 +31,7 @@ import com.apk.claw.android.ui.compose.screen.ChatScreen
 import com.apk.claw.android.ui.compose.screen.DeviceScreen
 import com.apk.claw.android.ui.compose.screen.DiscoverScreen
 import com.apk.claw.android.ui.compose.screen.SettingsScreen
+import kotlinx.coroutines.launch
 
 /**
  * 顶级 Composable：Scaffold 壳 + 底部导航栏 + NavHost。
@@ -40,9 +45,19 @@ fun OctopusApp() {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    // 统一的轻量反馈入口：替代分散的 Toast
+    val showMessage: (String) -> Unit = { msg ->
+        scope.launch {
+            snackbarHostState.currentSnackbarData?.dismiss()
+            snackbarHostState.showSnackbar(msg)
+        }
+    }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
             NavigationBar(
                 containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
@@ -76,6 +91,7 @@ fun OctopusApp() {
     ) { innerPadding ->
         OctopusNavHost(
             navController = navController,
+            showMessage = showMessage,
             modifier = Modifier.padding(innerPadding)
         )
     }
@@ -88,6 +104,7 @@ fun OctopusApp() {
 @Composable
 fun OctopusNavHost(
     navController: androidx.navigation.NavHostController,
+    showMessage: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     NavHost(
@@ -105,7 +122,7 @@ fun OctopusNavHost(
             })
         }
         composable(Screen.Chat.route) { ChatScreen() }
-        composable(Screen.Device.route) { DeviceScreen() }
-        composable(Screen.Settings.route) { SettingsScreen() }
+        composable(Screen.Device.route) { DeviceScreen(onMessage = showMessage) }
+        composable(Screen.Settings.route) { SettingsScreen(onMessage = showMessage) }
     }
 }
