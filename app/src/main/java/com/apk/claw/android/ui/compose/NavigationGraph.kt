@@ -1,5 +1,9 @@
 package com.apk.claw.android.ui.compose
 
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -110,7 +114,12 @@ fun OctopusNavHost(
     NavHost(
         navController = navController,
         startDestination = Screen.Discover.route,
-        modifier = modifier
+        modifier = modifier,
+        // Tab 切换的淡入淡出 + 轻微放大「fade-through」过渡
+        enterTransition = { fadeIn(tween(220)) + scaleIn(initialScale = 0.96f, animationSpec = tween(220)) },
+        exitTransition = { fadeOut(tween(160)) },
+        popEnterTransition = { fadeIn(tween(220)) + scaleIn(initialScale = 0.96f, animationSpec = tween(220)) },
+        popExitTransition = { fadeOut(tween(160)) },
     ) {
         composable(Screen.Discover.route) {
             DiscoverScreen(onNavigate = { route ->
