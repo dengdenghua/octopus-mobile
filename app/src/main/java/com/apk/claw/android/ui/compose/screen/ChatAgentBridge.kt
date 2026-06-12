@@ -5,6 +5,7 @@ import android.os.Looper
 import com.apk.claw.android.agent.AgentCallback
 import com.apk.claw.android.agent.AgentConfig
 import com.apk.claw.android.agent.DefaultAgentService
+import com.apk.claw.android.floating.LiveControlOverlay
 import com.apk.claw.android.tool.ToolRegistry
 import com.apk.claw.android.tool.ToolResult
 import com.apk.claw.android.utils.KVUtils
@@ -30,7 +31,10 @@ object ChatAgentBridge {
     fun isConfigured(): Boolean = KVUtils.getLlmApiKey().isNotBlank()
 
     /** 中断当前正在运行的任务。 */
-    fun cancel() = service.cancel()
+    fun cancel() {
+        service.cancel()
+        LiveControlOverlay.hide()
+    }
 
     private fun buildConfig(): AgentConfig {
         var baseUrl = KVUtils.getLlmBaseUrl().trim()
@@ -62,8 +66,12 @@ object ChatAgentBridge {
         onError: (String) -> Unit,
     ) {
         service.updateConfig(buildConfig())
+        // 实时控制层：任务期间悬浮显示当前步骤 + 停止键（即使 Agent 跳出本 App 也可见）
+        LiveControlOverlay.show("💭 准备中…") { cancel() }
         service.executeTask(prompt, object : AgentCallback {
-            override fun onLoopStart(round: Int) {}
+            override fun onLoopStart(round: Int) {
+                LiveControlOverlay.updateStep("💭 思考中…")
+            }
 
             override fun onContent(round: Int, content: String) {
                 // 流式:每个 token 都回调(保留空白,避免词间粘连)
@@ -78,18 +86,22 @@ object ChatAgentBridge {
                 val summary = if (result.isSuccess) "✓ " + (result.data ?: "") else "✗ " + (result.error ?: "")
                 val icon = iconFor(toolName)
                 val friendly = ToolRegistry.getInstance().getDisplayName(toolName)
+                LiveControlOverlay.updateStep("$icon $friendly")
                 main.post { onTool(icon, friendly, parameters, summary.take(48)) }
             }
 
             override fun onComplete(round: Int, finalAnswer: String, totalTokens: Int) {
+                LiveControlOverlay.finish(true, "完成")
                 main.post { onDone(finalAnswer) }
             }
 
             override fun onError(round: Int, error: Exception, totalTokens: Int) {
+                LiveControlOverlay.finish(false, error.message?.take(20) ?: "出错")
                 main.post { onError(error.message ?: "调用失败") }
             }
 
             override fun onSystemDialogBlocked(round: Int, totalTokens: Int) {
+                LiveControlOverlay.finish(false, "需手动处理")
                 main.post { onError("检测到系统弹窗，已暂停（需手动处理）") }
             }
         })

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/lcRoot"
+    android:layout_width="330dp"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingStart="14dp"
+    android:paddingEnd="8dp"
+    android:paddingTop="8dp"
+    android:paddingBottom="8dp">
+
+    <ProgressBar
+        android:id="@+id/lcSpinner"
+        style="?android:attr/progressBarStyleSmall"
+        android:layout_width="18dp"
+        android:layout_height="18dp" />
+
+    <TextView
+        android:id="@+id/lcStep"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:layout_marginStart="10dp"
+        android:layout_marginEnd="10dp"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:text="准备中…"
+        android:textSize="13sp" />
+
+    <TextView
+        android:id="@+id/lcStop"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:paddingStart="14dp"
+        android:paddingEnd="14dp"
+        android:paddingTop="7dp"
+        android:paddingBottom="7dp"
+        android:text="停止"
+        android:textSize="13sp"
+        android:textStyle="bold" />
+</LinearLayout>
