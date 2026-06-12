@@ -51,6 +51,7 @@ class BrowserActivity : BaseActivity() {
 
     private lateinit var engine: BrowserEngine
     private lateinit var etUrl: EditText
+    private lateinit var engineChip: TextView
     private lateinit var progressBar: ProgressBar
     private lateinit var browserContainer: FrameLayout
     private lateinit var btnRefresh: ImageButton
@@ -130,9 +131,22 @@ class BrowserActivity : BaseActivity() {
                 setPadding(dp12, dp8, dp12, dp8)
             }
 
+            // 搜索引擎切换标记（omnibox 左侧），点击切换引擎
+            engineChip = TextView(this@BrowserActivity).apply {
+                text = SearchEngines.byId(KVUtils.getSearchEngine()).tag
+                textSize = 14f
+                setTypeface(typeface, Typeface.BOLD)
+                gravity = Gravity.CENTER
+                val s = dp(36)
+                layoutParams = LinearLayout.LayoutParams(s, s)
+                setOnClickListener { showEngineMenu(it) }
+                contentDescription = "切换搜索引擎"
+            }
+            addressBar.addView(engineChip)
+
             etUrl = EditText(this@BrowserActivity).apply {
                 layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f)
-                hint = "输入网址或搜索"
+                hint = "搜索或输入网址"
                 setSingleLine(true)
                 inputType = InputType.TYPE_TEXT_VARIATION_URI
                 imeOptions = EditorInfo.IME_ACTION_GO
@@ -271,7 +285,8 @@ class BrowserActivity : BaseActivity() {
                             progressBar.visibility = View.GONE
                             loadingOverlay.visibility = View.GONE
                             btnRefresh.setImageResource(android.R.drawable.ic_menu_rotate)
-                            etUrl.setText(event.url)
+                            // omnibox：搜索结果页显示关键词，其余显示 URL
+                            etUrl.setText(SearchEngines.extractQuery(event.url) ?: event.url)
                             // 自动更新标题到 toolbar（如果有 title 就显示）
                         }
                         is EngineEvent.ProgressChanged -> {
@@ -319,8 +334,22 @@ class BrowserActivity : BaseActivity() {
             // 关键词搜索：使用用户选择的搜索引擎
             SearchEngines.byId(KVUtils.getSearchEngine()).searchUrl(input)
         }
-        etUrl.setText(url)
+        // omnibox：搜索结果页显示关键词，其余显示 URL
+        etUrl.setText(SearchEngines.extractQuery(url) ?: url)
         engine.navigate(url)
+    }
+
+    /** 弹出搜索引擎切换菜单（omnibox 左侧标记） */
+    private fun showEngineMenu(anchor: View) {
+        val popup = android.widget.PopupMenu(this, anchor)
+        SearchEngines.ALL.forEachIndexed { i, e -> popup.menu.add(0, i, i, e.label) }
+        popup.setOnMenuItemClickListener { item ->
+            val e = SearchEngines.ALL[item.itemId]
+            KVUtils.setSearchEngine(e.id)
+            engineChip.text = e.tag
+            true
+        }
+        popup.show()
     }
 
     // ── 书签 Dialog ──────────────────────────────────

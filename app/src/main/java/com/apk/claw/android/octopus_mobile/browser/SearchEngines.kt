@@ -1,5 +1,6 @@
 package com.apk.claw.android.octopus_mobile.browser
 
+import java.net.URLDecoder
 import java.net.URLEncoder
 
 /**
@@ -18,6 +19,14 @@ data class SearchEngine(
 ) {
     fun searchUrl(query: String): String =
         queryTemplate + URLEncoder.encode(query, "UTF-8")
+
+    /** 若 url 是本引擎的搜索结果页，返回解码后的关键词，否则 null */
+    fun extractQuery(url: String): String? {
+        if (!url.startsWith(queryTemplate)) return null
+        val raw = url.substring(queryTemplate.length).substringBefore('&')
+        if (raw.isEmpty()) return null
+        return try { URLDecoder.decode(raw, "UTF-8") } catch (e: Exception) { raw }
+    }
 }
 
 object SearchEngines {
@@ -31,4 +40,10 @@ object SearchEngines {
     val DEFAULT = ALL[0]
 
     fun byId(id: String?): SearchEngine = ALL.firstOrNull { it.id == id } ?: DEFAULT
+
+    /** 任一引擎能从该 url 解出关键词则返回，否则 null（用于地址栏 omnibox 显示） */
+    fun extractQuery(url: String): String? {
+        for (e in ALL) e.extractQuery(url)?.let { return it }
+        return null
+    }
 }
