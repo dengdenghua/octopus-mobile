@@ -37,6 +37,8 @@ import com.apk.claw.android.R
 import com.apk.claw.android.octopus_mobile.browser.SearchEngines
 import com.apk.claw.android.service.ClawAccessibilityService
 import com.apk.claw.android.ui.browser.BrowserActivity
+import com.apk.claw.android.ui.cast.ScreenCastActivity
+import com.apk.claw.android.ui.plugin.PluginActivity
 import com.apk.claw.android.utils.KVUtils
 
 // 打开内置真浏览器：query 为空开首页，否则按「网址/搜索词」处理（BrowserActivity 内部判定）
@@ -44,6 +46,10 @@ private fun openBrowser(context: Context, query: String?) {
     val intent = Intent(context, BrowserActivity::class.java)
     if (!query.isNullOrBlank()) intent.putExtra(BrowserActivity.EXTRA_URL, query)
     runCatching { context.startActivity(intent) }
+}
+
+private fun openActivity(context: Context, clazz: Class<*>) {
+    runCatching { context.startActivity(Intent(context, clazz)) }
 }
 
 // 颜色常量
@@ -181,8 +187,8 @@ fun DiscoverScreen(onNavigate: (String) -> Unit = {}) {
             Triple("🌐", stringResource(R.string.discover_shortcut_browser), "browser"),
             Triple("☁️", stringResource(R.string.discover_shortcut_clouddrive), "chat"),
             Triple("🎬", stringResource(R.string.discover_shortcut_video), "chat"),
-            Triple("🧩", stringResource(R.string.discover_shortcut_plugin), "settings"),
-            Triple("🖥", stringResource(R.string.discover_shortcut_cast), "chat"),
+            Triple("🧩", stringResource(R.string.discover_shortcut_plugin), "plugin"),
+            Triple("🖥", stringResource(R.string.discover_shortcut_cast), "cast"),
             Triple("📱", stringResource(R.string.discover_shortcut_multiwindow), "chat"),
             Triple("💾", stringResource(R.string.discover_shortcut_memory), "chat"),
             Triple("🧬", stringResource(R.string.discover_shortcut_evolution), "chat"),
@@ -196,7 +202,12 @@ fun DiscoverScreen(onNavigate: (String) -> Unit = {}) {
                 ) {
                     row.forEach { (icon, name, route) ->
                         ShortcutItem(icon, name) {
-                            if (route == "browser") openBrowser(context, null) else onNavigate(route)
+                            when (route) {
+                                "browser" -> openBrowser(context, null)
+                                "plugin" -> openActivity(context, PluginActivity::class.java)
+                                "cast" -> openActivity(context, ScreenCastActivity::class.java)
+                                else -> onNavigate(route)
+                            }
                         }
                     }
                 }
