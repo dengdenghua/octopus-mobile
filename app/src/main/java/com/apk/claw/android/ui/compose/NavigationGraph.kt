@@ -113,7 +113,8 @@ fun OctopusNavHost(
 ) {
     NavHost(
         navController = navController,
-        startDestination = Screen.Discover.route,
+        // 对话即首页：落地直接进入对话主界面
+        startDestination = Screen.Chat.route,
         modifier = modifier,
         // Tab 切换的淡入淡出 + 轻微放大「fade-through」过渡
         enterTransition = { fadeIn(tween(220)) + scaleIn(initialScale = 0.96f, animationSpec = tween(220)) },
