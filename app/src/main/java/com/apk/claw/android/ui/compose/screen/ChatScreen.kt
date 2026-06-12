@@ -62,22 +62,73 @@ private fun nextId(): Long = chatIdCounter.incrementAndGet()
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen() {
-    // 对话历史：优先读持久化，首启无历史时回退演示数据
-    val messages = remember {
-        mutableStateListOf<ChatMessage>().apply { addAll(ChatStore.load() ?: demoSeed()) }
-    }
+    // 多会话:会话索引 + 当前会话 + 当前会话的消息
+    val sessions = remember { mutableStateListOf<SessionStore.SessionMeta>() }
+    var currentId by remember { mutableStateOf("") }
+    val messages = remember { mutableStateListOf<ChatMessage>() }
 
     var inputText by remember { mutableStateOf("") }
     var remoteMode by remember { mutableStateOf(true) }
     var isRunning by remember { mutableStateOf(false) }
+    var menuOpen by remember { mutableStateOf(false) }
     // 工具组展开状态(key=组首工具 id),默认折叠
     val expandedGroups = remember { mutableStateMapOf<Long, Boolean>() }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val ackText = stringResource(R.string.chat_ack)
     val thinkingText = stringResource(R.string.chat_thinking)
+    val newChatTitle = stringResource(R.string.chat_new)
     val scrollEnd = { scope.launch { listState.animateScrollToItem(messages.size) }; Unit }
-    val persist = { ChatStore.save(messages) }
+
+    // 保存当前会话消息 + 用首条用户消息更新会话标题/时间并置顶
+    val persist = {
+        if (currentId.isNotEmpty()) {
+            ChatStore.save(currentId, messages)
+            val firstUser = messages.firstOrNull { it is ChatMessage.UserMessage } as? ChatMessage.UserMessage
+            if (firstUser != null) {
+                val title = firstUser.text.take(18)
+                val now = System.currentTimeMillis()
+                SessionStore.updateMeta(currentId, title, now)
+                val i = sessions.indexOfFirst { it.id == currentId }
+                if (i >= 0) sessions[i] = sessions[i].copy(title = title, updatedAt = now)
+            }
+        }
+    }
+
+    // 初始化:确保至少一个会话,加载当前会话
+    LaunchedEffect(Unit) {
+        if (currentId.isEmpty()) {
+            val idx = SessionStore.ensureAtLeastOne(System.currentTimeMillis(), demoSeed())
+            sessions.clear(); sessions.addAll(idx)
+            currentId = SessionStore.currentId() ?: idx.first().id
+            messages.clear(); messages.addAll(ChatStore.load(currentId) ?: emptyList())
+            if (messages.isNotEmpty()) listState.scrollToItem(messages.size)
+        }
+    }
+    val switchTo = { id: String ->
+        if (id != currentId && id.isNotEmpty()) {
+            ChatStore.save(currentId, messages)
+            SessionStore.setCurrent(id); currentId = id
+            messages.clear(); messages.addAll(ChatStore.load(id) ?: emptyList())
+            scrollEnd()
+        }
+    }
+    val newChat = {
+        if (currentId.isNotEmpty()) ChatStore.save(currentId, messages)
+        val meta = SessionStore.create(System.currentTimeMillis()).copy(title = newChatTitle)
+        SessionStore.updateMeta(meta.id, newChatTitle, meta.updatedAt)
+        sessions.add(0, meta); currentId = meta.id; messages.clear()
+    }
+    val deleteSession = { id: String ->
+        SessionStore.delete(id)
+        sessions.removeAll { it.id == id }
+        if (id == currentId) {
+            val next = sessions.firstOrNull()?.id
+                ?: SessionStore.create(System.currentTimeMillis()).also { sessions.add(0, it) }.id
+            SessionStore.setCurrent(next); currentId = next
+            messages.clear(); messages.addAll(ChatStore.load(next) ?: emptyList())
+        }
+    }
 
     // 发送指令：配置了 LLM 则真正驱动 Agent;运行期间显示「思考中」、发送键变停止键
     val send = {
@@ -136,11 +187,6 @@ fun ChatScreen() {
     }
     val stop = { ChatAgentBridge.cancel() }
 
-    // 进入对话页时滚到底部，直接看到最新消息（历史加载后默认在顶部）
-    LaunchedEffect(Unit) {
-        if (messages.isNotEmpty()) listState.scrollToItem(messages.size)
-    }
-
     Column(modifier = Modifier.fillMaxSize().background(BackgroundColor)) {
         // 顶部栏
         TopAppBar(
@@ -172,9 +218,37 @@ fun ChatScreen() {
                 }
             },
             actions = {
-                // 清空对话(同时清持久化)
+                // 新建会话
+                IconButton(onClick = { if (!isRunning) newChat() }) {
+                    Text("＋", fontSize = 20.sp, color = TextPrimary)
+                }
+                // 会话列表(切换/删除)
+                Box {
+                    IconButton(onClick = { menuOpen = true }) {
+                        Text("☰", fontSize = 16.sp, color = TextPrimary)
+                    }
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        sessions.forEach { s ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        (if (s.id == currentId) "• " else "") + s.title,
+                                        fontWeight = if (s.id == currentId) FontWeight.SemiBold else FontWeight.Normal,
+                                        maxLines = 1,
+                                    )
+                                },
+                                onClick = { switchTo(s.id); menuOpen = false },
+                                trailingIcon = {
+                                    Text("✕", fontSize = 13.sp, color = TextMuted,
+                                        modifier = Modifier.clickable { deleteSession(s.id) })
+                                },
+                            )
+                        }
+                    }
+                }
+                // 清空当前会话
                 IconButton(onClick = {
-                    if (!isRunning) { messages.clear(); ChatStore.clear() }
+                    if (!isRunning) { messages.clear(); ChatStore.clear(currentId) }
                 }) {
                     Text("🗑️", fontSize = 16.sp)
                 }

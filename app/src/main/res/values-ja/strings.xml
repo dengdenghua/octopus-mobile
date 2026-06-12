@@ -296,6 +296,7 @@
     <string name="chat_thinking">考え中</string>
     <string name="chat_empty_hint">まだ会話がありません。コマンドを入力して開始</string>
     <string name="chat_tool_steps">%1$d 個のツールステップ</string>
+    <string name="chat_new">新規チャット</string>
 
     <!-- DeviceScreen (Compose) -->
     <string name="device_title">🖥 デバイス</string>

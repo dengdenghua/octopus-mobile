@@ -336,6 +336,7 @@ For these, install Shizuku — a safe, open-source helper.</string>
     <string name="chat_thinking">Thinking</string>
     <string name="chat_empty_hint">No messages yet — type a command to start</string>
     <string name="chat_tool_steps">%1$d tool steps</string>
+    <string name="chat_new">New chat</string>
 
     <!-- DeviceScreen (Compose) -->
     <string name="device_title">🖥 Devices</string>

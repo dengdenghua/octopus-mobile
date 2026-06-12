@@ -5,42 +5,37 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 
 /**
- * 对话历史持久化（MMKV）。
+ * 单个会话的消息持久化（MMKV，按 sessionId 分键）。
  *
- * 把 [ChatMessage] 列表序列化进 KVUtils，重启 App / 切走再回来都不丢。
- * 「Thinking」是运行期占位，不持久化。
+ * 「Thinking」是运行期占位，不持久化。每个会话最多保留最近 [MAX_KEEP] 条。
  */
 object ChatStore {
 
-    private const val KEY = "chat_history_v1"
-    /** 持久化保留的最大消息条数，避免 MMKV 无限增长。 */
+    private const val PREFIX = "chat_msgs_"
     private const val MAX_KEEP = 200
     private val gson = Gson()
 
-    /** 扁平 DTO：用 type 区分消息种类，避免 sealed class 的多态序列化问题。 */
     private data class Dto(
         val type: String,
-        val a: String = "",   // user/agent: text;  tool: icon
-        val b: String = "",   // tool: 工具名
-        val c: String = "",   // tool: 参数
-        val d: String = "",   // tool: 结果
+        val a: String = "", val b: String = "", val c: String = "", val d: String = "",
     )
 
-    fun save(messages: List<ChatMessage>) {
+    private fun key(sessionId: String) = PREFIX + sessionId
+
+    fun save(sessionId: String, messages: List<ChatMessage>) {
         val dtos = messages.takeLast(MAX_KEEP).mapNotNull { m ->
             when (m) {
                 is ChatMessage.UserMessage -> Dto("user", m.text)
                 is ChatMessage.AgentMessage -> Dto("agent", m.text)
                 is ChatMessage.ToolCall -> Dto("tool", m.icon, m.toolName, m.args, m.result ?: "")
-                is ChatMessage.Thinking -> null   // 运行期占位，不存
+                is ChatMessage.Thinking -> null
             }
         }
-        runCatching { KVUtils.putString(KEY, gson.toJson(dtos)) }
+        runCatching { KVUtils.putString(key(sessionId), gson.toJson(dtos)) }
     }
 
-    /** 读取历史；无历史返回 null（首启回退到演示数据）。 */
-    fun load(): List<ChatMessage>? {
-        val json = KVUtils.getString(KEY, "")
+    fun load(sessionId: String): List<ChatMessage>? {
+        val json = KVUtils.getString(key(sessionId), "")
         if (json.isBlank()) return null
         return runCatching {
             val dtos: List<Dto> = gson.fromJson(json, object : TypeToken<List<Dto>>() {}.type)
@@ -54,7 +49,7 @@ object ChatStore {
         }.getOrNull()?.takeIf { it.isNotEmpty() }
     }
 
-    fun clear() {
-        runCatching { KVUtils.putString(KEY, "") }
+    fun clear(sessionId: String) {
+        runCatching { KVUtils.putString(key(sessionId), "") }
     }
 }
