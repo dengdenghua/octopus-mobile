@@ -290,6 +290,11 @@
     <string name="discover_suggest_resume">▶️ 继续看剧</string>
     <string name="discover_status_memory">💾 5 条记忆</string>
     <string name="discover_status_rules">🔔 2 条规则</string>
+    <string name="discover_stat_sessions">💬 %1$d 会话</string>
+    <string name="discover_stat_a11y_on">♿ 无障碍已开</string>
+    <string name="discover_stat_a11y_off">♿ 无障碍未开</string>
+    <string name="discover_stat_llm_on">🤖 模型已配置</string>
+    <string name="discover_stat_llm_off">🤖 模型未配置</string>
 
     <!-- Bottom navigation -->
     <string name="nav_discover">发现</string>
@@ -349,6 +354,16 @@
     <string name="ctrl_tap">点击</string>
     <string name="ctrl_open">打开</string>
     <string name="ctrl_back">返回</string>
+    <string name="ctrl_home">主屏</string>
+    <string name="ctrl_recents">最近</string>
+    <string name="ctrl_notifications">通知</string>
+    <string name="ctrl_lock">锁屏</string>
+    <string name="device_controls">快捷控制</string>
+    <string name="device_a11y_required">开启无障碍服务即可控制本设备</string>
+    <string name="device_a11y_enable">去开启 ›</string>
+    <string name="device_screenshot_saved">截图已保存到相册</string>
+    <string name="device_screenshot_failed">截图失败（需无障碍/Shizuku）</string>
+    <string name="device_android_version">Android %1$s</string>
     <string name="device_browser">🌐 浏览器</string>
     <string name="device_tabs">标签页</string>
     <string name="device_extensions">扩展</string>

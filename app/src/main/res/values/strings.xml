@@ -295,6 +295,11 @@ For these, install Shizuku — a safe, open-source helper.</string>
     <string name="discover_suggest_resume">▶️ Continue Watching</string>
     <string name="discover_status_memory">💾 5 memories</string>
     <string name="discover_status_rules">🔔 2 rules</string>
+    <string name="discover_stat_sessions">💬 %1$d chats</string>
+    <string name="discover_stat_a11y_on">♿ Accessibility on</string>
+    <string name="discover_stat_a11y_off">♿ Accessibility off</string>
+    <string name="discover_stat_llm_on">🤖 Model ready</string>
+    <string name="discover_stat_llm_off">🤖 Model not set</string>
 
     <!-- Bottom navigation -->
     <string name="nav_discover">Discover</string>
@@ -354,6 +359,16 @@ For these, install Shizuku — a safe, open-source helper.</string>
     <string name="ctrl_tap">Tap</string>
     <string name="ctrl_open">Open</string>
     <string name="ctrl_back">Back</string>
+    <string name="ctrl_home">Home</string>
+    <string name="ctrl_recents">Recents</string>
+    <string name="ctrl_notifications">Notify</string>
+    <string name="ctrl_lock">Lock</string>
+    <string name="device_controls">Quick controls</string>
+    <string name="device_a11y_required">Turn on the Accessibility service to control this device</string>
+    <string name="device_a11y_enable">Enable ›</string>
+    <string name="device_screenshot_saved">Screenshot saved to gallery</string>
+    <string name="device_screenshot_failed">Screenshot failed (needs Accessibility/Shizuku)</string>
+    <string name="device_android_version">Android %1$s</string>
     <string name="device_browser">🌐 Browser</string>
     <string name="device_tabs">Tabs</string>
     <string name="device_extensions">Extensions</string>

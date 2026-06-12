@@ -27,7 +27,22 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import android.content.Context
+import android.content.Intent
 import com.apk.claw.android.R
+import com.apk.claw.android.service.ClawAccessibilityService
+import com.apk.claw.android.ui.browser.BrowserActivity
+
+// 打开内置真浏览器：query 为空开首页，否则按「网址/搜索词」处理（BrowserActivity 内部判定）
+private fun openBrowser(context: Context, query: String?) {
+    val intent = Intent(context, BrowserActivity::class.java)
+    if (!query.isNullOrBlank()) intent.putExtra(BrowserActivity.EXTRA_URL, query)
+    runCatching { context.startActivity(intent) }
+}
 
 // 颜色常量
 private val PrimaryColor = Color(0xFF0A84FF)
@@ -43,11 +58,12 @@ private val BorderColor = Color(0xFF38383A)
 
 @Composable
 fun DiscoverScreen(onNavigate: (String) -> Unit = {}) {
+    val context = LocalContext.current
     var searchText by remember { mutableStateOf("") }
-    // 提交指令：非空则跳转到「对话」页（Agent），并清空输入框
+    // 提交搜索：用内置真浏览器做网页搜索（网址直达 / 关键词搜索），并清空输入框
     val submit = {
         if (searchText.isNotBlank()) {
-            onNavigate("chat")
+            openBrowser(context, searchText.trim())
             searchText = ""
         }
     }
@@ -119,14 +135,14 @@ fun DiscoverScreen(onNavigate: (String) -> Unit = {}) {
         Spacer(modifier = Modifier.height(32.dp))
 
         // 快捷入口 4x2 网格
-        // 每个磁贴跳到最相关的页面：浏览器/投屏/多窗口 → 设备；插件 → 设置；其余 → 对话(Agent)
+        // 浏览器 → 内置真浏览器；插件 → 设置；其余皆为 Agent 任务 → 对话页
         val shortcuts = listOf(
-            Triple("🌐", stringResource(R.string.discover_shortcut_browser), "device"),
+            Triple("🌐", stringResource(R.string.discover_shortcut_browser), "browser"),
             Triple("☁️", stringResource(R.string.discover_shortcut_clouddrive), "chat"),
             Triple("🎬", stringResource(R.string.discover_shortcut_video), "chat"),
             Triple("🧩", stringResource(R.string.discover_shortcut_plugin), "settings"),
-            Triple("🖥", stringResource(R.string.discover_shortcut_cast), "device"),
-            Triple("📱", stringResource(R.string.discover_shortcut_multiwindow), "device"),
+            Triple("🖥", stringResource(R.string.discover_shortcut_cast), "chat"),
+            Triple("📱", stringResource(R.string.discover_shortcut_multiwindow), "chat"),
             Triple("💾", stringResource(R.string.discover_shortcut_memory), "chat"),
             Triple("🧬", stringResource(R.string.discover_shortcut_evolution), "chat"),
         )
@@ -138,7 +154,9 @@ fun DiscoverScreen(onNavigate: (String) -> Unit = {}) {
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
                     row.forEach { (icon, name, route) ->
-                        ShortcutItem(icon, name) { onNavigate(route) }
+                        ShortcutItem(icon, name) {
+                            if (route == "browser") openBrowser(context, null) else onNavigate(route)
+                        }
                     }
                 }
             }
@@ -160,17 +178,33 @@ fun DiscoverScreen(onNavigate: (String) -> Unit = {}) {
         }
         Spacer(modifier = Modifier.height(12.dp))
 
-        // 底部状态条
+        // 底部状态条 —— 真实数据：会话数 / 无障碍状态 / 模型状态，回到前台时刷新
+        val lifecycleOwner = LocalLifecycleOwner.current
+        var refreshTick by remember { mutableStateOf(0) }
+        DisposableEffect(lifecycleOwner) {
+            val obs = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_RESUME) refreshTick++ }
+            lifecycleOwner.lifecycle.addObserver(obs)
+            onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
+        }
+        val sessionCount = remember(refreshTick) { runCatching { SessionStore.index().size }.getOrDefault(0) }
+        val a11yOk = remember(refreshTick) { ClawAccessibilityService.isRunning() }
+        val llmOk = remember(refreshTick) { ChatAgentBridge.isConfigured() }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("🧬 82%", color = TextMuted, fontSize = 10.sp)
+            Text(stringResource(R.string.discover_stat_sessions, sessionCount), color = TextMuted, fontSize = 10.sp)
             Spacer(modifier = Modifier.width(16.dp))
-            Text(stringResource(R.string.discover_status_memory), color = TextMuted, fontSize = 10.sp)
+            Text(
+                stringResource(if (a11yOk) R.string.discover_stat_a11y_on else R.string.discover_stat_a11y_off),
+                color = if (a11yOk) SuccessColor else TextMuted, fontSize = 10.sp
+            )
             Spacer(modifier = Modifier.width(16.dp))
-            Text(stringResource(R.string.discover_status_rules), color = TextMuted, fontSize = 10.sp)
+            Text(
+                stringResource(if (llmOk) R.string.discover_stat_llm_on else R.string.discover_stat_llm_off),
+                color = if (llmOk) SuccessColor else TextMuted, fontSize = 10.sp
+            )
         }
         Spacer(modifier = Modifier.height(16.dp))
     }

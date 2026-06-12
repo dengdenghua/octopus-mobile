@@ -255,6 +255,11 @@
     <string name="discover_suggest_resume">▶️ 視聴を再開</string>
     <string name="discover_status_memory">💾 記憶 5 件</string>
     <string name="discover_status_rules">🔔 ルール 2 件</string>
+    <string name="discover_stat_sessions">💬 %1$d チャット</string>
+    <string name="discover_stat_a11y_on">♿ アクセシビリティ ON</string>
+    <string name="discover_stat_a11y_off">♿ アクセシビリティ OFF</string>
+    <string name="discover_stat_llm_on">🤖 モデル設定済</string>
+    <string name="discover_stat_llm_off">🤖 モデル未設定</string>
 
     <!-- Bottom navigation -->
     <string name="nav_discover">発見</string>
@@ -314,6 +319,16 @@
     <string name="ctrl_tap">タップ</string>
     <string name="ctrl_open">開く</string>
     <string name="ctrl_back">戻る</string>
+    <string name="ctrl_home">ホーム</string>
+    <string name="ctrl_recents">履歴</string>
+    <string name="ctrl_notifications">通知</string>
+    <string name="ctrl_lock">ロック</string>
+    <string name="device_controls">クイック操作</string>
+    <string name="device_a11y_required">このデバイスを操作するにはアクセシビリティを有効化してください</string>
+    <string name="device_a11y_enable">有効化 ›</string>
+    <string name="device_screenshot_saved">スクショをギャラリーに保存しました</string>
+    <string name="device_screenshot_failed">スクショ失敗（アクセシビリティ/Shizuku が必要）</string>
+    <string name="device_android_version">Android %1$s</string>
     <string name="device_browser">🌐 ブラウザ</string>
     <string name="device_tabs">タブ</string>
     <string name="device_extensions">拡張機能</string>
