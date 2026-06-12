@@ -190,10 +190,9 @@ fun DiscoverScreen(onNavigate: (String) -> Unit = {}) {
         )
         Spacer(modifier = Modifier.height(32.dp))
 
-        // 快捷入口 4x2 网格
-        // 浏览器 → 内置真浏览器；插件 → 设置；其余皆为 Agent 任务 → 对话页
+        // 快捷入口网格
+        // 顶部搜索框本身即浏览器入口，故不再单列「浏览器」图标。
         val shortcuts = listOf(
-            Triple("🌐", stringResource(R.string.discover_shortcut_browser), "browser"),
             Triple("☁️", stringResource(R.string.discover_shortcut_clouddrive), "clouddrive"),
             Triple("🎬", stringResource(R.string.discover_shortcut_video), "video"),
             Triple("🧩", stringResource(R.string.discover_shortcut_plugin), "plugin"),
@@ -212,7 +211,6 @@ fun DiscoverScreen(onNavigate: (String) -> Unit = {}) {
                     row.forEach { (icon, name, route) ->
                         ShortcutItem(icon, name) {
                             when (route) {
-                                "browser" -> openBrowser(context, null)
                                 "plugin" -> openActivity(context, PluginActivity::class.java)
                                 "cast" -> openActivity(context, ScreenCastActivity::class.java)
                                 "clouddrive" -> openActivity(context, CloudDriveActivity::class.java)
