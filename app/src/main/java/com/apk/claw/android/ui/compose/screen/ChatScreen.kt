@@ -15,6 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -22,7 +23,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.apk.claw.android.R
+import com.apk.claw.android.service.ClawAccessibilityService
+import com.apk.claw.android.ui.settings.LlmConfigActivity
 import kotlinx.coroutines.launch
 
 // 颜色
@@ -71,6 +77,17 @@ fun ChatScreen() {
     var remoteMode by remember { mutableStateOf(true) }
     var isRunning by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    // 设置完成度:每次回到前台重新检测(配置/授权可能在外部页面变更)
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var refreshTick by remember { mutableStateOf(0) }
+    DisposableEffect(lifecycleOwner) {
+        val obs = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_RESUME) refreshTick++ }
+        lifecycleOwner.lifecycle.addObserver(obs)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
+    }
+    val llmOk = remember(refreshTick) { ChatAgentBridge.isConfigured() }
+    val a11yOk = remember(refreshTick) { ClawAccessibilityService.isRunning() }
     // 工具组展开状态(key=组首工具 id),默认折叠
     val expandedGroups = remember { mutableStateMapOf<Long, Boolean>() }
     val listState = rememberLazyListState()
@@ -259,6 +276,16 @@ fun ChatScreen() {
             )
         )
 
+        // 设置指引:未配置完成时显示,配齐后自动隐藏
+        if (!llmOk || !a11yOk) {
+            SetupGuideCard(
+                llmOk = llmOk,
+                a11yOk = a11yOk,
+                onConfigLlm = { runCatching { context.startActivity(android.content.Intent(context, LlmConfigActivity::class.java)) } },
+                onEnableA11y = { runCatching { context.startActivity(android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)) } },
+            )
+        }
+
         // 消息列表 / 空状态
         if (messages.none { it !is ChatMessage.Thinking }) {
             Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -402,6 +429,51 @@ private fun AgentBubble(text: String) {
                 lineHeight = 21.sp,
             )
         }
+    }
+}
+
+// ── 设置指引 ──────────────────────────────────────────
+
+@Composable
+private fun SetupGuideCard(
+    llmOk: Boolean,
+    a11yOk: Boolean,
+    onConfigLlm: () -> Unit,
+    onEnableA11y: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        shape = RoundedCornerShape(14.dp),
+        color = PrimaryColor.copy(alpha = 0.10f),
+        border = BorderStroke(1.dp, PrimaryColor.copy(alpha = 0.25f)),
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Text(
+                stringResource(R.string.setup_title),
+                fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary,
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            SetupRow(stringResource(R.string.setup_llm), llmOk, onConfigLlm)
+            Spacer(modifier = Modifier.height(4.dp))
+            SetupRow(stringResource(R.string.setup_a11y), a11yOk, onEnableA11y)
+        }
+    }
+}
+
+@Composable
+private fun SetupRow(label: String, done: Boolean, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().clickable(enabled = !done, onClick = onClick).padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(if (done) "✓" else "○", fontSize = 13.sp, color = if (done) SuccessColor else TextMuted)
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            label, fontSize = 12.sp,
+            color = if (done) TextMuted else TextPrimary,
+            modifier = Modifier.weight(1f),
+        )
+        if (!done) Text(stringResource(R.string.setup_go), fontSize = 11.sp, color = PrimaryColor, fontWeight = FontWeight.SemiBold)
     }
 }
 

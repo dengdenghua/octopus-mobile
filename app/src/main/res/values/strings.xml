@@ -337,6 +337,10 @@ For these, install Shizuku — a safe, open-source helper.</string>
     <string name="chat_empty_hint">No messages yet — type a command to start</string>
     <string name="chat_tool_steps">%1$d tool steps</string>
     <string name="chat_new">New chat</string>
+    <string name="setup_title">Finish setup to start</string>
+    <string name="setup_llm">Configure model (API key)</string>
+    <string name="setup_a11y">Enable Accessibility service</string>
+    <string name="setup_go">Set up ›</string>
 
     <!-- DeviceScreen (Compose) -->
     <string name="device_title">🖥 Devices</string>
