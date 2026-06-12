@@ -51,7 +51,7 @@ class BrowserActivity : BaseActivity() {
 
     private lateinit var engine: BrowserEngine
     private lateinit var etUrl: EditText
-    private lateinit var engineChip: TextView
+    private lateinit var engineChip: android.widget.ImageView
 
     // 深色 iOS 风配色（与 Compose 各页一致）
     private val cBg = Color.parseColor("#000000")
@@ -171,19 +171,16 @@ class BrowserActivity : BaseActivity() {
                 setBackgroundColor(cBg)
                 setPadding(dp12, dp8, dp12, dp8)
             }
-            engineChip = TextView(this@BrowserActivity).apply {
-                text = SearchEngines.byId(KVUtils.getSearchEngine()).tag
-                textSize = 13f
-                setTypeface(typeface, Typeface.BOLD)
-                gravity = Gravity.CENTER
-                setTextColor(cPrimary)
-                background = roundedBg(withAlpha(cPrimary, 38), 10)
+            engineChip = android.widget.ImageView(this@BrowserActivity).apply {
                 val s = dp(36)
                 layoutParams = LinearLayout.LayoutParams(s, s).apply { marginEnd = dp8 }
+                setPadding(dp8, dp8, dp8, dp8)
+                background = roundedBg(cSurface2, 10)
                 setOnClickListener { showEngineMenu(it) }
                 contentDescription = "切换搜索引擎"
             }
             addressBar.addView(engineChip)
+            loadEngineFavicon()
 
             etUrl = EditText(this@BrowserActivity).apply {
                 layoutParams = LinearLayout.LayoutParams(0, dp(40), 1f)
@@ -295,6 +292,13 @@ class BrowserActivity : BaseActivity() {
 
     private fun withAlpha(color: Int, alpha: Int) =
         Color.argb(alpha, Color.red(color), Color.green(color), Color.blue(color))
+
+    /** 加载当前搜索引擎的官方图标(favicon)到引擎切换标记。 */
+    private fun loadEngineFavicon() {
+        if (!::engineChip.isInitialized) return
+        val url = SearchEngines.byId(KVUtils.getSearchEngine()).favicon
+        runCatching { com.bumptech.glide.Glide.with(this).load(url).into(engineChip) }
+    }
 
     // ── 页内问 AI（AI 浏览器）─────────────────────────
 
@@ -499,7 +503,7 @@ class BrowserActivity : BaseActivity() {
         popup.setOnMenuItemClickListener { item ->
             val e = SearchEngines.ALL[item.itemId]
             KVUtils.setSearchEngine(e.id)
-            engineChip.text = e.tag
+            loadEngineFavicon()
             true
         }
         popup.show()

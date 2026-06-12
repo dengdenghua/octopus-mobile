@@ -24,6 +24,7 @@ mmkv = "2.3.0"
 adapter = "4.3.0"
 glide = "5.0.5"
 transformations = "4.3.0"
+coil = "2.7.0"
 easyfloat = "2.0.4"
 zxing = "3.5.3"
 oapi = "2.5.3"
@@ -59,6 +60,7 @@ mmkv = { module = "com.tencent:mmkv-static", version.ref = "mmkv" }
 adapter = { module = "com.drakeet.multitype:multitype", version.ref = "adapter" }
 glide = { module = "com.github.bumptech.glide:glide", version.ref = "glide" }
 glide-transformations = { module = "jp.wasabeef:glide-transformations", version.ref = "transformations" }
+coil-compose = { module = "io.coil-kt:coil-compose", version.ref = "coil" }
 easyfloat = { module = "com.github.princekin-f:EasyFloat", version.ref = "easyfloat" }
 zxing = { module = "com.google.zxing:core", version.ref = "zxing" }
 oapi-sdk = { module = "com.larksuite.oapi:oapi-sdk", version.ref = "oapi" }

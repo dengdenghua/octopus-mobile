@@ -124,11 +124,15 @@ fun DiscoverScreen(onNavigate: (String) -> Unit = {}) {
                         modifier = Modifier
                             .padding(start = 6.dp)
                             .size(30.dp)
-                            .background(PrimaryColor.copy(alpha = 0.15f), CircleShape)
+                            .background(Color.White, CircleShape)
                             .clickable { engineMenuOpen = true },
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text(engine.tag, color = PrimaryColor, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        coil.compose.AsyncImage(
+                            model = engine.favicon,
+                            contentDescription = engine.label,
+                            modifier = Modifier.size(18.dp),
+                        )
                     }
                     DropdownMenu(
                         expanded = engineMenuOpen,

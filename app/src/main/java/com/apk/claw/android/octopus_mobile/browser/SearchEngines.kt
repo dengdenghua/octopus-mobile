@@ -17,6 +17,9 @@ data class SearchEngine(
     /** 引擎首页（浏览器 Home 按钮 / 空查询时使用） */
     val home: String,
 ) {
+    /** 官方图标（favicon），运行时加载，避免打包版权 logo。 */
+    val favicon: String get() = "$home/favicon.ico"
+
     fun searchUrl(query: String): String =
         queryTemplate + URLEncoder.encode(query, "UTF-8")
 

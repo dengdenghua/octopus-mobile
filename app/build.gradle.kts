@@ -149,6 +149,7 @@ dependencies {
     implementation(libs.adapter)
     implementation(libs.glide)
     implementation(libs.glide.transformations)
+    implementation(libs.coil.compose)
     implementation(libs.easyfloat)
 
 
