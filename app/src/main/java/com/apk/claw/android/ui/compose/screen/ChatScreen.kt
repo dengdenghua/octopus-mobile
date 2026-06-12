@@ -240,6 +240,12 @@ fun ChatScreen() {
                 }
             },
             actions = {
+                // 信任中心：高权限集中查看 / 收回
+                IconButton(onClick = {
+                    runCatching { context.startActivity(android.content.Intent(context, com.apk.claw.android.ui.featurescreens.TrustCenterActivity::class.java)) }
+                }) {
+                    Text("🛡", fontSize = 16.sp)
+                }
                 // 新建会话
                 IconButton(onClick = { if (!isRunning) newChat() }) {
                     Text("＋", fontSize = 20.sp, color = TextPrimary)
