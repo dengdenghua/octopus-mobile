@@ -264,6 +264,7 @@ class BrowserActivity : BaseActivity() {
             layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, dp(52))
             setPadding(dp(8), 0, dp(8), 0)
             setBackgroundColor(cSurface)
+            addView(makeGlyphButton("✨", "问 AI") { showAiSheet() })
             addView(makeGlyphButton("‹", "后退") { engine.evaluateJs("window.history.back()") })
             addView(makeGlyphButton("›", "前进") { engine.evaluateJs("window.history.forward()") })
             addView(makeGlyphButton("⌂", "首页") { navigateTo(SearchEngines.byId(KVUtils.getSearchEngine()).home) })
@@ -294,6 +295,130 @@ class BrowserActivity : BaseActivity() {
 
     private fun withAlpha(color: Int, alpha: Int) =
         Color.argb(alpha, Color.red(color), Color.green(color), Color.blue(color))
+
+    // ── 页内问 AI（AI 浏览器）─────────────────────────
+
+    /**
+     * 「问 AI · 关于此页」：抓取当前页面的无障碍文本快照（GeckoView v151 的 JS 求值已失效，
+     * 改用无障碍树读正文），连同问题交给 LLM，流式回答在底部面板。
+     */
+    private fun showAiSheet() {
+        // 在弹面板之前抓快照，确保页面完整可见
+        val pageText = com.apk.claw.android.service.ClawAccessibilityService.getInstance()
+            ?.let { runCatching { it.screenTree }.getOrNull() }
+
+        val pad = dp(16)
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(cBg)
+            setPadding(pad, pad, pad, pad)
+        }
+        container.addView(TextView(this).apply {
+            text = "✨ 问 AI · 关于此页"
+            textSize = 16f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(cText)
+        })
+        if (pageText.isNullOrBlank()) {
+            container.addView(TextView(this).apply {
+                text = "需开启无障碍服务才能读取页面内容"
+                textSize = 11f
+                setTextColor(Color.parseColor("#FF9F0A"))
+                setPadding(0, dp(6), 0, 0)
+            })
+        }
+
+        val answer = TextView(this).apply {
+            textSize = 14f
+            setTextColor(cText)
+            setLineSpacing(0f, 1.2f)
+            setPadding(0, dp(12), 0, 0)
+        }
+        val answerScroll = ScrollView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, dp(220))
+            addView(answer)
+        }
+
+        val etAsk = EditText(this).apply {
+            hint = "问这个页面…"
+            setSingleLine(true)
+            textSize = 14f
+            setTextColor(cText)
+            setHintTextColor(cMuted)
+            background = roundedBg(cSurface2, 12)
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            imeOptions = EditorInfo.IME_ACTION_SEND
+        }
+
+        // 快捷问题
+        val chips = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, dp(12), 0, dp(10))
+        }
+        fun addChip(label: String, q: String) {
+            chips.addView(TextView(this).apply {
+                text = label
+                textSize = 12f
+                setTextColor(cPrimary)
+                background = roundedBg(withAlpha(cPrimary, 38), 14)
+                setPadding(dp(12), dp(7), dp(12), dp(7))
+                val lp = LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT)
+                lp.marginEnd = dp(8)
+                layoutParams = lp
+                setOnClickListener { runAi(answer, q, pageText) }
+            })
+        }
+        addChip("总结此页", "用简洁要点总结这个网页的主要内容。")
+        addChip("提取要点", "提取这个网页里最关键的信息要点。")
+        addChip("翻译", "把这个网页的主要内容翻译成中文。")
+        container.addView(chips)
+
+        val inputRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        inputRow.addView(etAsk, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+        val send = TextView(this).apply {
+            text = "发送"
+            textSize = 14f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(Color.WHITE)
+            background = roundedBg(cPrimary, 12)
+            setPadding(dp(16), dp(10), dp(16), dp(10))
+            val lp = LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT)
+            lp.marginStart = dp(8)
+            layoutParams = lp
+            setOnClickListener {
+                val q = etAsk.text.toString().trim()
+                if (q.isNotEmpty()) runAi(answer, q, pageText)
+            }
+        }
+        inputRow.addView(send)
+        container.addView(inputRow)
+        container.addView(answerScroll)
+
+        val sheet = com.google.android.material.bottomsheet.BottomSheetDialog(this)
+        sheet.setContentView(container)
+        sheet.show()
+    }
+
+    private fun runAi(answer: TextView, question: String, pageText: String?) {
+        if (!com.apk.claw.android.ui.compose.screen.ChatAgentBridge.isConfigured()) {
+            answer.text = "请先在「设置 → 模型」里配置 API Key。"
+            return
+        }
+        answer.text = "思考中…"
+        val ctx = if (pageText.isNullOrBlank()) "" else "\n\n【当前网页内容】\n" + pageText.take(4000)
+        val prompt = "你是网页阅读助手。请只依据下方网页内容回答，不要调用任何工具。\n用户问题：$question$ctx"
+        val sb = StringBuilder()
+        com.apk.claw.android.ui.compose.screen.ChatAgentBridge.run(
+            prompt,
+            onTool = { _, _, _, _ -> },
+            onText = { t -> sb.append(t); answer.text = sb.toString() },
+            onDone = { d -> answer.text = if (sb.isNotEmpty()) sb.toString() else d },
+            onError = { e -> answer.text = "出错：$e" },
+        )
+    }
 
     // ── 引擎事件收集 ─────────────────────────────────
 
