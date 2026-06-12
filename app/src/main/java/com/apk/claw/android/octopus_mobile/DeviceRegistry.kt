@@ -173,7 +173,9 @@ data class DeviceInfo(
     /** 最近一次心跳时间 */
     val lastSeenTs: Long = System.currentTimeMillis(),
     /** 是否在线 */
-    val online: Boolean = true
+    val online: Boolean = true,
+    /** 对端 ConfigServer 的鉴权 token（随 beacon 广播，用于远程控制鉴权） */
+    val authToken: String = ""
 ) {
     /**
      * 获取 ConfigServer 的 base URL。

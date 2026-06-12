@@ -369,6 +369,12 @@ For these, install Shizuku — a safe, open-source helper.</string>
     <string name="device_screenshot_saved">Screenshot saved to gallery</string>
     <string name="device_screenshot_failed">Screenshot failed (needs Accessibility/Shizuku)</string>
     <string name="device_android_version">Android %1$s</string>
+    <string name="device_nearby">Nearby devices</string>
+    <string name="device_nearby_empty">Searching… open Octopus on another device on the same Wi-Fi</string>
+    <string name="device_discoverable">Discoverable at %1$s</string>
+    <string name="device_discoverable_off">Connect to Wi-Fi to be discoverable</string>
+    <string name="device_cmd_sent">Sent to %1$s</string>
+    <string name="device_cmd_failed">Failed (device offline?)</string>
     <string name="device_browser">🌐 Browser</string>
     <string name="device_tabs">Tabs</string>
     <string name="device_extensions">Extensions</string>

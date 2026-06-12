@@ -364,6 +364,12 @@
     <string name="device_screenshot_saved">截图已保存到相册</string>
     <string name="device_screenshot_failed">截图失败（需无障碍/Shizuku）</string>
     <string name="device_android_version">Android %1$s</string>
+    <string name="device_nearby">附近设备</string>
+    <string name="device_nearby_empty">搜索中…请在同一 Wi-Fi 下的其他设备上打开 Octopus</string>
+    <string name="device_discoverable">本机可被发现：%1$s</string>
+    <string name="device_discoverable_off">连接 Wi-Fi 后可被发现</string>
+    <string name="device_cmd_sent">已发送到 %1$s</string>
+    <string name="device_cmd_failed">失败（设备离线？）</string>
     <string name="device_browser">🌐 浏览器</string>
     <string name="device_tabs">标签页</string>
     <string name="device_extensions">扩展</string>

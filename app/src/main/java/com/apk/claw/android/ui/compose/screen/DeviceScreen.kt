@@ -23,11 +23,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.lazy.items
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalContext
+import com.apk.claw.android.ClawApplication
 import com.apk.claw.android.R
+import com.apk.claw.android.octopus_mobile.DeviceInfo
+import com.apk.claw.android.octopus_mobile.DeviceRemoteControl
+import com.apk.claw.android.server.ConfigServerManager
 import com.apk.claw.android.service.ClawAccessibilityService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -68,6 +73,16 @@ fun DeviceScreen(onMessage: (String) -> Unit = {}) {
     val androidVer = remember { Build.VERSION.RELEASE ?: "" }
     val battery = remember(refreshTick) { batteryPct(context) }
     val ip = remember(refreshTick) { lanIp() }
+
+    // 局域网真后端：观察发现到的远端设备 + 启动发现/配置服务，让本机既能发现也能被发现/被控
+    val remoteControl = remember { DeviceRemoteControl() }
+    val nearby by ClawApplication.instance.deviceRegistry.deviceList.collectAsState()
+    var selectedRemoteId by remember { mutableStateOf<String?>(null) }
+    val discoverableAddr = remember(refreshTick) { runCatching { ConfigServerManager.getAddress() }.getOrNull() }
+    LaunchedEffect(Unit) {
+        runCatching { ClawApplication.instance.deviceDiscoveryManager.start() }
+        runCatching { ConfigServerManager.start(context) }
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(BackgroundColor).padding(horizontal = 16.dp),
@@ -120,7 +135,108 @@ fun DeviceScreen(onMessage: (String) -> Unit = {}) {
             }
         }
 
+        // ── 局域网附近设备（真实发现 + 真实远程控制）──
+        item {
+            Column {
+                Text(stringResource(R.string.device_nearby), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextSecondary, modifier = Modifier.padding(top = 6.dp, bottom = 2.dp))
+                Text(
+                    if (discoverableAddr != null) stringResource(R.string.device_discoverable, discoverableAddr)
+                    else stringResource(R.string.device_discoverable_off),
+                    fontSize = 10.sp, color = TextMuted,
+                )
+            }
+        }
+
+        if (nearby.isEmpty()) {
+            item {
+                Surface(shape = RoundedCornerShape(14.dp), color = SurfaceColor, border = BorderStroke(1.dp, BorderColor)) {
+                    Text(
+                        stringResource(R.string.device_nearby_empty),
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        fontSize = 12.sp, color = TextMuted, lineHeight = 16.sp, textAlign = TextAlign.Center,
+                    )
+                }
+            }
+        } else {
+            items(nearby, key = { it.deviceId }) { device ->
+                RemoteDeviceCard(
+                    device = device,
+                    expanded = selectedRemoteId == device.deviceId,
+                    onToggle = { selectedRemoteId = if (selectedRemoteId == device.deviceId) null else device.deviceId },
+                    onAction = { action ->
+                        scope.launch {
+                            val ok = when (action) {
+                                "screenshot" -> {
+                                    val bytes = withContext(Dispatchers.IO) { runCatching { remoteControl.captureScreenshot(device) }.getOrNull() }
+                                    val bmp = bytes?.let { android.graphics.BitmapFactory.decodeByteArray(it, 0, it.size) }
+                                    bmp != null && withContext(Dispatchers.IO) { saveToGallery(context, bmp) }
+                                }
+                                "home" -> withContext(Dispatchers.IO) { runCatching { remoteControl.pressHome(device) }.getOrDefault(false) }
+                                "back" -> withContext(Dispatchers.IO) { runCatching { remoteControl.pressBack(device) }.getOrDefault(false) }
+                                "recents" -> withContext(Dispatchers.IO) { runCatching { remoteControl.sendKey(device, 187) }.getOrDefault(false) }
+                                else -> false
+                            }
+                            onMessage(
+                                if (action == "screenshot" && ok) context.getString(R.string.device_screenshot_saved)
+                                else if (ok) context.getString(R.string.device_cmd_sent, device.deviceName)
+                                else context.getString(R.string.device_cmd_failed)
+                            )
+                        }
+                    },
+                )
+            }
+        }
+
         item { Spacer(modifier = Modifier.height(10.dp)) }
+    }
+}
+
+@Composable
+private fun RemoteDeviceCard(device: DeviceInfo, expanded: Boolean, onToggle: () -> Unit, onAction: (String) -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = if (expanded) PrimaryColor.copy(alpha = 0.08f) else SurfaceColor,
+        border = BorderStroke(1.dp, if (expanded) PrimaryColor.copy(alpha = 0.3f) else BorderColor),
+        modifier = Modifier.clickable(onClick = onToggle),
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("📱", fontSize = 18.sp)
+                Spacer(modifier = Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(device.deviceName, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                    Text("${device.ip}  ·  Android ${device.androidVersion}", fontSize = 10.sp, color = TextMuted)
+                }
+                Text(
+                    stringResource(if (device.online) R.string.status_online else R.string.status_offline),
+                    fontSize = 10.sp, color = if (device.online) SuccessColor else TextMuted, fontWeight = FontWeight.SemiBold,
+                )
+            }
+            if (expanded) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf(
+                        "📸" to ("screenshot" to stringResource(R.string.ctrl_screenshot)),
+                        "🏠" to ("home" to stringResource(R.string.ctrl_home)),
+                        "⬅️" to ("back" to stringResource(R.string.ctrl_back)),
+                        "🔲" to ("recents" to stringResource(R.string.ctrl_recents)),
+                    ).forEach { (icon, pair) ->
+                        val (action, label) = pair
+                        Column(
+                            modifier = Modifier.weight(1f)
+                                .background(SurfaceVariantColor, RoundedCornerShape(8.dp))
+                                .clickable { onAction(action) }
+                                .padding(vertical = 10.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Text(icon, fontSize = 16.sp)
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(label, fontSize = 9.sp, color = TextSecondary, textAlign = TextAlign.Center)
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

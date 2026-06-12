@@ -2,6 +2,7 @@ package com.apk.claw.android.octopus_mobile
 
 import android.content.Context
 import com.apk.claw.android.server.ConfigServer
+import com.apk.claw.android.server.ConfigServerManager
 import com.apk.claw.android.utils.XLog
 import com.google.gson.Gson
 import kotlinx.coroutines.*
@@ -129,7 +130,9 @@ class DeviceDiscoveryManager(
             "ip" to localIp,
             "configServerPort" to ConfigServer.PORT,
             "androidVersion" to android.os.Build.VERSION.RELEASE,
-            "appVersion" to getAppVersion()
+            "appVersion" to getAppVersion(),
+            // 携带本机 ConfigServer 鉴权 token，供对端远程控制时鉴权（局域网可信模型）
+            "authToken" to (ConfigServerManager.getAuthToken() ?: "")
         )
         val json = gson.toJson(beacon)
         val bytes = json.toByteArray(Charsets.UTF_8)
@@ -177,7 +180,8 @@ class DeviceDiscoveryManager(
                 ip = map["ip"] as? String ?: sourceIp,
                 configServerPort = (map["configServerPort"] as? Double)?.toInt() ?: ConfigServer.PORT,
                 androidVersion = map["androidVersion"] as? String ?: "",
-                appVersion = map["appVersion"] as? String ?: ""
+                appVersion = map["appVersion"] as? String ?: "",
+                authToken = map["authToken"] as? String ?: ""
             )
 
             registry.upsertDevice(device)

@@ -102,7 +102,7 @@ class DeviceRemoteControl {
     ): ByteArray? = withContext(Dispatchers.IO) {
         try {
             val url = "${device.getBaseUrl()}/api/screen/screenshot?quality=$quality&maxWidth=$maxWidth"
-            val request = Request.Builder().url(url).get().build()
+            val request = Request.Builder().url(url).get().auth(device).build()
             val response = client.newCall(request).execute()
             if (response.isSuccessful) {
                 response.body?.bytes()
@@ -122,7 +122,7 @@ class DeviceRemoteControl {
     suspend fun getScreenInfo(device: DeviceInfo): Map<String, Any>? = withContext(Dispatchers.IO) {
         try {
             val url = "${device.getBaseUrl()}/api/screen/info"
-            val request = Request.Builder().url(url).get().build()
+            val request = Request.Builder().url(url).get().auth(device).build()
             val response = client.newCall(request).execute()
             if (response.isSuccessful) {
                 val body = response.body?.string() ?: return@withContext null
@@ -146,7 +146,7 @@ class DeviceRemoteControl {
                 val url = "${device.getBaseUrl()}/api/control/input"
                 val json = gson.toJson(params)
                 val body = json.toRequestBody(JSON_TYPE)
-                val request = Request.Builder().url(url).post(body).build()
+                val request = Request.Builder().url(url).post(body).auth(device).build()
                 val response = client.newCall(request).execute()
                 if (response.isSuccessful) {
                     val responseBody = response.body?.string() ?: "{}"
@@ -163,3 +163,7 @@ class DeviceRemoteControl {
             }
         }
 }
+
+// 对端 ConfigServer 的 api 接口需要鉴权；带上随 beacon 获得的 token
+private fun Request.Builder.auth(device: DeviceInfo): Request.Builder =
+    if (device.authToken.isNotEmpty()) addHeader("Authorization", "Bearer ${device.authToken}") else this
