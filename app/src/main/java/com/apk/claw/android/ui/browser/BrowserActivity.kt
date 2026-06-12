@@ -52,6 +52,15 @@ class BrowserActivity : BaseActivity() {
     private lateinit var engine: BrowserEngine
     private lateinit var etUrl: EditText
     private lateinit var engineChip: TextView
+
+    // 深色 iOS 风配色（与 Compose 各页一致）
+    private val cBg = Color.parseColor("#000000")
+    private val cSurface = Color.parseColor("#1C1C1E")
+    private val cSurface2 = Color.parseColor("#2C2C2E")
+    private val cPrimary = Color.parseColor("#0A84FF")
+    private val cText = Color.parseColor("#FFFFFF")
+    private val cMuted = Color.parseColor("#8E8E93")
+    private val cBorder = Color.parseColor("#38383A")
     private lateinit var progressBar: ProgressBar
     private lateinit var browserContainer: FrameLayout
     private lateinit var btnRefresh: ImageButton
@@ -69,6 +78,8 @@ class BrowserActivity : BaseActivity() {
 
         val root = buildLayout()
         setContentView(root)
+        // 深色状态栏，配合深色 chrome
+        runCatching { window.statusBarColor = cBg }
 
         // 注册引擎到 ToolRegistry
         ToolRegistry.setBrowserEngine(engine)
@@ -109,50 +120,82 @@ class BrowserActivity : BaseActivity() {
     private fun buildLayout(): LinearLayout {
         val dp8 = dp(8)
         val dp12 = dp(12)
-        val dp48 = dp(48)
 
         return LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT)
+            setBackgroundColor(cBg)
 
-            // Toolbar
-            addView(CommonToolbar(this@BrowserActivity).apply {
-                setTitle("浏览器")
-                setTitleCentered(false)
-                showBackButton(true) { finish() }
-                setActionText(engine.name) {}
-            })
+            // 顶栏（自定义深色：关闭 + 标题 + 引擎名）
+            addView(buildTopBar())
 
-            // 地址栏行
+            // 浏览器容器（占满中间）
+            browserContainer = FrameLayout(this@BrowserActivity).apply {
+                layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, 0, 1f)
+            }
+            addView(browserContainer)
+
+            // Loading 遮罩（深色，防白屏）
+            loadingOverlay = LinearLayout(this@BrowserActivity).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+                setBackgroundColor(cBg)
+                layoutParams = FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT)
+                addView(ProgressBar(this@BrowserActivity).apply {
+                    layoutParams = LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT)
+                    indeterminateTintList = android.content.res.ColorStateList.valueOf(cPrimary)
+                })
+                addView(TextView(this@BrowserActivity).apply {
+                    text = "加载中…"
+                    textSize = 13f
+                    setTextColor(cMuted)
+                    setPadding(0, dp8, 0, 0)
+                })
+            }
+
+            // 进度条（细，蓝色）
+            progressBar = ProgressBar(this@BrowserActivity, null, android.R.attr.progressBarStyleHorizontal).apply {
+                layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, dp(2))
+                max = 100
+                progress = 0
+                visibility = View.GONE
+                progressTintList = android.content.res.ColorStateList.valueOf(cPrimary)
+                progressBackgroundTintList = android.content.res.ColorStateList.valueOf(cBorder)
+            }
+
+            // 底部地址栏（omnibox：圆角暗色药丸 + 引擎标记 + 刷新）
             val addressBar = LinearLayout(this@BrowserActivity).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
                 layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
+                setBackgroundColor(cBg)
                 setPadding(dp12, dp8, dp12, dp8)
             }
-
-            // 搜索引擎切换标记（omnibox 左侧），点击切换引擎
             engineChip = TextView(this@BrowserActivity).apply {
                 text = SearchEngines.byId(KVUtils.getSearchEngine()).tag
-                textSize = 14f
+                textSize = 13f
                 setTypeface(typeface, Typeface.BOLD)
                 gravity = Gravity.CENTER
+                setTextColor(cPrimary)
+                background = roundedBg(withAlpha(cPrimary, 38), 10)
                 val s = dp(36)
-                layoutParams = LinearLayout.LayoutParams(s, s)
+                layoutParams = LinearLayout.LayoutParams(s, s).apply { marginEnd = dp8 }
                 setOnClickListener { showEngineMenu(it) }
                 contentDescription = "切换搜索引擎"
             }
             addressBar.addView(engineChip)
 
             etUrl = EditText(this@BrowserActivity).apply {
-                layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f)
+                layoutParams = LinearLayout.LayoutParams(0, dp(40), 1f)
                 hint = "搜索或输入网址"
                 setSingleLine(true)
                 inputType = InputType.TYPE_TEXT_VARIATION_URI
                 imeOptions = EditorInfo.IME_ACTION_GO
                 textSize = 14f
-                setBackgroundResource(android.R.drawable.edit_text)
-                setPadding(dp8, dp8, dp8, dp8)
+                setTextColor(cText)
+                setHintTextColor(cMuted)
+                background = roundedBg(cSurface2, 12)
+                setPadding(dp12, 0, dp12, 0)
                 setOnEditorActionListener { _, actionId, _ ->
                     if (actionId == EditorInfo.IME_ACTION_GO || actionId == EditorInfo.IME_ACTION_DONE) {
                         navigateTo(text.toString().trim())
@@ -164,109 +207,93 @@ class BrowserActivity : BaseActivity() {
             addressBar.addView(etUrl)
 
             btnRefresh = ImageButton(this@BrowserActivity).apply {
-                layoutParams = LinearLayout.LayoutParams(dp48, dp48)
+                layoutParams = LinearLayout.LayoutParams(dp(40), dp(40)).apply { marginStart = dp8 }
                 setImageResource(android.R.drawable.ic_menu_rotate)
+                setColorFilter(cMuted)
                 setBackgroundColor(Color.TRANSPARENT)
                 contentDescription = "刷新"
-                setOnClickListener {
-                    if (isLoading) {
-                        // 停止加载（通过重新导航到当前 URL 模拟）
-                        navigateTo(engine.currentUrl())
-                    } else {
-                        navigateTo(engine.currentUrl())
-                    }
-                }
+                setOnClickListener { navigateTo(engine.currentUrl()) }
             }
             addressBar.addView(btnRefresh)
 
-            // 进度条（构建，稍后随地址栏一起放到底部）
-            progressBar = ProgressBar(this@BrowserActivity, null, android.R.attr.progressBarStyleHorizontal).apply {
-                layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, dp(3))
-                max = 100
-                progress = 0
-                visibility = View.GONE
-            }
-
-            // 浏览器容器
-            browserContainer = FrameLayout(this@BrowserActivity).apply {
-                layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, 0, 1f)
-            }
-            addView(browserContainer)
-
-            // Loading 遮罩（防止 GeckoView 白屏）
-            loadingOverlay = LinearLayout(this@BrowserActivity).apply {
-                orientation = LinearLayout.VERTICAL
-                gravity = Gravity.CENTER
-                setBackgroundColor(Color.parseColor("#E8F0F0F0"))
-                layoutParams = FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT)
-            }
-            val spinner = ProgressBar(this@BrowserActivity).apply {
-                layoutParams = LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT)
-            }
-            loadingOverlay.addView(spinner)
-            val tvLoading = TextView(this@BrowserActivity).apply {
-                text = "引擎加载中..."
-                textSize = 14f
-                setTextColor(Color.GRAY)
-                setPadding(0, dp(8), 0, 0)
-            }
-            loadingOverlay.addView(tvLoading)
-
-            // 底部 omnibox：进度条 + 地址栏放在页面下方，避免与网页顶部自带搜索框重复
+            // 底部：进度条 + 地址栏（放页面下方，避免与网页顶部搜索框重复）+ 导航栏
             addView(progressBar)
             addView(addressBar)
-
-            // 底部工具栏
             addView(buildBottomToolbar())
         }
     }
 
+    /** 自定义深色顶栏 */
+    private fun buildTopBar(): LinearLayout {
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, dp(52))
+            setBackgroundColor(cBg)
+            setPadding(dp(6), 0, dp(16), 0)
+            addView(TextView(this@BrowserActivity).apply {
+                text = "✕"
+                textSize = 18f
+                gravity = Gravity.CENTER
+                setTextColor(cText)
+                val s = dp(44)
+                layoutParams = LinearLayout.LayoutParams(s, s)
+                isClickable = true
+                setOnClickListener { finish() }
+                contentDescription = "关闭"
+            })
+            addView(TextView(this@BrowserActivity).apply {
+                text = "浏览器"
+                textSize = 16f
+                setTypeface(typeface, Typeface.BOLD)
+                setTextColor(cText)
+                layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f)
+            })
+            addView(TextView(this@BrowserActivity).apply {
+                text = engine.name
+                textSize = 11f
+                setTextColor(cMuted)
+            })
+        }
+    }
+
     private fun buildBottomToolbar(): LinearLayout {
-        val dp48 = dp(48)
         return LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, dp(52))
             setPadding(dp(8), 0, dp(8), 0)
-            setBackgroundColor(Color.WHITE)
-            elevation = dp(4).toFloat()
-
-            // 后退
-            addView(makeToolbarButton(android.R.drawable.ic_media_rew, "后退") {
-                engine.evaluateJs("window.history.back()")
-            })
-
-            // 前进
-            addView(makeToolbarButton(android.R.drawable.ic_media_ff, "前进") {
-                engine.evaluateJs("window.history.forward()")
-            })
-
-            // Home
-            addView(makeToolbarButton(android.R.drawable.ic_menu_today, "首页") {
-                navigateTo(SearchEngines.byId(KVUtils.getSearchEngine()).home)
-            })
-
-            // 书签
-            addView(makeToolbarButton(android.R.drawable.star_big_on, "书签") {
-                showBookmarkDialog()
-            })
-
-            // 菜单（扩展）
-            addView(makeToolbarButton(android.R.drawable.ic_menu_more, "扩展") {
-                showExtensionDialog()
-            })
+            setBackgroundColor(cSurface)
+            addView(makeGlyphButton("‹", "后退") { engine.evaluateJs("window.history.back()") })
+            addView(makeGlyphButton("›", "前进") { engine.evaluateJs("window.history.forward()") })
+            addView(makeGlyphButton("⌂", "首页") { navigateTo(SearchEngines.byId(KVUtils.getSearchEngine()).home) })
+            addView(makeGlyphButton("☆", "书签") { showBookmarkDialog() })
+            addView(makeGlyphButton("⋯", "扩展") { showExtensionDialog() })
         }
     }
 
-    private fun makeToolbarButton(iconRes: Int, desc: String, onClick: () -> Unit): ImageButton {
-        return ImageButton(this).apply {
+    private fun makeGlyphButton(glyph: String, desc: String, onClick: () -> Unit): TextView {
+        return TextView(this).apply {
             layoutParams = LinearLayout.LayoutParams(0, dp(48), 1f)
-            setImageResource(iconRes)
-            setBackgroundColor(Color.TRANSPARENT)
+            text = glyph
+            textSize = 22f
+            gravity = Gravity.CENTER
+            setTextColor(cMuted)
             contentDescription = desc
+            isClickable = true
             setOnClickListener { onClick() }
         }
     }
+
+    /** 纯色圆角背景 */
+    private fun roundedBg(color: Int, radiusDp: Int) =
+        android.graphics.drawable.GradientDrawable().apply {
+            setColor(color)
+            cornerRadius = dp(radiusDp).toFloat()
+        }
+
+    private fun withAlpha(color: Int, alpha: Int) =
+        Color.argb(alpha, Color.red(color), Color.green(color), Color.blue(color))
 
     // ── 引擎事件收集 ─────────────────────────────────
 
