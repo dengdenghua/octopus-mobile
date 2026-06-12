@@ -6,6 +6,8 @@ import com.apk.claw.android.agent.AgentCallback
 import com.apk.claw.android.agent.AgentConfig
 import com.apk.claw.android.agent.DefaultAgentService
 import com.apk.claw.android.floating.LiveControlOverlay
+import com.apk.claw.android.octopus_mobile.ActivityLog
+import com.apk.claw.android.octopus_mobile.ControlTarget
 import com.apk.claw.android.tool.ToolRegistry
 import com.apk.claw.android.tool.ToolResult
 import com.apk.claw.android.utils.KVUtils
@@ -27,6 +29,12 @@ object ChatAgentBridge {
     private val service = DefaultAgentService()
     private val main = Handler(Looper.getMainLooper())
 
+    // 当前任务的审计采集
+    private var curTask: String? = null
+    private var curTarget = ""
+    private var curSteps = 0
+    private var curStart = 0L
+
     /** 是否已配置可用的 LLM（有 API Key 即认为可跑）。 */
     fun isConfigured(): Boolean = KVUtils.getLlmApiKey().isNotBlank()
 
@@ -34,6 +42,27 @@ object ChatAgentBridge {
     fun cancel() {
         service.cancel()
         LiveControlOverlay.hide()
+        finalize("cancelled", "已手动停止")
+    }
+
+    /** 落一条审计记录并清空当前任务状态（幂等：无活动任务时跳过）。 */
+    @Synchronized
+    private fun finalize(outcome: String, detail: String) {
+        val task = curTask ?: return
+        runCatching {
+            ActivityLog.record(
+                ActivityLog.Entry(
+                    id = "act_" + System.currentTimeMillis(),
+                    ts = System.currentTimeMillis(),
+                    task = task,
+                    target = curTarget,
+                    steps = curSteps,
+                    outcome = outcome,
+                    detail = detail.take(120),
+                )
+            )
+        }
+        curTask = null
     }
 
     private fun buildConfig(): AgentConfig {
@@ -66,6 +95,11 @@ object ChatAgentBridge {
         onError: (String) -> Unit,
     ) {
         service.updateConfig(buildConfig())
+        // 审计采集：开始一次任务
+        curTask = prompt
+        curTarget = ControlTarget.label()
+        curSteps = 0
+        curStart = System.currentTimeMillis()
         // 实时控制层：任务期间悬浮显示当前步骤 + 停止键（即使 Agent 跳出本 App 也可见）
         LiveControlOverlay.show("💭 准备中…") { cancel() }
         service.executeTask(prompt, object : AgentCallback {
@@ -86,22 +120,26 @@ object ChatAgentBridge {
                 val summary = if (result.isSuccess) "✓ " + (result.data ?: "") else "✗ " + (result.error ?: "")
                 val icon = iconFor(toolName)
                 val friendly = ToolRegistry.getInstance().getDisplayName(toolName)
+                curSteps++
                 LiveControlOverlay.updateStep("$icon $friendly")
                 main.post { onTool(icon, friendly, parameters, summary.take(48)) }
             }
 
             override fun onComplete(round: Int, finalAnswer: String, totalTokens: Int) {
                 LiveControlOverlay.finish(true, "完成")
+                finalize("success", finalAnswer)
                 main.post { onDone(finalAnswer) }
             }
 
             override fun onError(round: Int, error: Exception, totalTokens: Int) {
                 LiveControlOverlay.finish(false, error.message?.take(20) ?: "出错")
+                finalize("error", error.message ?: "调用失败")
                 main.post { onError(error.message ?: "调用失败") }
             }
 
             override fun onSystemDialogBlocked(round: Int, totalTokens: Int) {
                 LiveControlOverlay.finish(false, "需手动处理")
+                finalize("error", "检测到系统弹窗，已暂停")
                 main.post { onError("检测到系统弹窗，已暂停（需手动处理）") }
             }
         })

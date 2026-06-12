@@ -240,6 +240,12 @@ fun ChatScreen() {
                 }
             },
             actions = {
+                // 活动审计：跨会话回看 Agent 做过什么
+                IconButton(onClick = {
+                    runCatching { context.startActivity(android.content.Intent(context, com.apk.claw.android.ui.featurescreens.ActivityActivity::class.java)) }
+                }) {
+                    Text("🕘", fontSize = 15.sp)
+                }
                 // 信任中心：高权限集中查看 / 收回
                 IconButton(onClick = {
                     runCatching { context.startActivity(android.content.Intent(context, com.apk.claw.android.ui.featurescreens.TrustCenterActivity::class.java)) }
