@@ -83,6 +83,12 @@ fun ChatScreen() {
     var isRunning by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    // 设备已不再独立成页：在主对话界面启动局域网发现 + 配置服务，
+    // 使输入框的「目标选择器」能发现设备、本机也可被发现/被控。
+    LaunchedEffect(Unit) {
+        runCatching { ClawApplication.instance.deviceDiscoveryManager.start() }
+        runCatching { ConfigServerManager.start(context) }
+    }
     // 设置完成度:每次回到前台重新检测(配置/授权可能在外部页面变更)
     val lifecycleOwner = LocalLifecycleOwner.current
     var refreshTick by remember { mutableStateOf(0) }

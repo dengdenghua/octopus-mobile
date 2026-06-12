@@ -21,7 +21,8 @@ sealed class Screen(val route: String, @StringRes val labelRes: Int, val icon: I
     data object Settings : Screen("settings", R.string.nav_settings, Icons.Filled.Settings)
 
     companion object {
-        /** 底部 Tab 顺序：对话优先（对话即操作是产品主界面），其余退居其后 */
-        val bottomBar: List<Screen> = listOf(Chat, Discover, Device, Settings)
+        /** 底部 Tab：对话优先。设备不再独立成页——设备发现/选择已并入对话目标选择器，
+         *  局域网控制与权限并入信任中心。 */
+        val bottomBar: List<Screen> = listOf(Chat, Discover, Settings)
     }
 }

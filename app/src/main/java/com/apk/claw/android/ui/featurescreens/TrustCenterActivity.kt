@@ -42,6 +42,22 @@ class TrustCenterActivity : ComponentActivity() {
     }
 }
 
+private fun deviceModel(): String =
+    "${Build.MANUFACTURER} ${Build.MODEL}".trim().replaceFirstChar { it.uppercase() }
+
+private fun batteryPct(c: Context): Int = runCatching {
+    (c.getSystemService(Context.BATTERY_SERVICE) as? android.os.BatteryManager)
+        ?.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY) ?: -1
+}.getOrDefault(-1)
+
+private fun lanIp(): String = runCatching {
+    java.net.NetworkInterface.getNetworkInterfaces().toList()
+        .filter { it.isUp && !it.isLoopback }
+        .flatMap { it.inetAddresses.toList() }
+        .firstOrNull { !it.isLoopbackAddress && it is java.net.Inet4Address && it.isSiteLocalAddress }
+        ?.hostAddress ?: "—"
+}.getOrDefault("—")
+
 private fun openIntent(c: Context, action: String, withPkg: Boolean = false) {
     runCatching {
         val i = Intent(action)
@@ -86,6 +102,23 @@ fun TrustCenterScreen(onBack: () -> Unit) {
                 color = FMuted, fontSize = 12.sp, lineHeight = 17.sp,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             )
+
+            FSectionTitle("本机")
+            val batteryLevel = remember(tick) { batteryPct(ctx) }
+            val ip = remember(tick) { lanIp() }
+            FCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("📱", fontSize = 20.sp)
+                    Spacer(Modifier.width(10.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(deviceModel(), color = FText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                        Text("Android ${Build.VERSION.RELEASE}  ·  🌐 $ip", color = FMuted, fontSize = 11.sp)
+                    }
+                    if (batteryLevel in 0..100) {
+                        Text("🔋 $batteryLevel%", fontSize = 12.sp, color = if (batteryLevel <= 20) FWarning else FSub)
+                    }
+                }
+            }
 
             FSectionTitle("设备控制能力")
             CapabilityRow("♿", "无障碍服务", "核心：读屏与点击/输入（控制本机）", a11y) {

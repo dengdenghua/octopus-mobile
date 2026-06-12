@@ -32,7 +32,6 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.apk.claw.android.ui.compose.screen.ChatScreen
-import com.apk.claw.android.ui.compose.screen.DeviceScreen
 import com.apk.claw.android.ui.compose.screen.DiscoverScreen
 import com.apk.claw.android.ui.compose.screen.SettingsScreen
 import kotlinx.coroutines.launch
@@ -132,7 +131,6 @@ fun OctopusNavHost(
             })
         }
         composable(Screen.Chat.route) { ChatScreen() }
-        composable(Screen.Device.route) { DeviceScreen(onMessage = showMessage) }
         composable(Screen.Settings.route) { SettingsScreen(onMessage = showMessage) }
     }
 }
