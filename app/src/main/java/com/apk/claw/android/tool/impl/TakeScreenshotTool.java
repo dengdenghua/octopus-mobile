@@ -5,6 +5,9 @@ import android.util.Base64;
 
 import com.apk.claw.android.ClawApplication;
 import com.apk.claw.android.R;
+import com.apk.claw.android.octopus_mobile.ControlTarget;
+import com.apk.claw.android.octopus_mobile.DeviceInfo;
+import com.apk.claw.android.octopus_mobile.RemoteActions;
 import com.apk.claw.android.service.ClawAccessibilityService;
 import com.apk.claw.android.tool.BaseTool;
 import com.apk.claw.android.tool.ToolParameter;
@@ -54,14 +57,22 @@ public class TakeScreenshotTool extends BaseTool {
 
     @Override
     public ToolResult execute(Map<String, Object> params) {
-        ClawAccessibilityService service = ClawAccessibilityService.getInstance();
-        if (service == null) {
-            return ToolResult.error("Accessibility service is not running");
-        }
-
-        Bitmap bitmap = service.takeScreenshot(5000);
-        if (bitmap == null) {
-            return ToolResult.error("Failed to take screenshot. Requires Android 11+ (API 30).");
+        Bitmap bitmap;
+        DeviceInfo remote = ControlTarget.remoteTarget();
+        if (remote != null) {
+            bitmap = RemoteActions.screenshot(remote);
+            if (bitmap == null) {
+                return ToolResult.error("Remote screenshot failed on " + remote.getDeviceName());
+            }
+        } else {
+            ClawAccessibilityService service = ClawAccessibilityService.getInstance();
+            if (service == null) {
+                return ToolResult.error("Accessibility service is not running");
+            }
+            bitmap = service.takeScreenshot(5000);
+            if (bitmap == null) {
+                return ToolResult.error("Failed to take screenshot. Requires Android 11+ (API 30).");
+            }
         }
 
         // 解析 return_base64 参数，默认为 true

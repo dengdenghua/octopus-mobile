@@ -117,6 +117,7 @@ class ConfigServer(
                 uri == "/api/screen/screenshot" && method == Method.GET -> handleScreenshot(session)
                 uri == "/api/screen/stream" && method == Method.GET -> handleScreenStream(session)
                 uri == "/api/screen/info" && method == Method.GET -> handleScreenInfo()
+                uri == "/api/screen/tree" && method == Method.GET -> handleScreenTree(session)
 
                 // 多设备协同 API
                 uri == "/api/devices" && method == Method.GET -> handleGetDevices()
@@ -686,6 +687,22 @@ class ConfigServer(
         return corsResponse(newFixedLengthResponse(Response.Status.OK, MIME_JSON, json))
     }
 
+    /**
+     * GET /api/screen/tree?full=false
+     * 远程读屏：返回无障碍可见的 UI 树（供远端 Agent 决策点击坐标）。
+     */
+    private fun handleScreenTree(session: IHTTPSession): Response {
+        val full = session.parms["full"]?.toBoolean() ?: false
+        val svc = com.apk.claw.android.service.ClawAccessibilityService.getInstance()
+            ?: return corsResponse(newFixedLengthResponse(
+                Response.Status.SERVICE_UNAVAILABLE, MIME_JSON,
+                """{"code":-1,"message":"Accessibility service not running"}"""
+            ))
+        val tree = if (full) svc.screenTreeFull else svc.screenTree
+        val json = gson.toJson(mapOf("code" to 0, "data" to (tree ?: "")))
+        return corsResponse(newFixedLengthResponse(Response.Status.OK, MIME_JSON, json))
+    }
+
     // ======================== 多设备协同 API ========================
 
     /**
@@ -789,6 +806,16 @@ class ConfigServer(
                 val text = params.get("text")?.asString ?: ""
                 val result = ToolRegistry.executeTool("text_input", mapOf("text" to text))
                 result.isSuccess
+            }
+            "long_press" -> {
+                val x = params.get("x")?.asInt ?: 0
+                val y = params.get("y")?.asInt ?: 0
+                val duration = params.get("duration")?.asLong ?: 600L
+                service.performLongPress(x, y, duration)
+            }
+            "open_app" -> {
+                val pkg = params.get("package")?.asString ?: ""
+                service.openApp(pkg)
             }
             "back" -> service.pressBack()
             "home" -> service.pressHome()

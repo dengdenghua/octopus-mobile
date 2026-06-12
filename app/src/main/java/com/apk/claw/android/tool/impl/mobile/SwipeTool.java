@@ -2,6 +2,9 @@ package com.apk.claw.android.tool.impl.mobile;
 
 import com.apk.claw.android.ClawApplication;
 import com.apk.claw.android.R;
+import com.apk.claw.android.octopus_mobile.ControlTarget;
+import com.apk.claw.android.octopus_mobile.DeviceInfo;
+import com.apk.claw.android.octopus_mobile.RemoteActions;
 import com.apk.claw.android.service.ClawAccessibilityService;
 import com.apk.claw.android.tool.BaseTool;
 import com.apk.claw.android.tool.ToolParameter;
@@ -46,14 +49,21 @@ public class SwipeTool extends BaseTool {
 
     @Override
     public ToolResult execute(Map<String, Object> params) {
-        ClawAccessibilityService service = ClawAccessibilityService.getInstance();
-        if (service == null) {
-            return ToolResult.error("Accessibility service is not running");
-        }
         int startX = requireInt(params, "start_x");
         int startY = requireInt(params, "start_y");
         int endX = requireInt(params, "end_x");
         int endY = requireInt(params, "end_y");
+        long durationRemote = optionalLong(params, "duration_ms", 500);
+        DeviceInfo remote = ControlTarget.remoteTarget();
+        if (remote != null) {
+            boolean ok = RemoteActions.swipe(remote, startX, startY, endX, endY, durationRemote);
+            return ok ? ToolResult.success("Swiped on " + remote.getDeviceName())
+                    : ToolResult.error("Remote swipe failed on " + remote.getDeviceName());
+        }
+        ClawAccessibilityService service = ClawAccessibilityService.getInstance();
+        if (service == null) {
+            return ToolResult.error("Accessibility service is not running");
+        }
         String boundsError = validateCoordinates(startX, startY);
         if (boundsError != null) return ToolResult.error(boundsError);
         boundsError = validateCoordinates(endX, endY);

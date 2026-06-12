@@ -2,6 +2,9 @@ package com.apk.claw.android.tool.impl.mobile;
 
 import com.apk.claw.android.ClawApplication;
 import com.apk.claw.android.R;
+import com.apk.claw.android.octopus_mobile.ControlTarget;
+import com.apk.claw.android.octopus_mobile.DeviceInfo;
+import com.apk.claw.android.octopus_mobile.RemoteActions;
 import com.apk.claw.android.service.ClawAccessibilityService;
 import com.apk.claw.android.tool.BaseTool;
 import com.apk.claw.android.tool.ToolParameter;
@@ -43,12 +46,18 @@ public class TapTool extends BaseTool {
 
     @Override
     public ToolResult execute(Map<String, Object> params) {
+        int x = requireInt(params, "x");
+        int y = requireInt(params, "y");
+        DeviceInfo remote = ControlTarget.remoteTarget();
+        if (remote != null) {
+            boolean ok = RemoteActions.tap(remote, x, y);
+            return ok ? ToolResult.success("Tapped at (" + x + ", " + y + ") on " + remote.getDeviceName())
+                    : ToolResult.error("Remote tap failed on " + remote.getDeviceName());
+        }
         ClawAccessibilityService service = ClawAccessibilityService.getInstance();
         if (service == null) {
             return ToolResult.error("Accessibility service is not running");
         }
-        int x = requireInt(params, "x");
-        int y = requireInt(params, "y");
         String boundsError = validateCoordinates(x, y);
         if (boundsError != null) return ToolResult.error(boundsError);
         boolean success = service.performTap(x, y);

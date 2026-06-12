@@ -85,6 +85,35 @@ class DeviceRemoteControl {
         return sendInput(device, mapOf("action" to "home"))
     }
 
+    suspend fun longPress(device: DeviceInfo, x: Int, y: Int, durationMs: Long = 600): Boolean {
+        return sendInput(device, mapOf("action" to "long_press", "x" to x, "y" to y, "duration" to durationMs))
+    }
+
+    suspend fun openApp(device: DeviceInfo, packageName: String): Boolean {
+        return sendInput(device, mapOf("action" to "open_app", "package" to packageName))
+    }
+
+    suspend fun pressRecents(device: DeviceInfo): Boolean {
+        return sendInput(device, mapOf("action" to "recent"))
+    }
+
+    /** 远程读屏：返回对端无障碍 UI 树文本（供 Agent 决策）。 */
+    suspend fun getScreenTree(device: DeviceInfo, full: Boolean = false): String? = withContext(Dispatchers.IO) {
+        try {
+            val url = "${device.getBaseUrl()}/api/screen/tree?full=$full"
+            val request = Request.Builder().url(url).get().auth(device).build()
+            val response = client.newCall(request).execute()
+            if (response.isSuccessful) {
+                val body = response.body?.string() ?: return@withContext null
+                val map = gson.fromJson(body, Map::class.java) as? Map<*, *>
+                map?.get("data") as? String
+            } else null
+        } catch (e: Exception) {
+            XLog.e(TAG, "getScreenTree failed: ${e.message}")
+            null
+        }
+    }
+
     // ── 屏幕截图 ──
 
     /**

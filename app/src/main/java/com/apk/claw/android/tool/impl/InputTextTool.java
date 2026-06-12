@@ -10,6 +10,9 @@ import android.view.accessibility.AccessibilityNodeInfo;
 
 import com.apk.claw.android.ClawApplication;
 import com.apk.claw.android.R;
+import com.apk.claw.android.octopus_mobile.ControlTarget;
+import com.apk.claw.android.octopus_mobile.DeviceInfo;
+import com.apk.claw.android.octopus_mobile.RemoteActions;
 import com.apk.claw.android.service.ClawAccessibilityService;
 import com.apk.claw.android.tool.BaseTool;
 import com.apk.claw.android.tool.ToolParameter;
@@ -58,13 +61,20 @@ public class InputTextTool extends BaseTool {
 
     @Override
     public ToolResult execute(Map<String, Object> params) {
+        String text = requireString(params, "text");
+        boolean clearFirst = optionalBoolean(params, "clear_first", true);
+
+        DeviceInfo remote = ControlTarget.remoteTarget();
+        if (remote != null) {
+            boolean ok = RemoteActions.text(remote, text);
+            return ok ? ToolResult.success("Input text on " + remote.getDeviceName() + ": " + text)
+                    : ToolResult.error("Remote input failed on " + remote.getDeviceName());
+        }
+
         ClawAccessibilityService service = ClawAccessibilityService.getInstance();
         if (service == null) {
             return ToolResult.error("Accessibility service is not running");
         }
-
-        String text = requireString(params, "text");
-        boolean clearFirst = optionalBoolean(params, "clear_first", true);
 
         AccessibilityNodeInfo targetNode = service.getRootInActiveWindow() != null
                 ? findFocusedEditText(service.getRootInActiveWindow())

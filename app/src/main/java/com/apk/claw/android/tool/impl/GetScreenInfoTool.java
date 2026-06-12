@@ -2,6 +2,9 @@ package com.apk.claw.android.tool.impl;
 
 import com.apk.claw.android.ClawApplication;
 import com.apk.claw.android.R;
+import com.apk.claw.android.octopus_mobile.ControlTarget;
+import com.apk.claw.android.octopus_mobile.DeviceInfo;
+import com.apk.claw.android.octopus_mobile.RemoteActions;
 import com.apk.claw.android.service.ClawAccessibilityService;
 import com.apk.claw.android.tool.BaseTool;
 import com.apk.claw.android.tool.ToolParameter;
@@ -48,6 +51,14 @@ public class GetScreenInfoTool extends BaseTool {
 
     @Override
     public ToolResult execute(Map<String, Object> params) {
+        DeviceInfo remote = ControlTarget.remoteTarget();
+        if (remote != null) {
+            String rtree = RemoteActions.screenTree(remote, useFullTree);
+            if (rtree == null || rtree.isEmpty()) {
+                return ToolResult.error("Remote screen read failed on " + remote.getDeviceName());
+            }
+            return ToolResult.success(rtree);
+        }
         ClawAccessibilityService service = ClawAccessibilityService.getInstance();
         if (service == null) {
             return ToolResult.error("Accessibility service is not running");

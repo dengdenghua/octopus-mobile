@@ -26,7 +26,12 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.apk.claw.android.BuildConfig
+import com.apk.claw.android.ClawApplication
 import com.apk.claw.android.R
+import com.apk.claw.android.octopus_mobile.ControlTarget
+import com.apk.claw.android.octopus_mobile.DeviceInfo
+import com.apk.claw.android.server.ConfigServerManager
 import com.apk.claw.android.service.ClawAccessibilityService
 import com.apk.claw.android.ui.settings.LlmConfigActivity
 import kotlinx.coroutines.launch
@@ -326,8 +331,11 @@ fun ChatScreen() {
             modifier = Modifier.fillMaxWidth(),
             color = BackgroundColor.copy(alpha = 0.95f),
         ) {
+            Column(modifier = Modifier.padding(12.dp, 10.dp)) {
+            // 目标选择器：决定 Agent 在「本机」还是某台局域网设备上执行
+            TargetSelector()
+            Spacer(modifier = Modifier.height(8.dp))
             Row(
-                modifier = Modifier.padding(12.dp, 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 OutlinedTextField(
@@ -367,6 +375,68 @@ fun ChatScreen() {
                 ) {
                     Text(if (isRunning) "■" else "➤", color = Color.White, fontSize = 16.sp)
                 }
+            }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TargetSelector() {
+    val devices by ClawApplication.instance.deviceRegistry.deviceList.collectAsState()
+    var menu by remember { mutableStateOf(false) }
+    var label by remember { mutableStateOf(ControlTarget.label()) }
+    val remote = remember(label) { ControlTarget.isRemote() }
+    Box {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .background(
+                    (if (remote) PrimaryColor else SurfaceColor).copy(alpha = if (remote) 0.18f else 1f),
+                    RoundedCornerShape(12.dp)
+                )
+                .clickable { menu = true }
+                .padding(horizontal = 10.dp, vertical = 5.dp),
+        ) {
+            Text(if (remote) "🖥" else "📱", fontSize = 12.sp)
+            Spacer(modifier = Modifier.width(5.dp))
+            Text(label, color = if (remote) PrimaryColor else TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+            Text(" ▾", color = TextMuted, fontSize = 12.sp)
+        }
+        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            DropdownMenuItem(
+                text = { Text("📱 本机") },
+                onClick = { ControlTarget.setLocal(); label = ControlTarget.label(); menu = false },
+            )
+            devices.forEach { d ->
+                DropdownMenuItem(
+                    text = { Text("🖥 ${d.deviceName}") },
+                    onClick = { ControlTarget.setRemote(d); label = ControlTarget.label(); menu = false },
+                )
+            }
+            // 调试：回环目标（远程控制自己，用于单机验证远程路由）
+            if (BuildConfig.DEBUG) {
+                DropdownMenuItem(
+                    text = { Text("🔁 回环(本机:9527)") },
+                    onClick = {
+                        val token = runCatching { ConfigServerManager.getAuthToken() }.getOrNull() ?: ""
+                        // ConfigServer 绑定在本机 WiFi IP（非 127.0.0.1），用其真实地址回环
+                        val addr = runCatching { ConfigServerManager.getAddress() }.getOrNull() ?: "127.0.0.1:9527"
+                        val ip = addr.substringBefore(":")
+                        val port = addr.substringAfter(":").toIntOrNull() ?: 9527
+                        ControlTarget.setRemote(
+                            DeviceInfo(
+                                deviceId = "loopback",
+                                deviceName = "回环",
+                                ip = ip,
+                                configServerPort = port,
+                                authToken = token,
+                            )
+                        )
+                        label = ControlTarget.label()
+                        menu = false
+                    },
+                )
             }
         }
     }

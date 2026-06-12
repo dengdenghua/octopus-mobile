@@ -2,6 +2,9 @@ package com.apk.claw.android.tool.impl;
 
 import com.apk.claw.android.ClawApplication;
 import com.apk.claw.android.R;
+import com.apk.claw.android.octopus_mobile.ControlTarget;
+import com.apk.claw.android.octopus_mobile.DeviceInfo;
+import com.apk.claw.android.octopus_mobile.RemoteActions;
 import com.apk.claw.android.service.ClawAccessibilityService;
 import com.apk.claw.android.tool.BaseTool;
 import com.apk.claw.android.tool.ToolParameter;
@@ -48,12 +51,28 @@ public class SystemKeyTool extends BaseTool {
 
     @Override
     public ToolResult execute(Map<String, Object> params) {
+        String key = requireString(params, "key");
+
+        // 远程目标：转发支持的导航键（back/home/recent_apps）
+        DeviceInfo remote = ControlTarget.remoteTarget();
+        if (remote != null) {
+            boolean ok;
+            switch (key) {
+                case "back": ok = RemoteActions.back(remote); break;
+                case "home": ok = RemoteActions.home(remote); break;
+                case "recent_apps": ok = RemoteActions.recents(remote); break;
+                default:
+                    return ToolResult.error("Remote target does not support key: " + key + " (only back/home/recent_apps)");
+            }
+            return ok ? ToolResult.success("Pressed " + key + " on " + remote.getDeviceName())
+                    : ToolResult.error("Remote key failed on " + remote.getDeviceName());
+        }
+
         ClawAccessibilityService service = ClawAccessibilityService.getInstance();
         if (service == null) {
             return ToolResult.error("Accessibility service is not running");
         }
 
-        String key = requireString(params, "key");
         boolean success;
         String successMsg;
 
