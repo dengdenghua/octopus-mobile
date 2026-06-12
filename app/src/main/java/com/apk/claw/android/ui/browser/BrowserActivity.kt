@@ -52,6 +52,7 @@ class BrowserActivity : BaseActivity() {
     private lateinit var engine: BrowserEngine
     private lateinit var etUrl: EditText
     private lateinit var engineChip: android.widget.ImageView
+    private var tts: android.speech.tts.TextToSpeech? = null
 
     // 深色 iOS 风配色（与 Compose 各页一致）
     private val cBg = Color.parseColor("#000000")
@@ -108,6 +109,8 @@ class BrowserActivity : BaseActivity() {
         browserContainer.removeAllViews()
         // 清除 ToolRegistry 中的浏览器引擎，避免内存泄漏
         ToolRegistry.clearBrowserEngine()
+        runCatching { tts?.stop(); tts?.shutdown() }
+        tts = null
     }
 
     override fun onBackPressed() {
@@ -195,8 +198,15 @@ class BrowserActivity : BaseActivity() {
                 setPadding(dp12, 0, dp12, 0)
                 setOnEditorActionListener { _, actionId, _ ->
                     if (actionId == EditorInfo.IME_ACTION_GO || actionId == EditorInfo.IME_ACTION_DONE) {
-                        navigateTo(text.toString().trim())
+                        val t = text.toString().trim()
                         hideKeyboard()
+                        // 智能 omnibox：像指令 → 让 Agent 操作此页；否则按网址/搜索处理
+                        if (isPageCommand(t)) {
+                            android.widget.Toast.makeText(this@BrowserActivity, "🤖 让 AI 操作此页…", android.widget.Toast.LENGTH_SHORT).show()
+                            runAgentOnPage(t)
+                        } else {
+                            navigateTo(t)
+                        }
                         true
                     } else false
                 }
@@ -354,56 +364,173 @@ class BrowserActivity : BaseActivity() {
             imeOptions = EditorInfo.IME_ACTION_SEND
         }
 
-        // 快捷问题
-        val chips = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(0, dp(12), 0, dp(10))
-        }
-        fun addChip(label: String, q: String) {
-            chips.addView(TextView(this).apply {
+        val sheet = com.google.android.material.bottomsheet.BottomSheetDialog(this)
+
+        fun chip(parent: LinearLayout, label: String, accent: Int, onClick: () -> Unit) {
+            parent.addView(TextView(this).apply {
                 text = label
                 textSize = 12f
-                setTextColor(cPrimary)
-                background = roundedBg(withAlpha(cPrimary, 38), 14)
+                setTextColor(accent)
+                background = roundedBg(withAlpha(accent, 38), 14)
                 setPadding(dp(12), dp(7), dp(12), dp(7))
                 val lp = LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT)
                 lp.marginEnd = dp(8)
                 layoutParams = lp
-                setOnClickListener { runAi(answer, q, pageText) }
+                setOnClickListener { onClick() }
             })
         }
-        addChip("总结此页", "用简洁要点总结这个网页的主要内容。")
-        addChip("提取要点", "提取这个网页里最关键的信息要点。")
-        addChip("翻译", "把这个网页的主要内容翻译成中文。")
+
+        // 第一排：问答类
+        val chips = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, dp(12), 0, dp(8))
+        }
+        chip(chips, "总结此页", cPrimary) { runAi(answer, "用简洁要点总结这个网页的主要内容。", pageText) }
+        chip(chips, "提取要点", cPrimary) { runAi(answer, "提取这个网页里最关键的信息要点。", pageText) }
+        chip(chips, "翻译", cPrimary) { runAi(answer, "把这个网页的主要内容翻译成中文。", pageText) }
         container.addView(chips)
+
+        // 第二排：内容/操作类
+        val chips2 = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, 0, 0, dp(10))
+        }
+        chip(chips2, "📖 阅读模式", cText) { showReader(pageText) }
+        chip(chips2, "🔊 朗读", cText) { speakPage(pageText) }
+        container.addView(chips2)
 
         val inputRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
+        etAsk.hint = "问此页，或让 AI 操作此页…"
         inputRow.addView(etAsk, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
-        val send = TextView(this).apply {
-            text = "发送"
+        // 「问」：基于页面内容问答
+        inputRow.addView(TextView(this).apply {
+            text = "问"
             textSize = 14f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(Color.WHITE)
             background = roundedBg(cPrimary, 12)
-            setPadding(dp(16), dp(10), dp(16), dp(10))
-            val lp = LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT)
-            lp.marginStart = dp(8)
-            layoutParams = lp
+            setPadding(dp(14), dp(10), dp(14), dp(10))
+            layoutParams = LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginStart = dp(8) }
             setOnClickListener {
                 val q = etAsk.text.toString().trim()
                 if (q.isNotEmpty()) runAi(answer, q, pageText)
             }
-        }
-        inputRow.addView(send)
+        })
+        // 「执行」：让 Agent 真正操作当前网页（关面板让其看见页面）
+        inputRow.addView(TextView(this).apply {
+            text = "执行"
+            textSize = 14f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(Color.WHITE)
+            background = roundedBg(Color.parseColor("#FF9F0A"), 12)
+            setPadding(dp(14), dp(10), dp(14), dp(10))
+            layoutParams = LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginStart = dp(8) }
+            setOnClickListener {
+                val q = etAsk.text.toString().trim()
+                if (q.isNotEmpty()) { sheet.dismiss(); runAgentOnPage(q) }
+            }
+        })
         container.addView(inputRow)
         container.addView(answerScroll)
 
-        val sheet = com.google.android.material.bottomsheet.BottomSheetDialog(this)
         sheet.setContentView(container)
         sheet.show()
+    }
+
+    /** 从无障碍树中抽取纯正文（去掉 bounds/clickable 标注与浏览器自身 UI），供阅读/朗读用。 */
+    private fun extractReadableText(tree: String?): String {
+        if (tree.isNullOrBlank()) return ""
+        val chrome = setOf(
+            "X", "浏览器", "GeckoView", "停止", "问", "执行", "✨", "刷新",
+            "关闭", "切换搜索引擎", "问 AI", "后退", "前进", "首页", "书签", "扩展",
+            "搜索或输入网址", "加载中", "加载中…", "搜索或输入",
+        )
+        val seen = LinkedHashSet<String>()
+        Regex("(?:text|desc)=\"([^\"]+)\"").findAll(tree).forEach { m ->
+            val s = m.groupValues[1].trim()
+            if (s.length >= 2 && s !in chrome && !s.startsWith("http")) seen.add(s)
+        }
+        return seen.joinToString("\n")
+    }
+
+    /** 阅读模式：把页面正文以干净的大字深色视图展示。 */
+    private fun showReader(pageText: String?) {
+        val readable = extractReadableText(pageText)
+        if (readable.isBlank()) {
+            android.widget.Toast.makeText(this, "无法读取页面内容（需开启无障碍）", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        val tv = TextView(this).apply {
+            text = readable
+            textSize = 17f
+            setTextColor(cText)
+            setLineSpacing(0f, 1.35f)
+            setPadding(dp(20), dp(20), dp(20), dp(20))
+        }
+        val scroll = ScrollView(this).apply {
+            setBackgroundColor(cBg)
+            addView(tv)
+        }
+        val sheet = com.google.android.material.bottomsheet.BottomSheetDialog(this)
+        sheet.setContentView(scroll)
+        sheet.behavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
+        sheet.show()
+    }
+
+    /** 朗读：用系统 TTS 朗读页面正文；再次点击停止。 */
+    private fun speakPage(pageText: String?) {
+        val readable = extractReadableText(pageText).take(3000)
+        if (readable.isBlank()) {
+            android.widget.Toast.makeText(this, "无内容可朗读", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        val t = tts
+        if (t != null && t.isSpeaking) {
+            t.stop()
+            return
+        }
+        if (tts == null) {
+            tts = android.speech.tts.TextToSpeech(this) { status ->
+                if (status == android.speech.tts.TextToSpeech.SUCCESS) {
+                    tts?.language = java.util.Locale.CHINESE
+                    tts?.speak(readable, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "page")
+                }
+            }
+        } else {
+            tts?.language = java.util.Locale.CHINESE
+            tts?.speak(readable, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "page")
+        }
+    }
+
+    /** 保守判定：输入是否是一条「在本页操作」的指令（命中强祈使标记才算，避免误判普通搜索）。 */
+    private fun isPageCommand(s: String): Boolean {
+        if (s.startsWith("http") || (s.contains(".") && !s.contains(" "))) return false
+        val t = s.lowercase()
+        val markers = listOf(
+            "帮我", "这页", "此页", "这个页面", "本页", "点一下", "点击", "填写", "填一下",
+            "加入购物车", "加购", "下单", "结算", "登录这", "勾选", "提交表单",
+            "click ", "fill ", "add to cart", "log in", "submit ", "check the ",
+        )
+        return markers.any { t.contains(it) }
+    }
+
+    /** 让 Agent 在当前网页上执行操作（通过无障碍 tap/输入，不依赖已失效的 JS）。 */
+    private fun runAgentOnPage(task: String) {
+        if (!com.apk.claw.android.ui.compose.screen.ChatAgentBridge.isConfigured()) {
+            android.widget.Toast.makeText(this, "请先在「设置 → 模型」里配置 API Key", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        val prompt = "在当前网页上完成以下操作（用 get_screen_info 查看页面元素及坐标，用 tap / input_text 等工具操作）：$task"
+        com.apk.claw.android.ui.compose.screen.ChatAgentBridge.run(
+            prompt,
+            onTool = { _, _, _, _ -> },
+            onText = { },
+            onDone = { },
+            onError = { },
+        )
     }
 
     private fun runAi(answer: TextView, question: String, pageText: String?) {
