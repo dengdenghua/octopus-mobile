@@ -179,16 +179,13 @@ class BrowserActivity : BaseActivity() {
             }
             addressBar.addView(btnRefresh)
 
-            addView(addressBar)
-
-            // 进度条
+            // 进度条（构建，稍后随地址栏一起放到底部）
             progressBar = ProgressBar(this@BrowserActivity, null, android.R.attr.progressBarStyleHorizontal).apply {
                 layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, dp(3))
                 max = 100
                 progress = 0
                 visibility = View.GONE
             }
-            addView(progressBar)
 
             // 浏览器容器
             browserContainer = FrameLayout(this@BrowserActivity).apply {
@@ -214,6 +211,10 @@ class BrowserActivity : BaseActivity() {
                 setPadding(0, dp(8), 0, 0)
             }
             loadingOverlay.addView(tvLoading)
+
+            // 底部 omnibox：进度条 + 地址栏放在页面下方，避免与网页顶部自带搜索框重复
+            addView(progressBar)
+            addView(addressBar)
 
             // 底部工具栏
             addView(buildBottomToolbar())
