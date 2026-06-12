@@ -85,6 +85,13 @@ android {
         }
     }
 
+    // Lint 基线棘轮：存量问题记录在 lint-baseline.xml，只有“新增”错误才会使构建失败。
+    // 偿还存量后运行 ./gradlew updateLintBaseline 收紧基线。
+    lint {
+        baseline = file("lint-baseline.xml")
+        abortOnError = true
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

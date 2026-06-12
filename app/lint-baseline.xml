@@ -1,0 +1,3805 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<issues format="6" by="lint 9.1.0" type="baseline" client="gradle" dependencies="false" name="AGP (9.1.0)" variant="all" version="9.1.0">
+
+    <issue
+        id="GestureBackNavigation"
+        message="`onBackPressed` is no longer called for back gestures; migrate to AndroidX&apos;s backward compatible `OnBackPressedDispatcher`"
+        errorLine1="    override fun onBackPressed() {"
+        errorLine2="                 ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/ui/browser/BrowserActivity.kt"
+            line="113"
+            column="18"/>
+    </issue>
+
+    <issue
+        id="GestureBackNavigation"
+        message="If intercepting back events, this should be handled through the registration of callbacks; see https://developer.android.com/guide/navigation/custom-back/predictive-back-gesture"
+        errorLine1="            KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_HOME, KeyEvent.KEYCODE_MENU -> {"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/media/PlayerActivity.kt"
+            line="197"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="GestureBackNavigation"
+        message="`onBackPressed` is no longer called for back gestures; migrate to AndroidX&apos;s backward compatible `OnBackPressedDispatcher`"
+        errorLine1="    override fun onBackPressed() {"
+        errorLine2="                 ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/ui/web/WebActivity.kt"
+            line="123"
+            column="18"/>
+    </issue>
+
+    <issue
+        id="MissingTvBanner"
+        message="Expecting `android:banner` with the `&lt;application>` tag or each Leanback launcher activity"
+        errorLine1="    &lt;application"
+        errorLine2="     ~~~~~~~~~~~">
+        <location
+            file="src/main/AndroidManifest.xml"
+            line="51"
+            column="6"/>
+    </issue>
+
+    <issue
+        id="DefaultLocale"
+        message="Implicitly using the default locale is a common source of bugs: Use `String.format(Locale, ...)` instead"
+        errorLine1="                sb.append(String.format(&quot; range=[%.0f-%.0f, current=%.0f]&quot;,"
+        errorLine2="                          ^">
+        <location
+            file="src/main/java/com/apk/claw/android/service/ClawAccessibilityService.java"
+            line="441"
+            column="27"/>
+    </issue>
+
+    <issue
+        id="DefaultLocale"
+        message="Implicitly using the default locale is a common source of bugs: Use `String.format(Locale, ...)` instead"
+        errorLine1="                val ip = String.format("
+        errorLine2="                         ^">
+        <location
+            file="src/main/java/com/apk/claw/android/server/ConfigServerManager.kt"
+            line="146"
+            column="26"/>
+    </issue>
+
+    <issue
+        id="DefaultLocale"
+        message="Implicitly using the default locale is a common source of bugs: Use `toLowerCase(Locale)` instead. For strings meant to be internal use `Locale.ROOT`, otherwise `Locale.getDefault()`."
+        errorLine1="                    if (!appName.toLowerCase().contains(keyword.toLowerCase())"
+        errorLine2="                                 ~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/tool/impl/GetInstalledAppsTool.java"
+            line="72"
+            column="34"/>
+    </issue>
+
+    <issue
+        id="DefaultLocale"
+        message="Implicitly using the default locale is a common source of bugs: Use `toLowerCase(Locale)` instead. For strings meant to be internal use `Locale.ROOT`, otherwise `Locale.getDefault()`."
+        errorLine1="                    if (!appName.toLowerCase().contains(keyword.toLowerCase())"
+        errorLine2="                                                                ~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/tool/impl/GetInstalledAppsTool.java"
+            line="72"
+            column="65"/>
+    </issue>
+
+    <issue
+        id="DefaultLocale"
+        message="Implicitly using the default locale is a common source of bugs: Use `toLowerCase(Locale)` instead. For strings meant to be internal use `Locale.ROOT`, otherwise `Locale.getDefault()`."
+        errorLine1="                            &amp;&amp; !packageName.toLowerCase().contains(keyword.toLowerCase())) {"
+        errorLine2="                                            ~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/tool/impl/GetInstalledAppsTool.java"
+            line="73"
+            column="45"/>
+    </issue>
+
+    <issue
+        id="DefaultLocale"
+        message="Implicitly using the default locale is a common source of bugs: Use `toLowerCase(Locale)` instead. For strings meant to be internal use `Locale.ROOT`, otherwise `Locale.getDefault()`."
+        errorLine1="                            &amp;&amp; !packageName.toLowerCase().contains(keyword.toLowerCase())) {"
+        errorLine2="                                                                           ~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/tool/impl/GetInstalledAppsTool.java"
+            line="73"
+            column="76"/>
+    </issue>
+
+    <issue
+        id="DefaultLocale"
+        message="Implicitly using the default locale is a common source of bugs: Use `toLowerCase(Locale)` instead. For strings meant to be internal use `Locale.ROOT`, otherwise `Locale.getDefault()`."
+        errorLine1="                        if (!title.toLowerCase().contains(filterKeyword.toLowerCase())) {"
+        errorLine2="                                   ~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/tool/impl/ReadCalendarTool.java"
+            line="154"
+            column="36"/>
+    </issue>
+
+    <issue
+        id="DefaultLocale"
+        message="Implicitly using the default locale is a common source of bugs: Use `toLowerCase(Locale)` instead. For strings meant to be internal use `Locale.ROOT`, otherwise `Locale.getDefault()`."
+        errorLine1="                        if (!title.toLowerCase().contains(filterKeyword.toLowerCase())) {"
+        errorLine2="                                                                        ~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/tool/impl/ReadCalendarTool.java"
+            line="154"
+            column="73"/>
+    </issue>
+
+    <issue
+        id="DefaultLocale"
+        message="Implicitly using the default locale is a common source of bugs: Use `toLowerCase(Locale)` instead. For strings meant to be internal use `Locale.ROOT`, otherwise `Locale.getDefault()`."
+        errorLine1="        String box = optionalString(params, &quot;box&quot;, &quot;all&quot;).toLowerCase();"
+        errorLine2="                                                          ~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/tool/impl/ReadSmsTool.java"
+            line="103"
+            column="59"/>
+    </issue>
+
+    <issue
+        id="DefaultLocale"
+        message="Implicitly using the default locale is a common source of bugs: Use `toLowerCase(Locale)` instead. For strings meant to be internal use `Locale.ROOT`, otherwise `Locale.getDefault()`."
+        errorLine1="                        if (!body.toLowerCase().contains(filterKeyword.toLowerCase())) {"
+        errorLine2="                                  ~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/tool/impl/ReadSmsTool.java"
+            line="158"
+            column="35"/>
+    </issue>
+
+    <issue
+        id="DefaultLocale"
+        message="Implicitly using the default locale is a common source of bugs: Use `toLowerCase(Locale)` instead. For strings meant to be internal use `Locale.ROOT`, otherwise `Locale.getDefault()`."
+        errorLine1="                        if (!body.toLowerCase().contains(filterKeyword.toLowerCase())) {"
+        errorLine2="                                                                       ~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/tool/impl/ReadSmsTool.java"
+            line="158"
+            column="72"/>
+    </issue>
+
+    <issue
+        id="DefaultLocale"
+        message="Implicitly using the default locale is a common source of bugs: Use `toLowerCase(Locale)` instead. For strings meant to be internal use `Locale.ROOT`, otherwise `Locale.getDefault()`."
+        errorLine1="        String brand = Build.MANUFACTURER.toLowerCase().trim();"
+        errorLine2="                                          ~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/tool/impl/mobile/SearchAppInStoreTool.java"
+            line="97"
+            column="43"/>
+    </issue>
+
+    <issue
+        id="NewApi"
+        message="`android:windowSplashScreenAnimatedIcon` requires API level 31 (current min is 28)"
+        errorLine1="        &lt;item name=&quot;android:windowSplashScreenAnimatedIcon&quot;>@android:color/transparent&lt;/item>"
+        errorLine2="              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-night/themes.xml"
+            line="36"
+            column="15"/>
+    </issue>
+
+    <issue
+        id="NewApi"
+        message="`android:windowSplashScreenBackground` requires API level 31 (current min is 28)"
+        errorLine1="        &lt;item name=&quot;android:windowSplashScreenBackground&quot;>@color/colorBgPrimary&lt;/item>"
+        errorLine2="              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-night/themes.xml"
+            line="37"
+            column="15"/>
+    </issue>
+
+    <issue
+        id="NewApi"
+        message="`android:windowSplashScreenAnimatedIcon` requires API level 31 (current min is 28)"
+        errorLine1="        &lt;item name=&quot;android:windowSplashScreenAnimatedIcon&quot;>@android:color/transparent&lt;/item>"
+        errorLine2="              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/themes.xml"
+            line="58"
+            column="15"/>
+    </issue>
+
+    <issue
+        id="NewApi"
+        message="`android:windowSplashScreenBackground` requires API level 31 (current min is 28)"
+        errorLine1="        &lt;item name=&quot;android:windowSplashScreenBackground&quot;>@color/colorBgPrimary&lt;/item>"
+        errorLine2="              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/themes.xml"
+            line="59"
+            column="15"/>
+    </issue>
+
+    <issue
+        id="SdCardPath"
+        message="Do not hardcode &quot;/sdcard/&quot;; use `Environment.getExternalStorageDirectory().getPath()` instead"
+        errorLine1="        private const val DEFAULT_BACKUP_DIR = &quot;/sdcard/OctopusBackup&quot;"
+        errorLine2="                                                ~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/tool/impl/AppBackupTool.kt"
+            line="19"
+            column="49"/>
+    </issue>
+
+    <issue
+        id="SdCardPath"
+        message="Do not hardcode &quot;/sdcard/&quot;; use `Environment.getExternalStorageDirectory().getPath()` instead"
+        errorLine1="                val dstDir = &quot;/sdcard/Android/data/$pkg&quot;"
+        errorLine2="                              ~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/tool/impl/AppBackupTool.kt"
+            line="65"
+            column="31"/>
+    </issue>
+
+    <issue
+        id="SdCardPath"
+        message="Do not hardcode &quot;/sdcard/&quot;; use `Environment.getExternalStorageDirectory().getPath()` instead"
+        errorLine1="        - Backup to custom dir: action=&quot;backup&quot;, package=&quot;com.eg.android.AlipayGphone&quot;, backup_dir=&quot;/sdcard/MyBackup&quot;"
+        errorLine2="                                                                                                    ~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/tool/impl/AppBackupTool.kt"
+            line="106"
+            column="101"/>
+    </issue>
+
+    <issue
+        id="SdCardPath"
+        message="Do not hardcode &quot;/sdcard/&quot;; use `Environment.getExternalStorageDirectory().getPath()` instead"
+        errorLine1="        - 自定义目录备份: action=&quot;backup&quot;, package=&quot;com.eg.android.AlipayGphone&quot;, backup_dir=&quot;/sdcard/MyBackup&quot;"
+        errorLine2="                                                                                       ~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/tool/impl/AppBackupTool.kt"
+            line="124"
+            column="88"/>
+    </issue>
+
+    <issue
+        id="SdCardPath"
+        message="Do not hardcode &quot;`/data/`&quot;; use `Context.getFilesDir().getPath()` instead"
+        errorLine1="        if (path.startsWith(&quot;/data/data/&quot;) || path.startsWith(&quot;/data/system/&quot;)) {"
+        errorLine2="                             ~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/tool/impl/BrowseFilesTool.kt"
+            line="58"
+            column="30"/>
+    </issue>
+
+    <issue
+        id="SdCardPath"
+        message="Do not hardcode &quot;/sdcard/&quot;; use `Environment.getExternalStorageDirectory().getPath()` instead"
+        errorLine1="        - Browse downloads: action=&quot;list&quot;, path=&quot;/sdcard/Download&quot;"
+        errorLine2="                                                 ~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/tool/impl/BrowseFilesTool.kt"
+            line="102"
+            column="50"/>
+    </issue>
+
+    <issue
+        id="SdCardPath"
+        message="Do not hardcode &quot;/sdcard/&quot;; use `Environment.getExternalStorageDirectory().getPath()` instead"
+        errorLine1="        - Check WeChat data: action=&quot;list&quot;, path=&quot;/sdcard/Android/data/com.tencent.mm&quot;"
+        errorLine2="                                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/tool/impl/BrowseFilesTool.kt"
+            line="103"
+            column="51"/>
+    </issue>
+
+    <issue
+        id="SdCardPath"
+        message="Do not hardcode &quot;/sdcard/&quot;; use `Environment.getExternalStorageDirectory().getPath()` instead"
+        errorLine1="        - 浏览下载: action=&quot;list&quot;, path=&quot;/sdcard/Download&quot;"
+        errorLine2="                                     ~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/tool/impl/BrowseFilesTool.kt"
+            line="118"
+            column="38"/>
+    </issue>
+
+    <issue
+        id="SdCardPath"
+        message="Do not hardcode &quot;/sdcard/&quot;; use `Environment.getExternalStorageDirectory().getPath()` instead"
+        errorLine1="        - 查看微信数据: action=&quot;list&quot;, path=&quot;/sdcard/Android/data/com.tencent.mm&quot;"
+        errorLine2="                                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/tool/impl/BrowseFilesTool.kt"
+            line="119"
+            column="40"/>
+    </issue>
+
+    <issue
+        id="SdCardPath"
+        message="Do not hardcode &quot;/sdcard/&quot;; use `Environment.getExternalStorageDirectory().getPath()` instead"
+        errorLine1="    private const val CD2_DIR = &quot;/sdcard/CloudDrive2&quot;"
+        errorLine2="                                 ~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/media/CloudDriveManager.kt"
+            line="40"
+            column="34"/>
+    </issue>
+
+    <issue
+        id="SdCardPath"
+        message="Do not hardcode &quot;/sdcard/&quot;; use `Environment.getExternalStorageDirectory().getPath()` instead"
+        errorLine1="        val path = session.parms[&quot;path&quot;] ?: &quot;/sdcard&quot;"
+        errorLine2="                                             ~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/server/ConfigServer.kt"
+            line="813"
+            column="46"/>
+    </issue>
+
+    <issue
+        id="SdCardPath"
+        message="Do not hardcode &quot;/sdcard/&quot;; use `Environment.getExternalStorageDirectory().getPath()` instead"
+        errorLine1="        val path = session.parms[&quot;path&quot;] ?: &quot;/sdcard&quot;"
+        errorLine2="                                             ~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/server/ConfigServer.kt"
+            line="834"
+            column="46"/>
+    </issue>
+
+    <issue
+        id="SdCardPath"
+        message="Do not hardcode &quot;/sdcard/&quot;; use `Environment.getExternalStorageDirectory().getPath()` instead"
+        errorLine1="        if (!path.startsWith(&quot;/sdcard/&quot;)) {"
+        errorLine2="                              ~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/server/ConfigServer.kt"
+            line="882"
+            column="31"/>
+    </issue>
+
+    <issue
+        id="SdCardPath"
+        message="Do not hardcode &quot;/sdcard/&quot;; use `Environment.getExternalStorageDirectory().getPath()` instead"
+        errorLine1="        if (!path.startsWith(&quot;/sdcard/&quot;)) {"
+        errorLine2="                              ~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/server/ConfigServer.kt"
+            line="947"
+            column="31"/>
+    </issue>
+
+    <issue
+        id="SdCardPath"
+        message="Do not hardcode &quot;/sdcard/&quot;; use `Environment.getExternalStorageDirectory().getPath()` instead"
+        errorLine1="        if (!path.startsWith(&quot;/sdcard/&quot;)) {"
+        errorLine2="                              ~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/server/ConfigServer.kt"
+            line="995"
+            column="31"/>
+    </issue>
+
+    <issue
+        id="SdCardPath"
+        message="Do not hardcode &quot;`/data/`&quot;; use `Context.getFilesDir().getPath()` instead"
+        errorLine1="        if (source.startsWith(&quot;/data/data/&quot;) || source.startsWith(&quot;/data/system/&quot;) ||"
+        errorLine2="                               ~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/tool/impl/FileOpsTool.kt"
+            line="52"
+            column="32"/>
+    </issue>
+
+    <issue
+        id="SdCardPath"
+        message="Do not hardcode &quot;`/data/`&quot;; use `Context.getFilesDir().getPath()` instead"
+        errorLine1="            optionalString(params, &quot;destination&quot;, &quot;&quot;).startsWith(&quot;/data/data/&quot;) ||"
+        errorLine2="                                                                  ~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/tool/impl/FileOpsTool.kt"
+            line="53"
+            column="67"/>
+    </issue>
+
+    <issue
+        id="SdCardPath"
+        message="Do not hardcode &quot;/sdcard/&quot;; use `Environment.getExternalStorageDirectory().getPath()` instead"
+        errorLine1="        - Copy photo: action=&quot;copy&quot;, source=&quot;/sdcard/DCIM/Camera/photo.jpg&quot;, destination=&quot;/sdcard/Backup/&quot;"
+        errorLine2="                                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/tool/impl/FileOpsTool.kt"
+            line="116"
+            column="46"/>
+    </issue>
+
+    <issue
+        id="SdCardPath"
+        message="Do not hardcode &quot;/sdcard/&quot;; use `Environment.getExternalStorageDirectory().getPath()` instead"
+        errorLine1="        - Copy photo: action=&quot;copy&quot;, source=&quot;/sdcard/DCIM/Camera/photo.jpg&quot;, destination=&quot;/sdcard/Backup/&quot;"
+        errorLine2="                                                                                          ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/tool/impl/FileOpsTool.kt"
+            line="116"
+            column="91"/>
+    </issue>
+
+    <issue
+        id="SdCardPath"
+        message="Do not hardcode &quot;/sdcard/&quot;; use `Environment.getExternalStorageDirectory().getPath()` instead"
+        errorLine1="        - Rename: action=&quot;move&quot;, source=&quot;/sdcard/Download/old.pdf&quot;, destination=&quot;/sdcard/Download/new.pdf&quot;"
+        errorLine2="                                         ~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/tool/impl/FileOpsTool.kt"
+            line="117"
+            column="42"/>
+    </issue>
+
+    <issue
+        id="SdCardPath"
+        message="Do not hardcode &quot;/sdcard/&quot;; use `Environment.getExternalStorageDirectory().getPath()` instead"
+        errorLine1="        - Rename: action=&quot;move&quot;, source=&quot;/sdcard/Download/old.pdf&quot;, destination=&quot;/sdcard/Download/new.pdf&quot;"
+        errorLine2="                                                                                 ~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/tool/impl/FileOpsTool.kt"
+            line="117"
+            column="82"/>
+    </issue>
+
+    <issue
+        id="SdCardPath"
+        message="Do not hardcode &quot;/sdcard/&quot;; use `Environment.getExternalStorageDirectory().getPath()` instead"
+        errorLine1="        - Read config: action=&quot;read&quot;, source=&quot;/sdcard/config.json&quot;, max_lines=50"
+        errorLine2="                                              ~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/tool/impl/FileOpsTool.kt"
+            line="118"
+            column="47"/>
+    </issue>
+
+    <issue
+        id="SdCardPath"
+        message="Do not hardcode &quot;/sdcard/&quot;; use `Environment.getExternalStorageDirectory().getPath()` instead"
+        errorLine1="        - 复制照片: action=&quot;copy&quot;, source=&quot;/sdcard/DCIM/Camera/photo.jpg&quot;, destination=&quot;/sdcard/Backup/&quot;"
+        errorLine2="                                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/tool/impl/FileOpsTool.kt"
+            line="133"
+            column="40"/>
+    </issue>
+
+    <issue
+        id="SdCardPath"
+        message="Do not hardcode &quot;/sdcard/&quot;; use `Environment.getExternalStorageDirectory().getPath()` instead"
+        errorLine1="        - 复制照片: action=&quot;copy&quot;, source=&quot;/sdcard/DCIM/Camera/photo.jpg&quot;, destination=&quot;/sdcard/Backup/&quot;"
+        errorLine2="                                                                                    ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/tool/impl/FileOpsTool.kt"
+            line="133"
+            column="85"/>
+    </issue>
+
+    <issue
+        id="SdCardPath"
+        message="Do not hardcode &quot;/sdcard/&quot;; use `Environment.getExternalStorageDirectory().getPath()` instead"
+        errorLine1="        - 重命名: action=&quot;move&quot;, source=&quot;/sdcard/Download/old.pdf&quot;, destination=&quot;/sdcard/Download/new.pdf&quot;"
+        errorLine2="                                      ~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/tool/impl/FileOpsTool.kt"
+            line="134"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="SdCardPath"
+        message="Do not hardcode &quot;/sdcard/&quot;; use `Environment.getExternalStorageDirectory().getPath()` instead"
+        errorLine1="        - 重命名: action=&quot;move&quot;, source=&quot;/sdcard/Download/old.pdf&quot;, destination=&quot;/sdcard/Download/new.pdf&quot;"
+        errorLine2="                                                                              ~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/tool/impl/FileOpsTool.kt"
+            line="134"
+            column="79"/>
+    </issue>
+
+    <issue
+        id="SdCardPath"
+        message="Do not hardcode &quot;/sdcard/&quot;; use `Environment.getExternalStorageDirectory().getPath()` instead"
+        errorLine1="        - 读配置: action=&quot;read&quot;, source=&quot;/sdcard/config.json&quot;, max_lines=50"
+        errorLine2="                                      ~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/tool/impl/FileOpsTool.kt"
+            line="135"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="SdCardPath"
+        message="Do not hardcode &quot;/sdcard/&quot;; use `Environment.getExternalStorageDirectory().getPath()` instead"
+        errorLine1="        Example: play(path=&quot;/sdcard/Movies/Avatar.mkv&quot;)"
+        errorLine2="                            ~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/tool/impl/MediaTools.kt"
+            line="334"
+            column="29"/>
+    </issue>
+
+    <issue
+        id="SdCardPath"
+        message="Do not hardcode &quot;/sdcard/&quot;; use `Environment.getExternalStorageDirectory().getPath()` instead"
+        errorLine1="        示例：play(path=&quot;/sdcard/Movies/阿凡达.mkv&quot;)"
+        errorLine2="                      ~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/tool/impl/MediaTools.kt"
+            line="358"
+            column="23"/>
+    </issue>
+
+    <issue
+        id="SdCardPath"
+        message="Do not hardcode &quot;`/data/`&quot;; use `Context.getFilesDir().getPath()` instead"
+        errorLine1="            &quot;/data/data/&quot;,     // 其他 App 私有目录（不是自己的）"
+        errorLine2="             ~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/octopus_mobile/safety/PathGuard.kt"
+            line="183"
+            column="14"/>
+    </issue>
+
+    <issue
+        id="SdCardPath"
+        message="Do not hardcode &quot;`/data/`&quot;; use `Context.getFilesDir().getPath()` instead"
+        errorLine1="        if (basePath.startsWith(&quot;/data/data/&quot;) || basePath.startsWith(&quot;/data/system/&quot;)) {"
+        errorLine2="                                 ~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/tool/impl/SearchFilesTool.kt"
+            line="69"
+            column="34"/>
+    </issue>
+
+    <issue
+        id="SdCardPath"
+        message="Do not hardcode &quot;/sdcard/&quot;; use `Environment.getExternalStorageDirectory().getPath()` instead"
+        errorLine1="        - Find all photos: action=&quot;name&quot;, path=&quot;/sdcard&quot;, pattern=&quot;*.jpg&quot;"
+        errorLine2="                                                ~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/tool/impl/SearchFilesTool.kt"
+            line="119"
+            column="49"/>
+    </issue>
+
+    <issue
+        id="SdCardPath"
+        message="Do not hardcode &quot;/sdcard/&quot;; use `Environment.getExternalStorageDirectory().getPath()` instead"
+        errorLine1="        - Find PDFs in Download: action=&quot;name&quot;, path=&quot;/sdcard/Download&quot;, pattern=&quot;*.pdf&quot;"
+        errorLine2="                                                      ~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/tool/impl/SearchFilesTool.kt"
+            line="120"
+            column="55"/>
+    </issue>
+
+    <issue
+        id="SdCardPath"
+        message="Do not hardcode &quot;/sdcard/&quot;; use `Environment.getExternalStorageDirectory().getPath()` instead"
+        errorLine1="        - Search text in logs: action=&quot;content&quot;, path=&quot;/sdcard&quot;, pattern=&quot;error&quot;, file_type=&quot;*.log&quot;"
+        errorLine2="                                                       ~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/tool/impl/SearchFilesTool.kt"
+            line="121"
+            column="56"/>
+    </issue>
+
+    <issue
+        id="SdCardPath"
+        message="Do not hardcode &quot;/sdcard/&quot;; use `Environment.getExternalStorageDirectory().getPath()` instead"
+        errorLine1="        - Find duplicates: action=&quot;duplicates&quot;, path=&quot;/sdcard&quot;, min_size_mb=5"
+        errorLine2="                                                      ~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/tool/impl/SearchFilesTool.kt"
+            line="122"
+            column="55"/>
+    </issue>
+
+    <issue
+        id="SdCardPath"
+        message="Do not hardcode &quot;/sdcard/&quot;; use `Environment.getExternalStorageDirectory().getPath()` instead"
+        errorLine1="        - 找所有照片: action=&quot;name&quot;, path=&quot;/sdcard&quot;, pattern=&quot;*.jpg&quot;"
+        errorLine2="                                      ~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/tool/impl/SearchFilesTool.kt"
+            line="135"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="SdCardPath"
+        message="Do not hardcode &quot;/sdcard/&quot;; use `Environment.getExternalStorageDirectory().getPath()` instead"
+        errorLine1="        - 找下载目录的 PDF: action=&quot;name&quot;, path=&quot;/sdcard/Download&quot;, pattern=&quot;*.pdf&quot;"
+        errorLine2="                                           ~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/tool/impl/SearchFilesTool.kt"
+            line="136"
+            column="44"/>
+    </issue>
+
+    <issue
+        id="SdCardPath"
+        message="Do not hardcode &quot;/sdcard/&quot;; use `Environment.getExternalStorageDirectory().getPath()` instead"
+        errorLine1="        - 在日志中搜文本: action=&quot;content&quot;, path=&quot;/sdcard&quot;, pattern=&quot;error&quot;, file_type=&quot;*.log&quot;"
+        errorLine2="                                           ~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/tool/impl/SearchFilesTool.kt"
+            line="137"
+            column="44"/>
+    </issue>
+
+    <issue
+        id="SdCardPath"
+        message="Do not hardcode &quot;/sdcard/&quot;; use `Environment.getExternalStorageDirectory().getPath()` instead"
+        errorLine1="        - 找重复文件: action=&quot;duplicates&quot;, path=&quot;/sdcard&quot;, min_size_mb=5"
+        errorLine2="                                            ~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/tool/impl/SearchFilesTool.kt"
+            line="138"
+            column="45"/>
+    </issue>
+
+    <issue
+        id="SdCardPath"
+        message="Do not hardcode &quot;/sdcard/&quot;; use `Environment.getExternalStorageDirectory().getPath()` instead"
+        errorLine1="        val tempPath = &quot;/sdcard/octopus_screenshot_${System.currentTimeMillis()}.png&quot;"
+        errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/shizuku/ShizukuShellService.kt"
+            line="274"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="SdCardPath"
+        message="Do not hardcode &quot;/sdcard/&quot;; use `Environment.getExternalStorageDirectory().getPath()` instead"
+        errorLine1="        val tempPath = &quot;/sdcard/octopus_ui_dump.xml&quot;"
+        errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/shizuku/ShizukuShellService.kt"
+            line="390"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="SdCardPath"
+        message="Do not hardcode &quot;/sdcard/&quot;; use `Environment.getExternalStorageDirectory().getPath()` instead"
+        errorLine1="        val srcDir = &quot;/sdcard/Android/data/$packageName&quot;"
+        errorLine2="                      ~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/shizuku/ShizukuShellService.kt"
+            line="840"
+            column="23"/>
+    </issue>
+
+    <issue
+        id="UnusedAttribute"
+        message="Attribute `canTakeScreenshot` is only used in API level 30 and higher (current min is 28)"
+        errorLine1="    android:canTakeScreenshot=&quot;true&quot;"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/xml/accessibility_service_config.xml"
+            line="8"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="BatteryLife"
+        message="Use of `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` violates the Play Store Content Policy regarding acceptable use cases, as described in https://developer.android.com/training/monitoring-device-state/doze-standby.html"
+        errorLine1="            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)"
+        errorLine2="                                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/ui/home/HomeActivity.kt"
+            line="303"
+            column="42"/>
+    </issue>
+
+    <issue
+        id="CustomSplashScreen"
+        message="The application should not provide its own launch screen"
+        errorLine1="class SplashActivity : BaseActivity() {"
+        errorLine2="      ~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/ui/splash/SplashActivity.kt"
+            line="13"
+            column="7"/>
+    </issue>
+
+    <issue
+        id="InflateParams"
+        message="Avoid passing `null` as the view root (needed to resolve layout parameters on the inflated layout&apos;s root element)"
+        errorLine1="        val view = LayoutInflater.from(context).inflate(R.layout.dialog_input, null)"
+        errorLine2="                                                                               ~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/widget/InputDialog.kt"
+            line="121"
+            column="80"/>
+    </issue>
+
+    <issue
+        id="LeanbackUsesWifi"
+        message="Requiring Wifi permissions limits app availability on TVs that support only Ethernet"
+        errorLine1="    &lt;uses-permission android:name=&quot;android.permission.CHANGE_WIFI_MULTICAST_STATE&quot; />"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/AndroidManifest.xml"
+            line="21"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="AndroidGradlePluginVersion"
+        message="A newer version of com.android.application than 9.1.0 is available: 9.2.1. (There is also a newer version of 9.1.𝑥 available, if upgrading to 9.2.1 is difficult: 9.1.1)"
+        errorLine1="agp = &quot;9.1.0&quot;"
+        errorLine2="      ~~~~~~~">
+        <location
+            file="$HOME/Public/octopus/octopus-mobile/gradle/libs.versions.toml"
+            line="2"
+            column="7"/>
+    </issue>
+
+    <issue
+        id="GradleDependency"
+        message="A newer version of androidx.core:core-ktx than 1.10.1 is available: 1.19.0"
+        errorLine1="coreKtx = &quot;1.10.1&quot;"
+        errorLine2="          ~~~~~~~~">
+        <location
+            file="$HOME/Public/octopus/octopus-mobile/gradle/libs.versions.toml"
+            line="3"
+            column="11"/>
+    </issue>
+
+    <issue
+        id="GradleDependency"
+        message="A newer version of androidx.test.ext:junit than 1.1.5 is available: 1.3.0"
+        errorLine1="junitVersion = &quot;1.1.5&quot;"
+        errorLine2="               ~~~~~~~">
+        <location
+            file="$HOME/Public/octopus/octopus-mobile/gradle/libs.versions.toml"
+            line="5"
+            column="16"/>
+    </issue>
+
+    <issue
+        id="GradleDependency"
+        message="A newer version of androidx.test.espresso:espresso-core than 3.5.1 is available: 3.7.0"
+        errorLine1="espressoCore = &quot;3.5.1&quot;"
+        errorLine2="               ~~~~~~~">
+        <location
+            file="$HOME/Public/octopus/octopus-mobile/gradle/libs.versions.toml"
+            line="6"
+            column="16"/>
+    </issue>
+
+    <issue
+        id="GradleDependency"
+        message="A newer version of androidx.test:core than 1.5.0 is available: 1.7.0"
+        errorLine1="androidxTestCore = &quot;1.5.0&quot;"
+        errorLine2="                   ~~~~~~~">
+        <location
+            file="$HOME/Public/octopus/octopus-mobile/gradle/libs.versions.toml"
+            line="11"
+            column="20"/>
+    </issue>
+
+    <issue
+        id="GradleDependency"
+        message="A newer version of androidx.appcompat:appcompat than 1.6.1 is available: 1.7.1"
+        errorLine1="appcompat = &quot;1.6.1&quot;"
+        errorLine2="            ~~~~~~~">
+        <location
+            file="$HOME/Public/octopus/octopus-mobile/gradle/libs.versions.toml"
+            line="13"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="GradleDependency"
+        message="A newer version of com.google.android.material:material than 1.10.0 is available: 1.14.0"
+        errorLine1="material = &quot;1.10.0&quot;"
+        errorLine2="           ~~~~~~~~">
+        <location
+            file="$HOME/Public/octopus/octopus-mobile/gradle/libs.versions.toml"
+            line="14"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="GradleDependency"
+        message="A newer version of androidx.constraintlayout:constraintlayout than 2.1.4 is available: 2.2.1"
+        errorLine1="constraintlayout = &quot;2.1.4&quot;"
+        errorLine2="                   ~~~~~~~">
+        <location
+            file="$HOME/Public/octopus/octopus-mobile/gradle/libs.versions.toml"
+            line="19"
+            column="20"/>
+    </issue>
+
+    <issue
+        id="GradleDependency"
+        message="A newer version of androidx.lifecycle:lifecycle-runtime-ktx than 2.6.2 is available: 2.10.0"
+        errorLine1="lifecycle = &quot;2.6.2&quot;"
+        errorLine2="            ~~~~~~~">
+        <location
+            file="$HOME/Public/octopus/octopus-mobile/gradle/libs.versions.toml"
+            line="22"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="GradleDependency"
+        message="A newer version of androidx.lifecycle:lifecycle-viewmodel-compose than 2.6.2 is available: 2.10.0"
+        errorLine1="lifecycle = &quot;2.6.2&quot;"
+        errorLine2="            ~~~~~~~">
+        <location
+            file="$HOME/Public/octopus/octopus-mobile/gradle/libs.versions.toml"
+            line="22"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="GradleDependency"
+        message="A newer version of androidx.lifecycle:lifecycle-viewmodel-ktx than 2.6.2 is available: 2.10.0"
+        errorLine1="lifecycle = &quot;2.6.2&quot;"
+        errorLine2="            ~~~~~~~">
+        <location
+            file="$HOME/Public/octopus/octopus-mobile/gradle/libs.versions.toml"
+            line="22"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="GradleDependency"
+        message="A newer version of androidx.compose:compose-bom than 2025.05.01 is available: 2026.05.01"
+        errorLine1="composeBom = &quot;2025.05.01&quot;"
+        errorLine2="             ~~~~~~~~~~~~">
+        <location
+            file="$HOME/Public/octopus/octopus-mobile/gradle/libs.versions.toml"
+            line="33"
+            column="14"/>
+    </issue>
+
+    <issue
+        id="GradleDependency"
+        message="A newer version of androidx.navigation:navigation-compose than 2.9.0 is available: 2.9.8"
+        errorLine1="composeNavigation = &quot;2.9.0&quot;"
+        errorLine2="                    ~~~~~~~">
+        <location
+            file="$HOME/Public/octopus/octopus-mobile/gradle/libs.versions.toml"
+            line="34"
+            column="21"/>
+    </issue>
+
+    <issue
+        id="GradleDependency"
+        message="A newer version of androidx.activity:activity-compose than 1.10.1 is available: 1.13.0"
+        errorLine1="compose-activity = { group = &quot;androidx.activity&quot;, name = &quot;activity-compose&quot;, version = &quot;1.10.1&quot; }"
+        errorLine2="                                                                                       ~~~~~~~~">
+        <location
+            file="$HOME/Public/octopus/octopus-mobile/gradle/libs.versions.toml"
+            line="83"
+            column="88"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of org.jetbrains.kotlinx:kotlinx-coroutines-android than 1.7.3 is available: 1.11.0"
+        errorLine1="coroutines = &quot;1.7.3&quot;"
+        errorLine2="             ~~~~~~~">
+        <location
+            file="$HOME/Public/octopus/octopus-mobile/gradle/libs.versions.toml"
+            line="7"
+            column="14"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of org.jetbrains.kotlinx:kotlinx-coroutines-core than 1.7.3 is available: 1.11.0"
+        errorLine1="coroutines = &quot;1.7.3&quot;"
+        errorLine2="             ~~~~~~~">
+        <location
+            file="$HOME/Public/octopus/octopus-mobile/gradle/libs.versions.toml"
+            line="7"
+            column="14"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of org.jetbrains.kotlinx:kotlinx-coroutines-test than 1.7.3 is available: 1.11.0"
+        errorLine1="coroutines = &quot;1.7.3&quot;"
+        errorLine2="             ~~~~~~~">
+        <location
+            file="$HOME/Public/octopus/octopus-mobile/gradle/libs.versions.toml"
+            line="7"
+            column="14"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of com.squareup.okhttp3:mockwebserver than 4.12.0 is available: 5.4.0"
+        errorLine1="mockwebserver = &quot;4.12.0&quot;"
+        errorLine2="                ~~~~~~~~">
+        <location
+            file="$HOME/Public/octopus/octopus-mobile/gradle/libs.versions.toml"
+            line="8"
+            column="17"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of org.robolectric:robolectric than 4.11.1 is available: 4.16.1"
+        errorLine1="robolectric = &quot;4.11.1&quot;"
+        errorLine2="              ~~~~~~~~">
+        <location
+            file="$HOME/Public/octopus/octopus-mobile/gradle/libs.versions.toml"
+            line="9"
+            column="15"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of org.mockito:mockito-core than 5.7.0 is available: 5.23.0"
+        errorLine1="mockito = &quot;5.7.0&quot;"
+        errorLine2="          ~~~~~~~">
+        <location
+            file="$HOME/Public/octopus/octopus-mobile/gradle/libs.versions.toml"
+            line="10"
+            column="11"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of org.json:json than 20240303 is available: 20260522"
+        errorLine1="orgJson = &quot;20240303&quot;"
+        errorLine2="          ~~~~~~~~~~">
+        <location
+            file="$HOME/Public/octopus/octopus-mobile/gradle/libs.versions.toml"
+            line="12"
+            column="11"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of dev.langchain4j:langchain4j-anthropic than 1.12.2 is available: 1.16.2"
+        errorLine1="langchain4j = &quot;1.12.2&quot;"
+        errorLine2="              ~~~~~~~~">
+        <location
+            file="$HOME/Public/octopus/octopus-mobile/gradle/libs.versions.toml"
+            line="15"
+            column="15"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of dev.langchain4j:langchain4j-core than 1.12.2 is available: 1.16.2"
+        errorLine1="langchain4j = &quot;1.12.2&quot;"
+        errorLine2="              ~~~~~~~~">
+        <location
+            file="$HOME/Public/octopus/octopus-mobile/gradle/libs.versions.toml"
+            line="15"
+            column="15"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of dev.langchain4j:langchain4j-open-ai than 1.12.2 is available: 1.16.2"
+        errorLine1="langchain4j = &quot;1.12.2&quot;"
+        errorLine2="              ~~~~~~~~">
+        <location
+            file="$HOME/Public/octopus/octopus-mobile/gradle/libs.versions.toml"
+            line="15"
+            column="15"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of com.squareup.okhttp3:logging-interceptor than 4.12.0 is available: 5.4.0"
+        errorLine1="okhttp = &quot;4.12.0&quot;"
+        errorLine2="         ~~~~~~~~">
+        <location
+            file="$HOME/Public/octopus/octopus-mobile/gradle/libs.versions.toml"
+            line="16"
+            column="10"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of com.squareup.okhttp3:okhttp than 4.12.0 is available: 5.4.0"
+        errorLine1="okhttp = &quot;4.12.0&quot;"
+        errorLine2="         ~~~~~~~~">
+        <location
+            file="$HOME/Public/octopus/octopus-mobile/gradle/libs.versions.toml"
+            line="16"
+            column="10"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of com.squareup.retrofit2:converter-gson than 2.11.0 is available: 3.0.0"
+        errorLine1="retrofit = &quot;2.11.0&quot;"
+        errorLine2="           ~~~~~~~~">
+        <location
+            file="$HOME/Public/octopus/octopus-mobile/gradle/libs.versions.toml"
+            line="17"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of com.squareup.retrofit2:retrofit than 2.11.0 is available: 3.0.0"
+        errorLine1="retrofit = &quot;2.11.0&quot;"
+        errorLine2="           ~~~~~~~~">
+        <location
+            file="$HOME/Public/octopus/octopus-mobile/gradle/libs.versions.toml"
+            line="17"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of com.google.code.gson:gson than 2.13.2 is available: 2.14.0"
+        errorLine1="gson = &quot;2.13.2&quot;"
+        errorLine2="       ~~~~~~~~">
+        <location
+            file="$HOME/Public/octopus/octopus-mobile/gradle/libs.versions.toml"
+            line="18"
+            column="8"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of com.tencent:mmkv-static than 2.3.0 is available: 2.4.0"
+        errorLine1="mmkv = &quot;2.3.0&quot;"
+        errorLine2="       ~~~~~~~">
+        <location
+            file="$HOME/Public/octopus/octopus-mobile/gradle/libs.versions.toml"
+            line="23"
+            column="8"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of com.github.bumptech.glide:glide than 5.0.5 is available: 5.0.7"
+        errorLine1="glide = &quot;5.0.5&quot;"
+        errorLine2="        ~~~~~~~">
+        <location
+            file="$HOME/Public/octopus/octopus-mobile/gradle/libs.versions.toml"
+            line="25"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of com.google.zxing:core than 3.5.3 is available: 3.5.4"
+        errorLine1="zxing = &quot;3.5.3&quot;"
+        errorLine2="        ~~~~~~~">
+        <location
+            file="$HOME/Public/octopus/octopus-mobile/gradle/libs.versions.toml"
+            line="28"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of com.larksuite.oapi:oapi-sdk than 2.5.3 is available: 2.7.3"
+        errorLine1="oapi = &quot;2.5.3&quot;"
+        errorLine2="       ~~~~~~~">
+        <location
+            file="$HOME/Public/octopus/octopus-mobile/gradle/libs.versions.toml"
+            line="29"
+            column="8"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of org.jetbrains.kotlin.plugin.compose than 2.1.20 is available: 2.4.0"
+        errorLine1="kotlin = &quot;2.1.20&quot;"
+        errorLine2="         ~~~~~~~~">
+        <location
+            file="$HOME/Public/octopus/octopus-mobile/gradle/libs.versions.toml"
+            line="35"
+            column="10"/>
+    </issue>
+
+    <issue
+        id="ModifierParameter"
+        message="Modifier parameter should be the first optional parameter"
+        errorLine1="    modifier: Modifier = Modifier"
+        errorLine2="    ~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/ui/compose/NavigationGraph.kt"
+            line="112"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="SwitchIntDef"
+        message="Switch statement on an `int` with known associated constant missing case `AccessibilityEvent.TYPE_ANNOUNCEMENT`, `AccessibilityEvent.TYPE_ASSIST_READING_CONTEXT`, `AccessibilityEvent.TYPE_GESTURE_DETECTION_END`, `AccessibilityEvent.TYPE_GESTURE_DETECTION_START`, `AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED`, `AccessibilityEvent.TYPE_SPEECH_STATE_CHANGE`, `AccessibilityEvent.TYPE_TOUCH_EXPLORATION_GESTURE_END`, `AccessibilityEvent.TYPE_TOUCH_EXPLORATION_GESTURE_START`, `AccessibilityEvent.TYPE_TOUCH_INTERACTION_END`, `AccessibilityEvent.TYPE_TOUCH_INTERACTION_START`, `AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUSED`, `AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUS_CLEARED`, `AccessibilityEvent.TYPE_VIEW_CONTEXT_CLICKED`, `AccessibilityEvent.TYPE_VIEW_FOCUSED`, `AccessibilityEvent.TYPE_VIEW_HOVER_ENTER`, `AccessibilityEvent.TYPE_VIEW_HOVER_EXIT`, `AccessibilityEvent.TYPE_VIEW_LONG_CLICKED`, `AccessibilityEvent.TYPE_VIEW_SELECTED`, `AccessibilityEvent.TYPE_VIEW_TARGETED_BY_SCROLL`, `AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED`, `AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED`, `AccessibilityEvent.TYPE_VIEW_TEXT_TRAVERSED_AT_MOVEMENT_GRANULARITY`, `AccessibilityEvent.TYPE_WINDOWS_CHANGED`"
+        errorLine1="        when (event.eventType) {"
+        errorLine2="        ~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/octopus_mobile/ScreenStreamer.kt"
+            line="83"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="PluralsCandidate"
+        message="Formatting %d followed by words (&quot;characters&quot;): This should probably be a plural rather than a string"
+        errorLine1="    &lt;string name=&quot;input_dialog_need_more&quot;>Enter at least %d characters&lt;/string>"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="279"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="PluralsCandidate"
+        message="Formatting %d followed by words (&quot;characters&quot;): This should probably be a plural rather than a string"
+        errorLine1="    &lt;string name=&quot;input_dialog_need_less&quot;>Enter at most %d characters&lt;/string>"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="280"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="PluralsCandidate"
+        message="Formatting %d followed by words (&quot;chats&quot;): This should probably be a plural rather than a string"
+        errorLine1="    &lt;string name=&quot;discover_stat_sessions&quot;>💬 %1$d chats&lt;/string>"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="298"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="PluralsCandidate"
+        message="Formatting %d followed by words (&quot;tool&quot;): This should probably be a plural rather than a string"
+        errorLine1="    &lt;string name=&quot;chat_tool_steps&quot;>%1$d tool steps&lt;/string>"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="343"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="PluralsCandidate"
+        message="Formatting %d followed by words (&quot;online&quot;): This should probably be a plural rather than a string"
+        errorLine1="    &lt;string name=&quot;device_online_count&quot;>%1$d/%2$d online&lt;/string>"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="352"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="ChromeOsAbiSupport"
+        message="Missing x86_64 ABI support for ChromeOS"
+        errorLine1="            abiFilters += listOf(&quot;arm64-v8a&quot;)"
+        errorLine2="                          ~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="build.gradle.kts"
+            line="54"
+            column="27"/>
+    </issue>
+
+    <issue
+        id="GetInstance"
+        message="ECB encryption mode should not be used (was &quot;AES/ECB/PKCS5Padding&quot;)"
+        errorLine1="        val cipher = Cipher.getInstance(&quot;AES/ECB/PKCS5Padding&quot;)"
+        errorLine2="                                        ~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/channel/wechat/WeChatCdn.kt"
+            line="37"
+            column="41"/>
+    </issue>
+
+    <issue
+        id="GetInstance"
+        message="ECB encryption mode should not be used (was &quot;AES/ECB/PKCS5Padding&quot;)"
+        errorLine1="        val cipher = Cipher.getInstance(&quot;AES/ECB/PKCS5Padding&quot;)"
+        errorLine2="                                        ~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/channel/wechat/WeChatCdn.kt"
+            line="43"
+            column="41"/>
+    </issue>
+
+    <issue
+        id="InsecureBaseConfiguration"
+        message="Insecure Base Configuration"
+        errorLine1="    &lt;base-config cleartextTrafficPermitted=&quot;true&quot;>"
+        errorLine2="                                            ~~~~">
+        <location
+            file="src/main/res/xml/network_security_config.xml"
+            line="3"
+            column="45"/>
+    </issue>
+
+    <issue
+        id="QueryAllPackagesPermission"
+        message="A `&lt;queries>` declaration should generally be used instead of QUERY_ALL_PACKAGES; see https://g.co/dev/packagevisibility for details"
+        errorLine1="    &lt;uses-permission android:name=&quot;android.permission.QUERY_ALL_PACKAGES&quot; />"
+        errorLine2="                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/AndroidManifest.xml"
+            line="22"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="WakelockTimeout"
+        message="Provide a timeout when requesting a wakelock with `PowerManager.Wakelock.acquire(long timeout)`. This will ensure the OS will cleanup any wakelocks that last longer than you intend, and will save your user&apos;s battery."
+        errorLine1="            acquire()"
+        errorLine2="            ~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/AppViewModel.kt"
+            line="309"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is always >= 28"
+        errorLine1="        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/service/ClawAccessibilityService.java"
+            line="549"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is always >= 28"
+        errorLine1="            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {"
+        errorLine2="                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/service/ForegroundService.kt"
+            line="49"
+            column="17"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is always >= 28"
+        errorLine1="        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/service/ForegroundService.kt"
+            line="104"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is always >= 28"
+        errorLine1="        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/octopus_mobile/browser/SystemWebViewEngine.kt"
+            line="179"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="StaticFieldLeak"
+        message="Do not place Android context classes in static fields (static reference to `ConfigServer` which has field `context` pointing to `Context`); this is a memory leak"
+        errorLine1="    @Volatile"
+        errorLine2="    ^">
+        <location
+            file="src/main/java/com/apk/claw/android/server/ConfigServerManager.kt"
+            line="25"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="StaticFieldLeak"
+        message="Do not place Android context classes in static fields (static reference to `QBotApiClient` which has field `context` pointing to `Context`); this is a memory leak"
+        errorLine1="    private static volatile QBotApiClient instance;"
+        errorLine2="            ~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/channel/qqbot/QBotApiClient.java"
+            line="26"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="StaticFieldLeak"
+        message="Do not place Android context classes in static fields (static reference to `ScreenCastService` which has field `context` pointing to `Context`); this is a memory leak"
+        errorLine1="        /** 单例实例 */"
+        errorLine2="        ^">
+        <location
+            file="src/main/java/com/apk/claw/android/cast/ScreenCastService.kt"
+            line="39"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseCompoundDrawables"
+        message="This tag and its children can be replaced by one `&lt;TextView/>` and a compound drawable"
+        errorLine1="            &lt;LinearLayout"
+        errorLine2="             ~~~~~~~~~~~~">
+        <location
+            file="src/main/res/layout/activity_channel_config.xml"
+            line="130"
+            column="14"/>
+    </issue>
+
+    <issue
+        id="UseCompoundDrawables"
+        message="This tag and its children can be replaced by one `&lt;TextView/>` and a compound drawable"
+        errorLine1="        &lt;LinearLayout"
+        errorLine2="         ~~~~~~~~~~~~">
+        <location
+            file="src/main/res/layout/dialog_confirm.xml"
+            line="42"
+            column="10"/>
+    </issue>
+
+    <issue
+        id="AutoboxingStateCreation"
+        message="Prefer `mutableIntStateOf` instead of `mutableStateOf`"
+        errorLine1="    var refreshTick by remember { mutableStateOf(0) }"
+        errorLine2="                                  ~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/ui/compose/screen/ChatScreen.kt"
+            line="83"
+            column="35"/>
+    </issue>
+
+    <issue
+        id="AutoboxingStateCreation"
+        message="Prefer `mutableIntStateOf` instead of `mutableStateOf`"
+        errorLine1="    var refreshTick by remember { mutableStateOf(0) }"
+        errorLine2="                                  ~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/ui/compose/screen/DeviceScreen.kt"
+            line="65"
+            column="35"/>
+    </issue>
+
+    <issue
+        id="AutoboxingStateCreation"
+        message="Prefer `mutableIntStateOf` instead of `mutableStateOf`"
+        errorLine1="        var refreshTick by remember { mutableStateOf(0) }"
+        errorLine2="                                      ~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/ui/compose/screen/DiscoverScreen.kt"
+            line="245"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="AutoboxingStateCreation"
+        message="Prefer `mutableIntStateOf` instead of `mutableStateOf`"
+        errorLine1="    var refreshTick by remember { mutableStateOf(0) }"
+        errorLine2="                                  ~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/ui/compose/screen/SettingsScreen.kt"
+            line="80"
+            column="35"/>
+    </issue>
+
+    <issue
+        id="Overdraw"
+        message="Possible overdraw: Root element paints background `@color/colorBgSecondary` with a theme that also paints a background (inferred theme is `@style/Theme.OctopusMobile`)"
+        errorLine1="    android:background=&quot;@color/colorBgSecondary&quot;"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/layout/activity_channel_config.xml"
+            line="6"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="Overdraw"
+        message="Possible overdraw: Root element paints background `@color/colorBgPrimary` with a theme that also paints a background (inferred theme is `@style/Theme.OctopusMobile`)"
+        errorLine1="    android:background=&quot;@color/colorBgPrimary&quot;>"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/layout/activity_guide.xml"
+            line="7"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="Overdraw"
+        message="Possible overdraw: Root element paints background `@color/colorBgPrimary` with a theme that also paints a background (inferred theme is `@style/Theme.OctopusMobile`)"
+        errorLine1="    android:background=&quot;@color/colorBgPrimary&quot;"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/layout/activity_home.xml"
+            line="7"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="Overdraw"
+        message="Possible overdraw: Root element paints background `@color/colorBgSecondary` with a theme that also paints a background (inferred theme is `@style/Theme.OctopusMobile`)"
+        errorLine1="    android:background=&quot;@color/colorBgSecondary&quot;"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/layout/activity_llm_config.xml"
+            line="6"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="Overdraw"
+        message="Possible overdraw: Root element paints background `@color/colorBgPrimary` with a theme that also paints a background (inferred theme is `@style/Theme.OctopusMobile`)"
+        errorLine1="    android:background=&quot;@color/colorBgPrimary&quot;"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/layout/activity_settings.xml"
+            line="5"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="Overdraw"
+        message="Possible overdraw: Root element paints background `@color/colorBgPrimary` with a theme that also paints a background (inferred theme is `@style/Theme_OctopusMobile_Splash`)"
+        errorLine1="    android:background=&quot;@color/colorBgPrimary&quot;>"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/layout/activity_splash.xml"
+            line="7"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.drawable.bg_tag_recommend` appears to be unused"
+        errorLine1="&lt;shape xmlns:android=&quot;http://schemas.android.com/apk/res/android&quot;"
+        errorLine2="^">
+        <location
+            file="src/main/res/drawable/bg_tag_recommend.xml"
+            line="2"
+            column="1"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.colorTextFixedWhitePrimary` appears to be unused"
+        errorLine1="    &lt;color name=&quot;colorTextFixedWhitePrimary&quot;>#E6FFFFFF&lt;/color>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/colors.xml"
+            line="9"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.colorTextFixedWhiteSecondary` appears to be unused"
+        errorLine1="    &lt;color name=&quot;colorTextFixedWhiteSecondary&quot;>#99FFFFFF&lt;/color>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/colors.xml"
+            line="10"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.colorTextFixedBlackPrimary` appears to be unused"
+        errorLine1="    &lt;color name=&quot;colorTextFixedBlackPrimary&quot;>#F5000000&lt;/color>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/colors.xml"
+            line="11"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.colorTextFixedBlackSecondary` appears to be unused"
+        errorLine1="    &lt;color name=&quot;colorTextFixedBlackSecondary&quot;>#AD000000&lt;/color>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/colors.xml"
+            line="12"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.colorFillPrimary` appears to be unused"
+        errorLine1="    &lt;color name=&quot;colorFillPrimary&quot;>#33787880&lt;/color>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/colors.xml"
+            line="15"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.colorFillSecondary` appears to be unused"
+        errorLine1="    &lt;color name=&quot;colorFillSecondary&quot;>#29787880&lt;/color>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/colors.xml"
+            line="16"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.colorFillTertiary` appears to be unused"
+        errorLine1="    &lt;color name=&quot;colorFillTertiary&quot;>#1F787880&lt;/color>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/colors.xml"
+            line="17"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.colorFillQuaternary` appears to be unused"
+        errorLine1="    &lt;color name=&quot;colorFillQuaternary&quot;>#14787880&lt;/color>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/colors.xml"
+            line="18"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.colorContainerHigh` appears to be unused"
+        errorLine1="    &lt;color name=&quot;colorContainerHigh&quot;>#FFE0E0EA&lt;/color>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/colors.xml"
+            line="24"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.colorContainerHighest` appears to be unused"
+        errorLine1="    &lt;color name=&quot;colorContainerHighest&quot;>#FFD1D1D6&lt;/color>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/colors.xml"
+            line="25"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.colorContainerInverse` appears to be unused"
+        errorLine1="    &lt;color name=&quot;colorContainerInverse&quot;>#FF2C2C2E&lt;/color>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/colors.xml"
+            line="26"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.colorBgTertiary` appears to be unused"
+        errorLine1="    &lt;color name=&quot;colorBgTertiary&quot;>#FFFFFFFF&lt;/color>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/colors.xml"
+            line="31"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.colorOverlayDim` appears to be unused"
+        errorLine1="    &lt;color name=&quot;colorOverlayDim&quot;>#80000000&lt;/color>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/colors.xml"
+            line="39"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.colorOverlayScrim` appears to be unused"
+        errorLine1="    &lt;color name=&quot;colorOverlayScrim&quot;>#33000000&lt;/color>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/colors.xml"
+            line="40"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.colorOverlayLabel` appears to be unused"
+        errorLine1="    &lt;color name=&quot;colorOverlayLabel&quot;>#AD000000&lt;/color>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/colors.xml"
+            line="41"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.colorBrandFixedOnContainer` appears to be unused"
+        errorLine1="    &lt;color name=&quot;colorBrandFixedOnContainer&quot;>#FF2F2D84&lt;/color>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/colors.xml"
+            line="48"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.colorBrandVariant` appears to be unused"
+        errorLine1="    &lt;color name=&quot;colorBrandVariant&quot;>#FF7E7DB2&lt;/color>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/colors.xml"
+            line="49"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.colorBrandOnVariant` appears to be unused"
+        errorLine1="    &lt;color name=&quot;colorBrandOnVariant&quot;>#FFE5E4FF&lt;/color>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/colors.xml"
+            line="50"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.colorBrandLowButtonBg` appears to be unused"
+        errorLine1="    &lt;color name=&quot;colorBrandLowButtonBg&quot;>#FFE5E4FF&lt;/color>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/colors.xml"
+            line="51"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.colorErrorOnContainer` appears to be unused"
+        errorLine1="    &lt;color name=&quot;colorErrorOnContainer&quot;>#FFD54941&lt;/color>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/colors.xml"
+            line="57"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.colorWarningPrimary` appears to be unused"
+        errorLine1="    &lt;color name=&quot;colorWarningPrimary&quot;>#FFE37318&lt;/color>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/colors.xml"
+            line="60"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.colorWarningOnPrimary` appears to be unused"
+        errorLine1="    &lt;color name=&quot;colorWarningOnPrimary&quot;>#FFFFFFFF&lt;/color>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/colors.xml"
+            line="61"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.colorWarningContainer` appears to be unused"
+        errorLine1="    &lt;color name=&quot;colorWarningContainer&quot;>#FFFFF9F6&lt;/color>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/colors.xml"
+            line="62"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.colorWarningOnContainer` appears to be unused"
+        errorLine1="    &lt;color name=&quot;colorWarningOnContainer&quot;>#FFBE5A00&lt;/color>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/colors.xml"
+            line="63"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.colorSuccessOnPrimary` appears to be unused"
+        errorLine1="    &lt;color name=&quot;colorSuccessOnPrimary&quot;>#FFFFFFFF&lt;/color>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/colors.xml"
+            line="67"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.colorSuccessOnContainer` appears to be unused"
+        errorLine1="    &lt;color name=&quot;colorSuccessOnContainer&quot;>#FF006C45&lt;/color>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/colors.xml"
+            line="69"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.colorInfoPrimary` appears to be unused"
+        errorLine1="    &lt;color name=&quot;colorInfoPrimary&quot;>#FF1AAFFF&lt;/color>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/colors.xml"
+            line="72"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.colorInfoOnPrimary` appears to be unused"
+        errorLine1="    &lt;color name=&quot;colorInfoOnPrimary&quot;>#FFFFFFFF&lt;/color>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/colors.xml"
+            line="73"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.colorInfoContainer` appears to be unused"
+        errorLine1="    &lt;color name=&quot;colorInfoContainer&quot;>#FFEEF9FF&lt;/color>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/colors.xml"
+            line="74"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.colorInfoOnContainer` appears to be unused"
+        errorLine1="    &lt;color name=&quot;colorInfoOnContainer&quot;>#FF007BBE&lt;/color>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/colors.xml"
+            line="75"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.drawable.ic_bookmark` appears to be unused"
+        errorLine1="&lt;vector xmlns:android=&quot;http://schemas.android.com/apk/res/android&quot;"
+        errorLine2="^">
+        <location
+            file="src/main/res/drawable/ic_bookmark.xml"
+            line="1"
+            column="1"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.drawable.ic_checkbox_checked` appears to be unused"
+        errorLine1="&lt;vector xmlns:android=&quot;http://schemas.android.com/apk/res/android&quot;"
+        errorLine2="^">
+        <location
+            file="src/main/res/drawable/ic_checkbox_checked.xml"
+            line="2"
+            column="1"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.drawable.ic_extension` appears to be unused"
+        errorLine1="&lt;vector xmlns:android=&quot;http://schemas.android.com/apk/res/android&quot;"
+        errorLine2="^">
+        <location
+            file="src/main/res/drawable/ic_extension.xml"
+            line="1"
+            column="1"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.drawable.icon_book_open` appears to be unused"
+        errorLine1="&lt;vector xmlns:android=&quot;http://schemas.android.com/apk/res/android&quot;"
+        errorLine2="^">
+        <location
+            file="src/main/res/drawable/icon_book_open.xml"
+            line="1"
+            column="1"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.drawable.icon_credits` appears to be unused"
+        errorLine1="&lt;vector xmlns:android=&quot;http://schemas.android.com/apk/res/android&quot;"
+        errorLine2="^">
+        <location
+            file="src/main/res/drawable/icon_credits.xml"
+            line="1"
+            column="1"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.drawable.icon_exit` appears to be unused"
+        errorLine1="&lt;vector xmlns:android=&quot;http://schemas.android.com/apk/res/android&quot;"
+        errorLine2="^">
+        <location
+            file="src/main/res/drawable/icon_exit.xml"
+            line="1"
+            column="1"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.drawable.icon_up_circle` appears to be unused"
+        errorLine1="&lt;vector xmlns:android=&quot;http://schemas.android.com/apk/res/android&quot;"
+        errorLine2="^">
+        <location
+            file="src/main/res/drawable/icon_up_circle.xml"
+            line="1"
+            column="1"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.drawable.icon_waring` appears to be unused"
+        errorLine1="&lt;vector xmlns:android=&quot;http://schemas.android.com/apk/res/android&quot;"
+        errorLine2="^">
+        <location
+            file="src/main/res/drawable/icon_waring.xml"
+            line="1"
+            column="1"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.anim.slide_down` appears to be unused"
+        errorLine1="&lt;translate xmlns:android=&quot;http://schemas.android.com/apk/res/android&quot;"
+        errorLine2="^">
+        <location
+            file="src/main/res/anim/slide_down.xml"
+            line="2"
+            column="1"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.anim.slide_up` appears to be unused"
+        errorLine1="&lt;translate xmlns:android=&quot;http://schemas.android.com/apk/res/android&quot;"
+        errorLine2="^">
+        <location
+            file="src/main/res/anim/slide_up.xml"
+            line="2"
+            column="1"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.drawable.splash_background` appears to be unused"
+        errorLine1="&lt;layer-list xmlns:android=&quot;http://schemas.android.com/apk/res/android&quot;>"
+        errorLine2="^">
+        <location
+            file="src/main/res/drawable/splash_background.xml"
+            line="2"
+            column="1"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.common_agree` appears to be unused"
+        errorLine1="    &lt;string name=&quot;common_agree&quot;>Agree&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="9"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.common_load_failed` appears to be unused"
+        errorLine1="    &lt;string name=&quot;common_load_failed&quot;>Failed to load: %s&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="20"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.channel_config_wechat_btn_scan` appears to be unused"
+        errorLine1="    &lt;string name=&quot;channel_config_wechat_btn_scan&quot;>Get QR Code&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="126"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.protocol_agree_title` appears to be unused"
+        errorLine1="    &lt;string name=&quot;protocol_agree_title&quot;>Privacy Guidelines&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="166"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.protocol_alert_title` appears to be unused"
+        errorLine1="    &lt;string name=&quot;protocol_alert_title&quot;>Terms and Privacy&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="167"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.protocol_disagree` appears to be unused"
+        errorLine1="    &lt;string name=&quot;protocol_disagree&quot;>Disagree&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="168"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.protocol_agree_continue` appears to be unused"
+        errorLine1="    &lt;string name=&quot;protocol_agree_continue&quot;>Agree and Continue&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="169"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.channel_msg_task_in_progress` appears to be unused"
+        errorLine1="    &lt;string name=&quot;channel_msg_task_in_progress&quot;>A task is already running, please wait&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="189"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.cd_settings` appears to be unused"
+        errorLine1="    &lt;string name=&quot;cd_settings&quot;>Settings&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="194"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.cd_clear_input` appears to be unused"
+        errorLine1="    &lt;string name=&quot;cd_clear_input&quot;>Clear input&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="195"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.cd_checkbox` appears to be unused"
+        errorLine1="    &lt;string name=&quot;cd_checkbox&quot;>Toggle checkbox&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="196"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.cd_selected` appears to be unused"
+        errorLine1="    &lt;string name=&quot;cd_selected&quot;>Selected&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="197"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.cd_app_logo` appears to be unused"
+        errorLine1="    &lt;string name=&quot;cd_app_logo&quot;>App logo&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="201"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.cd_qr_code` appears to be unused"
+        errorLine1="    &lt;string name=&quot;cd_qr_code&quot;>QR code&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="202"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.cd_toggle_password` appears to be unused"
+        errorLine1="    &lt;string name=&quot;cd_toggle_password&quot;>Show or hide password&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="203"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.cd_copy` appears to be unused"
+        errorLine1="    &lt;string name=&quot;cd_copy&quot;>Copy&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="204"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.cd_arrow_right` appears to be unused"
+        errorLine1="    &lt;string name=&quot;cd_arrow_right&quot;>More&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="205"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.cd_empty_state` appears to be unused"
+        errorLine1="    &lt;string name=&quot;cd_empty_state&quot;>No data&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="206"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.cd_error_state` appears to be unused"
+        errorLine1="    &lt;string name=&quot;cd_error_state&quot;>Load failed&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="207"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.tool_name_browse_files` appears to be unused"
+        errorLine1="    &lt;string name=&quot;tool_name_browse_files&quot;>Browse Files&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="271"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.tool_name_search_files` appears to be unused"
+        errorLine1="    &lt;string name=&quot;tool_name_search_files&quot;>Search Files&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="272"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.tool_name_file_ops` appears to be unused"
+        errorLine1="    &lt;string name=&quot;tool_name_file_ops&quot;>File Operations&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="273"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.tool_name_backup_app` appears to be unused"
+        errorLine1="    &lt;string name=&quot;tool_name_backup_app&quot;>App Backup&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="274"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.tool_name_navigate` appears to be unused"
+        errorLine1="    &lt;string name=&quot;tool_name_navigate&quot;>Smart Navigate&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="275"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.tool_name_media_player` appears to be unused"
+        errorLine1="    &lt;string name=&quot;tool_name_media_player&quot;>Media Player&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="276"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.discover_status_memory` appears to be unused"
+        errorLine1="    &lt;string name=&quot;discover_status_memory&quot;>💾 5 memories&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="296"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.discover_status_rules` appears to be unused"
+        errorLine1="    &lt;string name=&quot;discover_status_rules&quot;>🔔 2 rules&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="297"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.settings_local_fallback` appears to be unused"
+        errorLine1="    &lt;string name=&quot;settings_local_fallback&quot;>Local Fallback ✓&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="318"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.settings_device_mgmt` appears to be unused"
+        errorLine1="    &lt;string name=&quot;settings_device_mgmt&quot;>Device Management&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="325"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.settings_val_devices` appears to be unused"
+        errorLine1="    &lt;string name=&quot;settings_val_devices&quot;>2 devices&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="326"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.settings_cast_control` appears to be unused"
+        errorLine1="    &lt;string name=&quot;settings_cast_control&quot;>Screen Cast&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="328"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.settings_plugin_mgmt` appears to be unused"
+        errorLine1="    &lt;string name=&quot;settings_plugin_mgmt&quot;>Plugin Management&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="329"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.settings_val_plugins_loaded` appears to be unused"
+        errorLine1="    &lt;string name=&quot;settings_val_plugins_loaded&quot;>3 loaded&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="330"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.device_online_count` appears to be unused"
+        errorLine1="    &lt;string name=&quot;device_online_count&quot;>%1$d/%2$d online&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="352"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.device_cast` appears to be unused"
+        errorLine1="    &lt;string name=&quot;device_cast&quot;>🖥 Screen Cast&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="353"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.device_cast_disconnected` appears to be unused"
+        errorLine1="    &lt;string name=&quot;device_cast_disconnected&quot;>📺 Not connected&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="354"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.device_vision` appears to be unused"
+        errorLine1="    &lt;string name=&quot;device_vision&quot;>👁️ Vision&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="355"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.device_vision_desc` appears to be unused"
+        errorLine1="    &lt;string name=&quot;device_vision_desc&quot;>VLM multimodal analysis\nAuto-fallback on system dialogs&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="356"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.ctrl_tap` appears to be unused"
+        errorLine1="    &lt;string name=&quot;ctrl_tap&quot;>Tap&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="359"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.ctrl_open` appears to be unused"
+        errorLine1="    &lt;string name=&quot;ctrl_open&quot;>Open&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="360"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.device_browser` appears to be unused"
+        errorLine1="    &lt;string name=&quot;device_browser&quot;>🌐 Browser&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="380"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.device_tabs` appears to be unused"
+        errorLine1="    &lt;string name=&quot;device_tabs&quot;>Tabs&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="381"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.device_extensions` appears to be unused"
+        errorLine1="    &lt;string name=&quot;device_extensions&quot;>Extensions&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="382"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.badge_active` appears to be unused"
+        errorLine1="    &lt;string name=&quot;badge_active&quot;>Active&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="383"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.ShapeAppearance_Launcher_Medium` appears to be unused"
+        errorLine1="    &lt;style name=&quot;ShapeAppearance.Launcher.Medium&quot; parent=&quot;&quot;>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/themes.xml"
+            line="39"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.UpdateDialogStyle` appears to be unused"
+        errorLine1="    &lt;style name=&quot;UpdateDialogStyle&quot; parent=&quot;android:style/Theme.Dialog&quot;>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/themes.xml"
+            line="85"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.UpdateDialogAnimation` appears to be unused"
+        errorLine1="    &lt;style name=&quot;UpdateDialogAnimation&quot;>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/themes.xml"
+            line="97"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.TS_Display_Large_Emphasized` appears to be unused"
+        errorLine1="    &lt;style name=&quot;TS.Display.Large.Emphasized&quot; parent=&quot;TextAppearance.Material3.DisplayLarge&quot;>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/type.xml"
+            line="12"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.TS_Display_Large` appears to be unused"
+        errorLine1="    &lt;style name=&quot;TS.Display.Large&quot; parent=&quot;TextAppearance.Material3.DisplayLarge&quot;>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/type.xml"
+            line="19"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.TS_Display_Medium_Emphasized` appears to be unused"
+        errorLine1="    &lt;style name=&quot;TS.Display.Medium.Emphasized&quot; parent=&quot;TextAppearance.Material3.DisplayMedium&quot;>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/type.xml"
+            line="26"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.TS_Display_Medium` appears to be unused"
+        errorLine1="    &lt;style name=&quot;TS.Display.Medium&quot; parent=&quot;TextAppearance.Material3.DisplayMedium&quot;>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/type.xml"
+            line="33"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.TS_Display_Small_Emphasized` appears to be unused"
+        errorLine1="    &lt;style name=&quot;TS.Display.Small.Emphasized&quot; parent=&quot;TextAppearance.Material3.DisplaySmall&quot;>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/type.xml"
+            line="40"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.TS_Display_Small` appears to be unused"
+        errorLine1="    &lt;style name=&quot;TS.Display.Small&quot; parent=&quot;TextAppearance.Material3.DisplaySmall&quot;>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/type.xml"
+            line="47"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.TS_Headline_Large_Emphasized` appears to be unused"
+        errorLine1="    &lt;style name=&quot;TS.Headline.Large.Emphasized&quot; parent=&quot;TextAppearance.Material3.HeadlineLarge&quot;>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/type.xml"
+            line="55"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.TS_Headline_Large` appears to be unused"
+        errorLine1="    &lt;style name=&quot;TS.Headline.Large&quot; parent=&quot;TextAppearance.Material3.HeadlineLarge&quot;>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/type.xml"
+            line="62"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.TS_Headline_Medium_Emphasized` appears to be unused"
+        errorLine1="    &lt;style name=&quot;TS.Headline.Medium.Emphasized&quot; parent=&quot;TextAppearance.Material3.HeadlineMedium&quot;>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/type.xml"
+            line="69"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.TS_Headline_Medium` appears to be unused"
+        errorLine1="    &lt;style name=&quot;TS.Headline.Medium&quot; parent=&quot;TextAppearance.Material3.HeadlineMedium&quot;>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/type.xml"
+            line="76"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.TS_Headline_Small_Emphasized` appears to be unused"
+        errorLine1="    &lt;style name=&quot;TS.Headline.Small.Emphasized&quot; parent=&quot;TextAppearance.Material3.HeadlineSmall&quot;>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/type.xml"
+            line="83"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.TS_Headline_Small` appears to be unused"
+        errorLine1="    &lt;style name=&quot;TS.Headline.Small&quot; parent=&quot;TextAppearance.Material3.HeadlineSmall&quot;>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/type.xml"
+            line="90"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.TS_Title_Large_Emphasized` appears to be unused"
+        errorLine1="    &lt;style name=&quot;TS.Title.Large.Emphasized&quot; parent=&quot;TextAppearance.Material3.TitleLarge&quot;>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/type.xml"
+            line="98"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.TS_Title_Large` appears to be unused"
+        errorLine1="    &lt;style name=&quot;TS.Title.Large&quot; parent=&quot;TextAppearance.Material3.TitleLarge&quot;>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/type.xml"
+            line="105"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.TS_Title_Medium_Emphasized` appears to be unused"
+        errorLine1="    &lt;style name=&quot;TS.Title.Medium.Emphasized&quot; parent=&quot;TextAppearance.Material3.TitleMedium&quot;>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/type.xml"
+            line="112"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.TS_Title_Medium` appears to be unused"
+        errorLine1="    &lt;style name=&quot;TS.Title.Medium&quot; parent=&quot;TextAppearance.Material3.TitleMedium&quot;>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/type.xml"
+            line="119"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.TS_Title_Small_Emphasized` appears to be unused"
+        errorLine1="    &lt;style name=&quot;TS.Title.Small.Emphasized&quot; parent=&quot;TextAppearance.Material3.TitleSmall&quot;>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/type.xml"
+            line="126"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.TS_Title_Small` appears to be unused"
+        errorLine1="    &lt;style name=&quot;TS.Title.Small&quot; parent=&quot;TextAppearance.Material3.TitleSmall&quot;>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/type.xml"
+            line="133"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.TS_Label_Large_Emphasized` appears to be unused"
+        errorLine1="    &lt;style name=&quot;TS.Label.Large.Emphasized&quot; parent=&quot;TextAppearance.Material3.LabelLarge&quot;>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/type.xml"
+            line="141"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.TS_Label_Large` appears to be unused"
+        errorLine1="    &lt;style name=&quot;TS.Label.Large&quot; parent=&quot;TextAppearance.Material3.LabelLarge&quot;>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/type.xml"
+            line="148"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.TS_Label_Medium_Emphasized` appears to be unused"
+        errorLine1="    &lt;style name=&quot;TS.Label.Medium.Emphasized&quot; parent=&quot;TextAppearance.Material3.LabelMedium&quot;>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/type.xml"
+            line="155"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.TS_Label_Medium` appears to be unused"
+        errorLine1="    &lt;style name=&quot;TS.Label.Medium&quot; parent=&quot;TextAppearance.Material3.LabelMedium&quot;>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/type.xml"
+            line="162"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.TS_Label_Small_Emphasized` appears to be unused"
+        errorLine1="    &lt;style name=&quot;TS.Label.Small.Emphasized&quot; parent=&quot;TextAppearance.Material3.LabelSmall&quot;>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/type.xml"
+            line="169"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.TS_Label_Small` appears to be unused"
+        errorLine1="    &lt;style name=&quot;TS.Label.Small&quot; parent=&quot;TextAppearance.Material3.LabelSmall&quot;>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/type.xml"
+            line="176"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.TS_Body_Large_Emphasized` appears to be unused"
+        errorLine1="    &lt;style name=&quot;TS.Body.Large.Emphasized&quot; parent=&quot;TextAppearance.Material3.BodyLarge&quot;>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/type.xml"
+            line="184"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.TS_Body_Large` appears to be unused"
+        errorLine1="    &lt;style name=&quot;TS.Body.Large&quot; parent=&quot;TextAppearance.Material3.BodyLarge&quot;>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/type.xml"
+            line="191"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.TS_Body_Medium_Emphasized` appears to be unused"
+        errorLine1="    &lt;style name=&quot;TS.Body.Medium.Emphasized&quot; parent=&quot;TextAppearance.Material3.BodyMedium&quot;>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/type.xml"
+            line="198"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.TS_Body_Medium` appears to be unused"
+        errorLine1="    &lt;style name=&quot;TS.Body.Medium&quot; parent=&quot;TextAppearance.Material3.BodyMedium&quot;>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/type.xml"
+            line="205"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.TS_Body_Small_Emphasized` appears to be unused"
+        errorLine1="    &lt;style name=&quot;TS.Body.Small.Emphasized&quot; parent=&quot;TextAppearance.Material3.BodySmall&quot;>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/type.xml"
+            line="212"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.TS_Body_Small` appears to be unused"
+        errorLine1="    &lt;style name=&quot;TS.Body.Small&quot; parent=&quot;TextAppearance.Material3.BodySmall&quot;>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/type.xml"
+            line="219"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.TS_Caption_Large_Emphasized` appears to be unused"
+        errorLine1="    &lt;style name=&quot;TS.Caption.Large.Emphasized&quot; parent=&quot;TextAppearance.Material3.BodySmall&quot;>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/type.xml"
+            line="227"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.TS_Caption_Large` appears to be unused"
+        errorLine1="    &lt;style name=&quot;TS.Caption.Large&quot; parent=&quot;TextAppearance.Material3.BodySmall&quot;>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/type.xml"
+            line="234"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.TS_Caption_Medium_Emphasized` appears to be unused"
+        errorLine1="    &lt;style name=&quot;TS.Caption.Medium.Emphasized&quot; parent=&quot;TextAppearance.Material3.BodySmall&quot;>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/type.xml"
+            line="241"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.TS_Caption_Medium` appears to be unused"
+        errorLine1="    &lt;style name=&quot;TS.Caption.Medium&quot; parent=&quot;TextAppearance.Material3.BodySmall&quot;>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/type.xml"
+            line="248"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.TS_Caption_Small_Emphasized` appears to be unused"
+        errorLine1="    &lt;style name=&quot;TS.Caption.Small.Emphasized&quot; parent=&quot;TextAppearance.Material3.BodySmall&quot;>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/type.xml"
+            line="255"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.TS_Caption_Small` appears to be unused"
+        errorLine1="    &lt;style name=&quot;TS.Caption.Small&quot; parent=&quot;TextAppearance.Material3.BodySmall&quot;>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/type.xml"
+            line="262"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.TS_Mark_Large` appears to be unused"
+        errorLine1="    &lt;style name=&quot;TS.Mark.Large&quot; parent=&quot;TextAppearance.Material3.LabelLarge&quot;>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/type.xml"
+            line="270"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.TS_Mark_Medium` appears to be unused"
+        errorLine1="    &lt;style name=&quot;TS.Mark.Medium&quot; parent=&quot;TextAppearance.Material3.LabelMedium&quot;>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/type.xml"
+            line="277"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.TS_Mark_Small` appears to be unused"
+        errorLine1="    &lt;style name=&quot;TS.Mark.Small&quot; parent=&quot;TextAppearance.Material3.LabelSmall&quot;>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/type.xml"
+            line="284"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.TS_Link_Large` appears to be unused"
+        errorLine1="    &lt;style name=&quot;TS.Link.Large&quot; parent=&quot;TextAppearance.Material3.BodyLarge&quot;>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/type.xml"
+            line="292"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.TS_Link_Medium` appears to be unused"
+        errorLine1="    &lt;style name=&quot;TS.Link.Medium&quot; parent=&quot;TextAppearance.Material3.BodyMedium&quot;>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/type.xml"
+            line="300"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.TS_Link_Small` appears to be unused"
+        errorLine1="    &lt;style name=&quot;TS.Link.Small&quot; parent=&quot;TextAppearance.Material3.BodySmall&quot;>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/type.xml"
+            line="308"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.TS_Footnote_Medium` appears to be unused"
+        errorLine1="    &lt;style name=&quot;TS.Footnote.Medium&quot; parent=&quot;TextAppearance.Material3.BodySmall&quot;>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/type.xml"
+            line="317"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.TS_Footnote_Small` appears to be unused"
+        errorLine1="    &lt;style name=&quot;TS.Footnote.Small&quot; parent=&quot;TextAppearance.Material3.BodySmall&quot;>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/type.xml"
+            line="324"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="TypographyDashes"
+        message="Replace &quot;-&quot; with an &quot;en dash&quot; character (–, &amp;#8211;) ?"
+        errorLine1="    &lt;string name=&quot;llm_config_model_name_hint&quot;>例: gpt-4o、gpt-4o-mini、claude-3-5-sonnet&lt;/string>"
+        errorLine2="                                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-ja/strings.xml"
+            line="134"
+            column="47"/>
+    </issue>
+
+    <issue
+        id="TypographyDashes"
+        message="Replace &quot;-&quot; with an &quot;en dash&quot; character (–, &amp;#8211;) ?"
+        errorLine1="    &lt;string name=&quot;llm_config_model_name_hint&quot;>如 gpt-4o、gpt-4o-mini、claude-3-5-sonnet&lt;/string>"
+        errorLine2="                                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values-zh/strings.xml"
+            line="149"
+            column="47"/>
+    </issue>
+
+    <issue
+        id="TypographyDashes"
+        message="Replace &quot;-&quot; with an &quot;en dash&quot; character (–, &amp;#8211;) ?"
+        errorLine1="    &lt;string name=&quot;llm_config_model_name_hint&quot;>e.g. gpt-4o, gpt-4o-mini, claude-3-5-sonnet&lt;/string>"
+        errorLine2="                                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="149"
+            column="47"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="    &lt;string name=&quot;discover_search_hint&quot;>搜索或输入指令...&lt;/string>"
+        errorLine2="                                        ~~~~~~~~~~">
+        <location
+            file="src/main/res/values-zh/strings.xml"
+            line="279"
+            column="41"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="    &lt;string name=&quot;chat_input_hint&quot;>输入指令...&lt;/string>"
+        errorLine2="                                   ~~~~~~~">
+        <location
+            file="src/main/res/values-zh/strings.xml"
+            line="334"
+            column="36"/>
+    </issue>
+
+    <issue
+        id="IconLauncherShape"
+        message="Launcher icons should not fill every pixel of their square region; see the design guide for details">
+        <location
+            file="src/main/res/drawable-nodpi/ic_launcher.png"/>
+    </issue>
+
+    <issue
+        id="IconLocation"
+        message="Found bitmap drawable `res/drawable/ic_channel_dingtalk.png` in densityless folder">
+        <location
+            file="src/main/res/drawable/ic_channel_dingtalk.png"/>
+    </issue>
+
+    <issue
+        id="IconLocation"
+        message="Found bitmap drawable `res/drawable/ic_channel_feishu.png` in densityless folder">
+        <location
+            file="src/main/res/drawable/ic_channel_feishu.png"/>
+    </issue>
+
+    <issue
+        id="IconLocation"
+        message="Found bitmap drawable `res/drawable/ic_channel_qq.png` in densityless folder">
+        <location
+            file="src/main/res/drawable/ic_channel_qq.png"/>
+    </issue>
+
+    <issue
+        id="TextFields"
+        message="This text field does not specify an `inputType`"
+        errorLine1="        &lt;EditText"
+        errorLine2="         ~~~~~~~~">
+        <location
+            file="src/main/res/layout/dialog_input.xml"
+            line="48"
+            column="10"/>
+    </issue>
+
+    <issue
+        id="Autofill"
+        message="Missing `autofillHints` attribute"
+        errorLine1="                &lt;EditText"
+        errorLine2="                 ~~~~~~~~">
+        <location
+            file="src/main/res/layout/activity_channel_config.xml"
+            line="56"
+            column="18"/>
+    </issue>
+
+    <issue
+        id="Autofill"
+        message="Missing `autofillHints` attribute"
+        errorLine1="                    &lt;EditText"
+        errorLine2="                     ~~~~~~~~">
+        <location
+            file="src/main/res/layout/activity_channel_config.xml"
+            line="97"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="Autofill"
+        message="Missing `autofillHints` attribute"
+        errorLine1="                &lt;EditText"
+        errorLine2="                 ~~~~~~~~">
+        <location
+            file="src/main/res/layout/activity_llm_config.xml"
+            line="53"
+            column="18"/>
+    </issue>
+
+    <issue
+        id="Autofill"
+        message="Missing `autofillHints` attribute"
+        errorLine1="                &lt;EditText"
+        errorLine2="                 ~~~~~~~~">
+        <location
+            file="src/main/res/layout/activity_llm_config.xml"
+            line="86"
+            column="18"/>
+    </issue>
+
+    <issue
+        id="Autofill"
+        message="Missing `autofillHints` attribute"
+        errorLine1="                &lt;EditText"
+        errorLine2="                 ~~~~~~~~">
+        <location
+            file="src/main/res/layout/activity_llm_config.xml"
+            line="119"
+            column="18"/>
+    </issue>
+
+    <issue
+        id="Autofill"
+        message="Missing `autofillHints` attribute"
+        errorLine1="        &lt;EditText"
+        errorLine2="         ~~~~~~~~">
+        <location
+            file="src/main/res/layout/dialog_input.xml"
+            line="48"
+            column="10"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))"
+        errorLine2="                                                    ~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/widget/AdvancedPermissionDialog.kt"
+            line="119"
+            column="53"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toColorInt` instead?"
+        errorLine1="            setBackgroundColor(Color.parseColor(&quot;#1A1A2E&quot;))"
+        errorLine2="                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/cast/AgentPresentation.kt"
+            line="91"
+            column="32"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toColorInt` instead?"
+        errorLine1="            setBackgroundColor(Color.parseColor(&quot;#16213E&quot;))"
+        errorLine2="                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/cast/AgentPresentation.kt"
+            line="98"
+            column="32"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toColorInt` instead?"
+        errorLine1="            setTextColor(Color.parseColor(&quot;#4CAF50&quot;))"
+        errorLine2="                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/cast/AgentPresentation.kt"
+            line="114"
+            column="26"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toColorInt` instead?"
+        errorLine1="            setBackgroundColor(Color.parseColor(&quot;#0F3460&quot;))"
+        errorLine2="                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/cast/AgentPresentation.kt"
+            line="126"
+            column="32"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toColorInt` instead?"
+        errorLine1="            setTextColor(Color.parseColor(&quot;#E0E0E0&quot;))"
+        errorLine2="                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/cast/AgentPresentation.kt"
+            line="134"
+            column="26"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toColorInt` instead?"
+        errorLine1="            setBackgroundColor(Color.parseColor(&quot;#16213E&quot;))"
+        errorLine2="                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/cast/AgentPresentation.kt"
+            line="151"
+            column="32"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toColorInt` instead?"
+        errorLine1="                setBackgroundColor(Color.parseColor(&quot;#1A1A2E&quot;))"
+        errorLine2="                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/cast/AgentPresentation.kt"
+            line="163"
+            column="36"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toColorInt` instead?"
+        errorLine1="    private val cBg = Color.parseColor(&quot;#000000&quot;)"
+        errorLine2="                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/ui/browser/BrowserActivity.kt"
+            line="57"
+            column="23"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toColorInt` instead?"
+        errorLine1="    private val cSurface = Color.parseColor(&quot;#1C1C1E&quot;)"
+        errorLine2="                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/ui/browser/BrowserActivity.kt"
+            line="58"
+            column="28"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toColorInt` instead?"
+        errorLine1="    private val cSurface2 = Color.parseColor(&quot;#2C2C2E&quot;)"
+        errorLine2="                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/ui/browser/BrowserActivity.kt"
+            line="59"
+            column="29"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toColorInt` instead?"
+        errorLine1="    private val cPrimary = Color.parseColor(&quot;#0A84FF&quot;)"
+        errorLine2="                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/ui/browser/BrowserActivity.kt"
+            line="60"
+            column="28"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toColorInt` instead?"
+        errorLine1="    private val cText = Color.parseColor(&quot;#FFFFFF&quot;)"
+        errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/ui/browser/BrowserActivity.kt"
+            line="61"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toColorInt` instead?"
+        errorLine1="    private val cMuted = Color.parseColor(&quot;#8E8E93&quot;)"
+        errorLine2="                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/ui/browser/BrowserActivity.kt"
+            line="62"
+            column="26"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toColorInt` instead?"
+        errorLine1="    private val cBorder = Color.parseColor(&quot;#38383A&quot;)"
+        errorLine2="                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/ui/browser/BrowserActivity.kt"
+            line="63"
+            column="27"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `Bitmap.scale` instead?"
+        errorLine1="                scaledBitmap = Bitmap.createScaledBitmap(bitmap, VISION_MAX_WIDTH, newHeight, true)"
+        errorLine2="                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/agent/DefaultAgentService.kt"
+            line="138"
+            column="32"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toColorInt` instead?"
+        errorLine1="            setTextColor(if (device?.online == true) Color.parseColor(&quot;#4CAF50&quot;) else Color.GRAY)"
+        errorLine2="                                                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/ui/device/DeviceDetailActivity.kt"
+            line="98"
+            column="54"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toColorInt` instead?"
+        errorLine1="            setBackgroundColor(Color.parseColor(&quot;#F5F5F5&quot;))"
+        errorLine2="                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/ui/device/DeviceDetailActivity.kt"
+            line="142"
+            column="32"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toColorInt` instead?"
+        errorLine1="        tvStatus.setTextColor(if (d.online) Color.parseColor(&quot;#4CAF50&quot;) else Color.GRAY)"
+        errorLine2="                                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/ui/device/DeviceDetailActivity.kt"
+            line="176"
+            column="45"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="        session.load(GeckoSession.Loader().uri(Uri.parse(url)))"
+        errorLine2="                                               ~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/octopus_mobile/browser/GeckoViewEngine.kt"
+            line="89"
+            column="48"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `Context.withStyledAttributes` instead?"
+        errorLine1="            val ta = context.obtainStyledAttributes(it, R.styleable.PermissionCardView)"
+        errorLine2="                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/widget/PermissionCardView.kt"
+            line="52"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toColorInt` instead?"
+        errorLine1="                setTextColor(Color.parseColor(&quot;#999999&quot;))"
+        errorLine2="                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/ui/plugin/PluginActivity.kt"
+            line="173"
+            column="30"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `Bitmap.scale` instead?"
+        errorLine1="                Bitmap.createScaledBitmap(bmp, maxWidth, newHeight, true)"
+        errorLine2="                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/server/ScreenCaptureManager.kt"
+            line="95"
+            column="17"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toColorInt` instead?"
+        errorLine1="            setTextColor(Color.parseColor(&quot;#666666&quot;))"
+        errorLine2="                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/ui/cast/ScreenCastActivity.kt"
+            line="119"
+            column="26"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toColorInt` instead?"
+        errorLine1="            setBackgroundColor(Color.parseColor(&quot;#F0F0F0&quot;))"
+        errorLine2="                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/ui/cast/ScreenCastActivity.kt"
+            line="152"
+            column="32"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toColorInt` instead?"
+        errorLine1="        tvCastStatus.setTextColor(if (casting) Color.parseColor(&quot;#4CAF50&quot;) else Color.GRAY)"
+        errorLine2="                                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/ui/cast/ScreenCastActivity.kt"
+            line="216"
+            column="48"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX function `createBitmap` instead?"
+        errorLine1="            val bitmap = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.RGB_565)"
+        errorLine2="                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/ui/settings/SettingsViewModel.kt"
+            line="305"
+            column="26"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `Bitmap.set` instead?"
+        errorLine1="                    bitmap.setPixel(x, y, if (matrix.get(x, y)) android.graphics.Color.BLACK else android.graphics.Color.WHITE)"
+        errorLine2="                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/ui/settings/SettingsViewModel.kt"
+            line="308"
+            column="21"/>
+    </issue>
+
+    <issue
+        id="UseTomlInstead"
+        message="Use version catalog instead"
+        errorLine1="    implementation(&quot;org.mozilla.geckoview:geckoview:151.0.20260513195118&quot;)"
+        errorLine2="                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="build.gradle.kts"
+            line="161"
+            column="20"/>
+    </issue>
+
+    <issue
+        id="UseTomlInstead"
+        message="Use version catalog instead"
+        errorLine1="    implementation(&quot;dev.rikka.shizuku:api:13.1.5&quot;)"
+        errorLine2="                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="build.gradle.kts"
+            line="165"
+            column="20"/>
+    </issue>
+
+    <issue
+        id="UseTomlInstead"
+        message="Use version catalog instead"
+        errorLine1="    implementation(&quot;dev.rikka.shizuku:provider:13.1.5&quot;)"
+        errorLine2="                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="build.gradle.kts"
+            line="166"
+            column="20"/>
+    </issue>
+
+    <issue
+        id="ContentDescription"
+        message="Missing `contentDescription` attribute on image"
+        errorLine1="        &lt;ImageView"
+        errorLine2="         ~~~~~~~~~">
+        <location
+            file="src/main/res/layout/common_toolbar.xml"
+            line="49"
+            column="10"/>
+    </issue>
+
+    <issue
+        id="ContentDescription"
+        message="Missing `contentDescription` attribute on image"
+        errorLine1="            &lt;ImageView"
+        errorLine2="             ~~~~~~~~~">
+        <location
+            file="src/main/res/layout/dialog_confirm.xml"
+            line="48"
+            column="14"/>
+    </issue>
+
+    <issue
+        id="ContentDescription"
+        message="Missing `contentDescription` attribute on image"
+        errorLine1="        &lt;ImageView"
+        errorLine2="         ~~~~~~~~~">
+        <location
+            file="src/main/res/layout/dialog_input.xml"
+            line="62"
+            column="10"/>
+    </issue>
+
+    <issue
+        id="ContentDescription"
+        message="Missing `contentDescription` attribute on image"
+        errorLine1="        &lt;ImageView"
+        errorLine2="         ~~~~~~~~~">
+        <location
+            file="src/main/res/layout/dialog_qr_code.xml"
+            line="37"
+            column="10"/>
+    </issue>
+
+    <issue
+        id="ContentDescription"
+        message="Missing `contentDescription` attribute on image"
+        errorLine1="    &lt;ImageView"
+        errorLine2="     ~~~~~~~~~">
+        <location
+            file="src/main/res/layout/item_guide_section.xml"
+            line="11"
+            column="6"/>
+    </issue>
+
+    <issue
+        id="ContentDescription"
+        message="Missing `contentDescription` attribute on image"
+        errorLine1="        &lt;ImageView"
+        errorLine2="         ~~~~~~~~~">
+        <location
+            file="src/main/res/layout/widget_menu_item.xml"
+            line="69"
+            column="10"/>
+    </issue>
+
+    <issue
+        id="ContentDescription"
+        message="Missing `contentDescription` attribute on image"
+        errorLine1="        &lt;ImageView"
+        errorLine2="         ~~~~~~~~~">
+        <location
+            file="src/main/res/layout/widget_permission_card.xml"
+            line="12"
+            column="10"/>
+    </issue>
+
+    <issue
+        id="LabelFor"
+        message="Missing accessibility label: provide either a view with an `android:labelFor` that references this view or provide an `android:hint`"
+        errorLine1="                &lt;EditText"
+        errorLine2="                 ~~~~~~~~">
+        <location
+            file="src/main/res/layout/activity_channel_config.xml"
+            line="56"
+            column="18"/>
+    </issue>
+
+    <issue
+        id="LabelFor"
+        message="Missing accessibility label: provide either a view with an `android:labelFor` that references this view or provide an `android:hint`"
+        errorLine1="                    &lt;EditText"
+        errorLine2="                     ~~~~~~~~">
+        <location
+            file="src/main/res/layout/activity_channel_config.xml"
+            line="97"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="LabelFor"
+        message="Missing accessibility label: provide either a view with an `android:labelFor` that references this view or provide an `android:hint`"
+        errorLine1="        &lt;EditText"
+        errorLine2="         ~~~~~~~~">
+        <location
+            file="src/main/res/layout/dialog_input.xml"
+            line="48"
+            column="10"/>
+    </issue>
+
+    <issue
+        id="SetTextI18n"
+        message="String literal in `setText` can not be translated. Use Android resources instead."
+        errorLine1="            text = &quot;🐙 Octopus Agent Workspace&quot;"
+        errorLine2="                    ~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/cast/AgentPresentation.kt"
+            line="104"
+            column="21"/>
+    </issue>
+
+    <issue
+        id="SetTextI18n"
+        message="String literal in `setText` can not be translated. Use Android resources instead."
+        errorLine1="            text = &quot;Ready&quot;"
+        errorLine2="                    ~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/cast/AgentPresentation.kt"
+            line="112"
+            column="21"/>
+    </issue>
+
+    <issue
+        id="SetTextI18n"
+        message="Do not concatenate text displayed with `setText`. Use resource string with placeholders."
+        errorLine1="            text = &quot;Agent workspace ready.\nUse launch_freeform with display_id to start apps here.&quot;"
+        errorLine2="                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/cast/AgentPresentation.kt"
+            line="132"
+            column="20"/>
+    </issue>
+
+    <issue
+        id="SetTextI18n"
+        message="String literal in `setText` can not be translated. Use Android resources instead."
+        errorLine1="            text = &quot;Agent workspace ready.\nUse launch_freeform with display_id to start apps here.&quot;"
+        errorLine2="                    ~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/cast/AgentPresentation.kt"
+            line="132"
+            column="21"/>
+    </issue>
+
+    <issue
+        id="SetTextI18n"
+        message="String literal in `setText` can not be translated. Use Android resources instead."
+        errorLine1="            text = &quot;Agent workspace ready.\nUse launch_freeform with display_id to start apps here.&quot;"
+        errorLine2="                                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/cast/AgentPresentation.kt"
+            line="132"
+            column="45"/>
+    </issue>
+
+    <issue
+        id="SetTextI18n"
+        message="String literal in `setText` can not be translated. Use Android resources instead."
+        errorLine1="                tvLabel1.text = &quot;Client ID&quot;"
+        errorLine2="                                 ~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/ui/settings/ChannelConfigActivity.kt"
+            line="73"
+            column="34"/>
+    </issue>
+
+    <issue
+        id="SetTextI18n"
+        message="String literal in `setText` can not be translated. Use Android resources instead."
+        errorLine1="                tvLabel2.text = &quot;Client Secret&quot;"
+        errorLine2="                                 ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/ui/settings/ChannelConfigActivity.kt"
+            line="74"
+            column="34"/>
+    </issue>
+
+    <issue
+        id="SetTextI18n"
+        message="String literal in `setText` can not be translated. Use Android resources instead."
+        errorLine1="                tvLabel1.text = &quot;App ID&quot;"
+        errorLine2="                                 ~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/ui/settings/ChannelConfigActivity.kt"
+            line="82"
+            column="34"/>
+    </issue>
+
+    <issue
+        id="SetTextI18n"
+        message="String literal in `setText` can not be translated. Use Android resources instead."
+        errorLine1="                tvLabel2.text = &quot;App Secret&quot;"
+        errorLine2="                                 ~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/ui/settings/ChannelConfigActivity.kt"
+            line="83"
+            column="34"/>
+    </issue>
+
+    <issue
+        id="SetTextI18n"
+        message="String literal in `setText` can not be translated. Use Android resources instead."
+        errorLine1="                tvLabel1.text = &quot;App ID&quot;"
+        errorLine2="                                 ~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/ui/settings/ChannelConfigActivity.kt"
+            line="91"
+            column="34"/>
+    </issue>
+
+    <issue
+        id="SetTextI18n"
+        message="String literal in `setText` can not be translated. Use Android resources instead."
+        errorLine1="                tvLabel2.text = &quot;App Secret&quot;"
+        errorLine2="                                 ~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/ui/settings/ChannelConfigActivity.kt"
+            line="92"
+            column="34"/>
+    </issue>
+
+    <issue
+        id="SetTextI18n"
+        message="String literal in `setText` can not be translated. Use Android resources instead."
+        errorLine1="                tvLabel1.text = &quot;Bot Token&quot;"
+        errorLine2="                                 ~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/ui/settings/ChannelConfigActivity.kt"
+            line="100"
+            column="34"/>
+    </issue>
+
+    <issue
+        id="SetTextI18n"
+        message="String literal in `setText` can not be translated. Use Android resources instead."
+        errorLine1="                tvLabel1.text = &quot;Bot Token&quot;"
+        errorLine2="                                 ~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/ui/settings/ChannelConfigActivity.kt"
+            line="108"
+            column="34"/>
+    </issue>
+
+    <issue
+        id="SetTextI18n"
+        message="Number formatting does not take into account locale settings. Consider using `String.format` instead."
+        errorLine1="                tvRound?.text = currentRound.toString()"
+        errorLine2="                                ~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/floating/FloatingCircleManager.kt"
+            line="294"
+            column="33"/>
+    </issue>
+
+    <issue
+        id="SetTextI18n"
+        message="Do not concatenate text displayed with `setText`. Use resource string with placeholders."
+        errorLine1="        osdText.text = &quot;$posStr / $durStr  [$progress%]&quot;"
+        errorLine2="                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/media/PlayerActivity.kt"
+            line="238"
+            column="24"/>
+    </issue>
+
+    <issue
+        id="SetTextI18n"
+        message="Do not concatenate text displayed with `setText`. Use resource string with placeholders."
+        errorLine1="                text = &quot;提示: 插件需要 .dex 文件 + manifest.json。&quot; +"
+        errorLine2="                       ^">
+        <location
+            file="src/main/java/com/apk/claw/android/ui/plugin/PluginActivity.kt"
+            line="170"
+            column="24"/>
+    </issue>
+
+    <issue
+        id="SetTextI18n"
+        message="String literal in `setText` can not be translated. Use Android resources instead."
+        errorLine1="                text = &quot;提示: 插件需要 .dex 文件 + manifest.json。&quot; +"
+        errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/ui/plugin/PluginActivity.kt"
+            line="170"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="SetTextI18n"
+        message="String literal in `setText` can not be translated. Use Android resources instead."
+        errorLine1="                       &quot;插件工具将注册到 ToolRegistry 供 Agent 使用。&quot;"
+        errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/ui/plugin/PluginActivity.kt"
+            line="171"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="SetTextI18n"
+        message="String literal in `setText` can not be translated. Use Android resources instead."
+        errorLine1="        rbLocal = RadioButton(this).apply { text = &quot;LOCAL_ONLY — 纯本地 Agent&quot; }"
+        errorLine2="                                                    ~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/ui/settings/RuntimeConfigActivity.kt"
+            line="106"
+            column="53"/>
+    </issue>
+
+    <issue
+        id="SetTextI18n"
+        message="String literal in `setText` can not be translated. Use Android resources instead."
+        errorLine1="        rbRemote = RadioButton(this).apply { text = &quot;RPC_ONLY — 纯远程 (依赖母体)&quot; }"
+        errorLine2="                                                     ~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/ui/settings/RuntimeConfigActivity.kt"
+            line="107"
+            column="54"/>
+    </issue>
+
+    <issue
+        id="SetTextI18n"
+        message="String literal in `setText` can not be translated. Use Android resources instead."
+        errorLine1="        rbDual = RadioButton(this).apply { text = &quot;DUAL — 远程优先，离线降级&quot; }"
+        errorLine2="                                                   ~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/ui/settings/RuntimeConfigActivity.kt"
+            line="108"
+            column="52"/>
+    </issue>
+
+    <issue
+        id="SetTextI18n"
+        message="String literal in `setText` can not be translated. Use Android resources instead."
+        errorLine1="            text = &quot;DISCONNECTED&quot;"
+        errorLine2="                    ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/apk/claw/android/ui/settings/RuntimeConfigActivity.kt"
+            line="128"
+            column="21"/>
+    </issue>
+
+    <issue
+        id="HardcodedText"
+        message="Hardcoded string &quot;1&quot;, should use `@string` resource"
+        errorLine1="                android:text=&quot;1&quot;"
+        errorLine2="                ~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/layout/layout_floating_circle.xml"
+            line="114"
+            column="17"/>
+    </issue>
+
+    <issue
+        id="RtlSymmetry"
+        message="When you define `paddingEnd` you should probably also define `paddingStart` for right-to-left symmetry"
+        errorLine1="            android:paddingEnd=&quot;48pt&quot;"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/layout/dialog_input.xml"
+            line="55"
+            column="13"/>
+    </issue>
+
+</issues>
