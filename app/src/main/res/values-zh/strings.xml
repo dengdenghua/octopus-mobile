@@ -330,6 +330,7 @@
     <string name="chat_ack">收到，正在设备上执行…</string>
     <string name="chat_thinking">思考中</string>
     <string name="chat_empty_hint">还没有对话，输入指令开始吧</string>
+    <string name="chat_tool_steps">%1$d 个工具步骤</string>
 
     <!-- DeviceScreen (Compose) -->
     <string name="device_title">🖥 设备</string>

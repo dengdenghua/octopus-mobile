@@ -70,6 +70,8 @@ fun ChatScreen() {
     var inputText by remember { mutableStateOf("") }
     var remoteMode by remember { mutableStateOf(true) }
     var isRunning by remember { mutableStateOf(false) }
+    // 工具组展开状态(key=组首工具 id),默认折叠
+    val expandedGroups = remember { mutableStateMapOf<Long, Boolean>() }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val ackText = stringResource(R.string.chat_ack)
@@ -163,21 +165,30 @@ fun ChatScreen() {
                     color = TextMuted,
                 )
             }
-        } else
+        } else {
+        val rows = buildChatRows(messages)
         LazyColumn(
             state = listState,
             modifier = Modifier.weight(1f).padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            items(messages, key = { it.id }) { msg ->
-                when (msg) {
-                    is ChatMessage.UserMessage -> UserBubble(msg.text)
-                    is ChatMessage.AgentMessage -> AgentBubble(msg.text)
-                    is ChatMessage.ToolCall -> ToolCallItem(msg)
-                    is ChatMessage.Thinking -> ThinkingItem(msg.text)
+            items(rows, key = { it.key }) { row ->
+                when (row) {
+                    is ChatRow.Single -> when (val msg = row.msg) {
+                        is ChatMessage.UserMessage -> UserBubble(msg.text)
+                        is ChatMessage.AgentMessage -> AgentBubble(msg.text)
+                        is ChatMessage.ToolCall -> ToolCallItem(msg)
+                        is ChatMessage.Thinking -> ThinkingItem(msg.text)
+                    }
+                    is ChatRow.ToolGroup -> ToolGroupItem(
+                        tools = row.tools,
+                        expanded = expandedGroups[row.tools.first().id] == true,
+                        onToggle = { id -> expandedGroups[id] = expandedGroups[id] != true },
+                    )
                 }
             }
             item { Spacer(modifier = Modifier.height(8.dp)) }
+        }
         }
 
         // 输入框
@@ -287,6 +298,85 @@ private fun AgentBubble(text: String) {
                 color = TextPrimary,
                 lineHeight = 21.sp,
             )
+        }
+    }
+}
+
+// ── 工具步骤折叠 ──────────────────────────────────────
+
+/** 渲染行：普通消息 or 连续工具调用组。 */
+private sealed class ChatRow {
+    abstract val key: String
+    data class Single(val msg: ChatMessage) : ChatRow() { override val key = "m${msg.id}" }
+    data class ToolGroup(val tools: List<ChatMessage.ToolCall>) : ChatRow() { override val key = "g${tools.first().id}" }
+}
+
+/** 把连续的 ToolCall 合并成一组，其余消息原样保留。 */
+private fun buildChatRows(msgs: List<ChatMessage>): List<ChatRow> {
+    val out = mutableListOf<ChatRow>()
+    var i = 0
+    while (i < msgs.size) {
+        val m = msgs[i]
+        if (m is ChatMessage.ToolCall) {
+            val group = mutableListOf<ChatMessage.ToolCall>()
+            while (i < msgs.size && msgs[i] is ChatMessage.ToolCall) {
+                group.add(msgs[i] as ChatMessage.ToolCall); i++
+            }
+            out.add(ChatRow.ToolGroup(group))
+        } else {
+            out.add(ChatRow.Single(m)); i++
+        }
+    }
+    return out
+}
+
+/** 单个工具直接显示;多个工具折叠成可展开的「N 步骤」块。 */
+@Composable
+private fun ToolGroupItem(tools: List<ChatMessage.ToolCall>, expanded: Boolean, onToggle: (Long) -> Unit) {
+    if (tools.size == 1) { ToolCallItem(tools[0]); return }
+    val gid = tools.first().id
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = PrimaryColor.copy(alpha = 0.08f),
+        border = BorderStroke(1.dp, PrimaryColor.copy(alpha = 0.15f)),
+        modifier = Modifier.clickable { onToggle(gid) },
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+            // 折叠头:🔧 N 步骤 · 最后一步 + 箭头
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("🔧", fontSize = 14.sp)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    stringResource(R.string.chat_tool_steps, tools.size),
+                    fontSize = 11.sp, color = PrimaryColor, fontWeight = FontWeight.SemiBold,
+                )
+                if (!expanded) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "· ${tools.last().toolName}",
+                        fontSize = 11.sp, color = TextMuted,
+                        fontFamily = FontFamily.Monospace, maxLines = 1,
+                    )
+                }
+                Spacer(modifier = Modifier.weight(1f))
+                Text(if (expanded) "▾" else "▸", fontSize = 12.sp, color = TextMuted)
+            }
+            if (expanded) {
+                tools.forEach { t ->
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(t.icon, fontSize = 13.sp)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(t.toolName, fontSize = 11.sp, color = PrimaryColor, fontFamily = FontFamily.Monospace)
+                        if (t.args.isNotEmpty()) {
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(t.args, fontSize = 10.sp, color = TextMuted, fontFamily = FontFamily.Monospace, maxLines = 1)
+                        }
+                        Spacer(modifier = Modifier.weight(1f))
+                        if (t.result != null) Text(t.result, fontSize = 10.sp, color = SuccessColor, maxLines = 1)
+                    }
+                }
+            }
         }
     }
 }
