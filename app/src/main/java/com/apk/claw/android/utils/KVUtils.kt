@@ -168,6 +168,13 @@ object KVUtils {
 
     fun setLanControlEnabled(enabled: Boolean) = putBoolean(KEY_LAN_CONTROL, enabled)
 
+    // ==================== 搜索引擎 ====================
+    private const val KEY_SEARCH_ENGINE = "KEY_SEARCH_ENGINE"
+
+    fun getSearchEngine(): String = getString(KEY_SEARCH_ENGINE, "google")
+
+    fun setSearchEngine(id: String) = putString(KEY_SEARCH_ENGINE, id)
+
     // ==================== 钉钉配置 ====================
     fun getDingtalkAppKey(): String = getString(KEY_DINGTALK_APP_KEY, "")
     fun setDingtalkAppKey(value: String) = putString(KEY_DINGTALK_APP_KEY, value)

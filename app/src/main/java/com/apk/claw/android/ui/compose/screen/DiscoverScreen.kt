@@ -34,8 +34,10 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import android.content.Context
 import android.content.Intent
 import com.apk.claw.android.R
+import com.apk.claw.android.octopus_mobile.browser.SearchEngines
 import com.apk.claw.android.service.ClawAccessibilityService
 import com.apk.claw.android.ui.browser.BrowserActivity
+import com.apk.claw.android.utils.KVUtils
 
 // 打开内置真浏览器：query 为空开首页，否则按「网址/搜索词」处理（BrowserActivity 内部判定）
 private fun openBrowser(context: Context, query: String?) {
@@ -60,6 +62,10 @@ private val BorderColor = Color(0xFF38383A)
 fun DiscoverScreen(onNavigate: (String) -> Unit = {}) {
     val context = LocalContext.current
     var searchText by remember { mutableStateOf("") }
+    // 搜索引擎选择（持久化），点搜索框左侧标记可切换
+    var engineId by remember { mutableStateOf(KVUtils.getSearchEngine()) }
+    var engineMenuOpen by remember { mutableStateOf(false) }
+    val engine = SearchEngines.byId(engineId)
     // 提交搜索：用内置真浏览器做网页搜索（网址直达 / 关键词搜索），并清空输入框
     val submit = {
         if (searchText.isNotBlank()) {
@@ -100,7 +106,42 @@ fun DiscoverScreen(onNavigate: (String) -> Unit = {}) {
             onValueChange = { searchText = it },
             modifier = Modifier.fillMaxWidth(),
             placeholder = { Text(stringResource(R.string.discover_search_hint), color = TextMuted) },
-            leadingIcon = { Icon(Icons.Default.Search, null, tint = TextMuted) },
+            leadingIcon = {
+                // 当前搜索引擎标记，点击切换
+                Box {
+                    Box(
+                        modifier = Modifier
+                            .padding(start = 6.dp)
+                            .size(30.dp)
+                            .background(PrimaryColor.copy(alpha = 0.15f), CircleShape)
+                            .clickable { engineMenuOpen = true },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(engine.tag, color = PrimaryColor, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    }
+                    DropdownMenu(
+                        expanded = engineMenuOpen,
+                        onDismissRequest = { engineMenuOpen = false },
+                    ) {
+                        SearchEngines.ALL.forEach { e ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        (if (e.id == engineId) "✓ " else "    ") + e.label,
+                                        color = if (e.id == engineId) PrimaryColor else TextPrimary,
+                                        fontSize = 14.sp,
+                                    )
+                                },
+                                onClick = {
+                                    engineId = e.id
+                                    KVUtils.setSearchEngine(e.id)
+                                    engineMenuOpen = false
+                                },
+                            )
+                        }
+                    }
+                }
+            },
             trailingIcon = {
                 // 发送按钮
                 Box(

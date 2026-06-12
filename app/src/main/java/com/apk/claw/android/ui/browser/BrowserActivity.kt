@@ -29,6 +29,8 @@ import com.apk.claw.android.base.BaseActivity
 import com.apk.claw.android.octopus_mobile.browser.BrowserEngine
 import com.apk.claw.android.octopus_mobile.browser.BrowserEngineFactory
 import com.apk.claw.android.octopus_mobile.browser.EngineEvent
+import com.apk.claw.android.octopus_mobile.browser.SearchEngines
+import com.apk.claw.android.utils.KVUtils
 import com.apk.claw.android.tool.ToolRegistry
 import com.apk.claw.android.widget.CommonToolbar
 import com.apk.claw.android.widget.KButton
@@ -84,7 +86,7 @@ class BrowserActivity : BaseActivity() {
         if (!url.isNullOrEmpty()) {
             navigateTo(url)
         } else {
-            navigateTo("https://www.google.com")
+            navigateTo(SearchEngines.byId(KVUtils.getSearchEngine()).home)
         }
     }
 
@@ -226,7 +228,7 @@ class BrowserActivity : BaseActivity() {
 
             // Home
             addView(makeToolbarButton(android.R.drawable.ic_menu_today, "首页") {
-                navigateTo("https://www.google.com")
+                navigateTo(SearchEngines.byId(KVUtils.getSearchEngine()).home)
             })
 
             // 书签
@@ -314,7 +316,8 @@ class BrowserActivity : BaseActivity() {
             if (input.startsWith("http://") || input.startsWith("https://")) input
             else "https://$input"
         } else {
-            "https://www.google.com/search?q=${java.net.URLEncoder.encode(input, "UTF-8")}"
+            // 关键词搜索：使用用户选择的搜索引擎
+            SearchEngines.byId(KVUtils.getSearchEngine()).searchUrl(input)
         }
         etUrl.setText(url)
         engine.navigate(url)
