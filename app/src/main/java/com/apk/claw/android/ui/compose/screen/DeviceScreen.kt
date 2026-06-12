@@ -34,6 +34,7 @@ import com.apk.claw.android.octopus_mobile.DeviceInfo
 import com.apk.claw.android.octopus_mobile.DeviceRemoteControl
 import com.apk.claw.android.server.ConfigServerManager
 import com.apk.claw.android.service.ClawAccessibilityService
+import com.apk.claw.android.utils.KVUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -135,6 +136,9 @@ fun DeviceScreen(onMessage: (String) -> Unit = {}) {
             }
         }
 
+        // 安全开关：是否允许本机被局域网控制（默认关闭，开启才广播控制 token）
+        item { LanControlToggle() }
+
         // ── 局域网附近设备（真实发现 + 真实远程控制）──
         item {
             Column {
@@ -188,6 +192,26 @@ fun DeviceScreen(onMessage: (String) -> Unit = {}) {
         }
 
         item { Spacer(modifier = Modifier.height(10.dp)) }
+    }
+}
+
+@Composable
+private fun LanControlToggle() {
+    var enabled by remember { mutableStateOf(KVUtils.isLanControlEnabled()) }
+    Surface(shape = RoundedCornerShape(14.dp), color = SurfaceColor, border = BorderStroke(1.dp, BorderColor)) {
+        Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(stringResource(R.string.device_allow_control), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(stringResource(R.string.device_allow_control_desc), fontSize = 10.sp, color = TextMuted, lineHeight = 14.sp)
+            }
+            Spacer(modifier = Modifier.width(10.dp))
+            Switch(
+                checked = enabled,
+                onCheckedChange = { enabled = it; KVUtils.setLanControlEnabled(it) },
+                colors = SwitchDefaults.colors(checkedTrackColor = SuccessColor, checkedThumbColor = Color.White),
+            )
+        }
     }
 }
 

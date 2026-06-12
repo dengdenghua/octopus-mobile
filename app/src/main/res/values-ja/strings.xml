@@ -335,6 +335,8 @@
     <string name="device_discoverable_off">Wi-Fi 接続で検出可能になります</string>
     <string name="device_cmd_sent">%1$s に送信しました</string>
     <string name="device_cmd_failed">失敗（オフライン？）</string>
+    <string name="device_allow_control">LAN リモート操作を許可</string>
+    <string name="device_allow_control_desc">同じ Wi-Fi の他端末からこの端末を操作できるようにします。既定はオフ。信頼できるネットワークでのみ有効化してください。</string>
     <string name="device_browser">🌐 ブラウザ</string>
     <string name="device_tabs">タブ</string>
     <string name="device_extensions">拡張機能</string>

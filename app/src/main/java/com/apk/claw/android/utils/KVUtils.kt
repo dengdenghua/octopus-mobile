@@ -160,6 +160,14 @@ object KVUtils {
 
     fun setGuideShown(shown: Boolean) = putBoolean(KEY_GUIDE_SHOWN, shown)
 
+    // ==================== 局域网远程控制 ====================
+    // 是否允许本机被局域网其他设备控制（开启后才在 beacon 广播控制 token）。默认关闭，更安全。
+    private const val KEY_LAN_CONTROL = "KEY_LAN_CONTROL_ENABLED"
+
+    fun isLanControlEnabled(): Boolean = getBoolean(KEY_LAN_CONTROL, false)
+
+    fun setLanControlEnabled(enabled: Boolean) = putBoolean(KEY_LAN_CONTROL, enabled)
+
     // ==================== 钉钉配置 ====================
     fun getDingtalkAppKey(): String = getString(KEY_DINGTALK_APP_KEY, "")
     fun setDingtalkAppKey(value: String) = putString(KEY_DINGTALK_APP_KEY, value)

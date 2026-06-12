@@ -375,6 +375,8 @@ For these, install Shizuku — a safe, open-source helper.</string>
     <string name="device_discoverable_off">Connect to Wi-Fi to be discoverable</string>
     <string name="device_cmd_sent">Sent to %1$s</string>
     <string name="device_cmd_failed">Failed (device offline?)</string>
+    <string name="device_allow_control">Allow LAN remote control</string>
+    <string name="device_allow_control_desc">Let other devices on this Wi-Fi control this one. Off by default — only turn on for trusted networks.</string>
     <string name="device_browser">🌐 Browser</string>
     <string name="device_tabs">Tabs</string>
     <string name="device_extensions">Extensions</string>

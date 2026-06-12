@@ -370,6 +370,8 @@
     <string name="device_discoverable_off">连接 Wi-Fi 后可被发现</string>
     <string name="device_cmd_sent">已发送到 %1$s</string>
     <string name="device_cmd_failed">失败（设备离线？）</string>
+    <string name="device_allow_control">允许局域网远程控制</string>
+    <string name="device_allow_control_desc">允许同一 Wi-Fi 下的其他设备控制本机。默认关闭，仅在可信网络下开启。</string>
     <string name="device_browser">🌐 浏览器</string>
     <string name="device_tabs">标签页</string>
     <string name="device_extensions">扩展</string>
