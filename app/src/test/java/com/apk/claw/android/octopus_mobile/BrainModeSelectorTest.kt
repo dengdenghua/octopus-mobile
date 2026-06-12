@@ -22,7 +22,7 @@ import org.robolectric.annotation.Config
  *  - onDomainChanged 回调触发
  *  - decide() 路由到 remote/local（无真实 LLM，测占位返回）
  *  - executeLocalTool 前缀剥离
- *  - skillCount() 返回 30
+ *  - skillCount() 返回 43
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
@@ -58,8 +58,8 @@ class BrainModeSelectorTest {
     }
 
     @Test
-    fun `skillCount returns 30`() {
-        assertEquals(30, selector.skillCount())
+    fun `skillCount returns 43`() {
+        assertEquals(43, selector.skillCount())
     }
 
     // ── 意图分类驱动领域切换 ──────────────────────────────
@@ -162,7 +162,7 @@ class BrainModeSelectorTest {
     @Test
     fun `executeLocalTool strips android prefix`() = runBlocking {
         val result = selector.executeLocalTool(
-            ToolCall(id = "1", name = "android.finish", args = emptyMap())
+            ToolCall(id = "1", name = "android.finish", args = mapOf("summary" to "done"))
         )
         assertTrue(result is ToolExecutionResult.Success)
     }
@@ -180,7 +180,7 @@ class BrainModeSelectorTest {
     @Test
     fun `executeLocalTool passes through without prefix`() = runBlocking {
         val result = selector.executeLocalTool(
-            ToolCall(id = "1", name = "finish", args = emptyMap())
+            ToolCall(id = "1", name = "finish", args = mapOf("summary" to "done"))
         )
         assertTrue(result is ToolExecutionResult.Success)
     }

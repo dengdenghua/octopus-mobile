@@ -84,8 +84,9 @@ class GeckoViewEngine : BrowserEngine {
     // ── 导航 ──────────────────────────────────────────
 
     override fun navigate(url: String) {
-        val session = activeSession ?: return
+        // 先记录导航意图（即使会话未就绪，currentUrl() 也反映最近一次 navigate）
         currentUrlValue = url
+        val session = activeSession ?: return
         session.load(GeckoSession.Loader().uri(Uri.parse(url)))
         _events.tryEmit(EngineEvent.PageStarted)
     }

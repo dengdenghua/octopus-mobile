@@ -74,6 +74,17 @@ class MemoryStore(private val context: Context) {
         return getMemories().filter { it.type == type }
     }
 
+    /** 删除一条记忆 */
+    fun removeMemory(id: String) {
+        val memories = getMemories().toMutableList()
+        if (memories.removeAll { it.id == id }) saveMemories(memories)
+    }
+
+    /** 清空全部记忆 */
+    fun clearAll() {
+        saveMemories(emptyList())
+    }
+
     /** 生成注入到 System Prompt 的记忆文本 */
     fun buildPromptSection(): String {
         val memories = getMemories().sortedByDescending { it.confidence }

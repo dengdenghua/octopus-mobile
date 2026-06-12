@@ -158,7 +158,8 @@ object SkillExporter {
         }
         schema.put("properties", properties)
         if (required.isNotEmpty()) {
-            schema.put("required", required.toList())
+            // 必须包成 JSONArray：org.json 序列化 List 时会退化成字符串
+            schema.put("required", org.json.JSONArray(required))
         }
         return schema.toString()
     }

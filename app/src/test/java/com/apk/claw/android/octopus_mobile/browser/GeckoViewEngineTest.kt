@@ -12,8 +12,8 @@ import org.robolectric.annotation.Config
  * GeckoViewEngine 单元测试.
  *
  * 覆盖：
- *  - isAvailable()（GeckoView 不在 test classpath → 应返回 false）
- *  - BrowserEngineFactory.selectBest() 回退到 SystemWebViewEngine
+ *  - isAvailable()（GeckoView 作为 implementation 依赖在 test classpath 上 → true）
+ *  - BrowserEngineFactory.selectBest() 优先选择 GeckoView
  *  - describe() 元信息结构
  *  - antiBotScore / supportsExtensions / supportsEval 常量
  *  - events() 返回非空 Flow
@@ -28,10 +28,10 @@ class GeckoViewEngineTest {
     // ── isAvailable ───────────────────────────────────────
 
     @Test
-    fun `isAvailable returns false when GeckoView not on classpath`() {
+    fun `isAvailable returns true when GeckoView on classpath`() {
         val engine = GeckoViewEngine()
-        // Robolectric 测试环境没有 GeckoView AAR，因此应为 false
-        assertFalse("GeckoView should not be available in unit test", engine.isAvailable())
+        // GeckoView 是 implementation 依赖，单元测试 classpath 也包含它
+        assertTrue("GeckoView should be available in unit test", engine.isAvailable())
     }
 
     // ── 引擎元信息 ─────────────────────────────────────────
@@ -108,11 +108,12 @@ class GeckoViewEngineTest {
     // ── Factory 选择策略 ──────────────────────────────────
 
     @Test
-    fun `selectBest falls back to SystemWebView when GeckoView unavailable`() {
+    fun `selectBest prefers GeckoView when available`() {
+        // GeckoView 在 classpath 上（implementation 依赖），应优先选择
         val best = BrowserEngineFactory.selectBest(context)
         assertTrue(
-            "Expected SystemWebViewEngine when GeckoView unavailable, got ${best.name}",
-            best is SystemWebViewEngine
+            "Expected GeckoViewEngine when available, got ${best.name}",
+            best is GeckoViewEngine
         )
     }
 
@@ -130,7 +131,6 @@ class GeckoViewEngineTest {
         if (gecko.isNotEmpty()) {
             assertTrue(gecko.first().isAvailable())
         }
-        // 测试环境 GeckoView 通常不可用，因此 list 长度为 1（只有 SystemWebView）
         assertTrue("list should have at least 1 engine", list.size >= 1)
     }
 }

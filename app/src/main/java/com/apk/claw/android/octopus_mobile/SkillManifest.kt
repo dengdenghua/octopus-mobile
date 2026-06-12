@@ -202,12 +202,16 @@ object SkillManifest {
 
         // 解析 parameters —— 优先 JSON Schema 单行，否则从 list-of-objects 构建
         val schema: JSONObject = parametersJson?.let { raw ->
-            try {
+            val parsed = try {
                 JSONObject(raw)
             } catch (e: Exception) {
                 // 解析失败 → 当作空 schema
-                JSONObject().put("type", "object").put("properties", JSONObject())
+                JSONObject()
             }
+            // 规范化：手写 SKILL.md 允许 `parameters: {}` 简写，统一补齐 type/properties
+            if (!parsed.has("type")) parsed.put("type", "object")
+            if (!parsed.has("properties")) parsed.put("properties", JSONObject())
+            parsed
         } ?: buildJsonSchemaFromList(name, description, params)
 
         return SkillSpec(
@@ -253,7 +257,9 @@ object SkillManifest {
 
         schema.put("properties", properties)
         if (required.isNotEmpty()) {
-            schema.put("required", required.toList())
+            // 必须包成 JSONArray：org.json 不会自动转换 Kotlin List，
+            // 直接 put List 会导致 getJSONArray("required") 抛 JSONException
+            schema.put("required", org.json.JSONArray(required))
         }
         return schema
     }

@@ -136,8 +136,14 @@ object UrlGuard {
 
     private fun parseIp(host: String): String? {
         val stripped = host.trim('[', ']')
+        // 只把"长得像 IP 字面量"的主机当 IP 处理。
+        // 不能直接用 InetAddress.getByName 判断：它对域名会做 DNS 解析并成功返回，
+        // 导致域名跳过下方 dns_resolves_to_private 检查（SSRF 绕过）。
+        val looksLikeIpv4 = stripped.matches(Regex("""\d{1,3}(\.\d{1,3}){3}"""))
+        val looksLikeIpv6 = stripped.contains(":")
+        if (!looksLikeIpv4 && !looksLikeIpv6) return null
         return try {
-            InetAddress.getByName(stripped)
+            InetAddress.getByName(stripped)  // 纯字面量不触发 DNS
             stripped
         } catch (e: Exception) {
             null

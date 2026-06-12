@@ -100,8 +100,10 @@ class ToolCallDispatcher(
 
     /**
      * 同步执行本地工具（便于测试和复用）.
+     * 接受全名（"android.finish"）或短名（"finish"），自动剥前缀。
      */
-    fun executeLocal(shortName: String, args: Map<String, Any?>): ToolResult {
+    fun executeLocal(name: String, args: Map<String, Any?>): ToolResult {
+        val shortName = stripAndroidPrefix(name)
         // 转换 Any? 到 Any（ToolRegistry.executeTool 需要非空 Map）
         val cleanArgs = args.filterValues { it != null }.mapValues { it.value!! }
         return toolRegistry.executeTool(shortName, cleanArgs)

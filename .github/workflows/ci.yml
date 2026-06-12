@@ -22,11 +22,8 @@ jobs:
       - name: Android Lint (baseline ratchet — only new issues fail)
         run: ./gradlew :app:lintDebug
 
-      # 当前有 53 个存量失败用例（mockable jar 的 is64Bit 环境问题 + 测试与代码漂移），
-      # 修复后删除 continue-on-error 使其成为强制门禁。
-      - name: Unit tests (non-blocking until existing failures are fixed)
+      - name: Unit tests
         run: ./gradlew :app:testDebugUnitTest
-        continue-on-error: true
 
       - name: Upload lint report
         if: always()

@@ -156,7 +156,12 @@ class ExtensionInstaller(
     suspend fun uninstall(extensionId: String): InstallResult {
         return withContext(Dispatchers.IO) {
             try {
-                val list = engine.listExtensions().await()
+                val list = try {
+                    engine.listExtensions().await()
+                } catch (e: Exception) {
+                    // Runtime 不可用 / 列表失败 → 视作没有已安装扩展
+                    emptyList()
+                }
                 val target = list.find { it.id == extensionId }
                     ?: return@withContext InstallResult.Failed("Extension not found: $extensionId")
                 engine.uninstallExtension(target).await()

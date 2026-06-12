@@ -39,7 +39,7 @@ class ToolCallGuardrailTest {
     fun `exact failure warn after 2`() {
         val guard = ToolCallGuardrailController()
         guard.observe("tap", mapOf("x" to 100, "y" to 200), failed = true)
-        guard.observe("tap", mapOf("x" to 100, "y" to 200), failed = true)
+        // 第 2 次相同失败即触发 WARN（exactFailureWarnAfter = 2），消息报告累计次数
         val d = guard.observe("tap", mapOf("x" to 100, "y" to 200), failed = true)
         assertEquals(GuardrailAction.WARN, d.action)
         assertTrue(d.message.contains("2"))

@@ -39,6 +39,11 @@ import com.apk.claw.android.service.ClawAccessibilityService
 import com.apk.claw.android.ui.browser.BrowserActivity
 import com.apk.claw.android.ui.cast.ScreenCastActivity
 import com.apk.claw.android.ui.plugin.PluginActivity
+import com.apk.claw.android.ui.featurescreens.CloudDriveActivity
+import com.apk.claw.android.ui.featurescreens.EvolutionActivity
+import com.apk.claw.android.ui.featurescreens.MemoryActivity
+import com.apk.claw.android.ui.featurescreens.MultiWindowActivity
+import com.apk.claw.android.ui.featurescreens.VideoLibraryActivity
 import com.apk.claw.android.utils.KVUtils
 
 // 打开内置真浏览器：query 为空开首页，否则按「网址/搜索词」处理（BrowserActivity 内部判定）
@@ -185,13 +190,13 @@ fun DiscoverScreen(onNavigate: (String) -> Unit = {}) {
         // 浏览器 → 内置真浏览器；插件 → 设置；其余皆为 Agent 任务 → 对话页
         val shortcuts = listOf(
             Triple("🌐", stringResource(R.string.discover_shortcut_browser), "browser"),
-            Triple("☁️", stringResource(R.string.discover_shortcut_clouddrive), "chat"),
-            Triple("🎬", stringResource(R.string.discover_shortcut_video), "chat"),
+            Triple("☁️", stringResource(R.string.discover_shortcut_clouddrive), "clouddrive"),
+            Triple("🎬", stringResource(R.string.discover_shortcut_video), "video"),
             Triple("🧩", stringResource(R.string.discover_shortcut_plugin), "plugin"),
             Triple("🖥", stringResource(R.string.discover_shortcut_cast), "cast"),
-            Triple("📱", stringResource(R.string.discover_shortcut_multiwindow), "chat"),
-            Triple("💾", stringResource(R.string.discover_shortcut_memory), "chat"),
-            Triple("🧬", stringResource(R.string.discover_shortcut_evolution), "chat"),
+            Triple("📱", stringResource(R.string.discover_shortcut_multiwindow), "multiwindow"),
+            Triple("💾", stringResource(R.string.discover_shortcut_memory), "memory"),
+            Triple("🧬", stringResource(R.string.discover_shortcut_evolution), "evolution"),
         )
 
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -206,6 +211,11 @@ fun DiscoverScreen(onNavigate: (String) -> Unit = {}) {
                                 "browser" -> openBrowser(context, null)
                                 "plugin" -> openActivity(context, PluginActivity::class.java)
                                 "cast" -> openActivity(context, ScreenCastActivity::class.java)
+                                "clouddrive" -> openActivity(context, CloudDriveActivity::class.java)
+                                "video" -> openActivity(context, VideoLibraryActivity::class.java)
+                                "multiwindow" -> openActivity(context, MultiWindowActivity::class.java)
+                                "memory" -> openActivity(context, MemoryActivity::class.java)
+                                "evolution" -> openActivity(context, EvolutionActivity::class.java)
                                 else -> onNavigate(route)
                             }
                         }

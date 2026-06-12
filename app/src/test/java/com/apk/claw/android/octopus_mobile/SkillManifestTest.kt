@@ -17,7 +17,7 @@ import org.robolectric.annotation.Config
  * SkillManifest 解析器测试.
  *
  * 覆盖：
- *  - 30 个真实 SKILL.md 资产（assets/skills/mobile 目录下所有 .md）
+ *  - 43 个真实 SKILL.md 资产（assets/skills/mobile 目录下所有 .md）
  *  - 精简版（JSON Schema 单行）+ 长版（list-of-objects）两种格式
  *  - 错误输入（缺 name / 缺 frontmatter / 空文件）
  *  - 边界（description 块 / continuation / 极小文件）
@@ -32,9 +32,9 @@ class SkillManifestTest {
     // ── 真实资产测试 ────────────────────────────────────────
 
     @Test
-    fun `loadFromAssets returns 30 skills`() {
+    fun `loadFromAssets returns 43 skills`() {
         val skills = SkillManifest.loadFromAssets(context, "skills/mobile")
-        assertEquals("expected 30 SKILL.md, got ${skills.size}", 30, skills.size)
+        assertEquals("expected 43 SKILL.md, got ${skills.size}", 43, skills.size)
     }
 
     @Test
@@ -61,7 +61,7 @@ class SkillManifestTest {
     }
 
     @Test
-    fun `loadFromAssets includes all 30 expected skills`() {
+    fun `loadFromAssets includes all core expected skills`() {
         val skills = SkillManifest.loadFromAssets(context, "skills/mobile")
         val names = skills.map { it.id }.toSet()
         val required = setOf(

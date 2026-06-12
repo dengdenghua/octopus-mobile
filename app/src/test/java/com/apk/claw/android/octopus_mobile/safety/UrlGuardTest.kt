@@ -10,8 +10,10 @@ class UrlGuardTest {
 
     @Test
     fun `allows safe url`() {
-        assertTrue(UrlGuard.isSafeUrl("https://example.com/path"))
-        assertTrue(UrlGuard.isSafeUrl("http://api.example.com/v1/data"))
+        // resolveDns=false：单元测试环境可能无网络，DNS 失败会 fail-closed 拒绝。
+        // 这里只验证协议/主机名/IP 规则层放行公网域名。
+        assertTrue(UrlGuard.check("https://example.com/path", resolveDns = false).allow)
+        assertTrue(UrlGuard.check("http://api.example.com/v1/data", resolveDns = false).allow)
     }
 
     @Test

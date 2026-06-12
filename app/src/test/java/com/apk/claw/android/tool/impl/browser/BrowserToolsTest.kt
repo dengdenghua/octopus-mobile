@@ -328,10 +328,16 @@ class BrowserToolsTest {
         override fun currentUrl(): String = lastNavigatedUrl
 
         override fun evaluateJs(script: String, callback: ((String?) -> Unit)?) {
+            // 模拟真实引擎的异步回调：延迟在后台线程发生，
+            // 否则同步 sleep 会让工具的超时等待循环永远观察不到超时
             if (jsDelayMs > 0) {
-                Thread.sleep(jsDelayMs)
+                Thread {
+                    Thread.sleep(jsDelayMs)
+                    callback?.invoke(jsResult)
+                }.start()
+            } else {
+                callback?.invoke(jsResult)
             }
-            callback?.invoke(jsResult)
         }
 
         override fun screenshot(): String? = screenshotResult

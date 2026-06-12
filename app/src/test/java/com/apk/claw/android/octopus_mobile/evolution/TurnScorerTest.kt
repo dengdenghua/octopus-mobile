@@ -1,7 +1,9 @@
 package com.apk.claw.android.octopus_mobile.evolution
 
 import org.junit.Assert.*
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 import java.io.File
 
 /**
@@ -9,7 +11,13 @@ import java.io.File
  */
 class TurnScorerTest {
 
-    private val tempDir = File(System.getProperty("java.io.tmpdir"), "turn_scorer_test_${System.currentTimeMillis()}")
+    // 每个测试独立临时目录。不能用毫秒时间戳命名：同一毫秒内多个测试
+    // 会共享目录，scores 文件跨测试累积导致计数断言失败。
+    @get:Rule
+    val tmp = TemporaryFolder()
+
+    private val tempDir: File
+        get() = tmp.root
 
     @Test
     fun `record and read back`() {

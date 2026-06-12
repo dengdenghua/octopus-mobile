@@ -41,11 +41,12 @@ object IntentClassifier {
         "搜索网页", "网页搜索", "网上", "上网", "浏览网页",
         "chrome", "firefox", "gecko", "webview", "web视图",
         "html", "dom", "css", "javascript", "js执行", "执行js",
-        "截图网页", "网页截图", "保存网页", "下载网页",
+        "截图网页", "网页截图", "浏览器截图", "保存网页", "下载网页",
         // 英文
         "webpage", "website", "browser", "open url", "visit url", "go to url",
         "navigate to", "web page", "web site", "browse to", "surf",
         "chrome", "firefox", "gecko", "webview",
+        "webpage screenshot", "website screenshot",
     )
 
     /** 手机意图关键词（权重 1.0） */
@@ -54,7 +55,7 @@ object IntentClassifier {
         "打开应用", "打开app", "打开软件", "启动应用", "启动app",
         "点击", "长按", "滑动", "拖拽", "划动",
         "返回键", "home键", "音量", "电源键", "菜单键",
-        "截屏", "录屏", "屏幕",
+        "截屏", "截图", "录屏", "屏幕",
         "输入文字", "输入文本", "打字", "粘贴",
         "找元素", "找按钮", "找文字", "找图标",
         "安装应用", "卸载应用", "更新应用",
@@ -64,7 +65,7 @@ object IntentClassifier {
         "open app", "launch app", "start app", "tap", "long press", "swipe",
         "scroll", "drag", "pinch", "zoom",
         "home button", "back button", "volume up", "volume down", "power button",
-        "record screen",
+        "record screen", "screenshot", "take screenshot",
         "type text", "input text", "enter text", "paste",
         "find element", "find button", "find text",
         "install app", "uninstall app",
@@ -100,8 +101,18 @@ object IntentClassifier {
         }
 
         // 2. 分别统计浏览器/手机关键词命中
-        val browserHits = BROWSER_KEYWORDS.filter { lower.contains(it.lowercase()) }
-        val mobileHits = MOBILE_KEYWORDS.filter { lower.contains(it.lowercase()) }
+        val browserHitsRaw = BROWSER_KEYWORDS.filter { lower.contains(it.lowercase()) }
+        val mobileHitsRaw = MOBILE_KEYWORDS.filter { lower.contains(it.lowercase()) }
+
+        // 2.5 重叠消解：若己方命中词只是对方更长命中词的子串
+        //（如"截图" ⊂ "截图网页"、"screenshot" ⊂ "webpage screenshot"），
+        // 视为被更具体的表达吸收，不计入己方得分
+        val browserHits = browserHitsRaw.filter { b ->
+            mobileHitsRaw.none { m -> m != b && m.lowercase().contains(b.lowercase()) }
+        }
+        val mobileHits = mobileHitsRaw.filter { m ->
+            browserHitsRaw.none { b -> b != m && b.lowercase().contains(m.lowercase()) }
+        }
 
         val browserScore = browserHits.size
         val mobileScore = mobileHits.size

@@ -1,0 +1,150 @@
+package com.apk.claw.android.ui.featurescreens
+
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.apk.claw.android.octopus_mobile.memory.MemoryStore
+import com.apk.claw.android.octopus_mobile.memory.MemoryStore.Memory
+import com.apk.claw.android.octopus_mobile.memory.MemoryStore.MemoryType
+
+class MemoryActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent { MemoryScreen(onBack = { finish() }) }
+        runCatching { window.statusBarColor = android.graphics.Color.BLACK }
+    }
+}
+
+private fun typeLabel(t: MemoryType) = when (t) {
+    MemoryType.PREFERENCE -> "偏好"
+    MemoryType.CONTEXT -> "上下文"
+    MemoryType.FACT -> "事实"
+}
+
+private fun typeColor(t: MemoryType) = when (t) {
+    MemoryType.PREFERENCE -> FPrimary
+    MemoryType.CONTEXT -> FWarning
+    MemoryType.FACT -> FSuccess
+}
+
+@Composable
+fun MemoryScreen(onBack: () -> Unit) {
+    val ctx = LocalContext.current
+    val store = remember { MemoryStore(ctx) }
+    var items by remember { mutableStateOf(store.getMemories()) }
+    var showAdd by remember { mutableStateOf(false) }
+    fun refresh() { items = store.getMemories() }
+
+    FeatureScaffold(
+        title = "记忆",
+        onBack = onBack,
+        action = {
+            Text("＋", color = FPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.clickable { showAdd = true }.padding(8.dp))
+        },
+    ) {
+        if (items.isEmpty()) {
+            FEmpty("还没有记忆。Agent 会在对话中自动记录你的偏好与事实，也可点右上角 ＋ 手动添加。")
+        } else {
+            LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(vertical = 6.dp)) {
+                item {
+                    Text("共 ${items.size} 条 · 会注入到 Agent 的系统提示",
+                        color = FMuted, fontSize = 11.sp, modifier = Modifier.padding(start = 16.dp, bottom = 4.dp))
+                }
+                items(items, key = { it.id }) { m ->
+                    FCard {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            FPill(typeLabel(m.type), typeColor(m.type))
+                            Spacer(Modifier.weight(1f))
+                            Text("✕", color = FMuted, fontSize = 14.sp,
+                                modifier = Modifier.clickable { store.removeMemory(m.id); refresh() }.padding(4.dp))
+                        }
+                        Spacer(Modifier.height(6.dp))
+                        Text(m.content, color = FText, fontSize = 14.sp, lineHeight = 19.sp)
+                        Spacer(Modifier.height(4.dp))
+                        Text("来源 ${m.source} · 引用 ${m.referenceCount} 次", color = FMuted, fontSize = 10.sp)
+                    }
+                }
+            }
+        }
+    }
+
+    if (showAdd) {
+        AddMemoryDialog(
+            onDismiss = { showAdd = false },
+            onConfirm = { content, type ->
+                if (content.isNotBlank()) {
+                    val now = System.currentTimeMillis()
+                    store.addMemory(
+                        Memory(
+                            id = "mem_$now",
+                            content = content.trim(),
+                            type = type,
+                            source = "manual",
+                            createdAt = now,
+                            lastReferencedAt = now,
+                        )
+                    )
+                    refresh()
+                }
+                showAdd = false
+            },
+        )
+    }
+}
+
+@Composable
+private fun AddMemoryDialog(onDismiss: () -> Unit, onConfirm: (String, MemoryType) -> Unit) {
+    var text by remember { mutableStateOf("") }
+    var type by remember { mutableStateOf(MemoryType.FACT) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = FSurface,
+        title = { Text("添加记忆", color = FText, fontSize = 16.sp) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = text, onValueChange = { text = it },
+                    placeholder = { Text("例如：我喜欢简洁的回答", color = FMuted) },
+                    keyboardOptions = KeyboardOptions.Default,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = FPrimary, unfocusedBorderColor = FBorder,
+                        focusedTextColor = FText, unfocusedTextColor = FText,
+                        cursorColor = FPrimary,
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    MemoryType.values().forEach { t ->
+                        val sel = t == type
+                        Surface(
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+                            color = if (sel) FPrimary.copy(alpha = 0.2f) else FSurface2,
+                            modifier = Modifier.clickable { type = t },
+                        ) {
+                            Text(typeLabel(t), color = if (sel) FPrimary else FSub,
+                                fontSize = 12.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { Text("添加", color = FPrimary, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { onConfirm(text, type) }.padding(8.dp)) },
+        dismissButton = { Text("取消", color = FMuted, modifier = Modifier.clickable(onClick = onDismiss).padding(8.dp)) },
+    )
+}

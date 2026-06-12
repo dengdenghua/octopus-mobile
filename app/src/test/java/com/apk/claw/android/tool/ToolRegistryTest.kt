@@ -1,6 +1,6 @@
 package com.apk.claw.android.tool
 
-import com.apk.claw.android.ClawApplication
+import com.apk.claw.android.TestClawApplication
 import com.apk.claw.android.octopus_mobile.browser.BrowserEngine
 import com.apk.claw.android.octopus_mobile.browser.EngineEvent
 import com.apk.claw.android.octopus_mobile.browser.EngineInfo
@@ -14,11 +14,9 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import org.junit.Assert.*
 import org.junit.Before
-import org.junit.BeforeClass
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
 /**
@@ -38,42 +36,17 @@ import org.robolectric.annotation.Config
  *  - turnScorer 记录路径
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(application = ClawApplication::class)
+@Config(application = TestClawApplication::class)
 class ToolRegistryTest {
-
-    companion object {
-        /**
-         * 通过 Robolectric 启动 ClawApplication，自动初始化 lateinit instance。
-         * 这样 getDisplayName() 等依赖 Application 的方法能正常工作。
-         */
-        @JvmStatic
-        @BeforeClass
-        fun ensureAppInitialized() {
-            // Robolectric 已在 @RunWith 启动时实例化 ClawApplication，
-            // 这里只需要确保 instance 已赋值（onCreate 在 Robolectric 里会调用）。
-            // 若未赋值（极少见），则通过反射强制写一次。
-            try {
-                val companionClass = Class.forName("com.apk.claw.android.ClawApplication\$Companion")
-                val instanceField = companionClass.getDeclaredField("instance")
-                instanceField.isAccessible = true
-                val companionInstance = companionClass.getDeclaredField("INSTANCE").get(null)
-                val current = try { instanceField.get(companionInstance) } catch (_: Throwable) { null }
-                if (current == null) {
-                    instanceField.set(companionInstance, RuntimeEnvironment.getApplication())
-                }
-            } catch (_: Exception) {
-                // 忽略
-            }
-        }
-    }
 
     @Before
     fun setUp() {
-        // 每次测试前重置单例状态
+        // 每次测试前重置单例状态（含其他测试类可能遗留的 browserEngine）
         ToolRegistry.guardrail.reset()
         ToolRegistry.safetyGate = null
         ToolRegistry.turnScorer = null
         ToolRegistry.eventBus = null
+        ToolRegistry.clearBrowserEngine()
     }
 
     // ── 注册与查询 ────────────────────────────────────────

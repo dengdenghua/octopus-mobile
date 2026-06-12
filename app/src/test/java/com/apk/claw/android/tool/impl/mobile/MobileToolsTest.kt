@@ -1,8 +1,12 @@
 package com.apk.claw.android.tool.impl.mobile
 
+import com.apk.claw.android.TestClawApplication
 import com.apk.claw.android.tool.ToolParameter
 import org.junit.Assert.*
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
 /**
  * MobileTools 单元测试 —— 参数验证层.
@@ -16,7 +20,10 @@ import org.junit.Test
  * 注意：这些工具依赖 ClawAccessibilityService（系统级 Accessibility 服务），
  * 在 Robolectric 单元测试环境中无法真正执行点击/滑动/输入操作。
  * 此处只验证参数契约和基础行为。
+ * getDisplayName() 读取字符串资源，因此需要 Robolectric 提供的真实 Resources。
  */
+@RunWith(RobolectricTestRunner::class)
+@Config(application = TestClawApplication::class)
 class MobileToolsTest {
 
     // ── TapTool ───────────────────────────────────────────

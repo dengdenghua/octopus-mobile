@@ -12,7 +12,7 @@ import org.robolectric.annotation.Config
  * SkillExporter 单元测试.
  *
  * 覆盖：
- *  - 导出 30 个工具的 SKILL.md
+ *  - 导出 34 个 MOBILE 工具的 SKILL.md
  *  - 工具名前缀 android.
  *  - 风险等级（low/medium/high）
  *  - 参数 JSON Schema 正确性
@@ -24,13 +24,16 @@ class SkillExporterTest {
 
     @Before
     fun setUp() {
+        // 清掉其他测试类可能遗留的 browserEngine（ToolRegistry 是单例），
+        // 否则 registerAllTools 会附带注册 7 个 browser 工具导致数量不确定
+        ToolRegistry.clearBrowserEngine()
         ToolRegistry.registerAllTools(ToolRegistry.DeviceType.MOBILE)
     }
 
     @Test
-    fun `exportAllFromRegistry returns 30 skills for MOBILE`() {
+    fun `exportAllFromRegistry returns 34 skills for MOBILE`() {
         val skills = SkillExporter.exportAllFromRegistry()
-        assertEquals("expected 30 tools for MOBILE", 30, skills.size)
+        assertEquals("expected 34 tools for MOBILE", 34, skills.size)
     }
 
     @Test

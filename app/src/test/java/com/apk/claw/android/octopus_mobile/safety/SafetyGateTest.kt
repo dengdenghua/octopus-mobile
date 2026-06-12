@@ -13,7 +13,8 @@ class SafetyGateTest {
     @Test
     fun `check blocks on secret`() {
         val gate = SafetyGate()
-        val verdict = gate.check("my key is sk-abc1234567890", "tool_call")
+        // 扫描规则要求 sk- 后至少 20 个字母数字（真实 OpenAI key 为 sk- + 48 字符）
+        val verdict = gate.check("my key is sk-abc1234567890abcdefghij", "tool_call")
         assertTrue(verdict.isBlocked)
         assertEquals("OpenAI API key", verdict.secretHits[0].description)
     }
@@ -39,7 +40,10 @@ class SafetyGateTest {
     @Test
     fun `checkToolCall blocks on secret in params`() {
         val gate = SafetyGate()
-        val verdict = gate.checkToolCall("browser_navigate", mapOf("url" to "https://example.com?key=sk-abc123"))
+        val verdict = gate.checkToolCall(
+            "browser_navigate",
+            mapOf("url" to "https://example.com?key=sk-abc1234567890abcdefghij"),
+        )
         assertTrue(verdict.isBlocked)
     }
 

@@ -6,6 +6,23 @@ import com.apk.claw.android.tool.ToolParameter
 import com.apk.claw.android.tool.ToolResult
 
 /**
+ * WebView.evaluateJavascript 的回调返回 JSON 编码值（字符串带双引号、转义）。
+ * 把 JSON 字符串还原为原始文本；非字符串（数字/对象/null 字面量）原样返回。
+ */
+private fun unwrapJsString(value: String?): String? {
+    if (value == null) return null
+    val trimmed = value.trim()
+    if (trimmed.length >= 2 && trimmed.startsWith("\"") && trimmed.endsWith("\"")) {
+        return try {
+            org.json.JSONTokener(trimmed).nextValue() as? String ?: value
+        } catch (_: Exception) {
+            value
+        }
+    }
+    return value
+}
+
+/**
  * 浏览器导航工具 —— 在内嵌浏览器中打开 URL.
  *
  * agent 调用：android.browser.navigate({"url": "https://example.com"})
@@ -65,7 +82,7 @@ class GetDomTool(
         """.trimIndent()
 
         engine.evaluateJs(script) { value ->
-            result = value
+            result = unwrapJsString(value)
             completed = true
         }
 
@@ -116,7 +133,7 @@ class BrowserClickTool(
         """.trimIndent()
 
         engine.evaluateJs(script) { value ->
-            result = value
+            result = unwrapJsString(value)
             completed = true
         }
 
@@ -177,7 +194,7 @@ class BrowserTypeTool(
         """.trimIndent()
 
         engine.evaluateJs(script) { value ->
-            result = value
+            result = unwrapJsString(value)
             completed = true
         }
 
@@ -248,7 +265,7 @@ class BrowserEvaluateTool(
         var completed = false
 
         engine.evaluateJs(script) { value ->
-            result = value
+            result = unwrapJsString(value)
             completed = true
         }
 
@@ -293,12 +310,16 @@ class InstallExtensionTool(
             return ToolResult.error("Current engine (${engine.name}) does not support extensions. Switch to GeckoView engine.")
         }
 
+        // 参数校验先于引擎类型检查：source 缺失/格式错误与引擎无关
+        val source = requireString(params, "source")
+        val name = optionalString(params, "name", "")
+        if (!source.startsWith("cws:") && !source.startsWith("url:") && !source.startsWith("amo:")) {
+            return ToolResult.error("Unknown source format. Use 'cws:<id>', 'url:<url>', or 'amo:<url>'")
+        }
+
         if (engine !is com.apk.claw.android.octopus_mobile.browser.GeckoViewEngine) {
             return ToolResult.error("Extension installation requires GeckoView engine. Current: ${engine.name}")
         }
-
-        val source = requireString(params, "source")
-        val name = optionalString(params, "name", "")
 
         // 同步调用（BaseTool.execute 是同步的）
         var installResult: com.apk.claw.android.octopus_mobile.browser.ExtensionInstaller.InstallResult? = null

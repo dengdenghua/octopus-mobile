@@ -116,6 +116,13 @@
             android:name=".ui.web.WebActivity"
             android:exported="false" />
 
+        <!-- 发现页功能界面（深色 Compose） -->
+        <activity android:name=".ui.featurescreens.MemoryActivity" android:exported="false" />
+        <activity android:name=".ui.featurescreens.EvolutionActivity" android:exported="false" />
+        <activity android:name=".ui.featurescreens.MultiWindowActivity" android:exported="false" />
+        <activity android:name=".ui.featurescreens.VideoLibraryActivity" android:exported="false" />
+        <activity android:name=".ui.featurescreens.CloudDriveActivity" android:exported="false" />
+
         <!-- mpv 播放界面：横屏 + 全屏 + D-pad 支持 -->
         <activity
             android:name=".media.PlayerActivity"

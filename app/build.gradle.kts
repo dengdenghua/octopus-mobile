@@ -79,9 +79,11 @@ android {
     }
 
     // 单元测试：让 android.* 的桩方法返回默认值（避免 android.util.Log not mocked）
+    // includeAndroidResources: Robolectric 测试需要真实资源（如工具 getDisplayName 的字符串资源）
     testOptions {
         unitTests {
             isReturnDefaultValues = true
+            isIncludeAndroidResources = true
         }
     }
 

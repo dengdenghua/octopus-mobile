@@ -55,8 +55,9 @@ object CrxToXpiConverter {
 
         // 2. 解析 manifest.json
         val manifest = parseManifest(zipBytes)
+        // fallback ID 由扩展名派生：去掉非字母数字并统一小写（文件名/URL 安全）
         val extId = manifest.optString("id",
-            manifest.optString("name", "unknown").replace(Regex("[^a-zA-Z0-9]"), "")
+            manifest.optString("name", "unknown").replace(Regex("[^a-zA-Z0-9]"), "").lowercase()
         )
         val extName = manifest.optString("name", "Unknown Extension")
         val extVersion = manifest.optString("version", "0.0.0")

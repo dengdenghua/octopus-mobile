@@ -41,7 +41,7 @@ class ToolCallDispatcherTest {
 
     @Test
     fun `executeLocal strips android prefix and runs tool`() {
-        val result = dispatcher.executeLocal("android.finish", emptyMap())
+        val result = dispatcher.executeLocal("android.finish", mapOf("summary" to "done"))
         assertTrue(result.isSuccess)
     }
 
@@ -54,7 +54,7 @@ class ToolCallDispatcherTest {
 
     @Test
     fun `executeLocal passes through short name without prefix`() {
-        val result = dispatcher.executeLocal("finish", emptyMap())
+        val result = dispatcher.executeLocal("finish", mapOf("summary" to "done"))
         assertTrue(result.isSuccess)
     }
 
@@ -62,7 +62,7 @@ class ToolCallDispatcherTest {
     fun `executeLocal filters null args`() {
         val result = dispatcher.executeLocal(
             "finish",
-            mapOf("summary" to null, "other" to "value"),
+            mapOf("summary" to "done", "other" to null),
         )
         assertTrue(result.isSuccess)
     }
@@ -78,7 +78,7 @@ class ToolCallDispatcherTest {
     @Test
     fun `dispatch async sends success result for known tool`() = runBlocking {
         dispatcher.start()
-        val call = ToolCall(id = "test-1", name = "android.finish", args = emptyMap())
+        val call = ToolCall(id = "test-1", name = "android.finish", args = mapOf("summary" to "done"))
         dispatcher.dispatch(call)
         // Wait briefly for async dispatch
         kotlinx.coroutines.delay(200)

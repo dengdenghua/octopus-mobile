@@ -123,8 +123,9 @@ class SystemWebViewEngine : BrowserEngine {
     }
 
     override fun navigate(url: String) {
-        val wv = activeWebView ?: return
+        // 先记录导航意图（即使视图未就绪，currentUrl() 也反映最近一次 navigate）
         currentUrlValue = url
+        val wv = activeWebView ?: return
         wv.loadUrl(url)
     }
 

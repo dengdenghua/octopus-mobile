@@ -23,7 +23,7 @@ import com.blankj.utilcode.util.NetworkUtils
  */
 
 val appViewModel: AppViewModel by lazy { ClawApplication.appViewModelInstance }
-class ClawApplication : BaseApp() {
+open class ClawApplication : BaseApp() {
 
     companion object {
         private const val TAG = "ClawApplication"
@@ -68,6 +68,14 @@ class ClawApplication : BaseApp() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        initializeApp()
+    }
+
+    /**
+     * 全量初始化（MMKV 原生库、前台服务、Shizuku、通道等）。
+     * 单元测试用 TestClawApplication 覆写为空实现，跳过 JVM 上不可用的原生依赖。
+     */
+    protected open fun initializeApp() {
         XLog.setDEBUG(BuildConfig.DEBUG)
         registerNetworkCallback()
         appViewModelInstance = getAppViewModelProvider()[AppViewModel::class.java]
