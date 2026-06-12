@@ -11,12 +11,22 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import android.content.Context
 import android.content.Intent
+import android.os.Build
+import android.os.PowerManager
+import android.provider.Settings
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
+import androidx.core.app.NotificationManagerCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.apk.claw.android.octopus_mobile.browser.BrowserEngineFactory
+import com.apk.claw.android.server.ConfigServerManager
+import com.apk.claw.android.service.ClawAccessibilityService
+import com.apk.claw.android.shizuku.ShizukuManager
 import com.apk.claw.android.ui.settings.ChannelConfigActivity
 import com.apk.claw.android.ui.settings.LlmConfigActivity
 import com.apk.claw.android.utils.KVUtils
@@ -24,6 +34,31 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.apk.claw.android.R
+
+// ── 真实权限/状态探测（非 Composable，可在 remember 中调用）────────────
+private fun isNotifEnabled(c: Context): Boolean =
+    runCatching { NotificationManagerCompat.from(c).areNotificationsEnabled() }.getOrDefault(false)
+
+private fun isOverlayGranted(c: Context): Boolean =
+    runCatching { Settings.canDrawOverlays(c) }.getOrDefault(false)
+
+private fun isBatteryUnrestricted(c: Context): Boolean = runCatching {
+    val pm = c.getSystemService(Context.POWER_SERVICE) as? PowerManager
+    pm?.isIgnoringBatteryOptimizations(c.packageName) ?: false
+}.getOrDefault(false)
+
+// Q+ 走分区存储无需授权；Q 以下检查 WRITE_EXTERNAL_STORAGE
+private fun isStorageGranted(c: Context): Boolean {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) return true
+    return androidx.core.content.ContextCompat.checkSelfPermission(
+        c, android.Manifest.permission.WRITE_EXTERNAL_STORAGE
+    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+}
+
+private fun isShizukuReady(): Boolean = runCatching { ShizukuManager.isAvailable() }.getOrDefault(false)
+
+private fun selectedEngineName(c: Context): String =
+    runCatching { BrowserEngineFactory.selectBest(c).name }.getOrDefault("—")
 
 private val PrimaryColor = Color(0xFF0A84FF)
 private val SuccessColor = Color(0xFF30D158)
@@ -40,6 +75,14 @@ private val BorderColor = Color(0xFF38383A)
 @Composable
 fun SettingsScreen(onMessage: (String) -> Unit = {}) {
     val context = LocalContext.current
+    // 离开本页去授权后回来需刷新真实状态
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var refreshTick by remember { mutableStateOf(0) }
+    DisposableEffect(lifecycleOwner) {
+        val obs = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_RESUME) refreshTick++ }
+        lifecycleOwner.lifecycle.addObserver(obs)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
+    }
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(BackgroundColor).padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -52,10 +95,21 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
         // 权限状态
         item {
             SettingsCard(stringResource(R.string.settings_section_permissions)) {
+                // 真实权限状态，回到前台时刷新
+                val states = remember(refreshTick) {
+                    listOf(
+                        ClawAccessibilityService.isRunning(),
+                        isNotifEnabled(context),
+                        isOverlayGranted(context),
+                        isBatteryUnrestricted(context),
+                        isStorageGranted(context),
+                        isShizukuReady(),
+                    )
+                }
                 val perms = listOf(
-                    stringResource(R.string.perm_accessibility) to true, stringResource(R.string.perm_notification) to true,
-                    stringResource(R.string.perm_overlay) to true, stringResource(R.string.perm_battery) to true,
-                    stringResource(R.string.perm_storage) to true, "Shizuku" to false,
+                    stringResource(R.string.perm_accessibility) to states[0], stringResource(R.string.perm_notification) to states[1],
+                    stringResource(R.string.perm_overlay) to states[2], stringResource(R.string.perm_battery) to states[3],
+                    stringResource(R.string.perm_storage) to states[4], "Shizuku" to states[5],
                 )
                 // 2 列网格
                 perms.chunked(2).forEach { row ->
@@ -96,15 +150,6 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
                 Spacer(modifier = Modifier.height(6.dp))
                 Text("Base URL: $baseUrl", fontSize = 11.sp, color = TextMuted)
                 Text("API Key: $keyMasked", fontSize = 11.sp, color = TextMuted)
-                Spacer(modifier = Modifier.height(6.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Surface(shape = RoundedCornerShape(6.dp), color = PrimaryColor.copy(alpha = 0.15f)) {
-                        Text("VLM ✓", modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), fontSize = 10.sp, color = PrimaryColor, fontWeight = FontWeight.SemiBold)
-                    }
-                    Surface(shape = RoundedCornerShape(6.dp), color = SuccessColor.copy(alpha = 0.15f)) {
-                        Text(stringResource(R.string.settings_local_fallback), modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), fontSize = 10.sp, color = SuccessColor, fontWeight = FontWeight.SemiBold)
-                    }
-                }
             }
         }
 
@@ -113,13 +158,24 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
             SettingsCard(stringResource(R.string.settings_section_channels), onClick = {
                 context.startActivity(Intent(context, ChannelConfigActivity::class.java))
             }) {
+                // 真实「是否已配置」：检查各渠道凭据是否已填写
+                val cfg = remember(refreshTick) {
+                    listOf(
+                        KVUtils.getDingtalkAppKey().isNotEmpty() && KVUtils.getDingtalkAppSecret().isNotEmpty(),
+                        KVUtils.getFeishuAppId().isNotEmpty() && KVUtils.getFeishuAppSecret().isNotEmpty(),
+                        KVUtils.getQqAppId().isNotEmpty() && KVUtils.getQqAppSecret().isNotEmpty(),
+                        KVUtils.getDiscordBotToken().isNotEmpty(),
+                        KVUtils.getTelegramBotToken().isNotEmpty(),
+                        KVUtils.getWechatBotToken().isNotEmpty(),
+                    )
+                }
                 val channels = listOf(
-                    "💬" to stringResource(R.string.channel_dingtalk) to true,
-                    "🐦" to stringResource(R.string.channel_feishu) to false,
-                    "🐧" to "QQ" to false,
-                    "🎮" to "Discord" to true,
-                    "✈️" to "Telegram" to true,
-                    "💚" to stringResource(R.string.channel_wechat) to false,
+                    "💬" to stringResource(R.string.channel_dingtalk) to cfg[0],
+                    "🐦" to stringResource(R.string.channel_feishu) to cfg[1],
+                    "🐧" to "QQ" to cfg[2],
+                    "🎮" to "Discord" to cfg[3],
+                    "✈️" to "Telegram" to cfg[4],
+                    "💚" to stringResource(R.string.channel_wechat) to cfg[5],
                 )
                 // 3 列网格
                 channels.chunked(3).forEach { row ->
@@ -154,12 +210,15 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
         // 其他设置
         item {
             SettingsCard(stringResource(R.string.settings_section_other)) {
+                // 真实数据：局域网配置服务地址（未启动则提示）+ 实际选用的浏览器引擎
+                val lanAddr = remember(refreshTick) {
+                    runCatching { ConfigServerManager.getAddress() }.getOrNull()
+                }
+                val engineName = remember(refreshTick) { selectedEngineName(context) }
+                val notRunning = stringResource(R.string.status_not_connected)
                 listOf(
-                    stringResource(R.string.settings_lan_config) to "192.168.1.105:9527",
-                    stringResource(R.string.settings_device_mgmt) to stringResource(R.string.settings_val_devices),
-                    stringResource(R.string.settings_browser_engine) to "GeckoView 151",
-                    stringResource(R.string.settings_cast_control) to stringResource(R.string.status_not_connected),
-                    stringResource(R.string.settings_plugin_mgmt) to stringResource(R.string.settings_val_plugins_loaded),
+                    stringResource(R.string.settings_lan_config) to (lanAddr ?: notRunning),
+                    stringResource(R.string.settings_browser_engine) to engineName,
                 ).forEach { (label, value) ->
                     Row(
                         modifier = Modifier.fillMaxWidth()
