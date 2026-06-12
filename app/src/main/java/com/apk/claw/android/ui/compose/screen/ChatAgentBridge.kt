@@ -42,6 +42,7 @@ object ChatAgentBridge {
             .temperature(0.1)
             .maxIterations(40)
             .enableVision(false)
+            .streaming(true)   // 逐字流式输出
             .build()
     }
 
@@ -65,7 +66,8 @@ object ChatAgentBridge {
             override fun onLoopStart(round: Int) {}
 
             override fun onContent(round: Int, content: String) {
-                if (content.isNotBlank()) main.post { onText(content) }
+                // 流式:每个 token 都回调(保留空白,避免词间粘连)
+                if (content.isNotEmpty()) main.post { onText(content) }
             }
 
             override fun onToolCall(round: Int, toolId: String, toolName: String, parameters: String) {}

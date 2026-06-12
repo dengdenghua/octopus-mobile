@@ -91,13 +91,42 @@ fun ChatScreen() {
                 val thinking = ChatMessage.Thinking(thinkingText)
                 val showThinking = { if (!messages.contains(thinking)) { messages.add(thinking); scrollEnd() } }
                 val hideThinking = { messages.remove(thinking) }
+                // 流式:把 token 累积进同一个气泡(live bubble),实时更新
+                var streamId: Long? = null
+                var buf = StringBuilder()
+                val appendStream = { tok: String ->
+                    hideThinking()
+                    val id = streamId
+                    if (id == null) {
+                        buf = StringBuilder(tok)
+                        val m = ChatMessage.AgentMessage(buf.toString())
+                        streamId = m.id
+                        messages.add(m)
+                    } else {
+                        buf.append(tok)
+                        val idx = messages.indexOfFirst { it.id == id }
+                        if (idx >= 0) messages[idx] = ChatMessage.AgentMessage(buf.toString(), id)
+                    }
+                    scrollEnd()
+                }
+                // 结束当前流式气泡(final!=null 时用最终文本覆盖;否则定格已流式内容)
+                val finalizeStream = { final: String? ->
+                    val id = streamId
+                    if (id != null && final != null) {
+                        val idx = messages.indexOfFirst { it.id == id }
+                        if (idx >= 0) messages[idx] = ChatMessage.AgentMessage(final, id)
+                    } else if (id == null && final != null) {
+                        messages.add(ChatMessage.AgentMessage(final))
+                    }
+                    streamId = null; buf = StringBuilder()
+                }
                 showThinking()
                 ChatAgentBridge.run(
                     prompt = t,
-                    onTool = { icon, name, args, res -> hideThinking(); messages.add(ChatMessage.ToolCall(icon, name, args, res)); showThinking(); persist() },
-                    onText = { txt -> hideThinking(); messages.add(ChatMessage.AgentMessage(txt)); showThinking(); persist() },
-                    onDone = { ans -> hideThinking(); messages.add(ChatMessage.AgentMessage(ans)); isRunning = false; scrollEnd(); persist() },
-                    onError = { e -> hideThinking(); messages.add(ChatMessage.AgentMessage("⚠️ $e")); isRunning = false; scrollEnd(); persist() },
+                    onTool = { icon, name, args, res -> finalizeStream(null); hideThinking(); messages.add(ChatMessage.ToolCall(icon, name, args, res)); showThinking(); persist() },
+                    onText = { txt -> appendStream(txt) },
+                    onDone = { ans -> hideThinking(); finalizeStream(ans); isRunning = false; scrollEnd(); persist() },
+                    onError = { e -> hideThinking(); finalizeStream(null); messages.add(ChatMessage.AgentMessage("⚠️ $e")); isRunning = false; scrollEnd(); persist() },
                 )
             } else {
                 messages.add(ChatMessage.AgentMessage(ackText))
