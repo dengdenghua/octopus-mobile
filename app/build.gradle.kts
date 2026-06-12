@@ -47,10 +47,11 @@ android {
         buildConfigField("String", "VERSION_INFO", getVersionGit())
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // NDK ABI 过滤：只保留 ARM 架构（手机 + TV 盒子）
-        // 如需 x86 模拟器支持，添加 "x86_64"
+        // NDK ABI 过滤：只保留 arm64-v8a（近年所有手机 + TV 盒子均支持）
+        // 内置 GeckoView/mpv 原生库体积大，双架构会让包翻倍；故只出 64 位。
+        // 如需 32 位老设备支持，加回 "armeabi-v7a"；如需 x86 模拟器，加 "x86_64"。
         ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+            abiFilters += listOf("arm64-v8a")
         }
     }
 
