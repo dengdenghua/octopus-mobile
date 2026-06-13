@@ -31,9 +31,18 @@ import com.apk.claw.android.ClawApplication
 import com.apk.claw.android.R
 import com.apk.claw.android.octopus_mobile.ControlTarget
 import com.apk.claw.android.octopus_mobile.DeviceInfo
+import com.apk.claw.android.octopus_mobile.VoiceInput
 import com.apk.claw.android.server.ConfigServerManager
 import com.apk.claw.android.service.ClawAccessibilityService
 import com.apk.claw.android.ui.settings.LlmConfigActivity
+import android.Manifest
+import android.content.pm.PackageManager
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.launch
 
 // 颜色
@@ -215,6 +224,40 @@ fun ChatScreen() {
     }
     val stop = { ChatAgentBridge.cancel() }
 
+    // ── 语音优先输入：麦克风「按住说话」，松手即发 ──────────────────
+    var voiceMode by remember { mutableStateOf(true) }   // 默认语音优先；键盘为次选
+    var listening by remember { mutableStateOf(false) }
+    var partial by remember { mutableStateOf("") }       // 实时部分识别结果
+    val voice = remember { VoiceInput(context) }
+    DisposableEffect(Unit) { onDispose { voice.destroy() } }
+
+    val startListening = {
+        partial = ""
+        listening = true
+        voice.start(
+            onPartial = { partial = it },
+            onResult = { txt ->
+                listening = false; partial = ""
+                if (txt.isNotBlank()) { inputText = txt; send() }
+            },
+            onError = { err ->
+                listening = false; partial = ""
+                if (err.isNotEmpty()) Toast.makeText(context, err, Toast.LENGTH_SHORT).show()
+            },
+        )
+    }
+    // 录音授权：未授权时先请求，授权后再「按住说话」
+    val micPermLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        Toast.makeText(
+            context,
+            if (granted) "已授权，按住麦克风说话" else "未授权录音，无法语音输入",
+            Toast.LENGTH_SHORT,
+        ).show()
+    }
+    val hasMic = { ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED }
+
     Column(modifier = Modifier.fillMaxSize().background(BackgroundColor)) {
         // 顶部栏
         TopAppBar(
@@ -353,45 +396,104 @@ fun ChatScreen() {
             // 目标选择器：决定 Agent 在「本机」还是某台局域网设备上执行
             TargetSelector()
             Spacer(modifier = Modifier.height(8.dp))
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                OutlinedTextField(
-                    value = inputText,
-                    onValueChange = { inputText = it },
-                    modifier = Modifier.weight(1f),
-                    placeholder = { Text(stringResource(R.string.chat_input_hint), color = TextMuted) },
-                    shape = RoundedCornerShape(24.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = PrimaryColor,
-                        unfocusedBorderColor = BorderColor,
-                        focusedContainerColor = SurfaceColor,
-                        unfocusedContainerColor = SurfaceColor,
-                        cursorColor = PrimaryColor,
-                        focusedTextColor = TextPrimary,
-                        unfocusedTextColor = TextPrimary,
-                    ),
-                    singleLine = true,
-                    textStyle = TextStyle(fontSize = 14.sp),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                    keyboardActions = KeyboardActions(onSend = { send() }),
-                )
-                Spacer(modifier = Modifier.width(10.dp))
-                // 发送按钮
-                // 运行中=红色停止键(可中断);否则=发送键(无输入时淡化)
-                val btnActive = isRunning || inputText.isNotBlank()
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .background(
-                            (if (isRunning) Color(0xFFFF453B) else PrimaryColor)
-                                .copy(alpha = if (btnActive) 1f else 0.35f),
-                            RoundedCornerShape(20.dp)
+            if (voiceMode) {
+                // ── 语音优先：左侧键盘切换（次选）+ 大麦克风「按住说话」 ──
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .background(SurfaceColor, RoundedCornerShape(22.dp))
+                            .clickable { voiceMode = false },
+                        contentAlignment = Alignment.Center,
+                    ) { Text("⌨", fontSize = 18.sp) }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    val red = Color(0xFFFF453B)
+                    val pillColor = if (isRunning || listening) red else SurfaceColor
+                    val pillText = when {
+                        isRunning -> "■  停止 Agent"
+                        listening -> partial.ifBlank { "正在聆听… 松手发送" }
+                        else -> "🎤  按住说话"
+                    }
+                    // 运行中=点按停止；否则=按住说话（松手即发）
+                    val pillGesture = if (isRunning) {
+                        Modifier.clickable(onClick = stop)
+                    } else {
+                        Modifier.pointerInput(Unit) {
+                            detectTapGestures(onPress = {
+                                if (hasMic()) {
+                                    startListening()
+                                    tryAwaitRelease()
+                                    voice.stop()   // 松手 → 收尾 → onResult 自动 send()
+                                } else {
+                                    micPermLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                }
+                            })
+                        }
+                    }
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp)
+                            .background(pillColor, RoundedCornerShape(24.dp))
+                            .then(pillGesture),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            pillText,
+                            color = if (isRunning || listening) Color.White else TextSecondary,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
                         )
-                        .clickable(onClick = if (isRunning) stop else send),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(if (isRunning) "■" else "➤", color = Color.White, fontSize = 16.sp)
+                    }
+                }
+            } else {
+                // ── 文本模式：左侧麦克风切回 + 文本框 + 发送/停止 ──
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .background(SurfaceColor, RoundedCornerShape(22.dp))
+                            .clickable { voiceMode = true },
+                        contentAlignment = Alignment.Center,
+                    ) { Text("🎤", fontSize = 18.sp) }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    OutlinedTextField(
+                        value = inputText,
+                        onValueChange = { inputText = it },
+                        modifier = Modifier.weight(1f),
+                        placeholder = { Text(stringResource(R.string.chat_input_hint), color = TextMuted) },
+                        shape = RoundedCornerShape(24.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = PrimaryColor,
+                            unfocusedBorderColor = BorderColor,
+                            focusedContainerColor = SurfaceColor,
+                            unfocusedContainerColor = SurfaceColor,
+                            cursorColor = PrimaryColor,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary,
+                        ),
+                        singleLine = true,
+                        textStyle = TextStyle(fontSize = 14.sp),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                        keyboardActions = KeyboardActions(onSend = { send() }),
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    // 运行中=红色停止键(可中断);否则=发送键(无输入时淡化)
+                    val btnActive = isRunning || inputText.isNotBlank()
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .background(
+                                (if (isRunning) Color(0xFFFF453B) else PrimaryColor)
+                                    .copy(alpha = if (btnActive) 1f else 0.35f),
+                                RoundedCornerShape(20.dp)
+                            )
+                            .clickable(onClick = if (isRunning) stop else send),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(if (isRunning) "■" else "➤", color = Color.White, fontSize = 16.sp)
+                    }
                 }
             }
             }
