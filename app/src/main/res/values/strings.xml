@@ -149,6 +149,10 @@ For these, install Shizuku — a safe, open-source helper.</string>
     <string name="llm_config_model_name_hint">e.g. gpt-4o, gpt-4o-mini, claude-3-5-sonnet</string>
     <string name="llm_config_saved">LLM configuration saved</string>
     <string name="llm_config_api_key_required">Please enter API Key</string>
+    <string name="vision_config_section">Vision model (look at screen)</string>
+    <string name="vision_config_tip">Used by the look_at_screen tool when the accessibility tree is not enough (games, canvas, images). Leave all three empty to reuse the main model above (only works if it accepts images).</string>
+    <string name="vision_config_base_url_hint">e.g. https://dashscope.aliyuncs.com/compatible-mode/v1</string>
+    <string name="vision_config_model_name_hint">e.g. qwen-vl-max, gpt-4o, glm-4v</string>
     <string name="menu_llm_config">LLM Config</string>
 
     <!-- Settings Menu -->

@@ -66,6 +66,7 @@ object ToolRegistry {
 
     private fun registerCommonTools() {
         register(GetScreenInfoTool())
+        register(LookAtScreenTool())
         register(FindNodeInfoTool())
         register(InputTextTool())
         register(SystemKeyTool())

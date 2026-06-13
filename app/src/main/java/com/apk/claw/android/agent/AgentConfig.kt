@@ -37,6 +37,12 @@ data class AgentConfig(
   不要凭记忆假设屏幕状态，操作前必须先调用 get_screen_info 了解当前屏幕。
   如果刚执行了确定性操作（如 system_key(key="back")、system_key(key="home")），可以跳过观察直接行动。
 
+规则 1.5：树不够用时改用视觉。
+  如果 get_screen_info 返回为空 / 只有少量无意义节点 / 明显是游戏画面、Canvas 自绘界面、
+  图片或视频内容，或者你需要核对视觉状态（颜色、图标、进度条、验证码样式等），
+  调用 look_at_screen(question="...") 让视觉模型看屏并返回元素的大致像素坐标，再据此 tap/swipe。
+  注意：look_at_screen 较慢且更贵，能用 get_screen_info 解决就不要用它。
+
 规则 2：合理组合工具调用。
   - 确定性操作可以在一轮中并行调用多个工具（如 get_screen_info + tap、open_app + wait）
   - 结果不确定的操作（如不知道点击后会发生什么）一次只做一个，执行后验证效果再决定下一步

@@ -27,10 +27,16 @@ class LlmConfigActivity : BaseActivity() {
         val etApiKey = findViewById<EditText>(R.id.etApiKey)
         val etBaseUrl = findViewById<EditText>(R.id.etBaseUrl)
         val etModelName = findViewById<EditText>(R.id.etModelName)
+        val etVisionApiKey = findViewById<EditText>(R.id.etVisionApiKey)
+        val etVisionBaseUrl = findViewById<EditText>(R.id.etVisionBaseUrl)
+        val etVisionModelName = findViewById<EditText>(R.id.etVisionModelName)
 
         etApiKey.setText(KVUtils.getLlmApiKey())
         etBaseUrl.setText(KVUtils.getLlmBaseUrl())
         etModelName.setText(KVUtils.getLlmModelName())
+        etVisionApiKey.setText(KVUtils.getVisionApiKey())
+        etVisionBaseUrl.setText(KVUtils.getVisionBaseUrl())
+        etVisionModelName.setText(KVUtils.getVisionModelName())
 
         findViewById<KButton>(R.id.btnSave).setOnClickListener {
             val apiKey = etApiKey.text.toString().trim()
@@ -45,6 +51,10 @@ class LlmConfigActivity : BaseActivity() {
             KVUtils.setLlmApiKey(apiKey)
             KVUtils.setLlmBaseUrl(baseUrl)
             KVUtils.setLlmModelName(modelName)
+            // 视觉模型（可选，留空则复用主模型）
+            KVUtils.setVisionApiKey(etVisionApiKey.text.toString().trim())
+            KVUtils.setVisionBaseUrl(etVisionBaseUrl.text.toString().trim())
+            KVUtils.setVisionModelName(etVisionModelName.text.toString().trim())
 
             ClawApplication.appViewModelInstance.updateAgentConfig()
             ClawApplication.appViewModelInstance.initAgent()

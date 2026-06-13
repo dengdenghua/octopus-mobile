@@ -228,6 +228,20 @@ object KVUtils {
     /** 是否已配置 LLM（API Key 非空即视为已配置） */
     fun hasLlmConfig(): Boolean = getLlmApiKey().isNotEmpty()
 
+    // ==================== 视觉模型配置（look_at_screen 用） ====================
+    // 与主对话模型分开：主模型(deepseek-chat)纯文本省钱，看屏时才走视觉模型(Qwen-VL/GPT-4o/GLM-4V)。
+    // 三项留空则回退复用主模型配置（需主模型本身支持图片输入）。
+    private const val KEY_VISION_API_KEY = "KEY_VISION_API_KEY"
+    private const val KEY_VISION_BASE_URL = "KEY_VISION_BASE_URL"
+    private const val KEY_VISION_MODEL_NAME = "KEY_VISION_MODEL_NAME"
+
+    fun getVisionApiKey(): String = getString(KEY_VISION_API_KEY, "")
+    fun setVisionApiKey(value: String) = putString(KEY_VISION_API_KEY, value)
+    fun getVisionBaseUrl(): String = getString(KEY_VISION_BASE_URL, "")
+    fun setVisionBaseUrl(value: String) = putString(KEY_VISION_BASE_URL, value)
+    fun getVisionModelName(): String = getString(KEY_VISION_MODEL_NAME, "")
+    fun setVisionModelName(value: String) = putString(KEY_VISION_MODEL_NAME, value)
+
     // ── Octopus Mobile 方案 F 便捷方法 ──
     fun getOctopusRpcUrl(): String = getString(KEY_OCTOPUS_RPC_URL, "")
     fun setOctopusRpcUrl(value: String) = putString(KEY_OCTOPUS_RPC_URL, value)

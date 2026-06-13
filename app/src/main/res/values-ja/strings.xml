@@ -134,6 +134,10 @@
     <string name="llm_config_model_name_hint">例: gpt-4o、gpt-4o-mini、claude-3-5-sonnet</string>
     <string name="llm_config_saved">LLM設定を保存しました</string>
     <string name="llm_config_api_key_required">API Keyを入力してください</string>
+    <string name="vision_config_section">ビジョンモデル（画面を見る）</string>
+    <string name="vision_config_tip">アクセシビリティ情報が不十分なとき（ゲーム、Canvas、画像）に look_at_screen ツールが使用します。3つとも空欄なら上のメインモデルを再利用します（画像対応モデルのみ）。</string>
+    <string name="vision_config_base_url_hint">例: https://dashscope.aliyuncs.com/compatible-mode/v1</string>
+    <string name="vision_config_model_name_hint">例: qwen-vl-max、gpt-4o、glm-4v</string>
     <string name="menu_llm_config">LLM設定</string>
 
     <!-- 設定メニュー -->
