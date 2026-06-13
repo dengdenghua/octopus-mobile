@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<style>
+  html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:sans-serif;color:#fff}
+  #bar{position:fixed;top:0;left:0;right:0;height:40px;background:rgba(0,0,0,.82);display:flex;
+       align-items:center;gap:14px;padding:0 12px;z-index:10;font-size:14px}
+  #bar .sp{flex:1}#bar span{cursor:pointer}
+  #wrap{position:absolute;top:50%;left:0;right:0;transform:translateY(-50%);width:100%;aspect-ratio:16/9}
+  video{width:100%;height:100%;object-fit:fill;background:#111;touch-action:none;display:block}
+  #status{position:fixed;top:50%;left:0;right:0;transform:translateY(-50%);text-align:center;font-size:14px;z-index:5;padding:0 20px}
+  #kb{position:fixed;bottom:10px;left:10px;right:10px;z-index:10;display:none}
+  #kb input{width:70%;font-size:16px;padding:8px;border-radius:6px;border:none}
+  #kb button{font-size:15px;padding:8px 10px}
+</style>
+</head>
+<body>
+  <div id="bar">
+    <span onclick="Android.back()">‹ 返回</span>
+    <span>🖥 远程桌面 (WebRTC)</span>
+    <span class="sp"></span>
+    <span id="st" style="color:#8AB4F8;font-size:11px">○ 连接中</span>
+    <span onclick="key('backspace')">⌫</span>
+    <span onclick="key('esc')">Esc</span>
+    <span onclick="toggleKb()">⌨</span>
+  </div>
+  <div id="wrap"><video id="v" autoplay playsinline muted></video></div>
+  <div id="status">正在和母体建立 WebRTC…<br>（确认母体侧 pc_remote_webrtc.py 已运行；跨网需 STUN/TURN 可达）</div>
+  <div id="kb"><input id="kbi" placeholder="输入文字到 PC"><button onclick="sendType()">发送</button><button onclick="key('enter')">回车</button></div>
+<script>
+  let pc=null, dc=null;
+  const video=document.getElementById('v'), st=document.getElementById('st'), statusEl=document.getElementById('status');
+
+  function start(){
+    pc=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]});
+    pc.ontrack=e=>{ video.srcObject=e.streams[0]; statusEl.style.display='none'; };
+    pc.ondatachannel=e=>{ dc=e.channel; };
+    pc.onconnectionstatechange=()=>{ st.textContent = pc.connectionState==='connected' ? '● P2P 已连' : '○ '+pc.connectionState; };
+    Android.request();           // 让原生发 webrtc/request
+  }
+
+  // 母体 offer 进来（原生 evaluateJavascript 调用）
+  window.onOffer=async function(sdp){
+    try{
+      await pc.setRemoteDescription({type:'offer',sdp:sdp});
+      const ans=await pc.createAnswer();
+      await pc.setLocalDescription(ans);
+      await new Promise(r=>{
+        if(pc.iceGatheringState==='complete')return r();
+        pc.addEventListener('icegatheringstatechange',()=>{ if(pc.iceGatheringState==='complete')r(); });
+        setTimeout(r,5000);
+      });
+      Android.answer(pc.localDescription.sdp);
+      st.textContent='○ 已应答';
+    }catch(err){ statusEl.textContent='应答失败: '+err; }
+  };
+
+  function send(o){ if(dc&&dc.readyState==='open') dc.send(JSON.stringify(o)); }
+  function key(k){ send({action:'key',text:k}); }
+  function toggleKb(){ const k=document.getElementById('kb'); k.style.display=(k.style.display==='block')?'none':'block'; }
+  function sendType(){ const i=document.getElementById('kbi'); if(i.value)send({action:'type',text:i.value}); i.value=''; }
+
+  // 触摸：单指=点击/长按右键/拖拽；双指纵滑=滚动
+  function norm(t){ const r=video.getBoundingClientRect();
+    return {x:Math.min(1,Math.max(0,(t.clientX-r.left)/r.width)), y:Math.min(1,Math.max(0,(t.clientY-r.top)/r.height))}; }
+  let downN=null,lastN=null,dragging=false,moved=false,twoF=false,lastCy=0,lpTimer=null;
+  video.addEventListener('touchstart',e=>{
+    if(e.touches.length>=2){ twoF=true; lastCy=(e.touches[0].clientY+e.touches[1].clientY)/2; if(lpTimer){clearTimeout(lpTimer);lpTimer=null;} return; }
+    twoF=false; downN=norm(e.touches[0]); lastN=downN; moved=false; dragging=false;
+    lpTimer=setTimeout(()=>{ if(!moved&&downN) send({action:'rightclick',x:downN.x,y:downN.y}); lpTimer=null; },550);
+  },{passive:true});
+  video.addEventListener('touchmove',e=>{
+    if(twoF&&e.touches.length>=2){ const cy=(e.touches[0].clientY+e.touches[1].clientY)/2; const dy=cy-lastCy; lastCy=cy;
+      const r=video.getBoundingClientRect(); send({action:'scroll',x:0,y:dy/r.height}); return; }
+    const n=norm(e.touches[0]); lastN=n;
+    if(!dragging && (Math.abs(n.x-downN.x)>0.02||Math.abs(n.y-downN.y)>0.02)){ dragging=true; moved=true; if(lpTimer){clearTimeout(lpTimer);lpTimer=null;} send({action:'down',x:downN.x,y:downN.y}); }
+    if(dragging) send({action:'move',x:n.x,y:n.y});
+  },{passive:true});
+  video.addEventListener('touchend',e=>{
+    if(lpTimer){clearTimeout(lpTimer);lpTimer=null;}
+    if(twoF){ twoF=false; return; }
+    if(dragging){ send({action:'up',x:(lastN||downN).x,y:(lastN||downN).y}); }
+    else if(downN&&!moved){ send({action:'tap',x:downN.x,y:downN.y}); }
+    downN=null; dragging=false;
+  },{passive:true});
+
+  start();
+</script>
+</body>
+</html>

@@ -178,7 +178,20 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
                 context.startActivity(Intent(context, com.apk.claw.android.ui.featurescreens.PcRemoteActivity::class.java))
             }) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("看 PC 屏幕 + 触控/键盘控制（需母体在线）", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                    Text("看 PC 屏幕 + 触控/键盘控制（H.264/WS,同局域网）", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                    Spacer(modifier = Modifier.weight(1f))
+                    Text("›", fontSize = 18.sp, color = TextMuted)
+                }
+            }
+        }
+
+        // 母体远程桌面（WebRTC / WebView,P2P 跨网低延迟）
+        item {
+            SettingsCard("🖥 远程桌面 (WebRTC)", onClick = {
+                context.startActivity(Intent(context, com.apk.claw.android.ui.featurescreens.PcRemoteWebrtcActivity::class.java))
+            }) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("P2P 真连(WebView/STUN 打洞,跨网,需母体 pc_remote_webrtc.py)", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
                     Spacer(modifier = Modifier.weight(1f))
                     Text("›", fontSize = 18.sp, color = TextMuted)
                 }
