@@ -7,7 +7,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -16,11 +15,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.apk.claw.android.media.CloudDrive
-import com.apk.claw.android.media.CloudDriveManager
-import com.apk.claw.android.media.MediaFile
-import com.apk.claw.android.media.MediaType
+import com.apk.claw.android.media.MediaScanner
 import com.apk.claw.android.media.PlayerActivity
+import com.apk.claw.android.media.WebDAVEntry
+import com.apk.claw.android.media.WebDAVScanner
+import com.apk.claw.android.media.WebDavMounts
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -33,115 +32,115 @@ class CloudDriveActivity : ComponentActivity() {
     }
 }
 
+private fun isMedia(name: String): Boolean {
+    val ext = name.substringAfterLast('.', "").lowercase()
+    return ext in MediaScanner.VIDEO_EXTENSIONS || ext in MediaScanner.AUDIO_EXTENSIONS
+}
+
 @Composable
 fun CloudDriveScreen(onBack: () -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
-    var running by remember { mutableStateOf(runCatching { CloudDriveManager.isRunning() }.getOrDefault(false)) }
-    var drives by remember { mutableStateOf<List<CloudDrive>?>(null) }
-    var selected by remember { mutableStateOf<CloudDrive?>(null) }
-    var files by remember { mutableStateOf<List<MediaFile>?>(null) }
+    var mounts by remember { mutableStateOf(WebDavMounts.all()) }
+    var selected by remember { mutableStateOf<WebDavMounts.Mount?>(null) }
+    var pathStack by remember { mutableStateOf(listOf<String>()) }
+    var entries by remember { mutableStateOf<List<WebDAVEntry>?>(null) }
     var busy by remember { mutableStateOf(false) }
-    var toast by remember { mutableStateOf<String?>(null) }
-    var showCfg by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var showAdd by remember { mutableStateOf(false) }
 
-    fun loadDrives() {
+    fun load(m: WebDavMounts.Mount, path: String) {
         scope.launch {
-            busy = true
-            drives = withContext(Dispatchers.IO) { runCatching { CloudDriveManager.listMountedDrives() }.getOrDefault(emptyList()) }
+            busy = true; error = null; entries = null
+            val list = withContext(Dispatchers.IO) {
+                runCatching { WebDAVScanner.listDirectory(m.baseUrl.trimEnd('/'), path, m.username, m.password) }
+                    .getOrElse { emptyList() }
+            }
+            entries = list
+            if (list.isEmpty()) error = "目录为空，或服务器不可达 / 认证失败"
             busy = false
         }
     }
-    LaunchedEffect(running) { if (running) loadDrives() }
-
-    fun openDrive(d: CloudDrive) {
-        selected = d
-        files = null
-        scope.launch {
-            files = withContext(Dispatchers.IO) { runCatching { CloudDriveManager.listFiles(d.name, "/") }.getOrDefault(emptyList()) }
-        }
+    fun open(m: WebDavMounts.Mount) {
+        selected = m; pathStack = listOf(m.rootPath.ifBlank { "/" }); load(m, pathStack.last())
+    }
+    fun enter(href: String) {
+        pathStack = pathStack + href; load(selected!!, href)
+    }
+    fun up() {
+        if (pathStack.size > 1) { pathStack = pathStack.dropLast(1); load(selected!!, pathStack.last()) }
+        else { selected = null; entries = null }
     }
 
     FeatureScaffold(
-        title = if (selected == null) "网盘" else selected!!.name,
-        onBack = { if (selected != null) { selected = null } else onBack() },
+        title = selected?.name ?: "网盘 / NAS",
+        onBack = { if (selected != null) up() else onBack() },
         action = {
-            if (selected == null) Text("配置", color = FPrimary, fontSize = 14.sp, modifier = Modifier.clickable { showCfg = true }.padding(8.dp))
+            if (selected == null) Text("＋ 添加", color = FPrimary, fontSize = 14.sp,
+                modifier = Modifier.clickable { showAdd = true }.padding(8.dp))
         },
     ) {
         if (selected == null) {
-            // 状态卡
-            FCard {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(if (running) "服务运行中" else "服务未启动", color = FText, fontSize = 14.sp, modifier = Modifier.weight(1f))
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = if (running) FWarning.copy(alpha = 0.2f) else FPrimary.copy(alpha = 0.2f),
-                        modifier = Modifier.clickable {
-                            scope.launch {
-                                busy = true
-                                val msg = withContext(Dispatchers.IO) {
-                                    runCatching { if (running) CloudDriveManager.stop() else CloudDriveManager.start() }.getOrDefault("操作失败")
-                                }
-                                running = runCatching { CloudDriveManager.isRunning() }.getOrDefault(false)
-                                toast = msg
-                                busy = false
-                            }
-                        },
-                    ) {
-                        Text(if (running) "停止" else "启动", color = if (running) FWarning else FPrimary,
-                            fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp))
-                    }
-                }
-                Spacer(Modifier.height(4.dp))
-                Text(runCatching { CloudDriveManager.getServerUrl() }.getOrDefault("—"), color = FMuted, fontSize = 10.sp)
-            }
-            toast?.let { Text(it, color = FPrimary, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)) }
-
-            when {
-                busy && drives == null -> FEmpty("加载中…")
-                drives.isNullOrEmpty() -> FEmpty("没有挂载的网盘。点右上角「配置」填入 WebDAV 服务器地址与账号后启动。")
-                else -> LazyColumn(modifier = Modifier.weight(1f)) {
-                    item { FSectionTitle("已挂载 (${drives!!.size})") }
-                    items(drives!!, key = { it.name }) { d ->
+            if (mounts.isEmpty()) {
+                FEmpty("还没有挂载点。点右上角「＋ 添加」填入 NAS/网盘的 WebDAV 地址（群晖/Nextcloud/坚果云/AList 等都支持），即可浏览与播放。")
+            } else {
+                LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(vertical = 6.dp)) {
+                    items(mounts, key = { it.id }) { m ->
                         FCard {
-                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { openDrive(d) }) {
-                                Text("☁️", fontSize = 18.sp)
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { open(m) }) {
+                                Text("🗄️", fontSize = 18.sp)
                                 Spacer(Modifier.width(10.dp))
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text(d.name, color = FText, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                                    Text(d.url, color = FMuted, fontSize = 10.sp, maxLines = 1)
+                                    Text(m.name, color = FText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                                    Text(m.baseUrl, color = FMuted, fontSize = 10.sp, maxLines = 1)
                                 }
-                                Text("›", color = FMuted, fontSize = 18.sp)
+                                Text("✕", color = FMuted, fontSize = 14.sp,
+                                    modifier = Modifier.clickable { WebDavMounts.remove(m.id); mounts = WebDavMounts.all() }.padding(6.dp))
                             }
                         }
                     }
                 }
             }
         } else {
-            // 文件列表
-            val list = files
+            // 路径面包屑
+            Text(pathStack.last(), color = FMuted, fontSize = 11.sp, maxLines = 1,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+            val list = entries
             when {
-                list == null -> FEmpty("加载文件…")
-                list.isEmpty() -> FEmpty("此网盘没有可播放的媒体文件")
+                busy || list == null -> FEmpty("加载中…")
+                list.isEmpty() -> FEmpty(error ?: "目录为空")
                 else -> LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(vertical = 6.dp)) {
-                    items(list, key = { it.path }) { f ->
+                    val folders = list.filter { it.isDirectory }
+                    val files = list.filter { !it.isDirectory }
+                    items(folders, key = { "d" + it.href }) { e ->
+                        FCard {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { enter(e.href) }) {
+                                Text("📁", fontSize = 16.sp)
+                                Spacer(Modifier.width(10.dp))
+                                Text(e.name, color = FText, fontSize = 14.sp, modifier = Modifier.weight(1f), maxLines = 1)
+                                Text("›", color = FMuted, fontSize = 18.sp)
+                            }
+                        }
+                    }
+                    items(files, key = { "f" + it.href }) { e ->
+                        val playable = isMedia(e.name)
                         FCard {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.fillMaxWidth().clickable {
-                                    if (f.type == MediaType.VIDEO || f.type == MediaType.AUDIO) {
-                                        val url = runCatching { CloudDriveManager.buildPlayUrl(selected!!.name, f.path) }.getOrNull()
-                                        if (url != null) runCatching { ctx.startActivity(PlayerActivity.intent(ctx, url, null, 0, f.name)) }
-                                    }
+                                modifier = Modifier.fillMaxWidth().let {
+                                    if (playable) it.clickable {
+                                        val url = WebDavMounts.playUrl(selected!!, e.href)
+                                        runCatching { ctx.startActivity(PlayerActivity.intent(ctx, url, null, 0, e.name)) }
+                                    } else it
                                 },
                             ) {
-                                Text(if (f.type == MediaType.VIDEO) "🎬" else if (f.type == MediaType.AUDIO) "🎵" else "📄", fontSize = 16.sp)
+                                Text(if (playable) "🎬" else "📄", fontSize = 16.sp)
                                 Spacer(Modifier.width(10.dp))
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text(f.name, color = FText, fontSize = 14.sp, maxLines = 1)
-                                    Text(CloudDriveManager.let { runCatching { com.apk.claw.android.media.MediaScanner.formatSize(f.sizeBytes) }.getOrDefault("") }, color = FMuted, fontSize = 10.sp)
+                                    Text(e.name, color = if (playable) FText else FMuted, fontSize = 14.sp, maxLines = 1)
+                                    Text(MediaScanner.formatSize(e.size), color = FMuted, fontSize = 10.sp)
                                 }
+                                if (playable) Text("▶", color = FPrimary, fontSize = 14.sp)
                             }
                         }
                     }
@@ -150,32 +149,38 @@ fun CloudDriveScreen(onBack: () -> Unit) {
         }
     }
 
-    if (showCfg) {
-        CloudConfigDialog(
-            initialUrl = runCatching { CloudDriveManager.getServerUrl() }.getOrDefault(""),
-            initialUser = runCatching { CloudDriveManager.getUsername() }.getOrDefault(""),
-            onDismiss = { showCfg = false },
-            onSave = { url, user, pass ->
-                runCatching {
-                    if (url.isNotBlank()) CloudDriveManager.setServerUrl(url.trim())
-                    CloudDriveManager.setCredentials(user.trim(), pass)
+    if (showAdd) {
+        AddMountDialog(
+            onDismiss = { showAdd = false },
+            onSave = { name, url, path, user, pass ->
+                if (url.isNotBlank()) {
+                    WebDavMounts.add(
+                        WebDavMounts.Mount(
+                            id = "wd_" + System.currentTimeMillis(),
+                            name = name.ifBlank { url },
+                            baseUrl = url.trim(),
+                            rootPath = path.ifBlank { "/" }.trim(),
+                            username = user.trim(),
+                            password = pass,
+                        )
+                    )
+                    mounts = WebDavMounts.all()
                 }
-                showCfg = false
-                toast = "已保存配置，点「启动」连接"
+                showAdd = false
             },
         )
     }
 }
 
 @Composable
-private fun CloudConfigDialog(
-    initialUrl: String,
-    initialUser: String,
+private fun AddMountDialog(
     onDismiss: () -> Unit,
-    onSave: (String, String, String) -> Unit,
+    onSave: (String, String, String, String, String) -> Unit,
 ) {
-    var url by remember { mutableStateOf(initialUrl) }
-    var user by remember { mutableStateOf(initialUser) }
+    var name by remember { mutableStateOf("") }
+    var url by remember { mutableStateOf("") }
+    var path by remember { mutableStateOf("/") }
+    var user by remember { mutableStateOf("") }
     var pass by remember { mutableStateOf("") }
     val colors = OutlinedTextFieldDefaults.colors(
         focusedBorderColor = FPrimary, unfocusedBorderColor = FBorder,
@@ -184,20 +189,26 @@ private fun CloudConfigDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = FSurface,
-        title = { Text("WebDAV 配置", color = FText, fontSize = 16.sp) },
+        title = { Text("添加 WebDAV 挂载", color = FText, fontSize = 16.sp) },
         text = {
             Column {
+                OutlinedTextField(name, { name = it }, modifier = Modifier.fillMaxWidth(), singleLine = true,
+                    label = { Text("名称", color = FMuted) }, colors = colors)
+                Spacer(Modifier.height(8.dp))
                 OutlinedTextField(url, { url = it }, modifier = Modifier.fillMaxWidth(), singleLine = true,
                     placeholder = { Text("http://192.168.1.10:5005", color = FMuted) }, label = { Text("服务器地址", color = FMuted) }, colors = colors)
                 Spacer(Modifier.height(8.dp))
+                OutlinedTextField(path, { path = it }, modifier = Modifier.fillMaxWidth(), singleLine = true,
+                    label = { Text("起始路径（如 / 或 /dav）", color = FMuted) }, colors = colors)
+                Spacer(Modifier.height(8.dp))
                 OutlinedTextField(user, { user = it }, modifier = Modifier.fillMaxWidth(), singleLine = true,
-                    label = { Text("用户名", color = FMuted) }, colors = colors)
+                    label = { Text("用户名（可选）", color = FMuted) }, colors = colors)
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(pass, { pass = it }, modifier = Modifier.fillMaxWidth(), singleLine = true,
-                    label = { Text("密码", color = FMuted) }, colors = colors)
+                    label = { Text("密码（可选）", color = FMuted) }, colors = colors)
             }
         },
-        confirmButton = { Text("保存", color = FPrimary, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { onSave(url, user, pass) }.padding(8.dp)) },
+        confirmButton = { Text("保存", color = FPrimary, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { onSave(name, url, path, user, pass) }.padding(8.dp)) },
         dismissButton = { Text("取消", color = FMuted, modifier = Modifier.clickable(onClick = onDismiss).padding(8.dp)) },
     )
 }

@@ -123,10 +123,13 @@ object WebDAVScanner {
     private fun parseMultiStatus(xml: String, requestPath: String): List<WebDAVEntry> {
         val entries = mutableListOf<WebDAVEntry>()
 
-        // 分割 <d:response> 块
+        // 命名空间前缀无关 + 大小写无关：不同服务器用 d:/D:/ns0: 等前缀
+        val ci = setOf(RegexOption.IGNORE_CASE)
+        fun tag(name: String) = Regex("<(?:\\w+:)?$name>(.*?)</(?:\\w+:)?$name>", ci + RegexOption.DOT_MATCHES_ALL)
+
         val responsePattern = Regex(
-            "<d:response>(.*?)</d:response>",
-            RegexOption.DOT_MATCHES_ALL
+            "<(?:\\w+:)?response>(.*?)</(?:\\w+:)?response>",
+            setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE)
         )
         val responses = responsePattern.findAll(xml)
 
@@ -134,8 +137,8 @@ object WebDAVScanner {
             val block = response.groupValues[1]
 
             // 提取 href（URL 编码的路径）
-            val href = Regex("<d:href>(.*?)</d:href>").find(block)
-                ?.groupValues?.get(1)
+            val href = tag("href").find(block)
+                ?.groupValues?.get(1)?.trim()
                 ?.let { java.net.URLDecoder.decode(it, "UTF-8") }
                 ?: continue
 
@@ -145,22 +148,19 @@ object WebDAVScanner {
             if (normalizedHref == normalizedRequest) continue
 
             // 提取 displayname
-            val displayName = Regex("<d:displayname>(.*?)</d:displayname>").find(block)
-                ?.groupValues?.get(1)
-                ?: href.substringAfterLast('/').trimEnd('/')
+            val displayName = tag("displayname").find(block)
+                ?.groupValues?.get(1)?.trim()?.takeIf { it.isNotEmpty() }
+                ?: href.trimEnd('/').substringAfterLast('/')
 
             // 提取 contentlength（文件大小）
-            val sizeStr = Regex("<d:getcontentlength>(.*?)</d:getcontentlength>").find(block)
-                ?.groupValues?.get(1)
+            val sizeStr = tag("getcontentlength").find(block)?.groupValues?.get(1)?.trim()
             val size = sizeStr?.toLongOrNull() ?: 0
 
             // 提取 lastmodified
-            val lastModified = Regex("<d:getlastmodified>(.*?)</d:getlastmodified>").find(block)
-                ?.groupValues?.get(1)
-                ?: ""
+            val lastModified = tag("getlastmodified").find(block)?.groupValues?.get(1)?.trim() ?: ""
 
             // 判断是否为目录（resourcetype 包含 collection）
-            val isDirectory = block.contains("<d:collection")
+            val isDirectory = block.contains("collection", ignoreCase = true)
 
             if (displayName.isNotEmpty()) {
                 entries.add(WebDAVEntry(
