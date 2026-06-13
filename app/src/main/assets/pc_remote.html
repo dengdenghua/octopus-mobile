@@ -29,19 +29,45 @@
   <div id="status">正在和母体建立 WebRTC…<br>（确认母体侧 pc_remote_webrtc.py 已运行；跨网需 STUN/TURN 可达）</div>
   <div id="kb"><input id="kbi" placeholder="输入文字到 PC"><button onclick="sendType()">发送</button><button onclick="key('enter')">回车</button></div>
 <script>
-  let pc=null, dc=null;
+  let pc=null, dc=null, attempt=0, connectTimer=null;
+  const MAX_RETRY=5;
+  // 多个 STUN:WebRTC 并行查、谁通用谁(降级切换);死服务器不要放(会拖慢收集)。
+  // 对称 NAT 必通需 TURN:加 {urls:'turn:host:3478',username:'u',credential:'p'} 即可。
+  const ICE=[
+    {urls:'stun:stun.cloudflare.com:3478'},
+    {urls:'stun:stun.chat.bilibili.com:3478'},
+    {urls:'stun:stun.l.google.com:19302'},
+    {urls:'stun:stun.nextcloud.com:3478'},
+  ];
   const video=document.getElementById('v'), st=document.getElementById('st'), statusEl=document.getElementById('status');
 
   function start(){
-    pc=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]});
+    attempt++;
+    pc=new RTCPeerConnection({iceServers:ICE});
     pc.ontrack=e=>{ video.srcObject=e.streams[0]; statusEl.style.display='none'; };
     pc.ondatachannel=e=>{ dc=e.channel; };
-    pc.onconnectionstatechange=()=>{ st.textContent = pc.connectionState==='connected' ? '● P2P 已连' : '○ '+pc.connectionState; };
+    pc.onconnectionstatechange=()=>{
+      const s=pc.connectionState;
+      st.textContent = s==='connected' ? '● P2P 已连' : '○ '+s;
+      if(s==='connected'){ if(connectTimer)clearTimeout(connectTimer); attempt=0; statusEl.style.display='none'; }
+      else if(s==='failed'){ retry('连接失败'); }
+    };
     Android.request();           // 让原生发 webrtc/request
+    if(connectTimer)clearTimeout(connectTimer);
+    connectTimer=setTimeout(()=>{ if(!pc||pc.connectionState!=='connected') retry('超时'); }, 15000);
+  }
+
+  function retry(reason){
+    if(connectTimer){clearTimeout(connectTimer);connectTimer=null;}
+    if(attempt>=MAX_RETRY){ statusEl.style.display='block'; statusEl.textContent='连接失败('+reason+'),已重试 '+attempt+' 次。检查母体是否运行/网络,或需要 TURN。'; return; }
+    statusEl.style.display='block'; statusEl.textContent='重连中('+reason+')… 第 '+attempt+' 次(切换 STUN 重试)';
+    try{ if(pc) pc.close(); }catch(e){} pc=null; dc=null;
+    setTimeout(start, Math.min(1500*attempt, 5000));
   }
 
   // 母体 offer 进来（原生 evaluateJavascript 调用）
   window.onOffer=async function(sdp){
+    if(!pc) return;            // 重试间隙,等下一次 request 的 offer
     try{
       await pc.setRemoteDescription({type:'offer',sdp:sdp});
       const ans=await pc.createAnswer();
