@@ -78,6 +78,9 @@ object ToolRegistry {
         register(ClipboardTool())
         register(SendFileTool())
         register(FinishTool())
+        // 企业版 PM 编程接入(D①):未配置 octopus.pm.url 时工具会返回错误而非崩溃。
+        register(CreatePmTaskTool())
+        register(ListPmProjectsTool())
     }
 
     private fun registerTvTools() {
