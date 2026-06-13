@@ -126,6 +126,10 @@ class ConfigServer(
                 uri == "/api/devices/discover" && method == Method.POST -> handleDiscoverDevices()
                 uri == "/api/control/input" && method == Method.POST -> handleControlInput(session)
 
+                // 网页聊天:驱动同一个 Agent(双屏右侧对话用)
+                uri == "/api/agent/run" && method == Method.POST -> handleAgentRun(session)
+                uri == "/api/agent/events" && method == Method.GET -> handleAgentEvents(session)
+
                 // AI NAS 文件管理 API
                 uri == "/api/files/browse" && method == Method.GET -> handleFileBrowse(session)
                 uri == "/api/files/search" && method == Method.GET -> handleFileSearch(session)
@@ -167,6 +171,61 @@ class ConfigServer(
     private fun serveConsoleHtml(): Response {
         val html = context.assets.open("web/console.html").bufferedReader().use { it.readText() }
         return corsResponse(newFixedLengthResponse(Response.Status.OK, MIME_HTML, html))
+    }
+
+    /**
+     * 读取 POST JSON body 并修正中文乱码。
+     * NanoHTTPD 默认按 ISO-8859-1 把 body 读成字符串,UTF-8 中文会乱;按字节回转再以 UTF-8 解码修正。
+     */
+    private fun readJsonBody(session: IHTTPSession): JsonObject {
+        // 直接按 Content-Length 从原始输入流读字节,以 UTF-8 解码 —— 绕开 NanoHTTPD.parseBody
+        // 把 body 当 ASCII/ISO-8859-1 解码导致中文丢失的问题。
+        val raw = runCatching {
+            val len = session.headers["content-length"]?.toIntOrNull() ?: 0
+            if (len <= 0) return@runCatching "{}"
+            val buf = ByteArray(len)
+            var off = 0
+            while (off < len) {
+                val r = session.inputStream.read(buf, off, len - off)
+                if (r <= 0) break
+                off += r
+            }
+            String(buf, 0, off, Charsets.UTF_8)
+        }.getOrDefault("{}")
+        return runCatching { gson.fromJson(raw.ifBlank { "{}" }, JsonObject::class.java) }.getOrNull()
+            ?: gson.fromJson("{}", JsonObject::class.java)
+    }
+
+    /** POST /api/agent/run { "prompt": "..." } —— 网页发指令驱动 Agent。 */
+    private fun handleAgentRun(session: IHTTPSession): Response {
+        val params = readJsonBody(session)
+        val prompt = params.get("prompt")?.asString?.trim().orEmpty()
+        if (prompt.isEmpty()) {
+            return corsResponse(newFixedLengthResponse(Response.Status.BAD_REQUEST, MIME_JSON, """{"code":-1,"message":"empty prompt"}"""))
+        }
+        val ok = AgentWebBridge.run(prompt)
+        val json = gson.toJson(mapOf(
+            "code" to if (ok) 0 else -1,
+            "running" to AgentWebBridge.isRunning(),
+            "total" to AgentWebBridge.total(),
+            "message" to if (ok) "OK" else "busy_or_unconfigured",
+        ))
+        return corsResponse(newFixedLengthResponse(Response.Status.OK, MIME_JSON, json))
+    }
+
+    /** GET /api/agent/events?since=N —— 拉取从游标 N 起的增量事件(轮询)。 */
+    private fun handleAgentEvents(session: IHTTPSession): Response {
+        val since = session.parms["since"]?.toIntOrNull() ?: 0
+        val evs = AgentWebBridge.eventsSince(since).map {
+            mapOf("i" to it.i, "type" to it.type, "data" to it.data)
+        }
+        val json = gson.toJson(mapOf(
+            "code" to 0,
+            "running" to AgentWebBridge.isRunning(),
+            "total" to AgentWebBridge.total(),
+            "events" to evs,
+        ))
+        return corsResponse(newFixedLengthResponse(Response.Status.OK, MIME_JSON, json))
     }
 
     /** H5 页面调用此接口确认当前 token 是否有效 */
@@ -774,10 +833,7 @@ class ConfigServer(
      * ```
      */
     private fun handleControlInput(session: IHTTPSession): Response {
-        val body = mutableMapOf<String, String>()
-        session.parseBody(body)
-        val postData = body["postData"] ?: "{}"
-        val params = gson.fromJson(postData, JsonObject::class.java)
+        val params = readJsonBody(session)   // 修正中文乱码(text 输入)
 
         val action = params.get("action")?.asString
             ?: return corsResponse(newFixedLengthResponse(
