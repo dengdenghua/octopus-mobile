@@ -81,7 +81,9 @@ object VisionAnalyzer {
             apiKey = apiKey,
             model = model,
             temperature = 0.0,
-            maxTokens = 1024,
+            // 给足输出预算：推理型视觉模型(如小米 mimo-v2.5)会先写 reasoning_content 再写
+            // content，预算太小会把额度全耗在思考上、content 返回空。2048 实测足以产出最终答案。
+            maxTokens = 2048,
         )
     }
 

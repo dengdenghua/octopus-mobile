@@ -154,7 +154,10 @@ class LightweightLlmClient(
             val root = JSONObject(body)
             val choice = root.getJSONArray("choices").getJSONObject(0)
             val message = choice.getJSONObject("message")
+            // content 为空时回退到 reasoning_content：推理型模型(如 mimo-v2.5)有时只产出思考、
+            // content 留空，此时思考内容即为可用答案，强于直接丢空。
             val content = message.optString("content", "").takeIf { it.isNotEmpty() }
+                ?: message.optString("reasoning_content", "").takeIf { it.isNotEmpty() }
             val toolCalls = mutableListOf<ToolCall>()
 
             message.optJSONArray("tool_calls")?.let { tcArray ->
