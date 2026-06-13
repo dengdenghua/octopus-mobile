@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Octopus 应用图标(矢量章鱼)。被 launcher / 悬浮窗 / 闪屏 / 通知 / widget 复用。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 背景:圆角方块(深紫渐变感,用纯色) -->
+    <path
+        android:fillColor="#5E35B1"
+        android:pathData="M0,30 C0,13.4 13.4,0 30,0 L78,0 C94.6,0 108,13.4 108,30 L108,78 C108,94.6 94.6,108 78,108 L30,108 C13.4,108 0,94.6 0,78 Z" />
+
+    <!-- 章鱼身体 + 触手(头部圆顶 + 底部 6 个触手凸起) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M26,57 C26,35 38,19 54,19 C70,19 82,35 82,57 a4.6,4.6 0 0,1 -9.2,0 a4.6,4.6 0 0,1 -9.2,0 a4.6,4.6 0 0,1 -9.2,0 a4.6,4.6 0 0,1 -9.2,0 a4.6,4.6 0 0,1 -9.2,0 a4.6,4.6 0 0,1 -9.2,0 Z" />
+
+    <!-- 眼睛(紫色,挖在白色身体上) -->
+    <path
+        android:fillColor="#5E35B1"
+        android:pathData="M45.5,49 m-5.2,0 a5.2,5.2 0 1,0 10.4,0 a5.2,5.2 0 1,0 -10.4,0 Z" />
+    <path
+        android:fillColor="#5E35B1"
+        android:pathData="M62.5,49 m-5.2,0 a5.2,5.2 0 1,0 10.4,0 a5.2,5.2 0 1,0 -10.4,0 Z" />
+
+    <!-- 眼睛高光 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M47.5,47 m-1.8,0 a1.8,1.8 0 1,0 3.6,0 a1.8,1.8 0 1,0 -3.6,0 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M64.5,47 m-1.8,0 a1.8,1.8 0 1,0 3.6,0 a1.8,1.8 0 1,0 -3.6,0 Z" />
+</vector>
