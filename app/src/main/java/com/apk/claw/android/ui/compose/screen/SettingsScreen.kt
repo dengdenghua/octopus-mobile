@@ -172,6 +172,19 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
             }
         }
 
+        // 母体远程桌面（手机看 PC 屏 + 触控控制，类似 ToDesk）
+        item {
+            SettingsCard("🖥 母体远程桌面", onClick = {
+                context.startActivity(Intent(context, com.apk.claw.android.ui.featurescreens.PcRemoteActivity::class.java))
+            }) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("看 PC 屏幕 + 触控/键盘控制（需母体在线）", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                    Spacer(modifier = Modifier.weight(1f))
+                    Text("›", fontSize = 18.sp, color = TextMuted)
+                }
+            }
+        }
+
         // 消息渠道
         item {
             SettingsCard(stringResource(R.string.settings_section_channels), onClick = {

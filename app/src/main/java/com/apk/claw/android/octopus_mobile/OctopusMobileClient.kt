@@ -3,6 +3,7 @@ package com.apk.claw.android.octopus_mobile
 import android.util.Log
 import kotlinx.coroutines.*
 import okhttp3.*
+import okio.ByteString
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.ConcurrentHashMap
 
@@ -60,6 +61,9 @@ open class OctopusMobileClient(
     /** 工具执行回调：收到母体 tool/execute 后调用 */
     var onToolExecute: ((ToolCall) -> Unit)? = null
 
+    /** PC 屏幕帧回调：收到母体 push_pc_frame 推来的二进制帧后调用（远程桌面用） */
+    var onPcFrame: ((ByteArray) -> Unit)? = null
+
     /** 配置变更回调：收到母体 config/sync_pull_response 后调用 */
     var onConfigChange: ((String) -> Unit)? = null
 
@@ -108,6 +112,15 @@ open class OctopusMobileClient(
                 }
                 handleIncomingMessage(text)
                 onMessage?.invoke(text)
+            }
+
+            override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
+                // 二进制帧：母体 push_pc_frame 推来的 PC 屏幕帧（远程桌面）
+                if (state == ConnectionState.HELLO_SENT) {
+                    setState(ConnectionState.ONLINE)
+                    reconnectAttempts = 0
+                }
+                onPcFrame?.invoke(bytes.toByteArray())
             }
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
@@ -296,6 +309,31 @@ open class OctopusMobileClient(
             )
         }
         ws.send(Envelope.Request(method = "tool/result", params = params).toJson())
+    }
+
+    /** 订阅母体 PC 屏幕流（远程桌面：母体随后通过 push_pc_frame 推 JPEG 帧）。 */
+    fun subscribePcScreen() {
+        send(Envelope.Request(method = "pc_screen/subscribe", params = mapOf("tentacle_id" to tentacleId)))
+    }
+
+    /** 取消订阅母体 PC 屏幕流。 */
+    fun unsubscribePcScreen() {
+        send(Envelope.Request(method = "pc_screen/unsubscribe", params = mapOf("tentacle_id" to tentacleId)))
+    }
+
+    /**
+     * 远程控制母体（remote/input）。坐标为归一化 [0,1]，母体按其屏幕尺寸还原。
+     * @param action tap / move / down / up / type / key 等
+     */
+    fun sendRemoteInput(action: String, x: Float = 0f, y: Float = 0f, text: String? = null) {
+        val params = mutableMapOf<String, Any?>(
+            "action" to action,
+            "x" to x.toDouble(),
+            "y" to y.toDouble(),
+            "tentacle_id" to tentacleId,
+        )
+        if (text != null) params["text"] = text
+        send(Envelope.Request(method = "remote/input", params = params))
     }
 
     /**
