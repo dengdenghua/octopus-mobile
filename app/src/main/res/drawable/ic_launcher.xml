@@ -1,34 +1,56 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Octopus 应用图标(矢量章鱼)。被 launcher / 悬浮窗 / 闪屏 / 通知 / widget 复用。 -->
+<!-- Octopus 应用图标(矢量章鱼,渐变 + 圆润 + 表情)。
+     被 launcher / 悬浮窗 / 闪屏 / 通知 / widget 全局复用。 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- 背景:圆角方块(深紫渐变感,用纯色) -->
-    <path
-        android:fillColor="#5E35B1"
-        android:pathData="M0,30 C0,13.4 13.4,0 30,0 L78,0 C94.6,0 108,13.4 108,30 L108,78 C108,94.6 94.6,108 78,108 L30,108 C13.4,108 0,94.6 0,78 Z" />
+    <!-- 背景:对角紫色渐变圆角方块 -->
+    <path android:pathData="M0,30 C0,13.4 13.4,0 30,0 L78,0 C94.6,0 108,13.4 108,30 L108,78 C108,94.6 94.6,108 78,108 L30,108 C13.4,108 0,94.6 0,78 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="6" android:startY="6"
+                android:endX="102" android:endY="102"
+                android:startColor="#9B6BFF"
+                android:endColor="#4F2299" />
+        </aapt:attr>
+    </path>
 
-    <!-- 章鱼身体 + 触手(头部圆顶 + 底部 6 个触手凸起) -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M26,57 C26,35 38,19 54,19 C70,19 82,35 82,57 a4.6,4.6 0 0,1 -9.2,0 a4.6,4.6 0 0,1 -9.2,0 a4.6,4.6 0 0,1 -9.2,0 a4.6,4.6 0 0,1 -9.2,0 a4.6,4.6 0 0,1 -9.2,0 a4.6,4.6 0 0,1 -9.2,0 Z" />
+    <!-- 章鱼身体(圆润头 + 6 条饱满触手),白→淡紫微渐变增加立体感 -->
+    <path android:pathData="M24,60 C24,33 37,17 54,17 C71,17 84,33 84,60 a5,6 0 0,1 -10,0 a5,6 0 0,1 -10,0 a5,6 0 0,1 -10,0 a5,6 0 0,1 -10,0 a5,6 0 0,1 -10,0 a5,6 0 0,1 -10,0 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="54" android:startY="17"
+                android:endX="54" android:endY="68"
+                android:startColor="#FFFFFF"
+                android:endColor="#E7DBFF" />
+        </aapt:attr>
+    </path>
 
-    <!-- 眼睛(紫色,挖在白色身体上) -->
-    <path
-        android:fillColor="#5E35B1"
-        android:pathData="M45.5,49 m-5.2,0 a5.2,5.2 0 1,0 10.4,0 a5.2,5.2 0 1,0 -10.4,0 Z" />
-    <path
-        android:fillColor="#5E35B1"
-        android:pathData="M62.5,49 m-5.2,0 a5.2,5.2 0 1,0 10.4,0 a5.2,5.2 0 1,0 -10.4,0 Z" />
+    <!-- 腮红 -->
+    <path android:fillColor="#FFC0CF" android:fillAlpha="0.55"
+        android:pathData="M40,53 m-3.4,0 a3.4,3.4 0 1,0 6.8,0 a3.4,3.4 0 1,0 -6.8,0 Z" />
+    <path android:fillColor="#FFC0CF" android:fillAlpha="0.55"
+        android:pathData="M68,53 m-3.4,0 a3.4,3.4 0 1,0 6.8,0 a3.4,3.4 0 1,0 -6.8,0 Z" />
 
+    <!-- 眼睛(深紫大眼) -->
+    <path android:fillColor="#4F2299"
+        android:pathData="M46,45 m-6,0 a6,6 0 1,0 12,0 a6,6 0 1,0 -12,0 Z" />
+    <path android:fillColor="#4F2299"
+        android:pathData="M62,45 m-6,0 a6,6 0 1,0 12,0 a6,6 0 1,0 -12,0 Z" />
     <!-- 眼睛高光 -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M47.5,47 m-1.8,0 a1.8,1.8 0 1,0 3.6,0 a1.8,1.8 0 1,0 -3.6,0 Z" />
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M64.5,47 m-1.8,0 a1.8,1.8 0 1,0 3.6,0 a1.8,1.8 0 1,0 -3.6,0 Z" />
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M48,42.5 m-2.1,0 a2.1,2.1 0 1,0 4.2,0 a2.1,2.1 0 1,0 -4.2,0 Z" />
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M64,42.5 m-2.1,0 a2.1,2.1 0 1,0 4.2,0 a2.1,2.1 0 1,0 -4.2,0 Z" />
+
+    <!-- 微笑 -->
+    <path android:strokeColor="#4F2299" android:strokeWidth="2.4"
+        android:strokeLineCap="round" android:fillColor="#00000000"
+        android:pathData="M49,55 Q54,60 59,55" />
 </vector>
