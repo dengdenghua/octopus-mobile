@@ -5,6 +5,8 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.BasicTextField
@@ -86,6 +88,47 @@ private fun PcRemoteScreen(onBack: () -> Unit) {
                     onTap = { off -> sendAt(client, frame, boxSize, off.x, off.y, "tap") },
                     onLongPress = { off -> sendAt(client, frame, boxSize, off.x, off.y, "rightclick") },
                 )
+            }
+            .pointerInput(boxSize, frame) {
+                // 一指拖动=鼠标拖拽(down/move/up)；两指纵向滑动=滚动。tap/长按 由上面的探测器处理。
+                val slop = viewConfiguration.touchSlop
+                awaitEachGesture {
+                    val first = awaitFirstDown(requireUnconsumed = false)
+                    var twoFinger = false
+                    var dragEmitted = false
+                    var centroidInit = false
+                    var lastCentroidY = 0f
+                    var lastPos = first.position
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val pressed = event.changes.filter { it.pressed }
+                        if (pressed.isEmpty()) break
+                        if (pressed.size >= 2) {
+                            twoFinger = true
+                            val cy = pressed.map { it.position.y }.average().toFloat()
+                            if (!centroidInit) { lastCentroidY = cy; centroidInit = true }
+                            val dy = cy - lastCentroidY
+                            lastCentroidY = cy
+                            if (kotlin.math.abs(dy) > 1f && boxSize.height > 0) {
+                                client?.sendRemoteInput("scroll", 0f, dy / boxSize.height)
+                            }
+                            pressed.forEach { it.consume() }
+                        } else if (pressed.size == 1 && !twoFinger) {
+                            val p = pressed[0]
+                            val pos = p.position
+                            if (dragEmitted || (pos - first.position).getDistance() > slop) {
+                                if (!dragEmitted) {
+                                    sendDrag(client, frame, boxSize, first.position.x, first.position.y, "down")
+                                    dragEmitted = true
+                                }
+                                sendDrag(client, frame, boxSize, pos.x, pos.y, "move")
+                                p.consume()
+                                lastPos = pos
+                            }
+                        }
+                    }
+                    if (dragEmitted) sendDrag(client, frame, boxSize, lastPos.x, lastPos.y, "up")
+                }
             },
         contentAlignment = Alignment.Center,
     ) {
@@ -110,7 +153,11 @@ private fun PcRemoteScreen(onBack: () -> Unit) {
             Text("🖥 母体远程桌面", color = Color.White, fontSize = 14.sp)
             Spacer(Modifier.weight(1f))
             Text(if (frame != null) "▶ ${f?.width}×${f?.height}" else if (connected) "● 已连接" else "○ 未连接", color = Color(0xFF8AB4F8), fontSize = 11.sp)
-            Spacer(Modifier.width(14.dp))
+            Spacer(Modifier.width(12.dp))
+            Text("⌫", color = Color.White, fontSize = 16.sp, modifier = Modifier.pointerInput(Unit) { detectTapGestures { client?.sendRemoteInput("key", text = "backspace") } })
+            Spacer(Modifier.width(12.dp))
+            Text("Esc", color = Color.White, fontSize = 13.sp, modifier = Modifier.pointerInput(Unit) { detectTapGestures { client?.sendRemoteInput("key", text = "esc") } })
+            Spacer(Modifier.width(12.dp))
             Text("⌨", color = Color.White, fontSize = 18.sp, modifier = Modifier.pointerInput(Unit) { detectTapGestures { showKeyboard = true } })
         }
     }
@@ -153,6 +200,22 @@ private fun sendAt(
     val ox = (bw - dw) / 2f; val oy = (bh - dh) / 2f
     val nx = (tx - ox) / dw; val ny = (ty - oy) / dh
     if (nx in 0f..1f && ny in 0f..1f) client.sendRemoteInput(action, nx, ny)
+}
+
+/** 拖拽用：钳制到 [0,1] 并始终发送（避免 down 之后 move/up 落到画面外导致鼠标按住不放）。 */
+private fun sendDrag(
+    client: com.apk.claw.android.octopus_mobile.OctopusMobileClient?,
+    frame: ImageBitmap?, box: IntSize, tx: Float, ty: Float, action: String,
+) {
+    if (client == null || frame == null || box.width == 0 || box.height == 0) return
+    val bw = box.width.toFloat(); val bh = box.height.toFloat()
+    val iw = frame.width.toFloat(); val ih = frame.height.toFloat()
+    val scale = min(bw / iw, bh / ih)
+    val dw = iw * scale; val dh = ih * scale
+    val ox = (bw - dw) / 2f; val oy = (bh - dh) / 2f
+    val nx = ((tx - ox) / dw).coerceIn(0f, 1f)
+    val ny = ((ty - oy) / dh).coerceIn(0f, 1f)
+    client.sendRemoteInput(action, nx, ny)
 }
 
 /** 解析帧头（2B id长度 + 类型 + 标志 + id + 数据），JPEG/WebP 解码为 Bitmap。 */
