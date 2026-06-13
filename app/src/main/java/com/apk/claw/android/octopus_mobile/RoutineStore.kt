@@ -27,7 +27,13 @@ object RoutineStore {
         val createdAt: Long,
         val lastRunAt: Long = 0L,
         val runCount: Int = 0,
-    )
+        // 定时（可空：null=未定时。用可空 Int 避免 Gson 给老数据填 0 误判为 00:00 已定时）
+        val scheduleHour: Int? = null,
+        val scheduleMinute: Int? = null,
+        val scheduleDaily: Boolean = false,
+    ) {
+        val isScheduled: Boolean get() = scheduleHour != null && scheduleMinute != null
+    }
 
     fun all(): List<Routine> {
         val json = KVUtils.getString(KEY, "")
@@ -48,6 +54,11 @@ object RoutineStore {
 
     fun remove(id: String) {
         save(all().filterNot { it.id == id })
+    }
+
+    /** 按 id 替换整条（用于更新定时等）。 */
+    fun update(routine: Routine) {
+        save(all().map { if (it.id == routine.id) routine else it })
     }
 
     /** 记录一次运行：更新最近运行时间与次数。 */

@@ -21,6 +21,8 @@ class BootReceiver : BroadcastReceiver() {
             intent.action == "android.intent.action.QUICKBOOT_POWERON") {
             XLog.i(TAG, "收到开机广播，启动前台服务")
             ForegroundService.start(context)
+            // 开机后系统清空了闹钟，重新注册所有已定时的例程
+            runCatching { RoutineScheduler.rescheduleAll(context) }
         }
     }
 }

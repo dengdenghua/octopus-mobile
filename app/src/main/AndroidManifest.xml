@@ -196,6 +196,12 @@
             </intent-filter>
         </receiver>
 
+        <!-- 例程定时闹钟接收器（显式 Intent，无需 intent-filter） -->
+        <receiver
+            android:name=".service.RoutineAlarmReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
         <!-- 通知监听服务（主动 Agent） -->
         <service
             android:name=".octopus_mobile.proactive.NotificationRelayService"

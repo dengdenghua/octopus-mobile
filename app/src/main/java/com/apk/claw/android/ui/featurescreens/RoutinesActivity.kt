@@ -1,5 +1,7 @@
 package com.apk.claw.android.ui.featurescreens
 
+import android.app.AlertDialog
+import android.app.TimePickerDialog
 import android.content.Context
 import android.os.Bundle
 import android.widget.Toast
@@ -17,17 +19,17 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.apk.claw.android.ClawApplication
-import com.apk.claw.android.octopus_mobile.ControlTarget
 import com.apk.claw.android.octopus_mobile.RoutineStore
-import com.apk.claw.android.ui.compose.screen.ChatAgentBridge
+import com.apk.claw.android.service.RoutineScheduler
+import com.apk.claw.android.ui.compose.screen.RoutineRunner
+import java.util.Calendar
 
 /**
- * 例程页 —— 列出已保存的例程，一键重放。
+ * 例程页 —— 列出已保存的例程，一键重放，可设定时。
  *
  * 例程来源：在对话里长按你发过的指令 →「存为例程」。
- * 重放：恢复该例程保存的目标设备 → 用原始指令调起 Agent（[ChatAgentBridge.run]），
- * 实时进度走悬浮控制层（LiveControlOverlay，含停止键），结果落活动审计。
+ * 重放（[RoutineRunner]）：恢复目标设备 → 用原始指令调起 Agent；进度走悬浮控制层，结果落审计。
+ * 定时（[RoutineScheduler]）：AlarmManager 到点由 RoutineAlarmReceiver 重放。
  */
 class RoutinesActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -45,7 +47,7 @@ private fun RoutinesScreen(onBack: () -> Unit) {
 
     FeatureScaffold(title = "例程", onBack = onBack) {
         if (items.isEmpty()) {
-            FEmpty("还没有例程。\n\n在对话里长按你发过的一条指令 →「存为例程」，这里就能一键重放。重放会让 Agent 按指令重新看屏规划执行。")
+            FEmpty("还没有例程。\n\n在对话里长按你发过的一条指令 →「存为例程」，这里就能一键重放或设定时。重放会让 Agent 按指令重新看屏规划执行。")
         } else {
             LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(vertical = 6.dp)) {
                 item {
@@ -62,19 +64,33 @@ private fun RoutinesScreen(onBack: () -> Unit) {
                                 Text(r.name, color = FText, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                                 Spacer(Modifier.height(2.dp))
                                 Text(
-                                    "目标 ${r.targetLabel} · 运行 ${r.runCount} 次",
-                                    color = FMuted, fontSize = 10.sp,
+                                    buildString {
+                                        append("目标 ${r.targetLabel} · 运行 ${r.runCount} 次")
+                                        if (r.isScheduled) {
+                                            val t = "%02d:%02d".format(r.scheduleHour, r.scheduleMinute)
+                                            append(if (r.scheduleDaily) " · ⏰ 每天 $t" else " · ⏰ 一次 $t")
+                                        }
+                                    },
+                                    color = if (r.isScheduled) FPrimary else FMuted, fontSize = 10.sp,
                                 )
                             }
                             Text(
+                                "⏰", fontSize = 16.sp,
+                                modifier = Modifier
+                                    .clickable { openSchedule(ctx, r) { refresh() } }
+                                    .padding(horizontal = 6.dp, vertical = 4.dp),
+                            )
+                            Text(
                                 "▶ 运行", color = FPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
                                 modifier = Modifier
-                                    .clickable { runRoutine(ctx, r); refresh() }
-                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                                    .clickable { Toast.makeText(ctx, RoutineRunner.run(ctx, r), Toast.LENGTH_LONG).show(); refresh() }
+                                    .padding(horizontal = 6.dp, vertical = 4.dp),
                             )
                             Text(
                                 "✕", color = FMuted, fontSize = 14.sp,
-                                modifier = Modifier.clickable { RoutineStore.remove(r.id); refresh() }.padding(4.dp),
+                                modifier = Modifier
+                                    .clickable { RoutineScheduler.cancel(ctx, r.id); RoutineStore.remove(r.id); refresh() }
+                                    .padding(4.dp),
                             )
                         }
                         if (r.prompt != r.name) {
@@ -88,34 +104,35 @@ private fun RoutinesScreen(onBack: () -> Unit) {
     }
 }
 
-/** 恢复目标设备 → 用原始指令重放。 */
-private fun runRoutine(ctx: Context, r: RoutineStore.Routine) {
-    // 恢复目标
-    if (r.targetId.isBlank() || r.targetId == "local") {
-        ControlTarget.setLocal()
-    } else {
-        val dev = ClawApplication.instance.deviceRegistry.getDevice(r.targetId)
-        if (dev != null && dev.online) {
-            ControlTarget.setRemote(dev)
-        } else {
-            ControlTarget.setLocal()
-            Toast.makeText(ctx, "目标「${r.targetLabel}」不在线，改在本机执行", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    if (!ChatAgentBridge.isConfigured()) {
-        Toast.makeText(ctx, "未配置模型，请到 设置 → 模型配置", Toast.LENGTH_LONG).show()
-        return
-    }
-
-    RoutineStore.touch(r.id)
-    Toast.makeText(ctx, "开始运行：${r.name}", Toast.LENGTH_LONG).show()
-    // 进度与停止由悬浮控制层负责；结果落活动审计。这里回调留空即可。
-    ChatAgentBridge.run(
-        prompt = r.prompt,
-        onTool = { _, _, _, _ -> },
-        onText = { },
-        onDone = { },
-        onError = { msg -> },
-    )
+/** ⏰ 选时间 → 选「每天 / 仅一次 / 取消定时」→ 写库 + 注册/取消闹钟。 */
+private fun openSchedule(ctx: Context, r: RoutineStore.Routine, onChanged: () -> Unit) {
+    val now = Calendar.getInstance()
+    val h0 = r.scheduleHour ?: now.get(Calendar.HOUR_OF_DAY)
+    val m0 = r.scheduleMinute ?: now.get(Calendar.MINUTE)
+    TimePickerDialog(ctx, { _, h, m ->
+        val t = "%02d:%02d".format(h, m)
+        AlertDialog.Builder(ctx)
+            .setTitle("$t 定时")
+            .setItems(arrayOf("每天重复", "仅一次", "取消定时")) { _, which ->
+                when (which) {
+                    0 -> {
+                        val nr = r.copy(scheduleHour = h, scheduleMinute = m, scheduleDaily = true)
+                        RoutineStore.update(nr); RoutineScheduler.schedule(ctx, nr)
+                        Toast.makeText(ctx, "已设为每天 $t", Toast.LENGTH_SHORT).show()
+                    }
+                    1 -> {
+                        val nr = r.copy(scheduleHour = h, scheduleMinute = m, scheduleDaily = false)
+                        RoutineStore.update(nr); RoutineScheduler.schedule(ctx, nr)
+                        Toast.makeText(ctx, "已设为一次 $t（下一个 $t 触发）", Toast.LENGTH_SHORT).show()
+                    }
+                    2 -> {
+                        RoutineStore.update(r.copy(scheduleHour = null, scheduleMinute = null, scheduleDaily = false))
+                        RoutineScheduler.cancel(ctx, r.id)
+                        Toast.makeText(ctx, "已取消定时", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                onChanged()
+            }
+            .show()
+    }, h0, m0, true).show()
 }
