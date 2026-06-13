@@ -161,9 +161,12 @@ open class OctopusMobileClient(
      */
     private fun handleIncomingMessage(text: String) {
         try {
-            when {
+            // 母体（Python json.dumps）发的是 "method": "..."（冒号后带空格），
+            // 故用正则提取 method，避免对空白敏感的精确子串匹配漏判。
+            val method = Regex(""""method"\s*:\s*"([^"]+)"""").find(text)?.groupValues?.get(1)
+            when (method) {
                 // 任务结果（母体返回的任务执行结果）
-                text.contains(""""method":"task/result""") -> {
+                "task/result" -> {
                     val taskId = extractJsonField(text, "task_id") ?: return
                     val response = extractJsonField(text, "response") ?: ""
                     val steps = extractJsonField(text, "steps")?.toIntOrNull() ?: 0
@@ -171,14 +174,14 @@ open class OctopusMobileClient(
                     deferred?.complete(RemoteTaskResult.Success(steps, response, TokenUsage(0, 0, 0)))
                 }
                 // 任务错误
-                text.contains(""""method":"task/error""") -> {
+                "task/error" -> {
                     val taskId = extractJsonField(text, "task_id") ?: return
                     val error = extractJsonField(text, "error") ?: "Unknown error"
                     val deferred = pendingTasks.remove(taskId)
                     deferred?.complete(RemoteTaskResult.Failure(error))
                 }
                 // 工具执行（母体下发的 tool/execute）
-                text.contains(""""method":"tool/execute""") -> {
+                "tool/execute" -> {
                     val callId = extractJsonField(text, "id") ?: return
                     val tool = extractJsonField(text, "tool") ?: return
                     val argsJson = extractJsonObject(text, "args")
@@ -187,7 +190,7 @@ open class OctopusMobileClient(
                     onToolExecute?.invoke(call)
                 }
                 // 配置同步响应（母体推来的配置变更）
-                text.contains(""""method":"config/sync_pull_response""") -> {
+                "config/sync_pull_response" -> {
                     onConfigChange?.invoke(text)
                 }
             }
@@ -275,23 +278,24 @@ open class OctopusMobileClient(
         screenHashAfter: String? = null,
     ) {
         val ws = webSocket ?: return
-        val result = if (success) {
-            EnvelopeFactory.toolResult(
-                callId = callId,
-                success = true,
-                data = data,
-                durationMs = durationMs,
-                screenHashAfter = screenHashAfter,
-            )
+        // 母体 ws_server._handle_tool_result 按 method="tool/result" 路由，并从
+        // params.{call_id,success,data,error{code,message},duration_ms} 读取 ——
+        // 必须发 method 风格消息，而非 JSON-RPC reply（否则母体当作未知方法、调用方超时）。
+        val params = mutableMapOf<String, Any?>(
+            "call_id" to callId,
+            "success" to success,
+            "duration_ms" to durationMs,
+        )
+        if (success) {
+            params["data"] = data ?: ""
+            if (screenHashAfter != null) params["screen_hash_after"] = screenHashAfter
         } else {
-            EnvelopeFactory.toolResult(
-                callId = callId,
-                success = false,
-                errorCode = errorCode,
-                errorMessage = error ?: "Unknown error",
+            params["error"] = mapOf(
+                "code" to (errorCode ?: -32603),
+                "message" to (error ?: "Unknown error"),
             )
         }
-        ws.send(result.toJson())
+        ws.send(Envelope.Request(method = "tool/result", params = params).toJson())
     }
 
     /**

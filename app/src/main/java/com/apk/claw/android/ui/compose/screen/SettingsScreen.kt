@@ -29,6 +29,7 @@ import com.apk.claw.android.service.ClawAccessibilityService
 import com.apk.claw.android.shizuku.ShizukuManager
 import com.apk.claw.android.ui.settings.ChannelConfigActivity
 import com.apk.claw.android.ui.settings.LlmConfigActivity
+import com.apk.claw.android.ui.settings.RuntimeConfigActivity
 import com.apk.claw.android.utils.KVUtils
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -150,6 +151,24 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
                 Spacer(modifier = Modifier.height(6.dp))
                 Text("Base URL: $baseUrl", fontSize = 11.sp, color = TextMuted)
                 Text("API Key: $keyMasked", fontSize = 11.sp, color = TextMuted)
+            }
+        }
+
+        // 母体连接（octopus-agent Runtime）—— RPC 远程大脑
+        item {
+            val rpcUrl = remember(refreshTick) {
+                KVUtils.getOctopusRpcUrl().ifBlank { "未配置（默认 ws://10.0.2.2:8765）" }
+            }
+            SettingsCard("母体连接 · Octopus Runtime", onClick = {
+                context.startActivity(Intent(context, RuntimeConfigActivity::class.java))
+            }) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("RPC 远程大脑（母体下发 tool/execute）", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                    Spacer(modifier = Modifier.weight(1f))
+                    Text("›", fontSize = 18.sp, color = TextMuted)
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(rpcUrl, fontSize = 11.sp, color = TextMuted)
             }
         }
 
