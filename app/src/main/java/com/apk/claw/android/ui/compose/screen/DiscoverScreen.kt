@@ -196,6 +196,7 @@ fun DiscoverScreen(onNavigate: (String) -> Unit = {}) {
             Triple("☁️", stringResource(R.string.discover_shortcut_clouddrive), "clouddrive"),
             Triple("🎬", stringResource(R.string.discover_shortcut_video), "video"),
             Triple("🧩", stringResource(R.string.discover_shortcut_plugin), "plugin"),
+            Triple("🦊", stringResource(R.string.discover_shortcut_extension), "extension"),
             Triple("🖥", stringResource(R.string.discover_shortcut_cast), "cast"),
             Triple("📱", stringResource(R.string.discover_shortcut_multiwindow), "multiwindow"),
             Triple("💾", stringResource(R.string.discover_shortcut_memory), "memory"),
@@ -212,6 +213,7 @@ fun DiscoverScreen(onNavigate: (String) -> Unit = {}) {
                         ShortcutItem(icon, name) {
                             when (route) {
                                 "plugin" -> openActivity(context, PluginActivity::class.java)
+                                "extension" -> openBrowser(context, "https://addons.mozilla.org/zh-CN/android/")
                                 "cast" -> openActivity(context, ScreenCastActivity::class.java)
                                 "clouddrive" -> openActivity(context, CloudDriveActivity::class.java)
                                 "video" -> openActivity(context, VideoLibraryActivity::class.java)

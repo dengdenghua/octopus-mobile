@@ -286,6 +286,7 @@ For these, install Shizuku — a safe, open-source helper.</string>
     <string name="discover_shortcut_clouddrive">Cloud Drive</string>
     <string name="discover_shortcut_video">Video</string>
     <string name="discover_shortcut_plugin">Skills</string>
+    <string name="discover_shortcut_extension">Extensions</string>
     <string name="discover_shortcut_cast">Screen Cast</string>
     <string name="discover_shortcut_multiwindow">Multi-Window</string>
     <string name="discover_shortcut_memory">Memory</string>
