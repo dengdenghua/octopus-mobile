@@ -114,7 +114,7 @@ class PluginActivity : BaseActivity() {
 
             // Toolbar
             addView(CommonToolbar(this@PluginActivity).apply {
-                setTitle("插件管理")
+                setTitle("技能")
                 showBackButton(true) { finish() }
             })
 
@@ -130,23 +130,23 @@ class PluginActivity : BaseActivity() {
                 setPadding(dp16, dp8, dp16, dp16)
             }
 
-            // 已加载插件
+            // 已加载技能
             loadedGroup = MenuGroup(this@PluginActivity).apply {
-                setTitle("已加载插件")
+                setTitle("已加载技能")
                 layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = dp12 }
             }
             scrollContent.addView(loadedGroup)
 
-            // 可用插件
+            // 可用技能
             availableGroup = MenuGroup(this@PluginActivity).apply {
-                setTitle("可用插件")
+                setTitle("可用技能")
                 layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = dp12 }
             }
             scrollContent.addView(availableGroup)
 
             // 空状态
             tvEmpty = TextView(this@PluginActivity).apply {
-                text = "暂无可用插件"
+                text = "暂无可用技能"
                 textSize = 14f
                 setTextColor(Color.GRAY)
                 android.view.Gravity.CENTER
@@ -167,8 +167,8 @@ class PluginActivity : BaseActivity() {
 
             // 说明
             val tvNote = TextView(this@PluginActivity).apply {
-                text = "提示: 插件需要 .dex 文件 + manifest.json。" +
-                       "插件工具将注册到 ToolRegistry 供 Agent 使用。"
+                text = "提示: 技能需要 .dex 文件 + manifest.json。" +
+                       "技能会注册为 Agent 可调用的工具。"
                 textSize = 12f
                 setTextColor(Color.parseColor("#999999"))
                 setPadding(0, dp8, 0, dp8)
@@ -220,7 +220,7 @@ class PluginActivity : BaseActivity() {
     private fun loadPlugin(pluginId: String) {
         val ok = pluginManager.loadAndRegister(pluginId)
         if (ok) {
-            Toast.makeText(this, "插件加载成功", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "技能加载成功", Toast.LENGTH_SHORT).show()
         } else {
             val info = pluginManager.getAllPlugins().find { it.manifest.id == pluginId }
             Toast.makeText(this, "加载失败: ${info?.error ?: "未知错误"}", Toast.LENGTH_LONG).show()
@@ -231,7 +231,7 @@ class PluginActivity : BaseActivity() {
     private fun unloadPlugin(pluginId: String) {
         val ok = pluginManager.unload(pluginId)
         if (ok) {
-            Toast.makeText(this, "插件已卸载", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "技能已卸载", Toast.LENGTH_SHORT).show()
         }
         refreshPluginList()
     }
@@ -245,11 +245,11 @@ class PluginActivity : BaseActivity() {
     private fun installPlugin(dexFile: File, manifestFile: File) {
         val info = pluginManager.installFromFile(dexFile, manifestFile)
         if (info != null) {
-            Toast.makeText(this, "插件安装成功: ${info.manifest.name}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "技能安装成功: ${info.manifest.name}", Toast.LENGTH_SHORT).show()
             // 自动加载
             pluginManager.loadAndRegister(info.manifest.id)
         } else {
-            Toast.makeText(this, "插件安装失败", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "技能安装失败", Toast.LENGTH_LONG).show()
         }
         refreshPluginList()
         pendingDexFile = null

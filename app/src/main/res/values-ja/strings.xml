@@ -245,7 +245,7 @@
     <string name="discover_shortcut_browser">ブラウザ</string>
     <string name="discover_shortcut_clouddrive">クラウド</string>
     <string name="discover_shortcut_video">ビデオ</string>
-    <string name="discover_shortcut_plugin">プラグイン</string>
+    <string name="discover_shortcut_plugin">スキル</string>
     <string name="discover_shortcut_cast">画面投影</string>
     <string name="discover_shortcut_multiwindow">マルチウィンドウ</string>
     <string name="discover_shortcut_memory">メモリ</string>
