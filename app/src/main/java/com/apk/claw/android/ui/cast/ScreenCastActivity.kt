@@ -86,7 +86,7 @@ class ScreenCastActivity : BaseActivity() {
 
         // Toolbar
         content.addView(CommonToolbar(this@ScreenCastActivity).apply {
-            setTitle("投屏控制")
+            setTitle(getString(R.string.settings_cast_control))
             showBackButton(true) { finish() }
         })
 
@@ -98,13 +98,13 @@ class ScreenCastActivity : BaseActivity() {
 
         // ── 状态卡片 ──
         val statusCard = MenuGroup(this).apply {
-            setTitle("投屏状态")
+            setTitle(getString(R.string.screen_cast_status_title))
             layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = dp12 }
         }
 
         // 状态行
         tvCastStatus = TextView(this).apply {
-            text = "● 未投屏"
+            text = getString(R.string.screen_cast_not_casting)
             setTextColor(Color.GRAY)
             textSize = 18f
             typeface = Typeface.DEFAULT_BOLD
@@ -124,7 +124,7 @@ class ScreenCastActivity : BaseActivity() {
 
         // 开始/停止按钮
         btnToggle = KButton(this).apply {
-            text = if (castService.isCasting) "停止投屏" else "开始投屏"
+            text = if (castService.isCasting) getString(R.string.screen_cast_stop_button) else getString(R.string.screen_cast_start_button)
             layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = dp12 }
             setOnClickListener {
                 if (castService.isCasting) {
@@ -139,7 +139,7 @@ class ScreenCastActivity : BaseActivity() {
 
         // ── MJPEG 远程屏幕预览 ──
         val previewLabel = TextView(this).apply {
-            text = "远程屏幕预览"
+            text = getString(R.string.screen_cast_preview_label)
             textSize = 14f
             typeface = Typeface.DEFAULT_BOLD
             setPadding(0, 0, 0, dp4)
@@ -169,13 +169,13 @@ class ScreenCastActivity : BaseActivity() {
         streamRow.addView(etStreamUrl)
 
         btnPreview = KButton(this).apply {
-            text = "预览"
+            text = getString(R.string.screen_cast_preview_button)
             layoutParams = LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginStart = dp8 }
             setOnClickListener {
                 val url = etStreamUrl.text.toString().trim()
                 if (url.isNotEmpty()) {
                     mjpegView.start(url)
-                    Toast.makeText(this@ScreenCastActivity, "正在连接...", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@ScreenCastActivity, getString(R.string.screen_cast_connecting_toast), Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -184,23 +184,23 @@ class ScreenCastActivity : BaseActivity() {
 
         // ── 远程操作 ──
         remoteGroup = MenuGroup(this).apply {
-            setTitle("远程操作")
+            setTitle(getString(R.string.screen_cast_remote_control_title))
             layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = dp12 }
         }
         remoteGroup.addMenuItem(R.drawable.ic_settings, "Home", { sendLocalAction("home") }, showDivider = true)
         remoteGroup.addMenuItem(R.drawable.ic_back, "Back", { sendLocalAction("back") }, showDivider = true)
-        remoteGroup.addMenuItem(R.drawable.ic_settings, "截屏", { captureLocalScreen() }, showDivider = true)
-        remoteGroup.addMenuItem(R.drawable.ic_settings, "输入文本", { showInputDialog() }, showDivider = false)
+        remoteGroup.addMenuItem(R.drawable.ic_settings, getString(R.string.tool_name_screenshot), { captureLocalScreen() }, showDivider = true)
+        remoteGroup.addMenuItem(R.drawable.ic_settings, getString(R.string.tool_name_input_text), { showInputDialog() }, showDivider = false)
         padding.addView(remoteGroup)
 
         // ── 在外接屏启动 App ──
         launchGroup = MenuGroup(this).apply {
-            setTitle("在外接屏启动")
+            setTitle(getString(R.string.screen_cast_launch_external_title))
             layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = dp12 }
         }
-        launchGroup.addMenuItem(R.drawable.ic_settings, "微信", { launchOnCast("com.tencent.mm") }, showDivider = true)
-        launchGroup.addMenuItem(R.drawable.ic_browser, "浏览器", { launchOnCast("com.android.chrome") }, showDivider = true)
-        launchGroup.addMenuItem(R.drawable.ic_settings, "自定义包名", { showPackageInputDialog() }, showDivider = false)
+        launchGroup.addMenuItem(R.drawable.ic_settings, getString(R.string.menu_wechat), { launchOnCast("com.tencent.mm") }, showDivider = true)
+        launchGroup.addMenuItem(R.drawable.ic_browser, getString(R.string.discover_shortcut_browser), { launchOnCast("com.android.chrome") }, showDivider = true)
+        launchGroup.addMenuItem(R.drawable.ic_settings, getString(R.string.screen_cast_custom_package_menu), { showPackageInputDialog() }, showDivider = false)
         padding.addView(launchGroup)
 
         content.addView(padding)
@@ -212,10 +212,10 @@ class ScreenCastActivity : BaseActivity() {
 
     private fun refreshStatus() {
         val casting = castService.isCasting
-        tvCastStatus.text = if (casting) "● 投屏中" else "○ 未投屏"
+        tvCastStatus.text = if (casting) getString(R.string.screen_cast_casting) else getString(R.string.screen_cast_not_casting_indicator)
         tvCastStatus.setTextColor(if (casting) Color.parseColor("#4CAF50") else Color.GRAY)
         tvDisplayInfo.text = castService.displayManager.getExternalDisplayInfo()
-        btnToggle.text = if (casting) "停止投屏" else "开始投屏"
+        btnToggle.text = if (casting) getString(R.string.screen_cast_stop_button) else getString(R.string.screen_cast_start_button)
     }
 
     // ── 远程操作（本地设备通过 AccessibilityService） ──
@@ -224,7 +224,7 @@ class ScreenCastActivity : BaseActivity() {
         // 通过 AccessibilityService 发送本地按键
         val service = com.apk.claw.android.service.ClawAccessibilityService.getInstance()
         if (service == null) {
-            Toast.makeText(this, "无障碍服务未运行", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.screen_cast_service_not_running), Toast.LENGTH_SHORT).show()
             return
         }
         when (action) {
@@ -232,23 +232,23 @@ class ScreenCastActivity : BaseActivity() {
             "back" -> service.pressBack()
             "recent" -> service.openRecentApps()
         }
-        Toast.makeText(this, "$action 已发送", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, getString(R.string.screen_cast_action_sent, action), Toast.LENGTH_SHORT).show()
     }
 
     private fun captureLocalScreen() {
         // 通过 ScreenCaptureManager 截取本地屏幕
-        Toast.makeText(this, "截屏功能需通过 ConfigServer API 使用", Toast.LENGTH_LONG).show()
+        Toast.makeText(this, getString(R.string.screen_cast_screenshot_api_required), Toast.LENGTH_LONG).show()
     }
 
     private fun showInputDialog() {
         val et = EditText(this).apply {
-            hint = "输入文本"
+            hint = getString(R.string.tool_name_input_text)
             setPadding(dp(16), dp(12), dp(16), dp(12))
         }
         AlertDialog.Builder(this)
-            .setTitle("输入文本")
+            .setTitle(getString(R.string.tool_name_input_text))
             .setView(et)
-            .setPositiveButton("发送") { _, _ ->
+            .setPositiveButton(getString(R.string.screen_cast_send_button)) { _, _ ->
                 val text = et.text.toString()
                 if (text.isNotEmpty()) {
                     val service = com.apk.claw.android.service.ClawAccessibilityService.getInstance()
@@ -256,11 +256,11 @@ class ScreenCastActivity : BaseActivity() {
                         // 通过剪贴板 + 粘贴实现文本输入
                         val clipboard = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
                         clipboard.setPrimaryClip(android.content.ClipData.newPlainText("input", text))
-                        Toast.makeText(this, "文本已复制到剪贴板", Toast.LENGTH_SHORT).show()
-                    } ?: Toast.makeText(this, "无障碍服务未运行", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, getString(R.string.screen_cast_text_copied), Toast.LENGTH_SHORT).show()
+                    } ?: Toast.makeText(this, getString(R.string.screen_cast_service_not_running), Toast.LENGTH_SHORT).show()
                 }
             }
-            .setNegativeButton("取消", null)
+            .setNegativeButton(getString(R.string.common_cancel), null)
             .show()
     }
 
@@ -270,7 +270,7 @@ class ScreenCastActivity : BaseActivity() {
         val ok = castService.launchAppOnExternalDisplay(packageName)
         Toast.makeText(
             this,
-            if (ok) "已启动 $packageName 到外接屏" else "启动失败（需先开始投屏）",
+            if (ok) getString(R.string.screen_cast_app_launched, packageName) else getString(R.string.screen_cast_launch_failed),
             Toast.LENGTH_SHORT
         ).show()
     }
@@ -281,13 +281,13 @@ class ScreenCastActivity : BaseActivity() {
             setPadding(dp(16), dp(12), dp(16), dp(12))
         }
         AlertDialog.Builder(this)
-            .setTitle("输入包名")
+            .setTitle(getString(R.string.screen_cast_enter_package_name))
             .setView(et)
-            .setPositiveButton("启动") { _, _ ->
+            .setPositiveButton(getString(R.string.screen_cast_launch_button)) { _, _ ->
                 val pkg = et.text.toString().trim()
                 if (pkg.isNotEmpty()) launchOnCast(pkg)
             }
-            .setNegativeButton("取消", null)
+            .setNegativeButton(getString(R.string.common_cancel), null)
             .show()
     }
 

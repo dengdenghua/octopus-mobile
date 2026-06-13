@@ -14,9 +14,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.apk.claw.android.R
 import com.apk.claw.android.shizuku.ShizukuManager
 import com.apk.claw.android.shizuku.ShizukuShellService
 import kotlinx.coroutines.Dispatchers
@@ -49,19 +51,23 @@ fun MultiWindowScreen(onBack: () -> Unit) {
     var apps by remember { mutableStateOf<List<AppEntry>?>(null) }
     var toast by remember { mutableStateOf<String?>(null) }
 
+    val shizukuUnauthorizedMsg = stringResource(R.string.multiwindow_shizuku_unauthorized)
+    val openedSuccessTemplate = stringResource(R.string.multiwindow_opened_success)
+    val openedFailedTemplate = stringResource(R.string.multiwindow_opened_failed)
+
     LaunchedEffect(Unit) {
         apps = withContext(Dispatchers.IO) { runCatching { loadApps(ctx.packageManager) }.getOrDefault(emptyList()) }
     }
 
-    FeatureScaffold(title = "多窗口", onBack = onBack) {
+    FeatureScaffold(title = stringResource(R.string.discover_shortcut_multiwindow), onBack = onBack) {
         // Shizuku 状态条
         FCard {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(if (shizukuOk) "Shizuku 已就绪" else "需要 Shizuku 才能开小窗", color = FText, fontSize = 13.sp, modifier = Modifier.weight(1f))
-                FPill(if (shizukuOk) "可用" else "未授权", if (shizukuOk) FSuccess else FWarning)
+                Text(if (shizukuOk) stringResource(R.string.multiwindow_shizuku_ready) else stringResource(R.string.multiwindow_shizuku_required), color = FText, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                FPill(if (shizukuOk) stringResource(R.string.multiwindow_available) else stringResource(R.string.multiwindow_unauthorized), if (shizukuOk) FSuccess else FWarning)
             }
             Spacer(Modifier.height(4.dp))
-            Text("点击应用即可在自由窗口(freeform)中打开", color = FMuted, fontSize = 10.sp)
+            Text(stringResource(R.string.multiwindow_instruction), color = FMuted, fontSize = 10.sp)
         }
 
         toast?.let {
@@ -70,20 +76,20 @@ fun MultiWindowScreen(onBack: () -> Unit) {
 
         val list = apps
         when {
-            list == null -> FEmpty("加载应用列表…")
-            list.isEmpty() -> FEmpty("未找到可启动的应用")
+            list == null -> FEmpty(stringResource(R.string.multiwindow_loading))
+            list.isEmpty() -> FEmpty(stringResource(R.string.multiwindow_no_apps))
             else -> LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(vertical = 6.dp)) {
                 items(list, key = { it.pkg }) { app ->
                     FCard {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.fillMaxWidth().clickable {
-                                if (!shizukuOk) { toast = "未授权 Shizuku，无法开小窗"; return@clickable }
+                                if (!shizukuOk) { toast = shizukuUnauthorizedMsg; return@clickable }
                                 scope.launch {
                                     val ok = withContext(Dispatchers.IO) {
                                         runCatching { ShizukuShellService.launchFreeform(app.pkg, 100, 100, 800, 1200) }.getOrNull()
                                     }
-                                    toast = if (ok == true) "已在小窗打开 ${app.label}" else "打开失败：${app.label}"
+                                    toast = if (ok == true) String.format(openedSuccessTemplate, app.label) else String.format(openedFailedTemplate, app.label)
                                 }
                             },
                         ) {

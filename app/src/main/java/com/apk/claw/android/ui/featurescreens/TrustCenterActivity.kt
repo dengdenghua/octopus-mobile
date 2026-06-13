@@ -21,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -28,6 +29,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.apk.claw.android.R
 import com.apk.claw.android.octopus_mobile.ControlTarget
 import com.apk.claw.android.server.ConfigServerManager
 import com.apk.claw.android.service.ClawAccessibilityService
@@ -95,15 +97,15 @@ fun TrustCenterScreen(onBack: () -> Unit) {
     val targetLabel = remember(tick) { ControlTarget.label() }
     var lanOn by remember(tick) { mutableStateOf(KVUtils.isLanControlEnabled()) }
 
-    FeatureScaffold(title = "信任中心", onBack = onBack) {
+    FeatureScaffold(title = stringResource(R.string.trustcenter_title), onBack = onBack) {
         Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
             Text(
-                "Agent 通过下列权限操作你的设备。可随时查看状态、点开管理或一键收回。",
+                stringResource(R.string.trustcenter_description),
                 color = FMuted, fontSize = 12.sp, lineHeight = 17.sp,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             )
 
-            FSectionTitle("本机")
+            FSectionTitle(stringResource(R.string.device_this_device))
             val batteryLevel = remember(tick) { batteryPct(ctx) }
             val ip = remember(tick) { lanIp() }
             FCard {
@@ -120,32 +122,32 @@ fun TrustCenterScreen(onBack: () -> Unit) {
                 }
             }
 
-            FSectionTitle("设备控制能力")
-            CapabilityRow("♿", "无障碍服务", "核心：读屏与点击/输入（控制本机）", a11y) {
+            FSectionTitle(stringResource(R.string.trustcenter_section_capabilities))
+            CapabilityRow("♿", stringResource(R.string.home_card_accessibility_title), stringResource(R.string.trustcenter_capability_accessibility_desc), a11y) {
                 openIntent(ctx, Settings.ACTION_ACCESSIBILITY_SETTINGS)
             }
-            CapabilityRow("🪟", "悬浮窗", "实时控制层：操作时悬浮显示步骤+停止", overlay) {
+            CapabilityRow("🪟", stringResource(R.string.perm_overlay), stringResource(R.string.trustcenter_capability_overlay_desc), overlay) {
                 openIntent(ctx, Settings.ACTION_MANAGE_OVERLAY_PERMISSION, withPkg = true)
             }
-            CapabilityRow("🔋", "电池优化豁免", "后台长时间任务不被系统杀死", battery) {
+            CapabilityRow("🔋", stringResource(R.string.trustcenter_capability_battery), stringResource(R.string.trustcenter_capability_battery_desc), battery) {
                 openIntent(ctx, Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, withPkg = true)
             }
-            CapabilityRow("🔔", "通知", "前台服务常驻通知 / 任务提醒", notif) {
+            CapabilityRow("🔔", stringResource(R.string.ctrl_notifications), stringResource(R.string.trustcenter_capability_notification_desc), notif) {
                 openIntent(ctx, Settings.ACTION_APPLICATION_DETAILS_SETTINGS, withPkg = true)
             }
-            CapabilityRow("⚡", "Shizuku", "shell 级增强：小窗 / 截屏 / 系统设置", shizuku) {
+            CapabilityRow("⚡", stringResource(R.string.trustcenter_capability_shizuku), stringResource(R.string.trustcenter_capability_shizuku_desc), shizuku) {
                 runCatching { ShizukuManager.requestPermission() }
             }
-            CapabilityRow("💾", "存储", "读写媒体文件（截图保存等）", storage) {
+            CapabilityRow("💾", stringResource(R.string.perm_storage), stringResource(R.string.trustcenter_capability_storage_desc), storage) {
                 openIntent(ctx, Settings.ACTION_APPLICATION_DETAILS_SETTINGS, withPkg = true)
             }
 
-            FSectionTitle("局域网")
+            FSectionTitle(stringResource(R.string.trustcenter_section_lannetwork))
             FCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("允许被局域网控制", color = FText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                        Text("开启后本机才向同 Wi-Fi 广播控制 token", color = FMuted, fontSize = 10.sp, lineHeight = 14.sp)
+                        Text(stringResource(R.string.trustcenter_lan_allow_toggle), color = FText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                        Text(stringResource(R.string.trustcenter_lan_allow_desc), color = FMuted, fontSize = 10.sp, lineHeight = 14.sp)
                     }
                     Switch(
                         checked = lanOn,
@@ -156,15 +158,15 @@ fun TrustCenterScreen(onBack: () -> Unit) {
             }
             FCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("本机可被发现", color = FText, fontSize = 14.sp, modifier = Modifier.weight(1f))
-                    Text(lanAddr ?: "未启动", color = if (lanAddr != null) FSuccess else FMuted, fontSize = 12.sp)
+                    Text(stringResource(R.string.trustcenter_lan_discoverable_label), color = FText, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                    Text(lanAddr ?: stringResource(R.string.trustcenter_lan_not_started), color = if (lanAddr != null) FSuccess else FMuted, fontSize = 12.sp)
                 }
             }
 
-            FSectionTitle("当前执行目标")
+            FSectionTitle(stringResource(R.string.trustcenter_section_target))
             FCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Agent 将操作", color = FText, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                    Text(stringResource(R.string.trustcenter_target_label), color = FText, fontSize = 14.sp, modifier = Modifier.weight(1f))
                     FPill(targetLabel, if (ControlTarget.isRemote()) FWarning else FPrimary)
                 }
             }
@@ -184,13 +186,13 @@ fun TrustCenterScreen(onBack: () -> Unit) {
                     Text("🛑", fontSize = 16.sp)
                     Spacer(Modifier.width(10.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("一键收回联网控制", color = FText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                        Text("关闭局域网广播并把执行目标改回本机", color = FMuted, fontSize = 10.sp)
+                        Text(stringResource(R.string.trustcenter_action_revoke), color = FText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                        Text(stringResource(R.string.trustcenter_action_revoke_desc), color = FMuted, fontSize = 10.sp)
                     }
                 }
             }
             Text(
-                "无障碍 / 悬浮窗等系统权限需在系统设置中手动关闭（点上方对应项进入）。",
+                stringResource(R.string.trustcenter_instruction_manual_disable),
                 color = FMuted, fontSize = 10.sp, lineHeight = 14.sp,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
             )
@@ -209,7 +211,7 @@ private fun CapabilityRow(icon: String, name: String, desc: String, granted: Boo
                 Text(desc, color = FMuted, fontSize = 10.sp, lineHeight = 14.sp)
             }
             Spacer(Modifier.width(8.dp))
-            FPill(if (granted) "已授权" else "未授权", if (granted) FSuccess else FMuted)
+            FPill(if (granted) stringResource(R.string.trust_center_granted) else stringResource(R.string.trust_center_not_granted), if (granted) FSuccess else FMuted)
             Text("›", color = FMuted, fontSize = 18.sp, modifier = Modifier.padding(start = 6.dp))
         }
     }

@@ -209,8 +209,8 @@ class SettingsViewModel : ViewModel() {
         return when (state) {
             com.apk.claw.android.octopus_mobile.ConnectionState.ONLINE -> "● ONLINE"
             com.apk.claw.android.octopus_mobile.ConnectionState.CONNECTING,
-            com.apk.claw.android.octopus_mobile.ConnectionState.HELLO_SENT -> "● 连接中..."
-            com.apk.claw.android.octopus_mobile.ConnectionState.OFFLINE -> "○ 已断开"
+            com.apk.claw.android.octopus_mobile.ConnectionState.HELLO_SENT -> ClawApplication.instance.getString(R.string.settings_runtime_connecting)
+            com.apk.claw.android.octopus_mobile.ConnectionState.OFFLINE -> ClawApplication.instance.getString(R.string.settings_runtime_offline)
             else -> url
         }
     }

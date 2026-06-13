@@ -86,9 +86,9 @@ class RuntimeConfigActivity : BaseActivity() {
         content.addView(etRuntimeUrl, makeFieldParams())
 
         // ── Auth Token ──
-        content.addView(makeLabel("Auth Token (可选)"))
+        content.addView(makeLabel(getString(R.string.runtime_config_auth_token_label)))
         etAuthToken = EditText(this).apply {
-            hint = "留空则无认证"
+            hint = getString(R.string.runtime_config_auth_hint)
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
             setSingleLine()
             setBackgroundColor(Color.WHITE)
@@ -97,15 +97,15 @@ class RuntimeConfigActivity : BaseActivity() {
         content.addView(etAuthToken, makeFieldParams())
 
         // ── Brain Mode ──
-        content.addView(makeLabel("启动模式"))
+        content.addView(makeLabel(getString(R.string.runtime_config_launch_mode_label)))
         rgBrainMode = RadioGroup(this).apply {
             orientation = RadioGroup.VERTICAL
             setBackgroundColor(Color.WHITE)
             setPadding(dp(16), dp(8), dp(16), dp(8))
         }
-        rbLocal = RadioButton(this).apply { text = "LOCAL_ONLY — 纯本地 Agent" }
-        rbRemote = RadioButton(this).apply { text = "RPC_ONLY — 纯远程 (依赖母体)" }
-        rbDual = RadioButton(this).apply { text = "DUAL — 远程优先，离线降级" }
+        rbLocal = RadioButton(this).apply { text = getString(R.string.runtime_config_mode_local_only) }
+        rbRemote = RadioButton(this).apply { text = getString(R.string.runtime_config_mode_rpc_only) }
+        rbDual = RadioButton(this).apply { text = getString(R.string.runtime_config_mode_dual) }
         rbLocal.id = View.generateViewId()
         rbRemote.id = View.generateViewId()
         rbDual.id = View.generateViewId()
@@ -116,14 +116,14 @@ class RuntimeConfigActivity : BaseActivity() {
 
         // ── Auto Connect ──
         cbAutoConnect = CheckBox(this).apply {
-            text = "启动时自动连接"
+            text = getString(R.string.runtime_config_auto_connect)
             setBackgroundColor(Color.WHITE)
             setPadding(dp(16), dp(8), dp(16), dp(8))
         }
         content.addView(cbAutoConnect, makeFieldParams())
 
         // ── 连接状态 ──
-        content.addView(makeLabel("连接状态"))
+        content.addView(makeLabel(getString(R.string.runtime_config_status_label)))
         tvStatus = TextView(this).apply {
             text = "DISCONNECTED"
             textSize = 16f
@@ -142,12 +142,12 @@ class RuntimeConfigActivity : BaseActivity() {
             setPadding(0, dp(24), 0, dp(8))
         }
         btnConnect = KButton(this).apply {
-            text = "连接"
+            text = getString(R.string.runtime_config_connect_button)
             setBackgroundColor(0xFF1F6FEB.toInt())
             setTextColor(Color.WHITE)
         }
         btnDisconnect = KButton(this).apply {
-            text = "断开"
+            text = getString(R.string.runtime_config_disconnect_button)
             setBackgroundColor(0xFFDA3633.toInt())
             setTextColor(Color.WHITE)
         }
@@ -160,7 +160,7 @@ class RuntimeConfigActivity : BaseActivity() {
 
         // ── Save ──
         btnSave = KButton(this).apply {
-            text = "保存配置"
+            text = getString(R.string.runtime_config_save_button)
             setBackgroundColor(0xFF238636.toInt())
             setTextColor(Color.WHITE)
         }
@@ -231,7 +231,7 @@ class RuntimeConfigActivity : BaseActivity() {
     private fun onConnect() {
         val url = etRuntimeUrl.text.toString().trim()
         if (url.isEmpty()) {
-            Toast.makeText(this, "请先填写 Runtime URL", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.runtime_config_empty_url_toast), Toast.LENGTH_SHORT).show()
             return
         }
         // 先保存再连接
@@ -245,7 +245,7 @@ class RuntimeConfigActivity : BaseActivity() {
 
     private fun onSave() {
         saveToStorage()
-        Toast.makeText(this, "配置已保存", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, getString(R.string.channel_config_saved), Toast.LENGTH_SHORT).show()
     }
 
     private fun saveToStorage() {

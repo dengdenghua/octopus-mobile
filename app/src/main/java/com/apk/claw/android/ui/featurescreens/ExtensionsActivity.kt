@@ -15,6 +15,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import com.apk.claw.android.R
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -61,16 +63,16 @@ private fun ExtensionsScreen(onBack: () -> Unit) {
 
     LaunchedEffect(Unit) { refresh() }
 
-    FeatureScaffold(title = "浏览器扩展", onBack = onBack) {
+    FeatureScaffold(title = stringResource(R.string.extensions_title), onBack = onBack) {
         // 安装入口
         FCard {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("🦊 从 Firefox 商店(AMO)安装", color = FText, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                    Text("打开 addons.mozilla.org,在页面里点「添加到 Firefox」", color = FMuted, fontSize = 11.sp)
+                    Text(stringResource(R.string.extensions_install_from_amo), color = FText, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.extensions_install_instructions), color = FMuted, fontSize = 11.sp)
                 }
                 Text(
-                    "去安装", color = FPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                    stringResource(R.string.extensions_go_install_button), color = FPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
                     modifier = Modifier
                         .clickable { openAmo(ctx) }
                         .padding(horizontal = 8.dp, vertical = 6.dp),
@@ -79,11 +81,11 @@ private fun ExtensionsScreen(onBack: () -> Unit) {
         }
 
         Spacer(Modifier.height(4.dp))
-        Text("已安装", color = FMuted, fontSize = 11.sp, modifier = Modifier.padding(start = 16.dp, top = 6.dp, bottom = 2.dp))
+        Text(stringResource(R.string.extensions_installed_section), color = FMuted, fontSize = 11.sp, modifier = Modifier.padding(start = 16.dp, top = 6.dp, bottom = 2.dp))
 
         when {
-            loading -> FEmpty("加载中…")
-            items.isEmpty() -> FEmpty("还没安装扩展。\n点上方「去安装」到 Firefox 商店选一个,页面里「添加到 Firefox」即可。")
+            loading -> FEmpty(stringResource(R.string.browser_loading_text))
+            items.isEmpty() -> FEmpty(stringResource(R.string.extensions_empty_state))
             else -> LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(vertical = 4.dp)) {
                 items(items, key = { it.id }) { e ->
                     FCard {
@@ -94,16 +96,16 @@ private fun ExtensionsScreen(onBack: () -> Unit) {
                                     Spacer(Modifier.height(2.dp))
                                     Text(e.desc, color = FSub, fontSize = 12.sp, maxLines = 2)
                                 }
-                                Text(if (e.enabled) "● 已启用" else "○ 已停用", color = if (e.enabled) FPrimary else FMuted, fontSize = 10.sp)
+                                Text(if (e.enabled) stringResource(R.string.extensions_enabled_status) else stringResource(R.string.extensions_disabled_status), color = if (e.enabled) FPrimary else FMuted, fontSize = 10.sp)
                             }
                             Text(
-                                if (e.enabled) "停用" else "启用", color = FPrimary, fontSize = 14.sp,
+                                if (e.enabled) stringResource(R.string.extensions_disable_button) else stringResource(R.string.extensions_enable_button), color = FPrimary, fontSize = 14.sp,
                                 modifier = Modifier
                                     .clickable { toggle(controller(), e) { refresh() } }
                                     .padding(horizontal = 8.dp, vertical = 6.dp),
                             )
                             Text(
-                                "卸载", color = FMuted, fontSize = 14.sp,
+                                stringResource(R.string.extensions_uninstall_button), color = FMuted, fontSize = 14.sp,
                                 modifier = Modifier
                                     .clickable { uninstall(controller(), e, ctx) { refresh() } }
                                     .padding(horizontal = 8.dp, vertical = 6.dp),
@@ -137,7 +139,7 @@ private fun toggle(c: WebExtensionController?, e: ExtItem, done: () -> Unit) {
 private fun uninstall(c: WebExtensionController?, e: ExtItem, ctx: android.content.Context, done: () -> Unit) {
     c ?: return
     c.uninstall(e.ext).accept({
-        (ctx as? ComponentActivity)?.runOnUiThread { Toast.makeText(ctx, "已卸载 ${e.name}", Toast.LENGTH_SHORT).show() }
+        (ctx as? ComponentActivity)?.runOnUiThread { Toast.makeText(ctx, ctx.getString(R.string.extensions_uninstalled_toast, e.name), Toast.LENGTH_SHORT).show() }
         done()
     }, { done() })
 }

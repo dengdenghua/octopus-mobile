@@ -40,9 +40,9 @@ class RoutineAlarmReceiver : BroadcastReceiver() {
         // 执行
         if (RoutineRunner.canRun()) {
             val status = RoutineRunner.run(context, r)
-            notify(context, r.id.hashCode(), "正在运行例程", "${r.name}\n$status")
+            notify(context, r.id.hashCode(), context.getString(R.string.routine_alarm_running_title), context.getString(R.string.routine_alarm_running_text, r.name, status))
         } else {
-            notify(context, r.id.hashCode(), "例程已跳过", "「${r.name}」到点，但未配置模型")
+            notify(context, r.id.hashCode(), context.getString(R.string.routine_alarm_skipped_title), context.getString(R.string.routine_alarm_skipped_text, r.name))
         }
     }
 

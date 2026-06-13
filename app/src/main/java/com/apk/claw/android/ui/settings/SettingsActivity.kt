@@ -139,7 +139,7 @@ class SettingsActivity : BaseActivity() {
 
         menuItems[SettingsViewModel.MenuAction.DEVICE_LIST.name] = modelGroup.addMenuItem(
             leadingIcon = R.drawable.ic_devices,
-            title = "\u5c40\u57df\u7f51\u8bbe\u5907",
+            title = getString(R.string.device_list_toolbar_title),
             onClick = { viewModel.onMenuItemClick(SettingsViewModel.MenuAction.DEVICE_LIST) },
             showDivider = true
         )
@@ -147,7 +147,7 @@ class SettingsActivity : BaseActivity() {
 
         menuItems[SettingsViewModel.MenuAction.BROWSER.name] = modelGroup.addMenuItem(
             leadingIcon = R.drawable.ic_browser,
-            title = "\u6d4f\u89c8\u5668",
+            title = getString(R.string.discover_shortcut_browser),
             onClick = { viewModel.onMenuItemClick(SettingsViewModel.MenuAction.BROWSER) },
             showDivider = true
         )
@@ -155,7 +155,7 @@ class SettingsActivity : BaseActivity() {
 
         menuItems[SettingsViewModel.MenuAction.SCREEN_CAST.name] = modelGroup.addMenuItem(
             leadingIcon = R.drawable.ic_cast,
-            title = "\u6295\u5c4f\u63a7\u5236",
+            title = getString(R.string.settings_cast_control),
             onClick = { viewModel.onMenuItemClick(SettingsViewModel.MenuAction.SCREEN_CAST) },
             showDivider = true
         )
@@ -163,7 +163,7 @@ class SettingsActivity : BaseActivity() {
 
         menuItems[SettingsViewModel.MenuAction.PLUGIN.name] = modelGroup.addMenuItem(
             leadingIcon = R.drawable.ic_plugin,
-            title = "\u63d2\u4ef6\u7ba1\u7406",
+            title = getString(R.string.settings_plugin_mgmt),
             onClick = { viewModel.onMenuItemClick(SettingsViewModel.MenuAction.PLUGIN) },
             showDivider = false
         )

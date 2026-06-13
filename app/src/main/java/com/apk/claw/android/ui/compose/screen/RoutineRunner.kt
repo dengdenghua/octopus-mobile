@@ -2,6 +2,7 @@ package com.apk.claw.android.ui.compose.screen
 
 import android.content.Context
 import com.apk.claw.android.ClawApplication
+import com.apk.claw.android.R
 import com.apk.claw.android.octopus_mobile.ActionCache
 import com.apk.claw.android.octopus_mobile.ControlTarget
 import com.apk.claw.android.octopus_mobile.RoutineStore
@@ -31,13 +32,13 @@ object RoutineRunner {
                 ControlTarget.setRemote(dev)
             } else {
                 ControlTarget.setLocal()
-                note = "（目标「${r.targetLabel}」不在线，改用本机）"
+                note = ctx.getString(R.string.routine_runner_target_offline, r.targetLabel)
             }
         }
 
         // 2. 配置守卫
         if (!ChatAgentBridge.isConfigured()) {
-            return "未配置模型，请到 设置 → 模型配置"
+            return ctx.getString(R.string.routine_runner_model_not_configured)
         }
 
         // 3. 执行
@@ -66,7 +67,7 @@ object RoutineRunner {
             )
         }.start()
 
-        val via = if (hasFastPath) "⚡ 快路径" else "开始运行"
+        val via = if (hasFastPath) ctx.getString(R.string.routine_runner_fast_path) else ctx.getString(R.string.routine_runner_starting_execution)
         return "$via：${r.name}$note"
     }
 }

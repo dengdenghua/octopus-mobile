@@ -82,7 +82,7 @@ class DeviceDetailActivity : BaseActivity() {
 
         // Toolbar
         content.addView(CommonToolbar(this).apply {
-            setTitle(device?.deviceName ?: "设备详情")
+            setTitle(device?.deviceName ?: getString(R.string.device_detail_toolbar_title))
             showBackButton(true) { finish() }
         })
 
@@ -94,7 +94,7 @@ class DeviceDetailActivity : BaseActivity() {
 
         // ── 状态指示 ──
         tvStatus = TextView(this).apply {
-            text = if (device?.online == true) "● 在线" else "○ 离线"
+            text = if (device?.online == true) getString(R.string.device_detail_status_online) else getString(R.string.device_detail_status_offline)
             setTextColor(if (device?.online == true) Color.parseColor("#4CAF50") else Color.GRAY)
             textSize = 16f
             typeface = Typeface.DEFAULT_BOLD
@@ -104,7 +104,7 @@ class DeviceDetailActivity : BaseActivity() {
 
         // ── 信息卡片 ──
         val infoCard = MenuGroup(this).apply {
-            setTitle("设备信息")
+            setTitle(getString(R.string.tool_name_device_info))
             layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = dp12 }
         }
 
@@ -115,22 +115,22 @@ class DeviceDetailActivity : BaseActivity() {
         tvLastSeen = TextView(this).apply { textSize = 14f; setPadding(dp8, dp4, dp8, dp8) }
 
         // Use MenuItems for info display
-        infoCard.addMenuItem(R.drawable.ic_devices, "名称", {}, showDivider = true)
+        infoCard.addMenuItem(R.drawable.ic_devices, getString(R.string.device_detail_name_label), {}, showDivider = true)
             .setTrailingText(device?.deviceName ?: "N/A")
-        infoCard.addMenuItem(R.drawable.ic_runtime, "地址", {}, showDivider = true)
+        infoCard.addMenuItem(R.drawable.ic_runtime, getString(R.string.device_detail_address_label), {}, showDivider = true)
             .setTrailingText("${device?.ip}:${device?.configServerPort}")
-        infoCard.addMenuItem(R.drawable.ic_settings, "Android", {}, showDivider = true)
+        infoCard.addMenuItem(R.drawable.ic_settings, getString(R.string.device_detail_android_label), {}, showDivider = true)
             .setTrailingText(device?.androidVersion ?: "N/A")
-        infoCard.addMenuItem(R.drawable.ic_settings, "App 版本", {}, showDivider = true)
+        infoCard.addMenuItem(R.drawable.ic_settings, getString(R.string.device_detail_app_version_label), {}, showDivider = true)
             .setTrailingText(device?.appVersion ?: "N/A")
-        infoCard.addMenuItem(R.drawable.ic_settings, "最后心跳", {}, showDivider = false)
+        infoCard.addMenuItem(R.drawable.ic_settings, getString(R.string.device_detail_last_seen_label), {}, showDivider = false)
             .setTrailingText(dateFormat.format(Date(device?.lastSeenTs ?: 0)))
 
         padding.addView(infoCard)
 
         // ── 截图预览 ──
         val btnScreenshot = KButton(this).apply {
-            text = "截屏预览"
+            text = getString(R.string.device_detail_screenshot_button)
             layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = dp8 }
             setOnClickListener { captureScreenshot() }
         }
@@ -146,23 +146,23 @@ class DeviceDetailActivity : BaseActivity() {
 
         // ── 远程操作 ──
         controlGroup = MenuGroup(this).apply {
-            setTitle("远程操作")
+            setTitle(getString(R.string.screen_cast_remote_control_title))
             layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = dp12 }
         }
         controlGroup.addMenuItem(R.drawable.ic_settings, "Home", { sendAction("home") }, showDivider = true)
         controlGroup.addMenuItem(R.drawable.ic_back, "Back", { sendAction("back") }, showDivider = true)
-        controlGroup.addMenuItem(R.drawable.ic_settings, "输入文本", { showInputDialog() }, showDivider = true)
+        controlGroup.addMenuItem(R.drawable.ic_settings, getString(R.string.tool_name_input_text), { showInputDialog() }, showDivider = true)
         controlGroup.addMenuItem(R.drawable.ic_settings, "Recent Apps", { sendAction("recent") }, showDivider = false)
         padding.addView(controlGroup)
 
         // ── 在外接屏启动 ──
         val castGroup = MenuGroup(this).apply {
-            setTitle("在外接屏启动")
+            setTitle(getString(R.string.screen_cast_launch_external_title))
             layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = dp12 }
         }
-        castGroup.addMenuItem(R.drawable.ic_settings, "微信", { launchOnCast("com.tencent.mm") }, showDivider = true)
-        castGroup.addMenuItem(R.drawable.ic_settings, "浏览器", { launchOnCast("com.android.chrome") }, showDivider = true)
-        castGroup.addMenuItem(R.drawable.ic_settings, "自定义包名", { showPackageInputDialog() }, showDivider = false)
+        castGroup.addMenuItem(R.drawable.ic_settings, getString(R.string.menu_wechat), { launchOnCast("com.tencent.mm") }, showDivider = true)
+        castGroup.addMenuItem(R.drawable.ic_settings, getString(R.string.discover_shortcut_browser), { launchOnCast("com.android.chrome") }, showDivider = true)
+        castGroup.addMenuItem(R.drawable.ic_settings, getString(R.string.screen_cast_custom_package_menu), { showPackageInputDialog() }, showDivider = false)
         padding.addView(castGroup)
 
         content.addView(padding)
@@ -172,7 +172,7 @@ class DeviceDetailActivity : BaseActivity() {
 
     private fun bindDevice() {
         val d = device ?: return
-        tvStatus.text = if (d.online) "● 在线" else "○ 离线"
+        tvStatus.text = if (d.online) getString(R.string.device_detail_status_online) else getString(R.string.device_detail_status_offline)
         tvStatus.setTextColor(if (d.online) Color.parseColor("#4CAF50") else Color.GRAY)
     }
 
@@ -185,7 +185,7 @@ class DeviceDetailActivity : BaseActivity() {
                 ivScreenshot.setImageBitmap(bmp)
                 ivScreenshot.visibility = android.view.View.VISIBLE
             } else {
-                Toast.makeText(this@DeviceDetailActivity, "截图失败", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@DeviceDetailActivity, getString(R.string.device_detail_screenshot_failed_toast), Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -199,33 +199,33 @@ class DeviceDetailActivity : BaseActivity() {
                 "recent" -> remoteControl.sendKey(d, 187) // KEYCODE_APP_SWITCH
                 else -> false
             }
-            if (!ok) Toast.makeText(this@DeviceDetailActivity, "操作失败", Toast.LENGTH_SHORT).show()
+            if (!ok) Toast.makeText(this@DeviceDetailActivity, getString(R.string.device_detail_operation_failed_toast), Toast.LENGTH_SHORT).show()
         }
     }
 
     private fun showInputDialog() {
         val et = EditText(this).apply {
-            hint = "输入文本"
+            hint = getString(R.string.tool_name_input_text)
             setPadding(dp(16), dp(12), dp(16), dp(12))
         }
         android.app.AlertDialog.Builder(this)
-            .setTitle("远程输入文本")
+            .setTitle(getString(R.string.device_detail_remote_input_dialog_title))
             .setView(et)
-            .setPositiveButton("发送") { _, _ ->
+            .setPositiveButton(getString(R.string.screen_cast_send_button)) { _, _ ->
                 val text = et.text.toString()
                 if (text.isNotEmpty()) {
                     val d = device ?: return@setPositiveButton
                     lifecycleScope.launch { remoteControl.sendText(d, text) }
                 }
             }
-            .setNegativeButton("取消", null)
+            .setNegativeButton(getString(R.string.common_cancel), null)
             .show()
     }
 
     private fun launchOnCast(packageName: String) {
         val castService = ScreenCastService.getInstance(this)
         val ok = castService.launchAppOnExternalDisplay(packageName)
-        Toast.makeText(this, if (ok) "已启动 $packageName" else "启动失败（需先投屏）", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, if (ok) getString(R.string.device_detail_launched_toast, packageName) else getString(R.string.device_detail_launch_failed_toast), Toast.LENGTH_SHORT).show()
     }
 
     private fun showPackageInputDialog() {
@@ -234,13 +234,13 @@ class DeviceDetailActivity : BaseActivity() {
             setPadding(dp(16), dp(12), dp(16), dp(12))
         }
         android.app.AlertDialog.Builder(this)
-            .setTitle("输入包名")
+            .setTitle(getString(R.string.screen_cast_enter_package_name))
             .setView(et)
-            .setPositiveButton("启动") { _, _ ->
+            .setPositiveButton(getString(R.string.screen_cast_launch_button)) { _, _ ->
                 val pkg = et.text.toString().trim()
                 if (pkg.isNotEmpty()) launchOnCast(pkg)
             }
-            .setNegativeButton("取消", null)
+            .setNegativeButton(getString(R.string.common_cancel), null)
             .show()
     }
 

@@ -255,7 +255,7 @@ fun ChatScreen() {
     ) { granted ->
         Toast.makeText(
             context,
-            if (granted) "已授权，按住麦克风说话" else "未授权录音，无法语音输入",
+            if (granted) context.getString(R.string.chat_mic_permission_granted) else context.getString(R.string.chat_mic_permission_denied),
             Toast.LENGTH_SHORT,
         ).show()
     }
@@ -418,10 +418,11 @@ fun ChatScreen() {
                     Spacer(modifier = Modifier.width(10.dp))
                     val red = Color(0xFFFF453B)
                     val pillColor = if (isRunning || listening) red else SurfaceColor
+                    val listeningText = stringResource(R.string.chat_voice_listening_release)
                     val pillText = when {
-                        isRunning -> "■  停止 Agent"
-                        listening -> partial.ifBlank { "正在聆听… 松手发送" }
-                        else -> "🎤  按住说话"
+                        isRunning -> stringResource(R.string.chat_voice_stop_agent)
+                        listening -> partial.ifBlank { listeningText }
+                        else -> stringResource(R.string.chat_voice_hold_to_speak)
                     }
                     // 运行中=点按停止；否则=按住说话（松手即发）
                     val pillGesture = if (isRunning) {
@@ -534,7 +535,7 @@ private fun TargetSelector() {
         }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
             DropdownMenuItem(
-                text = { Text("📱 本机") },
+                text = { Text(stringResource(R.string.chat_target_local_device)) },
                 onClick = { ControlTarget.setLocal(); label = ControlTarget.label(); menu = false },
             )
             devices.forEach { d ->
@@ -573,19 +574,19 @@ private fun TargetSelector() {
 
 /** 首次启动（无持久化历史）时展示的演示对话。 */
 private fun demoSeed(): List<ChatMessage> = listOf(
-    ChatMessage.UserMessage("打开微信发消息给小明"),
-    ChatMessage.ToolCall("🔍", "get_screen_info", "", "✓ 主屏幕"),
+    ChatMessage.UserMessage(ClawApplication.instance.getString(R.string.chat_demo_open_wechat)),
+    ChatMessage.ToolCall("🔍", "get_screen_info", "", ClawApplication.instance.getString(R.string.chat_demo_main_screen)),
     ChatMessage.ToolCall("📱", "open_app", "com.tencent.mm", "✓"),
-    ChatMessage.ToolCall("👆", "tap", "(540, 380)", "✓ 搜索"),
-    ChatMessage.ToolCall("⌨️", "input_text", "(\"小明\")", "✓"),
-    ChatMessage.ToolCall("👆", "tap", "(270, 280)", "✓ 小明"),
-    ChatMessage.ToolCall("⌨️", "input_text", "(\"你好，今晚一起吃饭吗？\")", "✓"),
-    ChatMessage.ToolCall("👆", "tap", "(980, 1820)", "✓ 发送"),
-    ChatMessage.AgentMessage("已打开微信并找到小明的对话，消息\"你好，今晚一起吃饭吗？\"已发送成功。"),
-    ChatMessage.UserMessage("帮我看看明天的天气"),
+    ChatMessage.ToolCall("👆", "tap", "(540, 380)", ClawApplication.instance.getString(R.string.chat_demo_search)),
+    ChatMessage.ToolCall("⌨️", "input_text", "(\"${ClawApplication.instance.getString(R.string.chat_demo_contact_name)}\")", "✓"),
+    ChatMessage.ToolCall("👆", "tap", "(270, 280)", ClawApplication.instance.getString(R.string.chat_demo_xiaoming)),
+    ChatMessage.ToolCall("⌨️", "input_text", "(\"${ClawApplication.instance.getString(R.string.chat_demo_dinner_msg)}\")", "✓"),
+    ChatMessage.ToolCall("👆", "tap", "(980, 1820)", ClawApplication.instance.getString(R.string.chat_demo_send)),
+    ChatMessage.AgentMessage(ClawApplication.instance.getString(R.string.chat_demo_wechat_sent)),
+    ChatMessage.UserMessage(ClawApplication.instance.getString(R.string.chat_demo_check_weather)),
     ChatMessage.ToolCall("📱", "open_app", "com.miui.weather", "✓"),
-    ChatMessage.ToolCall("🔍", "get_screen_info", "", "✓ 天气详情"),
-    ChatMessage.AgentMessage("明天北京天气：晴转多云，最高 28°C，最低 16°C，空气质量良好。"),
+    ChatMessage.ToolCall("🔍", "get_screen_info", "", ClawApplication.instance.getString(R.string.chat_demo_weather_details)),
+    ChatMessage.AgentMessage(ClawApplication.instance.getString(R.string.chat_demo_weather_forecast)),
 )
 
 @Composable
@@ -614,7 +615,7 @@ private fun UserBubble(text: String) {
             }
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                 DropdownMenuItem(
-                    text = { Text("⭐ 存为例程") },
+                    text = { Text(stringResource(R.string.chat_save_as_routine)) },
                     onClick = {
                         menu = false
                         val now = System.currentTimeMillis()
@@ -628,7 +629,7 @@ private fun UserBubble(text: String) {
                                 createdAt = now,
                             )
                         )
-                        Toast.makeText(context, "已存为例程（📋 查看）", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, context.getString(R.string.chat_routine_saved_toast), Toast.LENGTH_SHORT).show()
                     },
                 )
             }

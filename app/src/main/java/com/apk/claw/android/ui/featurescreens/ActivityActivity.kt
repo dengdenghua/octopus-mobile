@@ -12,9 +12,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.apk.claw.android.ClawApplication
+import com.apk.claw.android.R
 import com.apk.claw.android.octopus_mobile.ActivityLog
 
 class ActivityActivity : ComponentActivity() {
@@ -28,9 +31,9 @@ class ActivityActivity : ComponentActivity() {
 private val cDanger = Color(0xFFFF453B)
 
 private fun outcomeLabel(o: String) = when (o) {
-    "success" -> "成功"
-    "cancelled" -> "已停止"
-    else -> "失败"
+    "success" -> ClawApplication.instance.getString(R.string.channel_msg_tool_success)
+    "cancelled" -> ClawApplication.instance.getString(R.string.activity_outcome_cancelled)
+    else -> ClawApplication.instance.getString(R.string.channel_msg_tool_failure)
 }
 
 private fun outcomeColor(o: String) = when (o) {
@@ -43,9 +46,9 @@ private fun relTime(ts: Long): String {
     val now = System.currentTimeMillis()
     val d = now - ts
     return when {
-        d < 60_000 -> "刚刚"
-        d < 3_600_000 -> "${d / 60_000} 分钟前"
-        d < 86_400_000 -> "${d / 3_600_000} 小时前"
+        d < 60_000 -> ClawApplication.instance.getString(R.string.activity_time_just_now)
+        d < 3_600_000 -> ClawApplication.instance.getString(R.string.activity_time_minutes_ago, d / 60_000)
+        d < 86_400_000 -> ClawApplication.instance.getString(R.string.activity_time_hours_ago, d / 3_600_000)
         else -> java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(ts))
     }
 }
@@ -55,22 +58,22 @@ fun ActivityScreen(onBack: () -> Unit) {
     var entries by remember { mutableStateOf(ActivityLog.all()) }
 
     FeatureScaffold(
-        title = "活动",
+        title = stringResource(R.string.activity_screen_title),
         onBack = onBack,
         action = {
             if (entries.isNotEmpty()) {
-                Text("清空", color = FPrimary, fontSize = 14.sp,
+                Text(stringResource(R.string.activity_clear_button), color = FPrimary, fontSize = 14.sp,
                     modifier = Modifier.clickable { ActivityLog.clear(); entries = emptyList() }.padding(8.dp))
             }
         },
     ) {
         if (entries.isEmpty()) {
-            FEmpty("还没有活动记录。Agent 每完成一次任务，都会在这里留下一条可回看的审计（指令 / 目标 / 步数 / 结果）。")
+            FEmpty(stringResource(R.string.activity_empty_state))
             return@FeatureScaffold
         }
         LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(vertical = 6.dp)) {
             item {
-                Text("共 ${entries.size} 条 · 跨所有会话与设备", color = FMuted, fontSize = 11.sp,
+                Text(stringResource(R.string.activity_summary_count, entries.size), color = FMuted, fontSize = 11.sp,
                     modifier = Modifier.padding(start = 16.dp, bottom = 4.dp))
             }
             items(entries, key = { it.id }) { e ->
@@ -80,9 +83,9 @@ fun ActivityScreen(onBack: () -> Unit) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         FPill(outcomeLabel(e.outcome), outcomeColor(e.outcome))
                         Spacer(Modifier.width(6.dp))
-                        FPill(e.target, if (e.target == "本机") FPrimary else FWarning)
+                        FPill(e.target, if (e.target == stringResource(R.string.control_target_local)) FPrimary else FWarning)
                         Spacer(Modifier.weight(1f))
-                        Text("${e.steps} 步 · ${relTime(e.ts)}", color = FMuted, fontSize = 10.sp)
+                        Text(stringResource(R.string.activity_steps_and_time, e.steps, relTime(e.ts)), color = FMuted, fontSize = 10.sp)
                     }
                     if (e.detail.isNotBlank()) {
                         Spacer(Modifier.height(6.dp))

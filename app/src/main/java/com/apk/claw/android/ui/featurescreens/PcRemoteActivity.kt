@@ -20,11 +20,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.apk.claw.android.R
 import com.apk.claw.android.appViewModel
 import com.apk.claw.android.octopus_mobile.ConnectionState
 import com.apk.claw.android.octopus_mobile.H264Decoder
@@ -140,8 +142,8 @@ private fun PcRemoteScreen(onBack: () -> Unit) {
 
         if (frames == 0) {
             Text(
-                if (connected) "已连接母体,等待 PC 画面…\n（确认母体侧 pc_remote_server.py 已运行）"
-                else "未连接母体。\n请先在 设置 → 母体连接 配好地址并连接。",
+                if (connected) stringResource(R.string.pcremote_waiting_screen)
+                else stringResource(R.string.pcremote_not_connected),
                 color = Color.White, fontSize = 14.sp,
             )
         }
@@ -151,11 +153,11 @@ private fun PcRemoteScreen(onBack: () -> Unit) {
             modifier = Modifier.align(Alignment.TopStart).fillMaxWidth().background(Color(0xCC000000)).padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("‹ 返回", color = Color.White, fontSize = 14.sp, modifier = Modifier.pointerInput(Unit) { detectTapGestures { onBack() } })
+            Text(stringResource(R.string.pcremote_back_button), color = Color.White, fontSize = 14.sp, modifier = Modifier.pointerInput(Unit) { detectTapGestures { onBack() } })
             Spacer(Modifier.width(14.dp))
-            Text("🖥 母体远程桌面", color = Color.White, fontSize = 14.sp)
+            Text(stringResource(R.string.settings_pc_remote_desktop_title), color = Color.White, fontSize = 14.sp)
             Spacer(Modifier.weight(1f))
-            Text(if (frames > 0) "▶ H264 ${frames}" else if (connected) "● 已连接" else "○ 未连接", color = Color(0xFF8AB4F8), fontSize = 11.sp)
+            Text(if (frames > 0) stringResource(R.string.pcremote_frame_count, frames) else if (connected) stringResource(R.string.pcremote_status_connected) else stringResource(R.string.pcremote_status_disconnected), color = Color(0xFF8AB4F8), fontSize = 11.sp)
             Spacer(Modifier.width(12.dp))
             Text("⌫", color = Color.White, fontSize = 16.sp, modifier = Modifier.pointerInput(Unit) { detectTapGestures { client?.sendRemoteInput("key", text = "backspace") } })
             Spacer(Modifier.width(12.dp))
@@ -169,7 +171,7 @@ private fun PcRemoteScreen(onBack: () -> Unit) {
         var input by remember { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { showKeyboard = false },
-            title = { Text("输入文字到 PC") },
+            title = { Text(stringResource(R.string.pcremote_input_dialog_title)) },
             text = {
                 BasicTextField(
                     value = input, onValueChange = { input = it },
@@ -181,10 +183,10 @@ private fun PcRemoteScreen(onBack: () -> Unit) {
                 TextButton(onClick = {
                     if (input.isNotEmpty()) client?.sendRemoteInput("type", text = input)
                     showKeyboard = false
-                }) { Text("发送") }
+                }) { Text(stringResource(R.string.screen_cast_send_button)) }
             },
             dismissButton = {
-                TextButton(onClick = { client?.sendRemoteInput("key", text = "enter"); showKeyboard = false }) { Text("回车") }
+                TextButton(onClick = { client?.sendRemoteInput("key", text = "enter"); showKeyboard = false }) { Text(stringResource(R.string.pcremote_enter_button)) }
             },
         )
     }

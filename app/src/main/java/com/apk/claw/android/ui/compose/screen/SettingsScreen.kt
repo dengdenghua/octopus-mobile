@@ -136,10 +136,12 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
 
         // 模型配置（点击进入真实 LLM 配置页）
         item {
+            val notConfiguredText = stringResource(R.string.status_not_configured)
+            val configuredText = stringResource(R.string.settings_llm_api_key_configured)
             val model = KVUtils.getLlmModelName().ifBlank { "—" }
-            val baseUrl = KVUtils.getLlmBaseUrl().ifBlank { "未配置" }
+            val baseUrl = KVUtils.getLlmBaseUrl().ifBlank { notConfiguredText }
             val apiKey = KVUtils.getLlmApiKey()
-            val keyMasked = if (apiKey.length >= 8) apiKey.take(5) + "••••" + apiKey.takeLast(4) else if (apiKey.isBlank()) "未配置" else "已设置"
+            val keyMasked = if (apiKey.length >= 8) apiKey.take(5) + "••••" + apiKey.takeLast(4) else if (apiKey.isBlank()) notConfiguredText else configuredText
             SettingsCard(stringResource(R.string.settings_section_model), onClick = {
                 context.startActivity(Intent(context, LlmConfigActivity::class.java))
             }) {
@@ -156,14 +158,15 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
 
         // 母体连接（octopus-agent Runtime）—— RPC 远程大脑
         item {
-            val rpcUrl = remember(refreshTick) {
-                KVUtils.getOctopusRpcUrl().ifBlank { "未配置（默认 ws://10.0.2.2:8765）" }
+            val rpcUrlDefault = stringResource(R.string.settings_rpc_url_default)
+            val rpcUrl = remember(refreshTick, rpcUrlDefault) {
+                KVUtils.getOctopusRpcUrl().ifBlank { rpcUrlDefault }
             }
-            SettingsCard("母体连接 · Octopus Runtime", onClick = {
+            SettingsCard(stringResource(R.string.settings_octopus_runtime_title), onClick = {
                 context.startActivity(Intent(context, RuntimeConfigActivity::class.java))
             }) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("RPC 远程大脑（母体下发 tool/execute）", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                    Text(stringResource(R.string.settings_rpc_remote_brain_description), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
                     Spacer(modifier = Modifier.weight(1f))
                     Text("›", fontSize = 18.sp, color = TextMuted)
                 }
@@ -174,11 +177,11 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
 
         // 母体远程桌面（手机看 PC 屏 + 触控控制，类似 ToDesk）
         item {
-            SettingsCard("🖥 母体远程桌面", onClick = {
+            SettingsCard(stringResource(R.string.settings_pc_remote_desktop_title), onClick = {
                 context.startActivity(Intent(context, com.apk.claw.android.ui.featurescreens.PcRemoteActivity::class.java))
             }) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("看 PC 屏幕 + 触控/键盘控制（H.264/WS,同局域网）", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                    Text(stringResource(R.string.settings_pc_remote_h264_description), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
                     Spacer(modifier = Modifier.weight(1f))
                     Text("›", fontSize = 18.sp, color = TextMuted)
                 }
@@ -187,11 +190,11 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
 
         // 母体远程桌面（WebRTC / WebView,P2P 跨网低延迟）
         item {
-            SettingsCard("🖥 远程桌面 (WebRTC)", onClick = {
+            SettingsCard(stringResource(R.string.settings_webrtc_remote_desktop_title), onClick = {
                 context.startActivity(Intent(context, com.apk.claw.android.ui.featurescreens.PcRemoteWebrtcActivity::class.java))
             }) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("P2P 真连(WebView/STUN 打洞,跨网,需母体 pc_remote_webrtc.py)", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                    Text(stringResource(R.string.settings_webrtc_p2p_description), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
                     Spacer(modifier = Modifier.weight(1f))
                     Text("›", fontSize = 18.sp, color = TextMuted)
                 }

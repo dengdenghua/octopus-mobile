@@ -12,8 +12,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.apk.claw.android.R
 import com.apk.claw.android.octopus_mobile.evolution.CanaryManager
 import com.apk.claw.android.octopus_mobile.evolution.LessonStore
 
@@ -33,15 +35,15 @@ fun EvolutionScreen(onBack: () -> Unit) {
         runCatching { CanaryManager(ctx.filesDir).listAll() }.getOrDefault(emptyList())
     }
 
-    FeatureScaffold(title = "自进化", onBack = onBack) {
+    FeatureScaffold(title = stringResource(R.string.discover_shortcut_evolution), onBack = onBack) {
         if (lessons.isEmpty() && canaries.isEmpty()) {
-            FEmpty("还没有进化记录。Agent 会在任务后自我反思，沉淀「教训」并通过灰度逐步生效，结果会显示在这里。")
+            FEmpty(stringResource(R.string.evolution_empty_state))
             return@FeatureScaffold
         }
         LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(bottom = 16.dp)) {
-            item { FSectionTitle("已沉淀教训 (${lessons.size})") }
+            item { FSectionTitle(stringResource(R.string.evolution_lessons_section_title, lessons.size)) }
             if (lessons.isEmpty()) {
-                item { FEmpty("暂无教训") }
+                item { FEmpty(stringResource(R.string.evolution_no_lessons)) }
             } else {
                 items(lessons.size) { i ->
                     val l = lessons[i]
@@ -50,7 +52,7 @@ fun EvolutionScreen(onBack: () -> Unit) {
                             if (!l.tag.isNullOrBlank()) { FPill(l.tag!!, FPrimary); Spacer(Modifier.width(6.dp)) }
                             FPill(l.source, FMuted)
                             Spacer(Modifier.weight(1f))
-                            Text("命中 ${l.hitCount}", color = FMuted, fontSize = 10.sp)
+                            Text(stringResource(R.string.evolution_hit_count, l.hitCount), color = FMuted, fontSize = 10.sp)
                         }
                         Spacer(Modifier.height(6.dp))
                         Text(l.content, color = FText, fontSize = 14.sp, lineHeight = 19.sp)
@@ -60,9 +62,9 @@ fun EvolutionScreen(onBack: () -> Unit) {
                 }
             }
 
-            item { FSectionTitle("灰度发布 (${canaries.size})") }
+            item { FSectionTitle(stringResource(R.string.evolution_canary_section_title, canaries.size)) }
             if (canaries.isEmpty()) {
-                item { FEmpty("暂无灰度中的能力") }
+                item { FEmpty(stringResource(R.string.evolution_no_canaries)) }
             } else {
                 items(canaries.size) { i ->
                     val c = canaries[i]
@@ -72,7 +74,7 @@ fun EvolutionScreen(onBack: () -> Unit) {
                             FPill(c.phase.name, FWarning)
                         }
                         Spacer(Modifier.height(4.dp))
-                        Text("样本 ${c.sampleCount} · 成功 ${c.successCount} · 失败 ${c.failureCount}", color = FMuted, fontSize = 10.sp)
+                        Text(stringResource(R.string.evolution_canary_stats, c.sampleCount, c.successCount, c.failureCount), color = FMuted, fontSize = 10.sp)
                     }
                 }
             }
@@ -94,6 +96,6 @@ private fun EffBar(value: Double) {
             )
         }
         Spacer(Modifier.width(8.dp))
-        Text("有效度 ${(v * 100).toInt()}%", color = FMuted, fontSize = 10.sp)
+        Text(stringResource(R.string.evolution_effectiveness, (v * 100).toInt()), color = FMuted, fontSize = 10.sp)
     }
 }

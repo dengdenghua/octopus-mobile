@@ -7,6 +7,7 @@ import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import androidx.activity.ComponentActivity
+import com.apk.claw.android.R
 import com.apk.claw.android.appViewModel
 import com.apk.claw.android.octopus_mobile.Envelope
 import com.apk.claw.android.utils.XLog
@@ -49,7 +50,7 @@ class PcRemoteWebrtcActivity : ComponentActivity() {
             }
         } catch (e: Throwable) {
             XLog.e("PcWebRTC", "WebView 初始化失败", e)
-            android.widget.Toast.makeText(this, "系统 WebView 不可用，无法启动远程桌面", android.widget.Toast.LENGTH_LONG).show()
+            android.widget.Toast.makeText(this, getString(R.string.pc_remote_webrtc_webview_unavailable), android.widget.Toast.LENGTH_LONG).show()
             finish()
             return
         }

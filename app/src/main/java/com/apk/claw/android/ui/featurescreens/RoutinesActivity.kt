@@ -16,9 +16,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.apk.claw.android.R
 import com.apk.claw.android.octopus_mobile.ActionCache
 import com.apk.claw.android.octopus_mobile.RoutineStore
 import com.apk.claw.android.service.RoutineScheduler
@@ -46,20 +48,24 @@ private fun RoutinesScreen(onBack: () -> Unit) {
     var items by remember { mutableStateOf(RoutineStore.all()) }
     fun refresh() { items = RoutineStore.all() }
 
-    FeatureScaffold(title = "例程", onBack = onBack) {
+    FeatureScaffold(title = stringResource(R.string.routines_title), onBack = onBack) {
         if (items.isEmpty()) {
-            FEmpty("还没有例程。\n\n在对话里长按你发过的一条指令 →「存为例程」，这里就能一键重放或设定时。重放会让 Agent 按指令重新看屏规划执行。")
+            FEmpty(stringResource(R.string.routines_empty_state))
         } else {
             LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(vertical = 6.dp)) {
                 item {
                     Text(
-                        "共 ${items.size} 条 · ⚡=已学快路径(直接重放更快)，否则 Agent 重新规划",
+                        stringResource(R.string.routines_count_summary, items.size),
                         color = FMuted, fontSize = 11.sp,
                         modifier = Modifier.padding(start = 16.dp, bottom = 4.dp),
                     )
                 }
                 items(items, key = { it.id }) { r ->
                     val cached = ActionCache.get(r.id, r.prompt)
+                    val targetAndCount = stringResource(R.string.routines_item_target_and_count, r.targetLabel, r.runCount)
+                    val schedTime = "%02d:%02d".format(r.scheduleHour, r.scheduleMinute)
+                    val schedDaily = stringResource(R.string.routines_item_schedule_daily, schedTime)
+                    val schedOnce = stringResource(R.string.routines_item_schedule_once, schedTime)
                     FCard {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(modifier = Modifier.weight(1f)) {
@@ -67,10 +73,9 @@ private fun RoutinesScreen(onBack: () -> Unit) {
                                 Spacer(Modifier.height(2.dp))
                                 Text(
                                     buildString {
-                                        append("目标 ${r.targetLabel} · 运行 ${r.runCount} 次")
+                                        append(targetAndCount)
                                         if (r.isScheduled) {
-                                            val t = "%02d:%02d".format(r.scheduleHour, r.scheduleMinute)
-                                            append(if (r.scheduleDaily) " · ⏰ 每天 $t" else " · ⏰ 一次 $t")
+                                            append(if (r.scheduleDaily) schedDaily else schedOnce)
                                         }
                                     },
                                     color = if (r.isScheduled) FPrimary else FMuted, fontSize = 10.sp,
@@ -78,7 +83,7 @@ private fun RoutinesScreen(onBack: () -> Unit) {
                             }
                             if (cached != null) {
                                 Text(
-                                    "⚡${cached.steps.size}", color = FPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                                    stringResource(R.string.routines_item_lightning_steps, cached.steps.size), color = FPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
                                     modifier = Modifier
                                         .clickable { forgetFastPath(ctx, r) { refresh() } }
                                         .padding(horizontal = 6.dp, vertical = 4.dp),
@@ -91,7 +96,7 @@ private fun RoutinesScreen(onBack: () -> Unit) {
                                     .padding(horizontal = 6.dp, vertical = 4.dp),
                             )
                             Text(
-                                "▶ 运行", color = FPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                                stringResource(R.string.routines_item_run_button), color = FPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
                                 modifier = Modifier
                                     .clickable { Toast.makeText(ctx, RoutineRunner.run(ctx, r), Toast.LENGTH_LONG).show(); refresh() }
                                     .padding(horizontal = 6.dp, vertical = 4.dp),
@@ -118,14 +123,14 @@ private fun RoutinesScreen(onBack: () -> Unit) {
 private fun forgetFastPath(ctx: Context, r: RoutineStore.Routine, onChanged: () -> Unit) {
     val n = ActionCache.get(r.id, r.prompt)?.steps?.size ?: 0
     AlertDialog.Builder(ctx)
-        .setTitle("忘记快路径")
-        .setMessage("「${r.name}」已学会 $n 步快路径。忘记后下次运行会让 Agent 重新看屏规划，并重新录制。")
-        .setPositiveButton("忘记") { _, _ ->
+        .setTitle(ctx.getString(R.string.routines_forget_fastpath_title))
+        .setMessage(ctx.getString(R.string.routines_forget_fastpath_message, r.name, n))
+        .setPositiveButton(ctx.getString(R.string.routines_forget_button)) { _, _ ->
             ActionCache.remove(r.id)
-            Toast.makeText(ctx, "已忘记快路径", Toast.LENGTH_SHORT).show()
+            Toast.makeText(ctx, ctx.getString(R.string.routines_forgotten_toast), Toast.LENGTH_SHORT).show()
             onChanged()
         }
-        .setNegativeButton("取消", null)
+        .setNegativeButton(ctx.getString(R.string.common_cancel), null)
         .show()
 }
 
@@ -137,23 +142,23 @@ private fun openSchedule(ctx: Context, r: RoutineStore.Routine, onChanged: () ->
     TimePickerDialog(ctx, { _, h, m ->
         val t = "%02d:%02d".format(h, m)
         AlertDialog.Builder(ctx)
-            .setTitle("$t 定时")
-            .setItems(arrayOf("每天重复", "仅一次", "取消定时")) { _, which ->
+            .setTitle(ctx.getString(R.string.routines_schedule_dialog_title, t))
+            .setItems(arrayOf(ctx.getString(R.string.routines_schedule_daily_option), ctx.getString(R.string.routines_schedule_once_option), ctx.getString(R.string.routines_schedule_cancel_option))) { _, which ->
                 when (which) {
                     0 -> {
                         val nr = r.copy(scheduleHour = h, scheduleMinute = m, scheduleDaily = true)
                         RoutineStore.update(nr); RoutineScheduler.schedule(ctx, nr)
-                        Toast.makeText(ctx, "已设为每天 $t", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(ctx, ctx.getString(R.string.routines_set_daily_toast, t), Toast.LENGTH_SHORT).show()
                     }
                     1 -> {
                         val nr = r.copy(scheduleHour = h, scheduleMinute = m, scheduleDaily = false)
                         RoutineStore.update(nr); RoutineScheduler.schedule(ctx, nr)
-                        Toast.makeText(ctx, "已设为一次 $t（下一个 $t 触发）", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(ctx, ctx.getString(R.string.routines_set_once_toast, t), Toast.LENGTH_SHORT).show()
                     }
                     2 -> {
                         RoutineStore.update(r.copy(scheduleHour = null, scheduleMinute = null, scheduleDaily = false))
                         RoutineScheduler.cancel(ctx, r.id)
-                        Toast.makeText(ctx, "已取消定时", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(ctx, ctx.getString(R.string.routines_cancel_scheduling_toast), Toast.LENGTH_SHORT).show()
                     }
                 }
                 onChanged()

@@ -149,7 +149,7 @@ class BrowserActivity : BaseActivity() {
                     indeterminateTintList = android.content.res.ColorStateList.valueOf(cPrimary)
                 })
                 addView(TextView(this@BrowserActivity).apply {
-                    text = "加载中…"
+                    text = getString(R.string.browser_loading_text)
                     textSize = 13f
                     setTextColor(cMuted)
                     setPadding(0, dp8, 0, 0)
@@ -180,14 +180,14 @@ class BrowserActivity : BaseActivity() {
                 setPadding(dp8, dp8, dp8, dp8)
                 background = roundedBg(cSurface2, 10)
                 setOnClickListener { showEngineMenu(it) }
-                contentDescription = "切换搜索引擎"
+                contentDescription = getString(R.string.browser_engine_chip_description)
             }
             addressBar.addView(engineChip)
             loadEngineFavicon()
 
             etUrl = EditText(this@BrowserActivity).apply {
                 layoutParams = LinearLayout.LayoutParams(0, dp(40), 1f)
-                hint = "搜索或输入网址"
+                hint = getString(R.string.browser_url_hint)
                 setSingleLine(true)
                 inputType = InputType.TYPE_TEXT_VARIATION_URI
                 imeOptions = EditorInfo.IME_ACTION_GO
@@ -202,7 +202,7 @@ class BrowserActivity : BaseActivity() {
                         hideKeyboard()
                         // 智能 omnibox：像指令 → 让 Agent 操作此页；否则按网址/搜索处理
                         if (isPageCommand(t)) {
-                            android.widget.Toast.makeText(this@BrowserActivity, "🤖 让 AI 操作此页…", android.widget.Toast.LENGTH_SHORT).show()
+                            android.widget.Toast.makeText(this@BrowserActivity, getString(R.string.browser_ai_operate_toast), android.widget.Toast.LENGTH_SHORT).show()
                             runAgentOnPage(t)
                         } else {
                             navigateTo(t)
@@ -218,7 +218,7 @@ class BrowserActivity : BaseActivity() {
                 setImageResource(android.R.drawable.ic_menu_rotate)
                 setColorFilter(cMuted)
                 setBackgroundColor(Color.TRANSPARENT)
-                contentDescription = "刷新"
+                contentDescription = getString(R.string.browser_refresh_button)
                 setOnClickListener { navigateTo(engine.currentUrl()) }
             }
             addressBar.addView(btnRefresh)
@@ -247,10 +247,10 @@ class BrowserActivity : BaseActivity() {
                 layoutParams = LinearLayout.LayoutParams(s, s)
                 isClickable = true
                 setOnClickListener { finish() }
-                contentDescription = "关闭"
+                contentDescription = getString(R.string.advanced_action_close)
             })
             addView(TextView(this@BrowserActivity).apply {
-                text = "浏览器"
+                text = getString(R.string.discover_shortcut_browser)
                 textSize = 16f
                 setTypeface(typeface, Typeface.BOLD)
                 setTextColor(cText)
@@ -271,12 +271,12 @@ class BrowserActivity : BaseActivity() {
             layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, dp(52))
             setPadding(dp(8), 0, dp(8), 0)
             setBackgroundColor(cSurface)
-            addView(makeGlyphButton("✨", "问 AI") { showAiSheet() })
-            addView(makeGlyphButton("‹", "后退") { engine.evaluateJs("window.history.back()") })
-            addView(makeGlyphButton("›", "前进") { engine.evaluateJs("window.history.forward()") })
-            addView(makeGlyphButton("⌂", "首页") { navigateTo(SearchEngines.byId(KVUtils.getSearchEngine()).home) })
-            addView(makeGlyphButton("☆", "书签") { showBookmarkDialog() })
-            addView(makeGlyphButton("⋯", "扩展") { showExtensionDialog() })
+            addView(makeGlyphButton("✨", getString(R.string.browser_ask_ai_button)) { showAiSheet() })
+            addView(makeGlyphButton("‹", getString(R.string.browser_back_button)) { engine.evaluateJs("window.history.back()") })
+            addView(makeGlyphButton("›", getString(R.string.browser_forward_button)) { engine.evaluateJs("window.history.forward()") })
+            addView(makeGlyphButton("⌂", getString(R.string.browser_home_button)) { navigateTo(SearchEngines.byId(KVUtils.getSearchEngine()).home) })
+            addView(makeGlyphButton("☆", getString(R.string.browser_bookmarks_button)) { showBookmarkDialog() })
+            addView(makeGlyphButton("⋯", getString(R.string.device_extensions)) { showExtensionDialog() })
         }
     }
 
@@ -328,14 +328,14 @@ class BrowserActivity : BaseActivity() {
             setPadding(pad, pad, pad, pad)
         }
         container.addView(TextView(this).apply {
-            text = "✨ 问 AI · 关于此页"
+            text = getString(R.string.browser_ai_sheet_title)
             textSize = 16f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(cText)
         })
         if (pageText.isNullOrBlank()) {
             container.addView(TextView(this).apply {
-                text = "需开启无障碍服务才能读取页面内容"
+                text = getString(R.string.browser_accessibility_warning)
                 textSize = 11f
                 setTextColor(Color.parseColor("#FF9F0A"))
                 setPadding(0, dp(6), 0, 0)
@@ -354,7 +354,7 @@ class BrowserActivity : BaseActivity() {
         }
 
         val etAsk = EditText(this).apply {
-            hint = "问这个页面…"
+            hint = getString(R.string.browser_ask_page_hint)
             setSingleLine(true)
             textSize = 14f
             setTextColor(cText)
@@ -385,9 +385,9 @@ class BrowserActivity : BaseActivity() {
             orientation = LinearLayout.HORIZONTAL
             setPadding(0, dp(12), 0, dp(8))
         }
-        chip(chips, "总结此页", cPrimary) { runAi(answer, "用简洁要点总结这个网页的主要内容。", pageText) }
-        chip(chips, "提取要点", cPrimary) { runAi(answer, "提取这个网页里最关键的信息要点。", pageText) }
-        chip(chips, "翻译", cPrimary) { runAi(answer, "把这个网页的主要内容翻译成中文。", pageText) }
+        chip(chips, getString(R.string.browser_chip_summarize), cPrimary) { runAi(answer, "用简洁要点总结这个网页的主要内容。", pageText) }
+        chip(chips, getString(R.string.browser_chip_key_points), cPrimary) { runAi(answer, "提取这个网页里最关键的信息要点。", pageText) }
+        chip(chips, getString(R.string.browser_chip_translate), cPrimary) { runAi(answer, "把这个网页的主要内容翻译成中文。", pageText) }
         container.addView(chips)
 
         // 第二排：内容/操作类
@@ -395,19 +395,19 @@ class BrowserActivity : BaseActivity() {
             orientation = LinearLayout.HORIZONTAL
             setPadding(0, 0, 0, dp(10))
         }
-        chip(chips2, "📖 阅读模式", cText) { showReader(pageText) }
-        chip(chips2, "🔊 朗读", cText) { speakPage(pageText) }
+        chip(chips2, getString(R.string.browser_chip_reader), cText) { showReader(pageText) }
+        chip(chips2, getString(R.string.browser_chip_speak), cText) { speakPage(pageText) }
         container.addView(chips2)
 
         val inputRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        etAsk.hint = "问此页，或让 AI 操作此页…"
+        etAsk.hint = getString(R.string.browser_input_ask_or_operate)
         inputRow.addView(etAsk, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
         // 「问」：基于页面内容问答
         inputRow.addView(TextView(this).apply {
-            text = "问"
+            text = getString(R.string.browser_ask_button)
             textSize = 14f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(Color.WHITE)
@@ -421,7 +421,7 @@ class BrowserActivity : BaseActivity() {
         })
         // 「执行」：让 Agent 真正操作当前网页（关面板让其看见页面）
         inputRow.addView(TextView(this).apply {
-            text = "执行"
+            text = getString(R.string.browser_execute_button)
             textSize = 14f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(Color.WHITE)
@@ -460,7 +460,7 @@ class BrowserActivity : BaseActivity() {
     private fun showReader(pageText: String?) {
         val readable = extractReadableText(pageText)
         if (readable.isBlank()) {
-            android.widget.Toast.makeText(this, "无法读取页面内容（需开启无障碍）", android.widget.Toast.LENGTH_SHORT).show()
+            android.widget.Toast.makeText(this, getString(R.string.browser_cannot_read_content), android.widget.Toast.LENGTH_SHORT).show()
             return
         }
         val tv = TextView(this).apply {
@@ -484,7 +484,7 @@ class BrowserActivity : BaseActivity() {
     private fun speakPage(pageText: String?) {
         val readable = extractReadableText(pageText).take(3000)
         if (readable.isBlank()) {
-            android.widget.Toast.makeText(this, "无内容可朗读", android.widget.Toast.LENGTH_SHORT).show()
+            android.widget.Toast.makeText(this, getString(R.string.browser_no_content_to_speak), android.widget.Toast.LENGTH_SHORT).show()
             return
         }
         val t = tts
@@ -520,7 +520,7 @@ class BrowserActivity : BaseActivity() {
     /** 让 Agent 在当前网页上执行操作（通过无障碍 tap/输入，不依赖已失效的 JS）。 */
     private fun runAgentOnPage(task: String) {
         if (!com.apk.claw.android.ui.compose.screen.ChatAgentBridge.isConfigured()) {
-            android.widget.Toast.makeText(this, "请先在「设置 → 模型」里配置 API Key", android.widget.Toast.LENGTH_SHORT).show()
+            android.widget.Toast.makeText(this, getString(R.string.browser_configure_api_key), android.widget.Toast.LENGTH_SHORT).show()
             return
         }
         val prompt = "在当前网页上完成以下操作（用 get_screen_info 查看页面元素及坐标，用 tap / input_text 等工具操作）：$task"
@@ -535,10 +535,10 @@ class BrowserActivity : BaseActivity() {
 
     private fun runAi(answer: TextView, question: String, pageText: String?) {
         if (!com.apk.claw.android.ui.compose.screen.ChatAgentBridge.isConfigured()) {
-            answer.text = "请先在「设置 → 模型」里配置 API Key。"
+            answer.text = getString(R.string.browser_configure_api_key_text)
             return
         }
-        answer.text = "思考中…"
+        answer.text = getString(R.string.browser_thinking_status)
         val ctx = if (pageText.isNullOrBlank()) "" else "\n\n【当前网页内容】\n" + pageText.take(4000)
         val prompt = "你是网页阅读助手。请只依据下方网页内容回答，不要调用任何工具。\n用户问题：$question$ctx"
         val sb = StringBuilder()
@@ -547,7 +547,7 @@ class BrowserActivity : BaseActivity() {
             onTool = { _, _, _, _ -> },
             onText = { t -> sb.append(t); answer.text = sb.toString() },
             onDone = { d -> answer.text = if (sb.isNotEmpty()) sb.toString() else d },
-            onError = { e -> answer.text = "出错：$e" },
+            onError = { e -> answer.text = getString(R.string.browser_error_message, e) },
         )
     }
 
@@ -581,14 +581,14 @@ class BrowserActivity : BaseActivity() {
                             progressBar.visibility = View.GONE
                             Toast.makeText(
                                 this@BrowserActivity,
-                                "加载错误: ${event.description}",
+                                getString(R.string.browser_load_error, event.description),
                                 Toast.LENGTH_SHORT
                             ).show()
                         }
                         is EngineEvent.DownloadStart -> {
                             Toast.makeText(
                                 this@BrowserActivity,
-                                "下载: ${event.suggestedFilename}",
+                                getString(R.string.browser_download_notification, event.suggestedFilename),
                                 Toast.LENGTH_SHORT
                             ).show()
                         }
@@ -648,25 +648,25 @@ class BrowserActivity : BaseActivity() {
 
         val items = mutableListOf<String>()
         if (isBookmarked) {
-            items.add("⭐ 取消收藏当前页")
+            items.add(getString(R.string.browser_remove_bookmark))
         } else {
-            items.add("☆ 收藏当前页")
+            items.add(getString(R.string.browser_bookmark_current))
         }
-        items.add("── 已保存书签 ──")
+        items.add(getString(R.string.browser_saved_bookmarks_header))
         bookmarks.forEach { items.add("${it.title}\n${it.url}") }
 
         AlertDialog.Builder(this)
-            .setTitle("书签")
+            .setTitle(getString(R.string.browser_bookmarks_button))
             .setItems(items.toTypedArray()) { _, which ->
                 when {
                     which == 0 -> {
                         if (isBookmarked) {
                             bookmarkManager.remove(currentUrl)
-                            Toast.makeText(this, "已取消收藏", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this, getString(R.string.browser_bookmark_removed), Toast.LENGTH_SHORT).show()
                         } else {
                             // 用当前 URL 和 etUrl 的文字作为标题
                             bookmarkManager.add(currentUrl, etUrl.text.toString().ifEmpty { currentUrl })
-                            Toast.makeText(this, "已收藏", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this, getString(R.string.browser_bookmarked), Toast.LENGTH_SHORT).show()
                         }
                     }
                     which > 1 -> {
@@ -675,7 +675,7 @@ class BrowserActivity : BaseActivity() {
                     }
                 }
             }
-            .setNegativeButton("关闭", null)
+            .setNegativeButton(getString(R.string.advanced_action_close), null)
             .show()
     }
 
@@ -683,35 +683,35 @@ class BrowserActivity : BaseActivity() {
 
     private fun showExtensionDialog() {
         if (!engine.supportsExtensions) {
-            Toast.makeText(this, "当前引擎(${engine.name})不支持扩展", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.browser_engine_no_extensions, engine.name), Toast.LENGTH_SHORT).show()
             return
         }
 
         val editText = EditText(this).apply {
-            hint = "扩展 .xpi 链接（火狐）"
+            hint = getString(R.string.browser_extension_xpi_hint)
             setSingleLine(true)
             setPadding(dp(16), dp(12), dp(16), dp(12))
         }
 
         AlertDialog.Builder(this)
-            .setTitle("扩展")
-            .setMessage("推荐：点「逛 AMO 商店」浏览火狐插件市场，在扩展页点「Add to Firefox」即可直接安装。\n或在下方粘贴 .xpi 链接安装。\n（Chrome 扩展因签名限制无法在 Firefox 内核安装）")
+            .setTitle(getString(R.string.device_extensions))
+            .setMessage(getString(R.string.browser_extension_dialog_message))
             .setView(editText)
-            .setPositiveButton("安装") { _, _ ->
+            .setPositiveButton(getString(R.string.browser_install_button)) { _, _ ->
                 val input = editText.text.toString().trim()
                 if (input.isNotEmpty()) {
                     installExtension(input)
                 }
             }
-            .setNeutralButton("逛 AMO 商店") { _, _ ->
+            .setNeutralButton(getString(R.string.browser_browse_amo_button)) { _, _ ->
                 navigateTo("https://addons.mozilla.org/zh-CN/android/")
             }
-            .setNegativeButton("取消", null)
+            .setNegativeButton(getString(R.string.common_cancel), null)
             .show()
     }
 
     private fun installExtension(input: String) {
-        Toast.makeText(this, "正在安装扩展...", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, getString(R.string.browser_installing_extension), Toast.LENGTH_SHORT).show()
         lifecycleScope.launch {
             try {
                 val installer = com.apk.claw.android.octopus_mobile.browser.ExtensionInstaller(
@@ -728,14 +728,14 @@ class BrowserActivity : BaseActivity() {
                     is com.apk.claw.android.octopus_mobile.browser.ExtensionInstaller.InstallResult.Success -> {
                         Toast.makeText(
                             this@BrowserActivity,
-                            "安装成功: ${result.extensionName} v${result.extensionVersion}",
+                            getString(R.string.browser_install_success, result.extensionName, result.extensionVersion),
                             Toast.LENGTH_LONG
                         ).show()
                     }
                     is com.apk.claw.android.octopus_mobile.browser.ExtensionInstaller.InstallResult.Failed -> {
                         Toast.makeText(
                             this@BrowserActivity,
-                            "安装失败: ${result.reason}",
+                            getString(R.string.browser_install_failed, result.reason),
                             Toast.LENGTH_LONG
                         ).show()
                     }
@@ -743,7 +743,7 @@ class BrowserActivity : BaseActivity() {
             } catch (e: Exception) {
                 Toast.makeText(
                     this@BrowserActivity,
-                    "安装异常: ${e.message}",
+                    getString(R.string.browser_install_error, e.message),
                     Toast.LENGTH_LONG
                 ).show()
             }

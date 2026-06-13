@@ -2,6 +2,8 @@ package com.apk.claw.android.ui.compose.screen
 
 import android.os.Handler
 import android.os.Looper
+import com.apk.claw.android.ClawApplication
+import com.apk.claw.android.R
 import com.apk.claw.android.agent.AgentCallback
 import com.apk.claw.android.agent.AgentConfig
 import com.apk.claw.android.agent.DefaultAgentService
@@ -49,7 +51,7 @@ object ChatAgentBridge {
     fun cancel() {
         service.cancel()
         LiveControlOverlay.hide()
-        finalize("cancelled", "已手动停止")
+        finalize("cancelled", ClawApplication.instance.getString(R.string.chat_agent_bridge_manually_stopped))
         busy.set(false)
     }
 
@@ -107,7 +109,7 @@ object ChatAgentBridge {
     ) {
         // 忙判断必须在改动任何共享状态(updateConfig/curTask)之前,拒绝并发任务。
         if (!busy.compareAndSet(false, true)) {
-            onError("正在执行另一个任务，请稍候")
+            onError(ClawApplication.instance.getString(R.string.chat_agent_bridge_busy_error))
             return
         }
         val recorder = recordKey?.let { ActionRecorder() }
@@ -118,10 +120,10 @@ object ChatAgentBridge {
         curSteps = 0
         curStart = System.currentTimeMillis()
         // 实时控制层：任务期间悬浮显示当前步骤 + 停止键（即使 Agent 跳出本 App 也可见）
-        LiveControlOverlay.show("💭 准备中…") { cancel() }
+        LiveControlOverlay.show(ClawApplication.instance.getString(R.string.chat_agent_bridge_preparing)) { cancel() }
         service.executeTask(prompt, object : AgentCallback {
             override fun onLoopStart(round: Int) {
-                LiveControlOverlay.updateStep("💭 思考中…")
+                LiveControlOverlay.updateStep(ClawApplication.instance.getString(R.string.chat_agent_bridge_thinking))
             }
 
             override fun onContent(round: Int, content: String) {
@@ -148,24 +150,24 @@ object ChatAgentBridge {
 
             override fun onComplete(round: Int, finalAnswer: String, totalTokens: Int) {
                 if (recordKey != null) recorder?.commit(recordKey, prompt)
-                LiveControlOverlay.finish(true, "完成")
+                LiveControlOverlay.finish(true, ClawApplication.instance.getString(R.string.floating_circle_success_state))
                 finalize("success", finalAnswer)
                 busy.set(false)
                 main.post { onDone(finalAnswer) }
             }
 
             override fun onError(round: Int, error: Exception, totalTokens: Int) {
-                LiveControlOverlay.finish(false, error.message?.take(20) ?: "出错")
-                finalize("error", error.message ?: "调用失败")
+                LiveControlOverlay.finish(false, error.message?.take(20) ?: ClawApplication.instance.getString(R.string.chat_agent_bridge_error))
+                finalize("error", error.message ?: ClawApplication.instance.getString(R.string.chat_agent_bridge_call_failed))
                 busy.set(false)
-                main.post { onError(error.message ?: "调用失败") }
+                main.post { onError(error.message ?: ClawApplication.instance.getString(R.string.chat_agent_bridge_call_failed)) }
             }
 
             override fun onSystemDialogBlocked(round: Int, totalTokens: Int) {
-                LiveControlOverlay.finish(false, "需手动处理")
-                finalize("error", "检测到系统弹窗，已暂停")
+                LiveControlOverlay.finish(false, ClawApplication.instance.getString(R.string.chat_agent_bridge_manual_required))
+                finalize("error", ClawApplication.instance.getString(R.string.chat_agent_bridge_dialog_detected))
                 busy.set(false)
-                main.post { onError("检测到系统弹窗，已暂停（需手动处理）") }
+                main.post { onError(ClawApplication.instance.getString(R.string.chat_agent_bridge_dialog_detected_full)) }
             }
         })
     }

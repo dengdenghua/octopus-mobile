@@ -2,6 +2,7 @@ package com.apk.claw.android.ui.compose.screen
 
 import android.graphics.Rect
 import android.view.accessibility.AccessibilityNodeInfo
+import com.apk.claw.android.R
 import com.apk.claw.android.octopus_mobile.ActionCache
 import com.apk.claw.android.octopus_mobile.ActivityLog
 import com.apk.claw.android.octopus_mobile.ControlTarget
@@ -56,7 +57,7 @@ object FastReplay {
                     target = ControlTarget.label(),
                     steps = seq.steps.size,
                     outcome = "success",
-                    detail = "⚡ 快路径重放 ${seq.steps.size} 步",
+                    detail = svc.getString(R.string.fast_replay_activity_log_message, seq.steps.size),
                 )
             )
         }

@@ -32,7 +32,8 @@ object ControlTarget {
 
     /** 当前目标显示名（本机 / 设备名）。 */
     @JvmStatic
-    fun label(): String = target?.deviceName ?: "本机"
+    fun label(): String = target?.deviceName
+        ?: com.apk.claw.android.ClawApplication.instance.getString(com.apk.claw.android.R.string.control_target_local)
 
     /** 当前目标 id（本机为 "local"）。 */
     @JvmStatic

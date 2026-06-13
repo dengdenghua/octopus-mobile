@@ -11,9 +11,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.apk.claw.android.R
 import com.apk.claw.android.tool.ToolRegistry
 import com.apk.claw.android.utils.KVUtils
 
@@ -46,9 +48,9 @@ private fun SkillsScreen(onBack: () -> Unit) {
     }
     var rev by remember { mutableStateOf(0) }
 
-    FeatureScaffold(title = "技能 / 能力", onBack = onBack) {
+    FeatureScaffold(title = stringResource(R.string.skills_screen_title), onBack = onBack) {
         Text(
-            "Agent 能调用的工具共 ${tools.size} 个。核心控制/感知工具锁定;其余可按需停用(停用后 Agent 不再使用该能力,降低误操作/隐私面)。",
+            stringResource(R.string.skills_screen_description, tools.size),
             color = FMuted, fontSize = 11.sp,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
         )
@@ -72,10 +74,10 @@ private fun SkillsScreen(onBack: () -> Unit) {
                             }
                         }
                         if (core) {
-                            Text("核心", color = FMuted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 8.dp))
+                            Text(stringResource(R.string.skills_badge_core), color = FMuted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 8.dp))
                         } else {
                             Text(
-                                if (enabled) "停用" else "启用",
+                                if (enabled) stringResource(R.string.extensions_disable_button) else stringResource(R.string.extensions_enable_button),
                                 color = if (enabled) FPrimary else FMuted, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
                                 modifier = Modifier
                                     .clickable { KVUtils.setToolDisabled(name, enabled); rev++ }

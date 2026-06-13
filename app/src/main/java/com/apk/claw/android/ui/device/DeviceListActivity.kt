@@ -68,7 +68,7 @@ class DeviceListActivity : BaseActivity() {
 
             // Toolbar
             addView(CommonToolbar(this@DeviceListActivity).apply {
-                setTitle("局域网设备")
+                setTitle(getString(R.string.device_list_toolbar_title))
                 showBackButton(true) { finish() }
             })
 
@@ -85,7 +85,7 @@ class DeviceListActivity : BaseActivity() {
 
             // 在线设备
             onlineGroup = MenuGroup(this@DeviceListActivity).apply {
-                setTitle("在线设备")
+                setTitle(getString(R.string.device_list_online_group_title))
                 layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
                     bottomMargin = dp8
                 }
@@ -94,7 +94,7 @@ class DeviceListActivity : BaseActivity() {
 
             // 离线设备
             offlineGroup = MenuGroup(this@DeviceListActivity).apply {
-                setTitle("离线设备")
+                setTitle(getString(R.string.device_list_offline_group_title))
                 layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
                     bottomMargin = dp8
                 }
@@ -103,7 +103,7 @@ class DeviceListActivity : BaseActivity() {
 
             // 空状态提示
             tvEmpty = TextView(this@DeviceListActivity).apply {
-                text = "正在扫描局域网设备..."
+                text = getString(R.string.device_list_empty_state_text)
                 textSize = 14f
                 setTextColor(Color.GRAY)
                 gravity = Gravity.CENTER
@@ -114,7 +114,7 @@ class DeviceListActivity : BaseActivity() {
 
             // 刷新按钮
             btnRefresh = KButton(this@DeviceListActivity).apply {
-                text = "刷新扫描"
+                text = getString(R.string.device_list_refresh_button_text)
                 layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
                     topMargin = dp8
                 }

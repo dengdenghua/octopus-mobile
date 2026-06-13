@@ -13,9 +13,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.apk.claw.android.R
 import com.apk.claw.android.media.MediaScanner
 import com.apk.claw.android.media.PlayerActivity
 import kotlinx.coroutines.Dispatchers
@@ -43,14 +45,14 @@ fun VideoLibraryScreen(onBack: () -> Unit) {
         }
     }
 
-    FeatureScaffold(title = "视频", onBack = onBack) {
+    FeatureScaffold(title = stringResource(R.string.discover_shortcut_video), onBack = onBack) {
         val list = files
         when {
-            list == null -> FEmpty("扫描本地视频…")
-            list.isEmpty() -> FEmpty("未扫描到视频文件。把视频放到手机存储后再来，或在对话页让 Agent 播放在线/网盘视频。")
+            list == null -> FEmpty(stringResource(R.string.videolibrary_scanning))
+            list.isEmpty() -> FEmpty(stringResource(R.string.videolibrary_no_files))
             else -> LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(vertical = 6.dp)) {
                 item {
-                    Text("共 ${list.size} 个视频", color = FMuted, fontSize = 11.sp, modifier = Modifier.padding(start = 16.dp, bottom = 4.dp))
+                    Text(stringResource(R.string.videolibrary_count, list.size), color = FMuted, fontSize = 11.sp, modifier = Modifier.padding(start = 16.dp, bottom = 4.dp))
                 }
                 items(list, key = { it.path }) { f ->
                     FCard {
@@ -68,7 +70,7 @@ fun VideoLibraryScreen(onBack: () -> Unit) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(f.name, color = FText, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1)
                                 Text(
-                                    MediaScanner.formatSize(f.sizeBytes) + " · " + f.extension.uppercase() + (if (f.isBluRay) " · 蓝光" else ""),
+                                    MediaScanner.formatSize(f.sizeBytes) + " · " + f.extension.uppercase() + (if (f.isBluRay) stringResource(R.string.videolibrary_bluray_label) else ""),
                                     color = FMuted, fontSize = 10.sp,
                                 )
                             }

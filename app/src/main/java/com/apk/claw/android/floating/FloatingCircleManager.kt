@@ -2,6 +2,7 @@ package com.apk.claw.android.floating
 
 import android.app.Application
 import com.apk.claw.android.ClawApplication
+import com.apk.claw.android.R
 import com.apk.claw.android.channel.Channel
 
 /**
@@ -38,10 +39,10 @@ object FloatingCircleManager {
 
     /** 任务执行中：控制条显示进度（show 幂等：已显示则只更新文案）。 */
     fun setRunningState(round: Int, channel: Channel) {
-        LiveControlOverlay.show("💭 执行中…") { cancelRunning() }
+        LiveControlOverlay.show(ClawApplication.instance.getString(R.string.floating_circle_running_state)) { cancelRunning() }
     }
 
-    fun setSuccessState() = LiveControlOverlay.finish(true, "完成")
+    fun setSuccessState() = LiveControlOverlay.finish(true, ClawApplication.instance.getString(R.string.floating_circle_success_state))
 
-    fun setErrorState() = LiveControlOverlay.finish(false, "已结束")
+    fun setErrorState() = LiveControlOverlay.finish(false, ClawApplication.instance.getString(R.string.floating_circle_error_state))
 }

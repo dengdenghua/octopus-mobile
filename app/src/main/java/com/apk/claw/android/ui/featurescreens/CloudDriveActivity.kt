@@ -12,9 +12,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.apk.claw.android.R
 import com.apk.claw.android.media.MediaScanner
 import com.apk.claw.android.media.PlayerActivity
 import com.apk.claw.android.media.WebDAVEntry
@@ -48,6 +50,7 @@ fun CloudDriveScreen(onBack: () -> Unit) {
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var showAdd by remember { mutableStateOf(false) }
+    val emptyOrAuthFailedMsg = stringResource(R.string.clouddrive_empty_or_auth_failed)
 
     fun load(m: WebDavMounts.Mount, path: String) {
         scope.launch {
@@ -57,7 +60,7 @@ fun CloudDriveScreen(onBack: () -> Unit) {
                     .getOrElse { emptyList() }
             }
             entries = list
-            if (list.isEmpty()) error = "目录为空，或服务器不可达 / 认证失败"
+            if (list.isEmpty()) error = emptyOrAuthFailedMsg
             busy = false
         }
     }
@@ -73,16 +76,16 @@ fun CloudDriveScreen(onBack: () -> Unit) {
     }
 
     FeatureScaffold(
-        title = selected?.name ?: "网盘 / NAS",
+        title = selected?.name ?: stringResource(R.string.clouddrive_title),
         onBack = { if (selected != null) up() else onBack() },
         action = {
-            if (selected == null) Text("＋ 添加", color = FPrimary, fontSize = 14.sp,
+            if (selected == null) Text(stringResource(R.string.clouddrive_add_button), color = FPrimary, fontSize = 14.sp,
                 modifier = Modifier.clickable { showAdd = true }.padding(8.dp))
         },
     ) {
         if (selected == null) {
             if (mounts.isEmpty()) {
-                FEmpty("还没有挂载点。点右上角「＋ 添加」填入 NAS/网盘的 WebDAV 地址（群晖/Nextcloud/坚果云/AList 等都支持），即可浏览与播放。")
+                FEmpty(stringResource(R.string.clouddrive_empty_state_hint))
             } else {
                 LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(vertical = 6.dp)) {
                     items(mounts, key = { it.id }) { m ->
@@ -107,8 +110,8 @@ fun CloudDriveScreen(onBack: () -> Unit) {
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
             val list = entries
             when {
-                busy || list == null -> FEmpty("加载中…")
-                list.isEmpty() -> FEmpty(error ?: "目录为空")
+                busy || list == null -> FEmpty(stringResource(R.string.browser_loading_text))
+                list.isEmpty() -> FEmpty(error ?: stringResource(R.string.clouddrive_empty_directory))
                 else -> LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(vertical = 6.dp)) {
                     val folders = list.filter { it.isDirectory }
                     val files = list.filter { !it.isDirectory }
@@ -189,26 +192,26 @@ private fun AddMountDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = FSurface,
-        title = { Text("添加 WebDAV 挂载", color = FText, fontSize = 16.sp) },
+        title = { Text(stringResource(R.string.clouddrive_add_mount_dialog_title), color = FText, fontSize = 16.sp) },
         text = {
             Column {
                 OutlinedTextField(name, { name = it }, modifier = Modifier.fillMaxWidth(), singleLine = true,
-                    label = { Text("名称", color = FMuted) }, colors = colors)
+                    label = { Text(stringResource(R.string.device_detail_name_label), color = FMuted) }, colors = colors)
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(url, { url = it }, modifier = Modifier.fillMaxWidth(), singleLine = true,
-                    placeholder = { Text("http://192.168.1.10:5005", color = FMuted) }, label = { Text("服务器地址", color = FMuted) }, colors = colors)
+                    placeholder = { Text("http://192.168.1.10:5005", color = FMuted) }, label = { Text(stringResource(R.string.clouddrive_label_server_address), color = FMuted) }, colors = colors)
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(path, { path = it }, modifier = Modifier.fillMaxWidth(), singleLine = true,
-                    label = { Text("起始路径（如 / 或 /dav）", color = FMuted) }, colors = colors)
+                    label = { Text(stringResource(R.string.clouddrive_label_start_path), color = FMuted) }, colors = colors)
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(user, { user = it }, modifier = Modifier.fillMaxWidth(), singleLine = true,
-                    label = { Text("用户名（可选）", color = FMuted) }, colors = colors)
+                    label = { Text(stringResource(R.string.clouddrive_label_username), color = FMuted) }, colors = colors)
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(pass, { pass = it }, modifier = Modifier.fillMaxWidth(), singleLine = true,
-                    label = { Text("密码（可选）", color = FMuted) }, colors = colors)
+                    label = { Text(stringResource(R.string.clouddrive_label_password), color = FMuted) }, colors = colors)
             }
         },
-        confirmButton = { Text("保存", color = FPrimary, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { onSave(name, url, path, user, pass) }.padding(8.dp)) },
-        dismissButton = { Text("取消", color = FMuted, modifier = Modifier.clickable(onClick = onDismiss).padding(8.dp)) },
+        confirmButton = { Text(stringResource(R.string.common_save), color = FPrimary, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { onSave(name, url, path, user, pass) }.padding(8.dp)) },
+        dismissButton = { Text(stringResource(R.string.common_cancel), color = FMuted, modifier = Modifier.clickable(onClick = onDismiss).padding(8.dp)) },
     )
 }

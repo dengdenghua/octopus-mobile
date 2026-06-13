@@ -58,7 +58,7 @@ class PluginActivity : BaseActivity() {
                 selectManifestForDex(tempDex)
             }
         } catch (e: Exception) {
-            Toast.makeText(this, "读取文件失败: ${e.message}", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, getString(R.string.plugin_read_dex_failure_toast, e.message), Toast.LENGTH_LONG).show()
         }
     }
 
@@ -79,7 +79,7 @@ class PluginActivity : BaseActivity() {
                 installPlugin(dexFile, tempManifest)
             }
         } catch (e: Exception) {
-            Toast.makeText(this, "读取 manifest 失败: ${e.message}", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, getString(R.string.plugin_read_manifest_failure_toast, e.message), Toast.LENGTH_LONG).show()
         }
     }
 
@@ -114,7 +114,7 @@ class PluginActivity : BaseActivity() {
 
             // Toolbar
             addView(CommonToolbar(this@PluginActivity).apply {
-                setTitle("技能")
+                setTitle(getString(R.string.discover_shortcut_plugin))
                 showBackButton(true) { finish() }
             })
 
@@ -132,21 +132,21 @@ class PluginActivity : BaseActivity() {
 
             // 已加载技能
             loadedGroup = MenuGroup(this@PluginActivity).apply {
-                setTitle("已加载技能")
+                setTitle(getString(R.string.plugin_loaded_group_title))
                 layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = dp12 }
             }
             scrollContent.addView(loadedGroup)
 
             // 可用技能
             availableGroup = MenuGroup(this@PluginActivity).apply {
-                setTitle("可用技能")
+                setTitle(getString(R.string.plugin_available_group_title))
                 layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = dp12 }
             }
             scrollContent.addView(availableGroup)
 
             // 空状态
             tvEmpty = TextView(this@PluginActivity).apply {
-                text = "暂无可用技能"
+                text = getString(R.string.plugin_empty_state)
                 textSize = 14f
                 setTextColor(Color.GRAY)
                 android.view.Gravity.CENTER
@@ -157,7 +157,7 @@ class PluginActivity : BaseActivity() {
 
             // 从文件安装按钮
             val btnInstall = KButton(this@PluginActivity).apply {
-                text = "从文件安装"
+                text = getString(R.string.plugin_install_button)
                 layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = dp8 }
                 setOnClickListener {
                     dexFileLauncher.launch("*/*")
@@ -167,8 +167,7 @@ class PluginActivity : BaseActivity() {
 
             // 说明
             val tvNote = TextView(this@PluginActivity).apply {
-                text = "提示: 技能需要 .dex 文件 + manifest.json。" +
-                       "技能会注册为 Agent 可调用的工具。"
+                text = getString(R.string.plugin_install_note)
                 textSize = 12f
                 setTextColor(Color.parseColor("#999999"))
                 setPadding(0, dp8, 0, dp8)
@@ -196,7 +195,7 @@ class PluginActivity : BaseActivity() {
                 onClick = { unloadPlugin(info.manifest.id) },
                 showDivider = true
             ).apply {
-                setTrailingText("卸载")
+                setTrailingText(getString(R.string.extensions_uninstall_button))
             }
         }
 
@@ -208,7 +207,7 @@ class PluginActivity : BaseActivity() {
                 showDivider = true
             ).apply {
                 val errorText = info.error
-                setTrailingText(if (errorText != null) "错误" else "加载")
+                setTrailingText(if (errorText != null) getString(R.string.plugin_error_status) else getString(R.string.plugin_load_action))
             }
         }
 
@@ -220,10 +219,10 @@ class PluginActivity : BaseActivity() {
     private fun loadPlugin(pluginId: String) {
         val ok = pluginManager.loadAndRegister(pluginId)
         if (ok) {
-            Toast.makeText(this, "技能加载成功", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.plugin_load_success_toast), Toast.LENGTH_SHORT).show()
         } else {
             val info = pluginManager.getAllPlugins().find { it.manifest.id == pluginId }
-            Toast.makeText(this, "加载失败: ${info?.error ?: "未知错误"}", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, getString(R.string.plugin_load_failure_toast, info?.error ?: getString(R.string.plugin_unknown_error)), Toast.LENGTH_LONG).show()
         }
         refreshPluginList()
     }
@@ -231,25 +230,25 @@ class PluginActivity : BaseActivity() {
     private fun unloadPlugin(pluginId: String) {
         val ok = pluginManager.unload(pluginId)
         if (ok) {
-            Toast.makeText(this, "技能已卸载", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.plugin_unload_success_toast), Toast.LENGTH_SHORT).show()
         }
         refreshPluginList()
     }
 
     private fun selectManifestForDex(dexFile: File) {
         pendingDexFile = dexFile
-        Toast.makeText(this, "请选择 manifest.json 文件", Toast.LENGTH_LONG).show()
+        Toast.makeText(this, getString(R.string.plugin_select_manifest_toast), Toast.LENGTH_LONG).show()
         manifestFileLauncher.launch("*/*")
     }
 
     private fun installPlugin(dexFile: File, manifestFile: File) {
         val info = pluginManager.installFromFile(dexFile, manifestFile)
         if (info != null) {
-            Toast.makeText(this, "技能安装成功: ${info.manifest.name}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.plugin_install_success_toast, info.manifest.name), Toast.LENGTH_SHORT).show()
             // 自动加载
             pluginManager.loadAndRegister(info.manifest.id)
         } else {
-            Toast.makeText(this, "技能安装失败", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, getString(R.string.plugin_install_failure_toast), Toast.LENGTH_LONG).show()
         }
         refreshPluginList()
         pendingDexFile = null
