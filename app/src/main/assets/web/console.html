@@ -30,6 +30,17 @@
   #ta{flex:1;background:#101015;color:#eee;border:1px solid #3a3a46;border-radius:8px;padding:9px;font-size:14px;resize:none;height:42px;max-height:120px}
   #send{background:#2e9e5b;color:#fff;border:none;border-radius:8px;padding:0 18px;font-size:14px;cursor:pointer}
   #send:disabled{background:#444;cursor:default}
+  /* 窄屏(手机/竖屏看本网页):上下堆叠 —— 上镜像、下对话,避免左右挤压 */
+  @media (max-width: 820px){
+    #app{flex-direction:column}
+    #left{flex:0 0 auto;border-right:none;border-bottom:1px solid #2a2a33}
+    #stage{max-height:44vh}
+    #screen{max-width:100%;max-height:44vh}
+    #msg2{max-width:96vw}
+    .ltbar{flex-wrap:wrap;height:auto;min-height:44px;padding:6px 8px}
+    #right{flex:1;min-height:0}
+    .b{max-width:92%}
+  }
 </style>
 </head>
 <body>
