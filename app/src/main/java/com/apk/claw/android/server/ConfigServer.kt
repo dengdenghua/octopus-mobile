@@ -95,7 +95,8 @@ class ConfigServer(
         val method = session.method
 
         // 鉴权：放行 H5 页面、debug 静态资源；其余 /api/* 必须带 token
-        val isPublic = uri == "/" || uri == "/index.html" || uri == "/debug.html"
+        val isPublic = uri == "/" || uri == "/index.html" || uri == "/debug.html" ||
+            uri == "/console" || uri == "/console.html"
         if (!isPublic && !validateAuth(session)) {
             return unauthorizedResponse()
         }
@@ -103,6 +104,7 @@ class ConfigServer(
         return try {
             when {
                 (uri == "/" || uri == "/index.html") && method == Method.GET -> serveHtml()
+                (uri == "/console" || uri == "/console.html") && method == Method.GET -> serveConsoleHtml()
                 uri == "/api/auth/check" && method == Method.GET -> handleAuthCheck()
                 uri == "/api/channels" && method == Method.GET -> handleGetChannels()
                 uri == "/api/channels" && method == Method.POST -> handlePostChannels(session)
@@ -158,6 +160,12 @@ class ConfigServer(
     private fun serveHtml(): Response {
         val inputStream = context.assets.open("web/index.html")
         val html = inputStream.bufferedReader().use { it.readText() }
+        return corsResponse(newFixedLengthResponse(Response.Status.OK, MIME_HTML, html))
+    }
+
+    /** 网页遥控台:实时屏幕(MJPEG)+ 点击/滑动/键盘 → /api/control/input。页面公开,API 仍要 token。 */
+    private fun serveConsoleHtml(): Response {
+        val html = context.assets.open("web/console.html").bufferedReader().use { it.readText() }
         return corsResponse(newFixedLengthResponse(Response.Status.OK, MIME_HTML, html))
     }
 

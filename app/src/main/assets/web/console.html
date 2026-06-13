@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Octopus 网页遥控</title>
+<style>
+  html,body{margin:0;height:100%;background:#0e0e12;font-family:-apple-system,system-ui,sans-serif;color:#eee;overflow:hidden}
+  #bar{height:46px;background:#1b1b22;display:flex;align-items:center;gap:8px;padding:0 12px;border-bottom:1px solid #2a2a33}
+  #bar b{font-size:14px}
+  #bar .sp{flex:1}
+  #bar button{background:#2a2a33;color:#eee;border:1px solid #3a3a46;border-radius:7px;padding:7px 11px;font-size:13px;cursor:pointer}
+  #bar button:active{background:#3a6}
+  #bar input{background:#101015;color:#eee;border:1px solid #3a3a46;border-radius:7px;padding:7px 9px;font-size:13px;width:150px}
+  #st{font-size:12px;color:#8ab4f8}
+  #stage{position:absolute;top:46px;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;background:#000}
+  #screen{max-width:100%;max-height:100%;cursor:crosshair;user-select:none;-webkit-user-drag:none}
+  #msg{position:fixed;top:55%;left:0;right:0;text-align:center;color:#aaa;padding:0 24px;font-size:14px;line-height:1.6}
+</style>
+</head>
+<body>
+  <div id="bar">
+    <b>🖥 Octopus 网页遥控</b>
+    <span id="st">连接中…</span>
+    <span class="sp"></span>
+    <button onclick="act('back')">返回</button>
+    <button onclick="act('home')">主屏</button>
+    <button onclick="act('recent')">最近</button>
+    <button onclick="key(67)">⌫</button>
+    <input id="kb" placeholder="输入文字 ↵ 发送">
+    <button onclick="reload()">刷新</button>
+  </div>
+  <div id="stage"><img id="screen" draggable="false"></div>
+  <div id="msg"></div>
+<script>
+  const q=new URLSearchParams(location.search);
+  const TOKEN=q.get('token')||'';
+  let DW=1080, DH=2400;
+  const img=document.getElementById('screen'), st=document.getElementById('st'), msg=document.getElementById('msg'), kb=document.getElementById('kb');
+
+  function api(p){ return p+(p.includes('?')?'&':'?')+'token='+encodeURIComponent(TOKEN); }
+  function post(action, body){
+    return fetch(api('/api/control/input'),{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(Object.assign({action},body||{}))}).catch(()=>{});
+  }
+  function act(a){ post(a); }
+  function key(code){ post('key',{keyCode:code}); }
+
+  async function init(){
+    if(!TOKEN){ msg.textContent='缺少 token。请用 http://手机IP:9527/console?token=你的token 打开。'; st.textContent='○ 无 token'; return; }
+    try{ const j=await (await fetch(api('/api/screen/info'))).json(); if(j&&j.data){ DW=j.data.width; DH=j.data.height; } }catch(e){}
+    img.onload =()=>{ st.textContent='● 已连 '+DW+'×'+DH; msg.textContent=''; };
+    img.onerror=()=>{ st.textContent='○ 流断开'; msg.textContent='屏幕流断开 — 点"刷新";确认 token 正确、ConfigServer 运行中、无障碍已开。'; };
+    reload();
+  }
+  function reload(){ img.src=api('/api/screen/stream?maxWidth=720&fps=12&quality=50&_='+Date.now()); }
+
+  function toDev(cx,cy){ const r=img.getBoundingClientRect();
+    const fx=Math.min(1,Math.max(0,(cx-r.left)/r.width)), fy=Math.min(1,Math.max(0,(cy-r.top)/r.height));
+    return {x:Math.round(fx*DW), y:Math.round(fy*DH)}; }
+
+  // 鼠标:按下→松开。位移小=tap;大=swipe;按住不动>500ms=长按
+  let down=null, lpTimer=null, moved=false;
+  img.addEventListener('mousedown',e=>{ down=toDev(e.clientX,e.clientY); down.t=Date.now(); moved=false;
+    lpTimer=setTimeout(()=>{ if(down&&!moved){ post('long_press',{x:down.x,y:down.y,duration:600}); down=null; } },520); });
+  img.addEventListener('mousemove',e=>{ if(down){ const p=toDev(e.clientX,e.clientY); if(Math.hypot(p.x-down.x,p.y-down.y)>20)moved=true; } });
+  img.addEventListener('mouseup',e=>{ if(lpTimer){clearTimeout(lpTimer);lpTimer=null;} if(!down)return;
+    const up=toDev(e.clientX,e.clientY); const dt=Date.now()-down.t;
+    if(Math.hypot(up.x-down.x,up.y-down.y)>20){ post('swipe',{x1:down.x,y1:down.y,x2:up.x,y2:up.y,duration:Math.min(800,Math.max(120,dt))}); }
+    else { post('tap',{x:up.x,y:up.y}); }
+    down=null; });
+  img.addEventListener('mouseleave',()=>{ if(lpTimer){clearTimeout(lpTimer);lpTimer=null;} down=null; });
+
+  // 滚轮 → 竖向 swipe(滚动)
+  img.addEventListener('wheel',e=>{ e.preventDefault(); const r=img.getBoundingClientRect();
+    const c=toDev(r.left+r.width/2, r.top+r.height/2); const dy=e.deltaY>0?-500:500;
+    post('swipe',{x1:c.x,y1:c.y,x2:c.x,y2:Math.min(DH,Math.max(0,c.y+dy)),duration:200}); },{passive:false});
+
+  // 文字:输入框回车 → text(整串一次发);text 工具会替换焦点框内容
+  kb.addEventListener('keydown',e=>{ if(e.key==='Enter'&&kb.value){ post('text',{text:kb.value}); kb.value=''; } });
+
+  init();
+</script>
+</body>
+</html>
