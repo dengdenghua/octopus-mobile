@@ -19,6 +19,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.apk.claw.android.octopus_mobile.ActionCache
 import com.apk.claw.android.octopus_mobile.RoutineStore
 import com.apk.claw.android.service.RoutineScheduler
 import com.apk.claw.android.ui.compose.screen.RoutineRunner
@@ -52,12 +53,13 @@ private fun RoutinesScreen(onBack: () -> Unit) {
             LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(vertical = 6.dp)) {
                 item {
                     Text(
-                        "共 ${items.size} 条 · 重放让 Agent 按指令重新规划执行",
+                        "共 ${items.size} 条 · ⚡=已学快路径(直接重放更快)，否则 Agent 重新规划",
                         color = FMuted, fontSize = 11.sp,
                         modifier = Modifier.padding(start = 16.dp, bottom = 4.dp),
                     )
                 }
                 items(items, key = { it.id }) { r ->
+                    val cached = ActionCache.get(r.id, r.prompt)
                     FCard {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(modifier = Modifier.weight(1f)) {
@@ -72,6 +74,14 @@ private fun RoutinesScreen(onBack: () -> Unit) {
                                         }
                                     },
                                     color = if (r.isScheduled) FPrimary else FMuted, fontSize = 10.sp,
+                                )
+                            }
+                            if (cached != null) {
+                                Text(
+                                    "⚡${cached.steps.size}", color = FPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier
+                                        .clickable { forgetFastPath(ctx, r) { refresh() } }
+                                        .padding(horizontal = 6.dp, vertical = 4.dp),
                                 )
                             }
                             Text(
@@ -89,7 +99,7 @@ private fun RoutinesScreen(onBack: () -> Unit) {
                             Text(
                                 "✕", color = FMuted, fontSize = 14.sp,
                                 modifier = Modifier
-                                    .clickable { RoutineScheduler.cancel(ctx, r.id); RoutineStore.remove(r.id); refresh() }
+                                    .clickable { RoutineScheduler.cancel(ctx, r.id); ActionCache.remove(r.id); RoutineStore.remove(r.id); refresh() }
                                     .padding(4.dp),
                             )
                         }
@@ -102,6 +112,21 @@ private fun RoutinesScreen(onBack: () -> Unit) {
             }
         }
     }
+}
+
+/** ⚡ 忘记快路径 —— 下次运行让 Agent 重新看屏规划并重新录制。 */
+private fun forgetFastPath(ctx: Context, r: RoutineStore.Routine, onChanged: () -> Unit) {
+    val n = ActionCache.get(r.id, r.prompt)?.steps?.size ?: 0
+    AlertDialog.Builder(ctx)
+        .setTitle("忘记快路径")
+        .setMessage("「${r.name}」已学会 $n 步快路径。忘记后下次运行会让 Agent 重新看屏规划，并重新录制。")
+        .setPositiveButton("忘记") { _, _ ->
+            ActionCache.remove(r.id)
+            Toast.makeText(ctx, "已忘记快路径", Toast.LENGTH_SHORT).show()
+            onChanged()
+        }
+        .setNegativeButton("取消", null)
+        .show()
 }
 
 /** ⏰ 选时间 → 选「每天 / 仅一次 / 取消定时」→ 写库 + 注册/取消闹钟。 */

@@ -6,6 +6,7 @@ import com.apk.claw.android.agent.AgentCallback
 import com.apk.claw.android.agent.AgentConfig
 import com.apk.claw.android.agent.DefaultAgentService
 import com.apk.claw.android.floating.LiveControlOverlay
+import com.apk.claw.android.octopus_mobile.ActionRecorder
 import com.apk.claw.android.octopus_mobile.ActivityLog
 import com.apk.claw.android.octopus_mobile.ControlTarget
 import com.apk.claw.android.tool.ToolRegistry
@@ -86,6 +87,8 @@ object ChatAgentBridge {
      * @param onText Agent 中间思考文本
      * @param onDone 任务完成（最终回答）
      * @param onError 出错（含未配置 / LLM 调用失败）
+     * @param recordKey 非空时把本次运行的有效 UI 动作录成「快路径」存到该 key（例程 id）下，
+     *                  供 [FastReplay] 下次确定性重放。对话页传 null（不录）。仅本机目标可录。
      */
     fun run(
         prompt: String,
@@ -93,7 +96,9 @@ object ChatAgentBridge {
         onText: (String) -> Unit,
         onDone: (String) -> Unit,
         onError: (String) -> Unit,
+        recordKey: String? = null,
     ) {
+        val recorder = recordKey?.let { ActionRecorder() }
         service.updateConfig(buildConfig())
         // 审计采集：开始一次任务
         curTask = prompt
@@ -112,11 +117,15 @@ object ChatAgentBridge {
                 if (content.isNotEmpty()) main.post { onText(content) }
             }
 
-            override fun onToolCall(round: Int, toolId: String, toolName: String, parameters: String) {}
+            override fun onToolCall(round: Int, toolId: String, toolName: String, parameters: String) {
+                // toolId = 真实工具名，parameters = LLM 原始 JSON 参数（执行前，可抓点击锚点）
+                recorder?.onToolCall(toolId, parameters)
+            }
 
             override fun onToolResult(
                 round: Int, toolId: String, toolName: String, parameters: String, result: ToolResult
             ) {
+                recorder?.onToolResult(toolId, result.isSuccess)
                 val summary = if (result.isSuccess) "✓ " + (result.data ?: "") else "✗ " + (result.error ?: "")
                 val icon = iconFor(toolName)
                 val friendly = ToolRegistry.getInstance().getDisplayName(toolName)
@@ -126,6 +135,7 @@ object ChatAgentBridge {
             }
 
             override fun onComplete(round: Int, finalAnswer: String, totalTokens: Int) {
+                if (recordKey != null) recorder?.commit(recordKey, prompt)
                 LiveControlOverlay.finish(true, "完成")
                 finalize("success", finalAnswer)
                 main.post { onDone(finalAnswer) }
