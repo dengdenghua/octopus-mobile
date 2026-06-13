@@ -177,6 +177,10 @@ object ToolRegistry {
 
     fun getAllTools(): List<BaseTool> = tools.values.toList()
 
+    /** 工具是否启用(用户可在「技能」页停用非核心工具,Agent 工具规格据此过滤)。 */
+    fun isToolEnabled(name: String): Boolean =
+        name !in com.apk.claw.android.utils.KVUtils.getDisabledTools()
+
     fun executeTool(name: String, params: Map<String, Any>): ToolResult {
         val tool = tools[name] ?: return ToolResult.error("Unknown tool: $name")
 

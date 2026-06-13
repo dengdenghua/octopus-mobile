@@ -212,8 +212,8 @@ fun DiscoverScreen(onNavigate: (String) -> Unit = {}) {
                     row.forEach { (icon, name, route) ->
                         ShortcutItem(icon, name) {
                             when (route) {
-                                "plugin" -> openActivity(context, PluginActivity::class.java)
-                                "extension" -> openBrowser(context, "https://addons.mozilla.org/zh-CN/android/")
+                                "plugin" -> openActivity(context, com.apk.claw.android.ui.featurescreens.SkillsActivity::class.java)
+                                "extension" -> openActivity(context, com.apk.claw.android.ui.featurescreens.ExtensionsActivity::class.java)
                                 "cast" -> openActivity(context, ScreenCastActivity::class.java)
                                 "clouddrive" -> openActivity(context, CloudDriveActivity::class.java)
                                 "video" -> openActivity(context, VideoLibraryActivity::class.java)

@@ -209,6 +209,16 @@ object KVUtils {
     fun getWechatUpdatesCursor(): String = getString(KEY_WECHAT_UPDATES_CURSOR, "")
     fun setWechatUpdatesCursor(value: String) = putString(KEY_WECHAT_UPDATES_CURSOR, value)
 
+    // ==================== 技能(工具)启停 ====================
+    private const val KEY_DISABLED_TOOLS = "KEY_DISABLED_TOOLS"
+    fun getDisabledTools(): Set<String> =
+        getString(KEY_DISABLED_TOOLS, "").split(",").filter { it.isNotBlank() }.toSet()
+    fun setToolDisabled(name: String, disabled: Boolean) {
+        val s = getDisabledTools().toMutableSet()
+        if (disabled) s.add(name) else s.remove(name)
+        putString(KEY_DISABLED_TOOLS, s.joinToString(","))
+    }
+
     // ==================== 局域网配置服务 ====================
     private const val KEY_CONFIG_SERVER_ENABLED = "KEY_CONFIG_SERVER_ENABLED"
     fun isConfigServerEnabled(): Boolean = getBoolean(KEY_CONFIG_SERVER_ENABLED, false)

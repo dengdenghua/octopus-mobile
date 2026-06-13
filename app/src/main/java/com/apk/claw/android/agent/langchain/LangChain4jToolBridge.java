@@ -37,6 +37,8 @@ public class LangChain4jToolBridge {
     public static List<ToolSpecification> buildToolSpecifications() {
         List<ToolSpecification> specs = new ArrayList<>();
         for (BaseTool tool : ToolRegistry.getInstance().getAllTools()) {
+            // 用户在「技能」页停用的工具不提供给 Agent
+            if (!ToolRegistry.getInstance().isToolEnabled(tool.getName())) continue;
             specs.add(toSpecification(tool));
         }
         return specs;
