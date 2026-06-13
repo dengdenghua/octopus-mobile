@@ -1,7 +1,8 @@
 package com.apk.claw.android.ui.featurescreens
 
-import android.graphics.BitmapFactory
 import android.os.Bundle
+import android.view.SurfaceHolder
+import android.view.SurfaceView
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -17,29 +18,26 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.Image
+import androidx.compose.ui.viewinterop.AndroidView
 import com.apk.claw.android.appViewModel
 import com.apk.claw.android.octopus_mobile.ConnectionState
-import kotlin.math.min
+import com.apk.claw.android.octopus_mobile.H264Decoder
+import com.apk.claw.android.octopus_mobile.OctopusMobileClient
 
 /**
- * 母体远程桌面 —— 手机看 PC 屏幕、触控/键盘控制 PC（类似 ToDesk）。
+ * 母体远程桌面 —— 手机看 PC 屏幕(H.264 硬解)、触控/键盘控制 PC（类似 ToDesk）。
  *
- * 复用现有那条 [com.apk.claw.android.octopus_mobile.OctopusMobileClient] WebSocket：
- *  - 订阅 pc_screen/subscribe，母体通过 push_pc_frame 推 JPEG 帧 → 解码渲染
+ * 复用现有 [OctopusMobileClient] WebSocket：
+ *  - 订阅 pc_screen/subscribe，母体推 H.264(Annex-B) 帧 → [H264Decoder]/MediaCodec 解码渲染到 SurfaceView
  *  - 触摸 → 归一化坐标 → remote/input（母体还原为 PC 鼠键）
  *
- * 前提：先在 设置 → 母体连接 配好地址并连接（DUAL / RPC_ONLY）。
+ * 前提：先在 设置 → 母体连接 配好地址并连接(DUAL / RPC_ONLY)。
  */
 class PcRemoteActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -52,22 +50,24 @@ class PcRemoteActivity : ComponentActivity() {
 @Composable
 private fun PcRemoteScreen(onBack: () -> Unit) {
     val client = appViewModel.octopusClient
-    var frame by remember { mutableStateOf<ImageBitmap?>(null) }
-    var boxSize by remember { mutableStateOf(IntSize.Zero) }
-    var fps by remember { mutableStateOf(0) }
+    val decoder = remember { H264Decoder(1280, 720) }
+    var frames by remember { mutableStateOf(0) }
     var showKeyboard by remember { mutableStateOf(false) }
     val connected = client?.currentState() == ConnectionState.ONLINE ||
         client?.currentState() == ConnectionState.HELLO_SENT
 
-    // 帧计数（粗略 fps 显示）
-    var frameAcc by remember { mutableStateOf(0) }
-
     DisposableEffect(client) {
         if (client != null) {
             client.onPcFrame = { bytes ->
-                decodeFrame(bytes)?.let {
-                    frame = it.asImageBitmap()
-                    frameAcc++
+                if (bytes.size >= 5) {
+                    val idLen = ((bytes[0].toInt() and 0xFF) shl 8) or (bytes[1].toInt() and 0xFF)
+                    val type = bytes[2].toInt() and 0xFF
+                    val isKey = (bytes[3].toInt() and 0x01) != 0
+                    val start = 4 + idLen
+                    if (type == 0x01 && start < bytes.size) {
+                        decoder.feed(bytes.copyOfRange(start, bytes.size), isKey)
+                        frames++
+                    }
                 }
             }
             client.subscribePcScreen()
@@ -75,69 +75,72 @@ private fun PcRemoteScreen(onBack: () -> Unit) {
         onDispose {
             client?.unsubscribePcScreen()
             client?.onPcFrame = null
+            decoder.stop()
         }
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black)
-            .onSizeChanged { boxSize = it }
-            .pointerInput(boxSize, frame) {
-                detectTapGestures(
-                    onTap = { off -> sendAt(client, frame, boxSize, off.x, off.y, "tap") },
-                    onLongPress = { off -> sendAt(client, frame, boxSize, off.x, off.y, "rightclick") },
-                )
-            }
-            .pointerInput(boxSize, frame) {
-                // 一指拖动=鼠标拖拽(down/move/up)；两指纵向滑动=滚动。tap/长按 由上面的探测器处理。
-                val slop = viewConfiguration.touchSlop
-                awaitEachGesture {
-                    val first = awaitFirstDown(requireUnconsumed = false)
-                    var twoFinger = false
-                    var dragEmitted = false
-                    var centroidInit = false
-                    var lastCentroidY = 0f
-                    var lastPos = first.position
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        val pressed = event.changes.filter { it.pressed }
-                        if (pressed.isEmpty()) break
-                        if (pressed.size >= 2) {
-                            twoFinger = true
-                            val cy = pressed.map { it.position.y }.average().toFloat()
-                            if (!centroidInit) { lastCentroidY = cy; centroidInit = true }
-                            val dy = cy - lastCentroidY
-                            lastCentroidY = cy
-                            if (kotlin.math.abs(dy) > 1f && boxSize.height > 0) {
-                                client?.sendRemoteInput("scroll", 0f, dy / boxSize.height)
-                            }
-                            pressed.forEach { it.consume() }
-                        } else if (pressed.size == 1 && !twoFinger) {
-                            val p = pressed[0]
-                            val pos = p.position
-                            if (dragEmitted || (pos - first.position).getDistance() > slop) {
-                                if (!dragEmitted) {
-                                    sendDrag(client, frame, boxSize, first.position.x, first.position.y, "down")
-                                    dragEmitted = true
-                                }
-                                sendDrag(client, frame, boxSize, pos.x, pos.y, "move")
-                                p.consume()
-                                lastPos = pos
-                            }
-                        }
-                    }
-                    if (dragEmitted) sendDrag(client, frame, boxSize, lastPos.x, lastPos.y, "up")
+    Box(modifier = Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
+        // 视频画面：16:9 居中,SurfaceView 即视频矩形 → 触摸坐标直接按本视图尺寸归一化
+        AndroidView(
+            factory = { ctx ->
+                SurfaceView(ctx).apply {
+                    holder.addCallback(object : SurfaceHolder.Callback {
+                        override fun surfaceCreated(h: SurfaceHolder) { decoder.start(h.surface) }
+                        override fun surfaceChanged(h: SurfaceHolder, f: Int, w: Int, ht: Int) {}
+                        override fun surfaceDestroyed(h: SurfaceHolder) { decoder.stop() }
+                    })
                 }
             },
-        contentAlignment = Alignment.Center,
-    ) {
-        val f = frame
-        if (f != null) {
-            Image(bitmap = f, contentDescription = "PC 屏幕", contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
-        } else {
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(16f / 9f)
+                .pointerInput(Unit) {
+                    detectTapGestures(
+                        onTap = { o -> sendN(client, size, o.x, o.y, "tap") },
+                        onLongPress = { o -> sendN(client, size, o.x, o.y, "rightclick") },
+                    )
+                }
+                .pointerInput(Unit) {
+                    val slop = viewConfiguration.touchSlop
+                    awaitEachGesture {
+                        val first = awaitFirstDown(requireUnconsumed = false)
+                        var twoFinger = false
+                        var dragEmitted = false
+                        var centroidInit = false
+                        var lastCentroidY = 0f
+                        var lastPos = first.position
+                        while (true) {
+                            val ev = awaitPointerEvent()
+                            val pressed = ev.changes.filter { it.pressed }
+                            if (pressed.isEmpty()) break
+                            if (pressed.size >= 2) {
+                                twoFinger = true
+                                val cy = pressed.map { it.position.y }.average().toFloat()
+                                if (!centroidInit) { lastCentroidY = cy; centroidInit = true }
+                                val dy = cy - lastCentroidY
+                                lastCentroidY = cy
+                                if (kotlin.math.abs(dy) > 1f && size.height > 0) {
+                                    client?.sendRemoteInput("scroll", 0f, dy / size.height)
+                                }
+                                pressed.forEach { it.consume() }
+                            } else if (pressed.size == 1 && !twoFinger) {
+                                val p = pressed[0]
+                                if (dragEmitted || (p.position - first.position).getDistance() > slop) {
+                                    if (!dragEmitted) { sendN(client, size, first.position.x, first.position.y, "down", clamp = true); dragEmitted = true }
+                                    sendN(client, size, p.position.x, p.position.y, "move", clamp = true)
+                                    p.consume()
+                                    lastPos = p.position
+                                }
+                            }
+                        }
+                        if (dragEmitted) sendN(client, size, lastPos.x, lastPos.y, "up", clamp = true)
+                    }
+                },
+        )
+
+        if (frames == 0) {
             Text(
-                if (connected) "已连接母体，等待 PC 画面…\n（确认母体侧采集驱动已运行）"
+                if (connected) "已连接母体,等待 PC 画面…\n（确认母体侧 pc_remote_server.py 已运行）"
                 else "未连接母体。\n请先在 设置 → 母体连接 配好地址并连接。",
                 color = Color.White, fontSize = 14.sp,
             )
@@ -152,7 +155,7 @@ private fun PcRemoteScreen(onBack: () -> Unit) {
             Spacer(Modifier.width(14.dp))
             Text("🖥 母体远程桌面", color = Color.White, fontSize = 14.sp)
             Spacer(Modifier.weight(1f))
-            Text(if (frame != null) "▶ ${f?.width}×${f?.height}" else if (connected) "● 已连接" else "○ 未连接", color = Color(0xFF8AB4F8), fontSize = 11.sp)
+            Text(if (frames > 0) "▶ H264 ${frames}" else if (connected) "● 已连接" else "○ 未连接", color = Color(0xFF8AB4F8), fontSize = 11.sp)
             Spacer(Modifier.width(12.dp))
             Text("⌫", color = Color.White, fontSize = 16.sp, modifier = Modifier.pointerInput(Unit) { detectTapGestures { client?.sendRemoteInput("key", text = "backspace") } })
             Spacer(Modifier.width(12.dp))
@@ -187,44 +190,12 @@ private fun PcRemoteScreen(onBack: () -> Unit) {
     }
 }
 
-/** 把触摸点映射到 PC 画面的归一化坐标并发送（ContentScale.Fit 的居中letterbox 还原）。 */
-private fun sendAt(
-    client: com.apk.claw.android.octopus_mobile.OctopusMobileClient?,
-    frame: ImageBitmap?, box: IntSize, tx: Float, ty: Float, action: String,
-) {
-    if (client == null || frame == null || box.width == 0 || box.height == 0) return
-    val bw = box.width.toFloat(); val bh = box.height.toFloat()
-    val iw = frame.width.toFloat(); val ih = frame.height.toFloat()
-    val scale = min(bw / iw, bh / ih)
-    val dw = iw * scale; val dh = ih * scale
-    val ox = (bw - dw) / 2f; val oy = (bh - dh) / 2f
-    val nx = (tx - ox) / dw; val ny = (ty - oy) / dh
-    if (nx in 0f..1f && ny in 0f..1f) client.sendRemoteInput(action, nx, ny)
-}
-
-/** 拖拽用：钳制到 [0,1] 并始终发送（避免 down 之后 move/up 落到画面外导致鼠标按住不放）。 */
-private fun sendDrag(
-    client: com.apk.claw.android.octopus_mobile.OctopusMobileClient?,
-    frame: ImageBitmap?, box: IntSize, tx: Float, ty: Float, action: String,
-) {
-    if (client == null || frame == null || box.width == 0 || box.height == 0) return
-    val bw = box.width.toFloat(); val bh = box.height.toFloat()
-    val iw = frame.width.toFloat(); val ih = frame.height.toFloat()
-    val scale = min(bw / iw, bh / ih)
-    val dw = iw * scale; val dh = ih * scale
-    val ox = (bw - dw) / 2f; val oy = (bh - dh) / 2f
-    val nx = ((tx - ox) / dw).coerceIn(0f, 1f)
-    val ny = ((ty - oy) / dh).coerceIn(0f, 1f)
+/** 触摸点按视图尺寸直接归一化并发送（视图即 16:9 视频矩形）。clamp=拖拽用,出界也发以免按住不放。 */
+private fun sendN(client: OctopusMobileClient?, size: IntSize, x: Float, y: Float, action: String, clamp: Boolean = false) {
+    if (client == null || size.width == 0 || size.height == 0) return
+    var nx = x / size.width
+    var ny = y / size.height
+    if (clamp) { nx = nx.coerceIn(0f, 1f); ny = ny.coerceIn(0f, 1f) }
+    else if (nx !in 0f..1f || ny !in 0f..1f) return
     client.sendRemoteInput(action, nx, ny)
-}
-
-/** 解析帧头（2B id长度 + 类型 + 标志 + id + 数据），JPEG/WebP 解码为 Bitmap。 */
-private fun decodeFrame(data: ByteArray): android.graphics.Bitmap? {
-    if (data.size < 4) return null
-    val idLen = ((data[0].toInt() and 0xFF) shl 8) or (data[1].toInt() and 0xFF)
-    val type = data[2].toInt() and 0xFF
-    val start = 4 + idLen
-    if (start >= data.size) return null
-    if (type != 0x02 && type != 0x03) return null  // 只处理 JPEG / WebP
-    return runCatching { BitmapFactory.decodeByteArray(data, start, data.size - start) }.getOrNull()
 }
