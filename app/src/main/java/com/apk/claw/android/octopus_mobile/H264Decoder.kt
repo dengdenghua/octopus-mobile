@@ -33,8 +33,12 @@ class H264Decoder(private val width: Int, private val height: Int) {
 
     fun stop() {
         running = false
-        worker?.interrupt()
+        val w = worker
         worker = null
+        w?.interrupt()
+        // 先等解码线程退出，再释放 codec —— 否则 worker 可能正卡在 dequeue/release
+        // 里被并发 stop()/release()，MediaCodec 非线程安全会触发 native 崩溃。
+        runCatching { w?.join(500) }
         runCatching { codec?.stop() }
         runCatching { codec?.release() }
         codec = null

@@ -88,19 +88,32 @@ class DefaultAgentService : AgentService {
             callback.onError(0, IllegalStateException("Agent is already running a task"), 0)
             return
         }
+        // 未 initialize() 就调用会让 executor 为 null；用 ?.submit 会静默吞掉任务，
+        // 导致 running 永远卡 true。这里显式拦截并回报错误。
+        val exec = executor
+        if (exec == null) {
+            callback.onError(0, IllegalStateException("Agent not initialized — call initialize() first"), 0)
+            return
+        }
 
         running.set(true)
         cancelled.set(false)
 
-        executor?.submit {
-            try {
-                runAgentLoop(userPrompt, callback)
-            } catch (e: Exception) {
-                XLog.e(TAG, "Agent execution error", e)
-                callback.onError(0, e, 0)
-            } finally {
-                running.set(false)
+        try {
+            exec.submit {
+                try {
+                    runAgentLoop(userPrompt, callback)
+                } catch (e: Exception) {
+                    XLog.e(TAG, "Agent execution error", e)
+                    callback.onError(0, e, 0)
+                } finally {
+                    running.set(false)
+                }
             }
+        } catch (e: java.util.concurrent.RejectedExecutionException) {
+            // executor 已 shutdown（如配置更新竞态）：复位状态并回报，避免卡死。
+            running.set(false)
+            callback.onError(0, e, 0)
         }
     }
 

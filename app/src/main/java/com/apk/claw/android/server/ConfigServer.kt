@@ -238,15 +238,17 @@ class ConfigServer(
     }
 
     private fun handleGetChannels(): Response {
+        // 仅回显脱敏后的密钥/令牌（POST 端会跳过带 * 的脱敏值，避免被覆盖）。
+        // AppKey / AppId 属于标识符而非机密，且 POST 端会原样保存，故不脱敏。
         val data = JsonObject().apply {
             addProperty("dingtalkAppKey", KVUtils.getDingtalkAppKey())
-            addProperty("dingtalkAppSecret", KVUtils.getDingtalkAppSecret())
+            addProperty("dingtalkAppSecret", maskSecret(KVUtils.getDingtalkAppSecret()))
             addProperty("feishuAppId", KVUtils.getFeishuAppId())
-            addProperty("feishuAppSecret", KVUtils.getFeishuAppSecret())
+            addProperty("feishuAppSecret", maskSecret(KVUtils.getFeishuAppSecret()))
             addProperty("qqAppId", KVUtils.getQqAppId())
-            addProperty("qqAppSecret", KVUtils.getQqAppSecret())
-            addProperty("discordBotToken", KVUtils.getDiscordBotToken())
-            addProperty("telegramBotToken", KVUtils.getTelegramBotToken())
+            addProperty("qqAppSecret", maskSecret(KVUtils.getQqAppSecret()))
+            addProperty("discordBotToken", maskSecret(KVUtils.getDiscordBotToken()))
+            addProperty("telegramBotToken", maskSecret(KVUtils.getTelegramBotToken()))
         }
         val result = JsonObject().apply {
             addProperty("code", 0)
@@ -372,7 +374,7 @@ class ConfigServer(
     private fun handleGetLlm(): Response {
         val apiKey = KVUtils.getLlmApiKey()
         val data = JsonObject().apply {
-            addProperty("llmApiKey", apiKey)
+            addProperty("llmApiKey", maskSecret(apiKey))   // 脱敏回显；POST 端跳过带 * 的值
             addProperty("llmBaseUrl", KVUtils.getLlmBaseUrl())
             addProperty("llmModelName", KVUtils.getLlmModelName())
         }
@@ -580,6 +582,21 @@ class ConfigServer(
     private fun isMaskedValue(value: String): Boolean {
         return value.contains("*")
     }
+
+    /**
+     * 文件 API 路径白名单：仅允许访问用户存储区(/sdcard)。
+     * 防止经 ?path=/data/data/<pkg>/... 遍历到 app 私有目录读取 MMKV(内含 API 密钥)。
+     * ShizukuShellService.isValidPath 只校验字符集，会放行 /data/data，故必须在此再加前缀限制。
+     */
+    private fun isAllowedUserPath(path: String): Boolean =
+        (path == "/sdcard" || path.startsWith("/sdcard/")) &&
+            !path.contains("..") &&
+            com.apk.claw.android.shizuku.ShizukuShellService.isValidPath(path)
+
+    private fun forbiddenPathResponse(): Response = corsResponse(newFixedLengthResponse(
+        Response.Status.FORBIDDEN, MIME_JSON,
+        """{"code":-1,"message":"Access denied: only /sdcard/ paths allowed"}"""
+    ))
 
     // ======================== 异步投屏 API ========================
 
@@ -903,6 +920,7 @@ class ConfigServer(
     private fun handleFileBrowse(session: IHTTPSession): Response {
         val path = session.parms["path"] ?: "/sdcard"
         val showHidden = session.parms["hidden"]?.toBoolean() ?: false
+        if (!isAllowedUserPath(path)) return forbiddenPathResponse()
 
         val shizuku = com.apk.claw.android.shizuku.ShizukuShellService
         val listing = shizuku.listFiles(path, showHidden)
@@ -925,6 +943,7 @@ class ConfigServer(
         val path = session.parms["path"] ?: "/sdcard"
         val pattern = session.parms["pattern"] ?: "*"
         val maxResults = session.parms["max"]?.toIntOrNull() ?: 30
+        if (!isAllowedUserPath(path)) return forbiddenPathResponse()
 
         val shizuku = com.apk.claw.android.shizuku.ShizukuShellService
         val result = shizuku.searchFiles(path, pattern, maxResults)
@@ -969,13 +988,8 @@ class ConfigServer(
             """{"code":-1,"message":"missing path param"}"""
         ))
 
-        // 安全检查
-        if (!path.startsWith("/sdcard/")) {
-            return corsResponse(newFixedLengthResponse(
-                Response.Status.FORBIDDEN, MIME_JSON,
-                """{"code":-1,"message":"Access denied: only /sdcard/ paths allowed"}"""
-            ))
-        }
+        // 安全检查：仅允许 /sdcard，且排除 .. 与注入字符
+        if (!isAllowedUserPath(path)) return forbiddenPathResponse()
 
         // 复制到 cacheDir 然后返回
         // 使用 externalFilesDir（/sdcard/Android/data/<pkg>/files/），shell 可写、app 可读
@@ -1035,12 +1049,7 @@ class ConfigServer(
             """{"code":-1,"message":"missing base64 data"}"""
         ))
 
-        if (!path.startsWith("/sdcard/")) {
-            return corsResponse(newFixedLengthResponse(
-                Response.Status.FORBIDDEN, MIME_JSON,
-                """{"code":-1,"message":"Access denied: only /sdcard/ paths allowed"}"""
-            ))
-        }
+        if (!isAllowedUserPath(path)) return forbiddenPathResponse()
 
         try {
             val bytes = android.util.Base64.decode(base64Data, android.util.Base64.DEFAULT)
@@ -1083,12 +1092,7 @@ class ConfigServer(
             """{"code":-1,"message":"missing path"}"""
         ))
 
-        if (!path.startsWith("/sdcard/")) {
-            return corsResponse(newFixedLengthResponse(
-                Response.Status.FORBIDDEN, MIME_JSON,
-                """{"code":-1,"message":"Access denied: only /sdcard/ paths allowed"}"""
-            ))
-        }
+        if (!isAllowedUserPath(path)) return forbiddenPathResponse()
 
         val shizuku = com.apk.claw.android.shizuku.ShizukuShellService
         val ok = shizuku.deleteFile(path)

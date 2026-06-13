@@ -31,18 +31,27 @@ class PcRemoteWebrtcActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         runCatching { window.statusBarColor = android.graphics.Color.BLACK }
-        webView = WebView(this).apply {
-            settings.javaScriptEnabled = true
-            settings.domStorageEnabled = true
-            settings.mediaPlaybackRequiresUserGesture = false  // 自动播放远端视频
-            webChromeClient = object : WebChromeClient() {
-                override fun onConsoleMessage(m: ConsoleMessage): Boolean {
-                    XLog.i("PcWebRTC-JS", "${m.message()} @${m.lineNumber()}")
-                    return true
+        // 部分设备的系统 WebView 组件缺失/正在更新时,WebView(this) 会抛异常。
+        // 捕获后优雅退出(提示用户),而不是让 Activity 崩溃。
+        webView = try {
+            WebView(this).apply {
+                settings.javaScriptEnabled = true
+                settings.domStorageEnabled = true
+                settings.mediaPlaybackRequiresUserGesture = false  // 自动播放远端视频
+                webChromeClient = object : WebChromeClient() {
+                    override fun onConsoleMessage(m: ConsoleMessage): Boolean {
+                        XLog.i("PcWebRTC-JS", "${m.message()} @${m.lineNumber()}")
+                        return true
+                    }
                 }
+                addJavascriptInterface(Bridge(), "Android")
+                loadUrl("file:///android_asset/pc_remote.html")
             }
-            addJavascriptInterface(Bridge(), "Android")
-            loadUrl("file:///android_asset/pc_remote.html")
+        } catch (e: Throwable) {
+            XLog.e("PcWebRTC", "WebView 初始化失败", e)
+            android.widget.Toast.makeText(this, "系统 WebView 不可用，无法启动远程桌面", android.widget.Toast.LENGTH_LONG).show()
+            finish()
+            return
         }
         setContentView(webView)
 

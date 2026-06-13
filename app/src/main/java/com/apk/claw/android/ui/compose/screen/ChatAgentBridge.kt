@@ -29,6 +29,12 @@ object ChatAgentBridge {
 
     private val service = DefaultAgentService()
     private val main = Handler(Looper.getMainLooper())
+    // 单 Agent 服务:同一时刻只跑一个任务。网页端([AgentWebBridge])与 App 对话页共享本桥,
+    // 用一个忙标记拦截并发,避免后来的 run() 经 updateConfig 把前一个任务的 executor 关掉。
+    private val busy = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /** 是否正在执行任务(网页端 / App 端共享判断)。 */
+    fun isBusy(): Boolean = busy.get()
 
     // 当前任务的审计采集
     private var curTask: String? = null
@@ -44,6 +50,7 @@ object ChatAgentBridge {
         service.cancel()
         LiveControlOverlay.hide()
         finalize("cancelled", "已手动停止")
+        busy.set(false)
     }
 
     /** 落一条审计记录并清空当前任务状态（幂等：无活动任务时跳过）。 */
@@ -98,6 +105,11 @@ object ChatAgentBridge {
         onError: (String) -> Unit,
         recordKey: String? = null,
     ) {
+        // 忙判断必须在改动任何共享状态(updateConfig/curTask)之前,拒绝并发任务。
+        if (!busy.compareAndSet(false, true)) {
+            onError("正在执行另一个任务，请稍候")
+            return
+        }
         val recorder = recordKey?.let { ActionRecorder() }
         service.updateConfig(buildConfig())
         // 审计采集：开始一次任务
@@ -138,18 +150,21 @@ object ChatAgentBridge {
                 if (recordKey != null) recorder?.commit(recordKey, prompt)
                 LiveControlOverlay.finish(true, "完成")
                 finalize("success", finalAnswer)
+                busy.set(false)
                 main.post { onDone(finalAnswer) }
             }
 
             override fun onError(round: Int, error: Exception, totalTokens: Int) {
                 LiveControlOverlay.finish(false, error.message?.take(20) ?: "出错")
                 finalize("error", error.message ?: "调用失败")
+                busy.set(false)
                 main.post { onError(error.message ?: "调用失败") }
             }
 
             override fun onSystemDialogBlocked(round: Int, totalTokens: Int) {
                 LiveControlOverlay.finish(false, "需手动处理")
                 finalize("error", "检测到系统弹窗，已暂停")
+                busy.set(false)
                 main.post { onError("检测到系统弹窗，已暂停（需手动处理）") }
             }
         })

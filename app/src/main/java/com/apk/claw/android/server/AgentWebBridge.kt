@@ -35,6 +35,7 @@ object AgentWebBridge {
     /** 网页发来一条指令。已在跑→false(busy);未配置模型→记错误并 false。 */
     fun run(prompt: String): Boolean {
         if (!ChatAgentBridge.isConfigured()) { add("error", "未配置模型,请到 设置 → 模型配置"); return false }
+        if (ChatAgentBridge.isBusy()) return false   // App 端或其它请求正在跑→busy
         if (!running.compareAndSet(false, true)) return false
         add("user", prompt)
         main.post {
