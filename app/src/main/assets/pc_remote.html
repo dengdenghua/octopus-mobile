@@ -10,6 +10,12 @@
   #wrap{position:absolute;top:50%;left:0;right:0;transform:translateY(-50%);width:100%;aspect-ratio:16/9}
   video{width:100%;height:100%;object-fit:fill;background:#111;touch-action:none;display:block}
   #status{position:fixed;top:50%;left:0;right:0;transform:translateY(-50%);text-align:center;font-size:14px;z-index:5;padding:0 20px}
+  #guide{position:fixed;top:46px;left:8px;right:8px;bottom:8px;background:rgba(15,18,28,.97);color:#ddd;
+         border-radius:10px;padding:14px;overflow:auto;z-index:20;display:none;font-size:13px;line-height:1.65}
+  #guide h3{margin:0 0 8px;color:#fff;font-size:15px}
+  #guide code{background:#222;color:#9cf;padding:1px 5px;border-radius:4px;word-break:break-all}
+  #guide .step{margin:10px 0;padding:9px;background:rgba(255,255,255,.05);border-radius:8px}
+  #guide button{margin-top:12px;font-size:15px;padding:9px 18px;border:none;border-radius:8px;background:#2e9e5b;color:#fff}
   #kb{position:fixed;bottom:10px;left:10px;right:10px;z-index:10;display:none}
   #kb input{width:70%;font-size:16px;padding:8px;border-radius:6px;border:none}
   #kb button{font-size:15px;padding:8px 10px}
@@ -27,10 +33,11 @@
   </div>
   <div id="wrap"><video id="v" autoplay playsinline muted></video></div>
   <div id="status">正在和母体建立 WebRTC…<br>（确认母体侧 pc_remote_webrtc.py 已运行；跨网需 STUN/TURN 可达）</div>
+  <div id="guide"></div>
   <div id="kb"><input id="kbi" placeholder="输入文字到 PC"><button onclick="sendType()">发送</button><button onclick="key('enter')">回车</button></div>
 <script>
   let pc=null, dc=null, attempt=0, connectTimer=null;
-  const MAX_RETRY=5;
+  const MAX_RETRY=3;
   // 多个 STUN:WebRTC 并行查、谁通用谁(降级切换);死服务器不要放(会拖慢收集)。
   // 对称 NAT 必通需 TURN:加 {urls:'turn:host:3478',username:'u',credential:'p'} 即可。
   const ICE=[
@@ -59,10 +66,30 @@
 
   function retry(reason){
     if(connectTimer){clearTimeout(connectTimer);connectTimer=null;}
-    if(attempt>=MAX_RETRY){ statusEl.style.display='block'; statusEl.textContent='连接失败('+reason+'),已重试 '+attempt+' 次。检查母体是否运行/网络,或需要 TURN。'; return; }
-    statusEl.style.display='block'; statusEl.textContent='重连中('+reason+')… 第 '+attempt+' 次(切换 STUN 重试)';
     try{ if(pc) pc.close(); }catch(e){} pc=null; dc=null;
+    if(attempt>=MAX_RETRY){ showGuide(reason); return; }   // 降级:重试用尽 → 设置指引
+    statusEl.style.display='block'; statusEl.textContent='重连中('+reason+')… 第 '+attempt+' 次(切换 STUN 重试)';
     setTimeout(start, Math.min(1500*attempt, 5000));
+  }
+
+  function retryNow(){
+    document.getElementById('guide').style.display='none';
+    statusEl.style.display='block'; statusEl.textContent='重连中…';
+    attempt=0;
+    try{ Android.reconnect && Android.reconnect(); }catch(e){}   // 先拉起底层 WS
+    setTimeout(start, 1500);                                     // 给 WS 一点连接时间
+  }
+
+  function showGuide(reason){
+    const g=document.getElementById('guide');
+    g.innerHTML =
+      '<h3>连不上母体（'+reason+'，已重试 '+attempt+' 次）— 按下面设置</h3>'+
+      '<div class="step"><b>① 母体在跑吗？</b><br>Mac 上(同机/回环即可)：<br><code>.venv/bin/python scripts/pc_remote_webrtc.py</code></div>'+
+      '<div class="step"><b>② 同一局域网</b>(手机和 Mac 同 WiFi)：<br>母体绑全网卡 + 设密码：<br><code>OCTOPUS_TENTACLE_HOST=0.0.0.0 OCTOPUS_TENTACLE_TOKEN=你的密码 .venv/bin/python scripts/pc_remote_webrtc.py</code><br>手机 设置→母体连接：地址 <code>ws://Mac内网IP:8765</code>，Auth Token 填同一密码</div>'+
+      '<div class="step"><b>③ 跨网（推荐 Tailscale，免费 / 零 TURN）</b>：<br>· 手机装 Tailscale，登和 Mac 同一账号<br>· 母体同 ② 那样 <code>0.0.0.0</code> + token 起<br>· 手机 设置→母体连接：地址 <code>ws://100.106.228.62:8765</code>（Mac 的 Tailscale IP；Mac 上 <code>tailscale ip -4</code> 可查），token 同上</div>'+
+      '<div class="step"><b>④ 仍连不上 = 对称 NAT</b>(STUN 打洞失败)：<br>用 ③ 的 Tailscale(自带免费中继)；或在两端 iceServers 加 <code>turn:</code>(coturn / 托管，按流量计费)</div>'+
+      '<button onclick="retryNow()">重试</button>';
+    g.style.display='block'; statusEl.style.display='none';
   }
 
   // 母体 offer 进来（原生 evaluateJavascript 调用）

@@ -77,6 +77,12 @@ class PcRemoteWebrtcActivity : ComponentActivity() {
         }
 
         @JavascriptInterface
+        fun reconnect() {
+            // 重试时先把底层 tentacle WS 拉起来(母体曾不可达时它可能已停止重连)
+            runCatching { com.apk.claw.android.appViewModel.connectRuntime() }
+        }
+
+        @JavascriptInterface
         fun back() {
             runOnUiThread { finish() }
         }
