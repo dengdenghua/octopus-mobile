@@ -594,6 +594,9 @@ class BrowserActivity : BaseActivity() {
                         }
                         is EngineEvent.ConsoleMessage -> {
                             Log.d(TAG, "[${event.level}] ${event.message}")
+                            if (event.message.startsWith("正在安装扩展")) {
+                                Toast.makeText(this@BrowserActivity, event.message, Toast.LENGTH_SHORT).show()
+                            }
                         }
                         is EngineEvent.JsAlert -> {
                             AlertDialog.Builder(this@BrowserActivity)
@@ -685,20 +688,23 @@ class BrowserActivity : BaseActivity() {
         }
 
         val editText = EditText(this).apply {
-            hint = "Chrome Web Store ID 或扩展 URL"
+            hint = "扩展 .xpi 链接（火狐）"
             setSingleLine(true)
             setPadding(dp(16), dp(12), dp(16), dp(12))
         }
 
         AlertDialog.Builder(this)
-            .setTitle("安装扩展")
-            .setMessage("输入 Chrome Web Store 扩展 ID 或 .xpi/.crx 下载链接")
+            .setTitle("扩展")
+            .setMessage("推荐：点「逛 AMO 商店」浏览火狐插件市场，在扩展页点「Add to Firefox」即可直接安装。\n或在下方粘贴 .xpi 链接安装。\n（Chrome 扩展因签名限制无法在 Firefox 内核安装）")
             .setView(editText)
             .setPositiveButton("安装") { _, _ ->
                 val input = editText.text.toString().trim()
                 if (input.isNotEmpty()) {
                     installExtension(input)
                 }
+            }
+            .setNeutralButton("逛 AMO 商店") { _, _ ->
+                navigateTo("https://addons.mozilla.org/zh-CN/android/")
             }
             .setNegativeButton("取消", null)
             .show()

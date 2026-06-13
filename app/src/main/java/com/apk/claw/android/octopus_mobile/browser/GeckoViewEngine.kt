@@ -14,6 +14,7 @@ import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoView
 import org.mozilla.geckoview.WebExtension
+import org.mozilla.geckoview.WebExtensionController
 import org.mozilla.geckoview.WebRequestError
 import android.net.Uri
 import java.io.ByteArrayOutputStream
@@ -188,6 +189,26 @@ class GeckoViewEngine : BrowserEngine {
         val settings = runtime.settings
         // GeckoView 125 GeckoRuntimeSettings 确认存在的属性
         settings.remoteDebuggingEnabled = true
+        // 开启扩展 Web API：AMO 页面的「Add to Firefox」才会路由到下面的安装委托。默认关闭。
+        runCatching { settings.extensionsWebAPIEnabled = true }
+
+        // 扩展安装委托：用户在 AMO 页面点「Add to Firefox」时，GeckoView 会回调此处确认安装。
+        // 自动放行（用户已主动点击安装），让"直接逛火狐插件市场一键装"真正生效。
+        runCatching {
+            runtime.webExtensionController.promptDelegate = object : WebExtensionController.PromptDelegate {
+                override fun onInstallPromptRequest(
+                    extension: WebExtension,
+                    permissions: Array<out String>,
+                    origins: Array<out String>,
+                    dataCollectionPermissions: Array<out String>,
+                ): GeckoResult<WebExtension.PermissionPromptResponse> {
+                    Log.i("GeckoViewEngine", "Install prompt: ${extension.metaData?.name ?: extension.id} -> ALLOW")
+                    _events.tryEmit(EngineEvent.ConsoleMessage("info", "正在安装扩展：${extension.metaData?.name ?: extension.id}"))
+                    // 授予请求的权限即安装；不开隐私模式 / 不授技术数据采集
+                    return GeckoResult.fromValue(WebExtension.PermissionPromptResponse(true, false, false))
+                }
+            }
+        }
         // settings.webNotificationsEnabled was removed in GeckoView 151.
         // Web notifications are now controlled via GeckoSession.PermissionDelegate.
         // settings.webNotificationsEnabled = true
