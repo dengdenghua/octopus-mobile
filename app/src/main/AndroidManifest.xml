@@ -126,6 +126,7 @@
         <activity android:name=".ui.featurescreens.CloudDriveActivity" android:exported="false" />
         <activity android:name=".ui.featurescreens.TrustCenterActivity" android:exported="false" />
         <activity android:name=".ui.featurescreens.ActivityActivity" android:exported="false" />
+        <activity android:name=".ui.featurescreens.RoutinesActivity" android:exported="false" />
 
         <!-- mpv 播放界面：横屏 + 全屏 + D-pad 支持 -->
         <activity

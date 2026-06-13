@@ -1,8 +1,10 @@
 package com.apk.claw.android.ui.compose.screen
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -31,6 +33,7 @@ import com.apk.claw.android.ClawApplication
 import com.apk.claw.android.R
 import com.apk.claw.android.octopus_mobile.ControlTarget
 import com.apk.claw.android.octopus_mobile.DeviceInfo
+import com.apk.claw.android.octopus_mobile.RoutineStore
 import com.apk.claw.android.octopus_mobile.VoiceInput
 import com.apk.claw.android.server.ConfigServerManager
 import com.apk.claw.android.service.ClawAccessibilityService
@@ -289,6 +292,12 @@ fun ChatScreen() {
                 }
             },
             actions = {
+                // 例程：把对话指令存成可复用例程，一键重放
+                IconButton(onClick = {
+                    runCatching { context.startActivity(android.content.Intent(context, com.apk.claw.android.ui.featurescreens.RoutinesActivity::class.java)) }
+                }) {
+                    Text("📋", fontSize = 15.sp)
+                }
                 // 活动审计：跨会话回看 Agent 做过什么
                 IconButton(onClick = {
                     runCatching { context.startActivity(android.content.Intent(context, com.apk.claw.android.ui.featurescreens.ActivityActivity::class.java)) }
@@ -580,22 +589,49 @@ private fun demoSeed(): List<ChatMessage> = listOf(
 )
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 private fun UserBubble(text: String) {
+    val context = LocalContext.current
+    var menu by remember { mutableStateOf(false) }
     Box(
         modifier = Modifier.fillMaxWidth(),
         contentAlignment = Alignment.CenterEnd
     ) {
-        Surface(
-            shape = RoundedCornerShape(18.dp, 18.dp, 4.dp, 18.dp),
-            color = UserBubbleColor,
-        ) {
-            Text(
-                text,
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                fontSize = 14.sp,
-                color = Color.White,
-                lineHeight = 21.sp,
-            )
+        Box {
+            Surface(
+                shape = RoundedCornerShape(18.dp, 18.dp, 4.dp, 18.dp),
+                color = UserBubbleColor,
+                // 长按一条指令 → 存为可复用例程
+                modifier = Modifier.combinedClickable(onClick = {}, onLongClick = { menu = true }),
+            ) {
+                Text(
+                    text,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    fontSize = 14.sp,
+                    color = Color.White,
+                    lineHeight = 21.sp,
+                )
+            }
+            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                DropdownMenuItem(
+                    text = { Text("⭐ 存为例程") },
+                    onClick = {
+                        menu = false
+                        val now = System.currentTimeMillis()
+                        RoutineStore.add(
+                            RoutineStore.Routine(
+                                id = "rt_$now",
+                                name = text.take(20),
+                                prompt = text,
+                                targetId = ControlTarget.id(),
+                                targetLabel = ControlTarget.label(),
+                                createdAt = now,
+                            )
+                        )
+                        Toast.makeText(context, "已存为例程（📋 查看）", Toast.LENGTH_SHORT).show()
+                    },
+                )
+            }
         }
     }
 }
