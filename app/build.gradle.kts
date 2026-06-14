@@ -47,14 +47,20 @@ android {
         buildConfigField("String", "VERSION_INFO", getVersionGit())
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // NDK ABI 过滤：只保留 arm64-v8a（近年所有手机 + TV 盒子均支持）
-        // 内置 GeckoView/mpv 原生库体积大，双架构会让包翻倍；故只出 64 位。
-        // 如需 32 位老设备支持，加回 "armeabi-v7a"；如需 x86 模拟器，加 "x86_64"。
-        ndk {
-            abiFilters += listOf("arm64-v8a")
-        }
+        // ABI 由下方 splits 块按架构分包(每个 APK 只带自己架构),这里不再用
+        // abiFilters 限制,否则会与 splits 冲突、把 32 位过滤掉。
     }
 
+    // 按 ABI 分包:arm64-v8a / armeabi-v7a 各生成一个独立 APK,只含自身架构,
+    // 64 位包不被 32 位库拖大;老 32 位手机装 v7a 那个。不出 universal(否则两套合一会暴涨)。
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "armeabi-v7a")
+            isUniversalApk = false
+        }
+    }
 
     buildTypes {
         getByName("debug") {
@@ -207,7 +213,12 @@ androidComponents {
         variant.outputs.forEach { output ->
             if (output is com.android.build.api.variant.impl.VariantOutputImpl) {
                 val versionName = android.defaultConfig.versionName ?: "0.0.0"
-                val fileName = "OctopusMobile_v${versionName}_${getDateTime()}.apk"
+                // ABI 分包后每个 output 带不同架构 → 文件名必须含 ABI,否则同名冲突打包失败
+                val abi = output.variantOutputConfiguration.filters
+                    .find { it.filterType == com.android.build.api.variant.FilterConfiguration.FilterType.ABI }
+                    ?.identifier
+                val abiTag = if (abi != null) "_$abi" else ""
+                val fileName = "OctopusMobile_v${versionName}${abiTag}_${getDateTime()}.apk"
                 println("output file name: $fileName")
                 output.outputFileName.set(fileName)
             }
