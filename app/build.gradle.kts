@@ -169,8 +169,11 @@ dependencies {
     implementation("dev.rikka.shizuku:provider:13.1.5")
 
     // mpv-android-lib —— FFmpeg + libplacebo + libass 播放引擎（MIT 协议）
-    // 全格式解码 + HDR 色调映射 + 高质量缩放 + ASS 字幕渲染
-    implementation(libs.mpv.android.lib)
+    // 已移除以瘦身 APK(约 -25MB):其原生库 libmpv/libav*/libplacebo/libass 占 ~25MB,
+    // 而 MpvController 目前是 stub(播放未接通),这些 .so 是纯死重。
+    // 视频库改为「按需」:真正接通播放时,改为进入视频库时从远端下载该 .so 集合后
+    //   System.load 动态加载(需一个托管 .so 的下载地址);在那之前先不打进基础包。
+    // implementation(libs.mpv.android.lib)
 
     // Jetpack Compose
     val composeBom = platform(libs.compose.bom)
