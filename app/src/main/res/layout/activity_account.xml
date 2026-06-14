@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/colorBgPrimary"
+    android:orientation="vertical">
+
+    <com.apk.claw.android.widget.CommonToolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="44pt" />
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clipToPadding="false"
+        android:paddingHorizontal="16pt"
+        android:paddingTop="16pt">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- Wallet card -->
+            <androidx.cardview.widget.CardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:cardBackgroundColor="@color/colorContainerBrighten"
+                app:cardCornerRadius="16pt"
+                app:cardElevation="1pt">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="20pt">
+
+                    <TextView
+                        android:id="@+id/tvMobile"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/colorTextSecondary"
+                        android:textSize="13pt" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12pt"
+                        android:text="@string/account_credits_label"
+                        android:textColor="@color/colorTextSecondary"
+                        android:textSize="13pt" />
+
+                    <TextView
+                        android:id="@+id/tvCredits"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="0"
+                        android:textColor="@color/colorTextPrimary"
+                        android:textSize="32pt"
+                        android:textStyle="bold" />
+
+                    <com.apk.claw.android.widget.KButton
+                        android:id="@+id/btnDailyClaim"
+                        android:layout_width="wrap_content"
+                        android:layout_height="40pt"
+                        android:layout_marginTop="16pt"
+                        android:gravity="center"
+                        android:paddingHorizontal="16pt"
+                        android:text="@string/account_daily_claim"
+                        android:textSize="14pt" />
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
+
+            <!-- Recharge -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24pt"
+                android:paddingHorizontal="4pt"
+                android:paddingBottom="4pt"
+                android:text="@string/account_recharge_title"
+                android:textColor="@color/colorTextPrimary"
+                android:textSize="14pt"
+                android:textStyle="bold" />
+
+            <LinearLayout
+                android:id="@+id/llGoods"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8pt"
+                android:orientation="vertical" />
+
+            <com.apk.claw.android.widget.KButton
+                android:id="@+id/btnLogout"
+                android:layout_width="match_parent"
+                android:layout_height="48pt"
+                android:layout_marginTop="28pt"
+                android:layout_marginBottom="24pt"
+                android:gravity="center"
+                android:text="@string/account_logout"
+                android:textSize="16pt"
+                app:btnBackground="@color/colorContainerBrighten"
+                app:btnTextColor="@color/colorTextPrimary" />
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>

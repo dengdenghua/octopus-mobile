@@ -22,6 +22,13 @@
             android:orientation="vertical"
             android:paddingVertical="8pt">
 
+            <!-- 账号分组 -->
+            <com.apk.claw.android.widget.MenuGroup
+                android:id="@+id/accountGroup"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8pt" />
+
             <!-- 模型分组 -->
             <com.apk.claw.android.widget.MenuGroup
                 android:id="@+id/modelGroup"

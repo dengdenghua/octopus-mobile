@@ -1,0 +1,62 @@
+package com.apk.claw.android.account
+
+import com.apk.claw.android.utils.KVUtils
+
+/**
+ * Persisted account session: auth token + identity + a cached credits balance,
+ * stored in MMKV via [KVUtils]. Keys are local to this feature (we use the
+ * generic put/get rather than adding to KVUtils' shared key list to keep the
+ * blast radius small).
+ */
+object AccountStore {
+    private const val K_TOKEN = "ACCOUNT_TOKEN"
+    private const val K_USER_ID = "ACCOUNT_USER_ID"
+    private const val K_MOBILE = "ACCOUNT_MOBILE"
+    private const val K_NICKNAME = "ACCOUNT_NICKNAME"
+    private const val K_AVATAR = "ACCOUNT_AVATAR"
+    private const val K_CREDITS = "ACCOUNT_CREDITS"
+
+    var token: String
+        get() = KVUtils.getString(K_TOKEN, "")
+        set(v) = run { KVUtils.putString(K_TOKEN, v) }
+
+    var userId: String
+        get() = KVUtils.getString(K_USER_ID, "")
+        set(v) = run { KVUtils.putString(K_USER_ID, v) }
+
+    var mobile: String
+        get() = KVUtils.getString(K_MOBILE, "")
+        set(v) = run { KVUtils.putString(K_MOBILE, v) }
+
+    var nickname: String
+        get() = KVUtils.getString(K_NICKNAME, "")
+        set(v) = run { KVUtils.putString(K_NICKNAME, v) }
+
+    var avatar: String
+        get() = KVUtils.getString(K_AVATAR, "")
+        set(v) = run { KVUtils.putString(K_AVATAR, v) }
+
+    /** Cached so the UI can show a balance offline; refreshed from the server. */
+    var credits: Long
+        get() = KVUtils.getString(K_CREDITS, "0").toLongOrNull() ?: 0L
+        set(v) = run { KVUtils.putString(K_CREDITS, v.toString()) }
+
+    val isLoggedIn: Boolean get() = token.isNotEmpty()
+
+    fun saveLogin(r: LoginResult) {
+        token = r.token
+        userId = r.userId
+        mobile = r.mobile
+        r.nickname?.takeIf { it.isNotEmpty() }?.let { nickname = it }
+        r.avatar?.takeIf { it.isNotEmpty() }?.let { avatar = it }
+    }
+
+    fun clear() {
+        token = ""
+        userId = ""
+        mobile = ""
+        nickname = ""
+        avatar = ""
+        credits = 0
+    }
+}

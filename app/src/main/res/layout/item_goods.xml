@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="10pt"
+    app:cardBackgroundColor="@color/colorContainerBrighten"
+    app:cardCornerRadius="12pt"
+    app:cardElevation="1pt">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="16pt">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tvGoodsTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/colorTextPrimary"
+                android:textSize="16pt"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvGoodsSub"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4pt"
+                android:textColor="@color/colorTextSecondary"
+                android:textSize="13pt" />
+        </LinearLayout>
+
+        <com.apk.claw.android.widget.KButton
+            android:id="@+id/btnBuy"
+            android:layout_width="wrap_content"
+            android:layout_height="40pt"
+            android:gravity="center"
+            android:minWidth="72pt"
+            android:paddingHorizontal="16pt"
+            android:textSize="14pt" />
+    </LinearLayout>
+</androidx.cardview.widget.CardView>

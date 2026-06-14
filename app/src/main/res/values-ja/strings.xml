@@ -678,4 +678,38 @@
     <string name="settings_advanced_hint">ホスト接続 · LANリモート</string>
     <string name="settings_remote_lan_title">リモートデスクトップ · LAN</string>
     <string name="settings_runtime_plain_desc">PCからこのスマホにタスクを送信</string>
+
+    <!-- ── アカウントと課金 ── -->
+    <string name="menu_account">アカウントとチャージ</string>
+    <string name="account_title">マイアカウント</string>
+    <string name="account_login_title">ログイン</string>
+    <string name="account_login_tip">電話番号でログインします。認証コードを送信します（モックでは自動入力）。</string>
+    <string name="account_mobile_label">電話番号</string>
+    <string name="account_mobile_hint">電話番号を入力</string>
+    <string name="account_code_label">認証コード</string>
+    <string name="account_code_hint">コードを入力</string>
+    <string name="account_send_code">コード取得</string>
+    <string name="account_resend_in">%1$d 秒後に再送</string>
+    <string name="account_code_sent">コードを送信しました</string>
+    <string name="account_mock_code_filled">モックコードを自動入力：%1$s</string>
+    <string name="account_code_send_failed">コード送信に失敗</string>
+    <string name="account_login_button">ログイン / 登録</string>
+    <string name="account_login_success">ログインしました</string>
+    <string name="account_login_failed">ログインに失敗</string>
+    <string name="account_invalid_mobile">正しい電話番号を入力してください</string>
+    <string name="account_invalid_code">認証コードを入力してください</string>
+    <string name="account_credits_label">クレジット残高</string>
+    <string name="account_daily_claim">デイリーチェックイン</string>
+    <string name="account_recharge_title">チャージ</string>
+    <string name="account_goods_credits">%1$d クレジット</string>
+    <string name="account_goods_bonus">（+%1$d ボーナス）</string>
+    <string name="account_logout">ログアウト</string>
+    <string name="account_order_failed">注文の作成に失敗</string>
+    <string name="account_pay_opened">レジを開きました。支払いを完了してください</string>
+    <string name="account_recharge_success">チャージ成功、+%1$d クレジット</string>
+    <string name="account_recharge_failed">支払いに失敗</string>
+    <string name="account_recharge_pending">支払い処理中。後で更新してください</string>
+    <string name="account_claim_success">チェックイン成功 +%1$d クレジット</string>
+    <string name="account_claim_already">本日はチェックイン済み</string>
+    <string name="account_claim_failed">チェックインに失敗</string>
 </resources>

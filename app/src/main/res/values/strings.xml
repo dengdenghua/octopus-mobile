@@ -784,4 +784,38 @@ For these, install Shizuku — a safe, open-source helper.</string>
     <string name="settings_advanced_hint">Host connection · LAN remote desktop</string>
     <string name="settings_remote_lan_title">Remote desktop · LAN</string>
     <string name="settings_runtime_plain_desc">Let your PC dispatch tasks to this phone</string>
+
+    <!-- ── account &amp; billing ── -->
+    <string name="menu_account">Account &amp; Credits</string>
+    <string name="account_title">My Account</string>
+    <string name="account_login_title">Sign in</string>
+    <string name="account_login_tip">Sign in with your phone number. A verification code will be sent (mock mode auto-fills it).</string>
+    <string name="account_mobile_label">Phone number</string>
+    <string name="account_mobile_hint">Enter your phone number</string>
+    <string name="account_code_label">Verification code</string>
+    <string name="account_code_hint">Enter the code</string>
+    <string name="account_send_code">Get code</string>
+    <string name="account_resend_in">Resend in %1$ds</string>
+    <string name="account_code_sent">Code sent</string>
+    <string name="account_mock_code_filled">Mock code auto-filled: %1$s</string>
+    <string name="account_code_send_failed">Failed to send code</string>
+    <string name="account_login_button">Sign in / Register</string>
+    <string name="account_login_success">Signed in</string>
+    <string name="account_login_failed">Sign-in failed</string>
+    <string name="account_invalid_mobile">Please enter a valid phone number</string>
+    <string name="account_invalid_code">Please enter the code</string>
+    <string name="account_credits_label">Credit balance</string>
+    <string name="account_daily_claim">Daily check-in</string>
+    <string name="account_recharge_title">Top up</string>
+    <string name="account_goods_credits">%1$d credits</string>
+    <string name="account_goods_bonus"> (+%1$d bonus)</string>
+    <string name="account_logout">Sign out</string>
+    <string name="account_order_failed">Failed to create order</string>
+    <string name="account_pay_opened">Cashier opened, please complete payment</string>
+    <string name="account_recharge_success">Top-up succeeded, +%1$d credits</string>
+    <string name="account_recharge_failed">Payment failed</string>
+    <string name="account_recharge_pending">Payment pending, please refresh later</string>
+    <string name="account_claim_success">Claimed +%1$d credits</string>
+    <string name="account_claim_already">Already checked in today</string>
+    <string name="account_claim_failed">Check-in failed</string>
 </resources>

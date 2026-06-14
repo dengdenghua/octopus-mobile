@@ -249,3 +249,9 @@
 -keepclasseswithmembernames class * {
     native <methods>;
 }
+
+# Coil（图片加载:发现页收藏 favicon / 搜索引擎图标用 coil.compose.AsyncImage）
+# release 下 R8 会裁掉 Coil 的 fetcher/decoder 导致图片不显示,这里保活。
+-keep class coil.** { *; }
+-keep interface coil.** { *; }
+-dontwarn coil.**

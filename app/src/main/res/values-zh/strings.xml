@@ -784,4 +784,38 @@
     <string name="settings_advanced_hint">主机连接 · 局域网远程桌面</string>
     <string name="settings_remote_lan_title">远程桌面 · 局域网</string>
     <string name="settings_runtime_plain_desc">让电脑远程指挥手机执行任务</string>
+
+    <!-- ── 账号与付费 ── -->
+    <string name="menu_account">账号与充值</string>
+    <string name="account_title">我的账户</string>
+    <string name="account_login_title">登录</string>
+    <string name="account_login_tip">使用手机号登录，将发送验证码（mock 模式会自动填入）。</string>
+    <string name="account_mobile_label">手机号</string>
+    <string name="account_mobile_hint">请输入手机号</string>
+    <string name="account_code_label">验证码</string>
+    <string name="account_code_hint">请输入验证码</string>
+    <string name="account_send_code">获取验证码</string>
+    <string name="account_resend_in">%1$d 秒后重发</string>
+    <string name="account_code_sent">验证码已发送</string>
+    <string name="account_mock_code_filled">Mock 验证码已自动填入：%1$s</string>
+    <string name="account_code_send_failed">验证码发送失败</string>
+    <string name="account_login_button">登录 / 注册</string>
+    <string name="account_login_success">登录成功</string>
+    <string name="account_login_failed">登录失败</string>
+    <string name="account_invalid_mobile">请输入正确的手机号</string>
+    <string name="account_invalid_code">请输入验证码</string>
+    <string name="account_credits_label">积分余额</string>
+    <string name="account_daily_claim">每日签到</string>
+    <string name="account_recharge_title">充值套餐</string>
+    <string name="account_goods_credits">%1$d 积分</string>
+    <string name="account_goods_bonus">（赠 %1$d）</string>
+    <string name="account_logout">退出登录</string>
+    <string name="account_order_failed">下单失败</string>
+    <string name="account_pay_opened">已打开收银台，请完成支付</string>
+    <string name="account_recharge_success">充值成功，到账 %1$d 积分</string>
+    <string name="account_recharge_failed">支付失败</string>
+    <string name="account_recharge_pending">支付处理中，请稍后刷新</string>
+    <string name="account_claim_success">签到成功 +%1$d 积分</string>
+    <string name="account_claim_already">今日已签到</string>
+    <string name="account_claim_failed">签到失败</string>
 </resources>

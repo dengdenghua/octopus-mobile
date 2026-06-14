@@ -17,6 +17,9 @@ import kotlinx.coroutines.launch
 import android.content.Intent
 import com.apk.claw.android.appViewModel
 import com.apk.claw.android.server.ConfigServerManager
+import com.apk.claw.android.account.AccountStore
+import com.apk.claw.android.ui.account.AccountActivity
+import com.apk.claw.android.ui.account.LoginActivity
 
 /**
  * 设置页面
@@ -69,6 +72,24 @@ class SettingsActivity : BaseActivity() {
     }
 
     private fun initMenuGroups() {
+        // 账号与充值（直接导航，不经 ViewModel 事件流）
+        val accountGroup = findViewById<MenuGroup>(R.id.accountGroup)
+        accountGroup.setTitle(getString(R.string.account_title))
+        val accountItem = accountGroup.addMenuItem(
+            leadingIcon = R.drawable.ic_account,
+            title = getString(R.string.menu_account),
+            onClick = {
+                val target = if (AccountStore.isLoggedIn) {
+                    AccountActivity::class.java
+                } else {
+                    LoginActivity::class.java
+                }
+                startActivity(Intent(this@SettingsActivity, target))
+            },
+            showDivider = false
+        )
+        accountItem.setLeadingIconColor(getColor(R.color.colorTextPrimary))
+
         // 通道
         val channelGroup = findViewById<MenuGroup>(R.id.channelGroup)
         channelGroup.setTitle(getString(R.string.settings_group_channel))
