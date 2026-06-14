@@ -37,6 +37,15 @@ DB_PATH = os.environ.get("OCTO_DB", os.path.join(os.path.dirname(__file__), "oct
 SMS_MOCK_CODE = os.environ.get("SMS_MOCK_CODE", "123456")
 SMS_PROVIDER = os.environ.get("SMS_PROVIDER", "mock")  # mock | aliyun | ...
 
+# 邮箱验证码:mock=固定 EMAIL_MOCK_CODE;生产 EMAIL_PROVIDER=smtp 并配 SMTP_*
+EMAIL_PROVIDER = os.environ.get("EMAIL_PROVIDER", "mock")  # mock | smtp
+EMAIL_MOCK_CODE = os.environ.get("EMAIL_MOCK_CODE", "123456")
+SMTP_HOST = os.environ.get("SMTP_HOST", "")
+SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
+SMTP_USER = os.environ.get("SMTP_USER", "")
+SMTP_PASS = os.environ.get("SMTP_PASS", "")
+SMTP_FROM = os.environ.get("SMTP_FROM", "")
+
 # 支付:mock=下单后查单即视为已支付(本地跑通);生产接微信/支付宝,用 webhook 改单状态
 PAYMENT_PROVIDER = os.environ.get("PAYMENT_PROVIDER", "mock")  # mock | wechat | alipay
 
@@ -138,6 +147,9 @@ def init_db() -> None:
             CREATE TABLE IF NOT EXISTS sms_codes(
                 mobile TEXT PRIMARY KEY, code TEXT NOT NULL, expire_at INTEGER NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS email_codes(
+                email TEXT PRIMARY KEY, code TEXT NOT NULL, expire_at INTEGER NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS orders(
                 order_no TEXT PRIMARY KEY, user_id TEXT NOT NULL, goods_id TEXT NOT NULL,
                 amount_fen INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'PENDING',
@@ -149,6 +161,11 @@ def init_db() -> None:
             );
             """
         )
+        # 迁移:给已存在的 users 表补 email 列(幂等)
+        try:
+            c.execute("ALTER TABLE users ADD COLUMN email TEXT")
+        except sqlite3.OperationalError:
+            pass  # 列已存在
         c.commit()
 
 
@@ -186,6 +203,28 @@ def send_sms(mobile: str, code: str) -> None:
         print(f"[sms-mock] {mobile} -> {code}")
         return
     raise HTTPException(status_code=500, detail=f"SMS provider '{SMS_PROVIDER}' not wired yet")
+
+
+def send_email(email: str, code: str) -> None:
+    """Mock 打印;生产 EMAIL_PROVIDER=smtp 走 SMTP。"""
+    if EMAIL_PROVIDER == "mock":
+        print(f"[email-mock] {email} -> {code}")
+        return
+    if EMAIL_PROVIDER == "smtp":
+        import smtplib
+        from email.mime.text import MIMEText
+
+        msg = MIMEText(f"你的登录验证码是 {code},5 分钟内有效。", _charset="utf-8")
+        msg["Subject"] = "登录验证码"
+        msg["From"] = SMTP_FROM or SMTP_USER
+        msg["To"] = email
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as s:
+            s.starttls()
+            if SMTP_USER:
+                s.login(SMTP_USER, SMTP_PASS)
+            s.sendmail(msg["From"], [email], msg.as_string())
+        return
+    raise HTTPException(status_code=500, detail=f"email provider '{EMAIL_PROVIDER}' not wired yet")
 
 
 # ─────────────────────────── endpoints: auth ───────────────────────────
@@ -237,6 +276,62 @@ def sms_login(body: dict[str, Any]) -> dict[str, Any]:
     )
     return {"token": token, "userId": uid, "mobile": mobile, "isNewUser": is_new,
             "nickname": f"用户{mobile[-4:]}"}
+
+
+def _valid_email(s: str) -> bool:
+    return "@" in s and "." in s.split("@")[-1] and 3 < len(s) <= 254
+
+
+@app.post("/auth/email/send")
+def email_send(body: dict[str, Any]) -> dict[str, Any]:
+    email = str(body.get("email", "")).strip().lower()
+    if not _valid_email(email):
+        raise HTTPException(status_code=400, detail="invalid email")
+    code = EMAIL_MOCK_CODE if EMAIL_PROVIDER == "mock" else f"{secrets.randbelow(1000000):06d}"
+    with closing(db()) as c:
+        c.execute(
+            "INSERT INTO email_codes(email, code, expire_at) VALUES(?,?,?) "
+            "ON CONFLICT(email) DO UPDATE SET code=excluded.code, expire_at=excluded.expire_at",
+            (email, code, now_ms() + 300_000),
+        )
+        c.commit()
+    send_email(email, code)
+    out = {"ok": True, "ttlSeconds": 300}
+    if EMAIL_PROVIDER == "mock":
+        out["devCode"] = code
+    return out
+
+
+@app.post("/auth/email/login")
+def email_login(body: dict[str, Any]) -> dict[str, Any]:
+    email = str(body.get("email", "")).strip().lower()
+    code = str(body.get("code", "")).strip()
+    with closing(db()) as c:
+        rec = c.execute("SELECT * FROM email_codes WHERE email = ?", (email,)).fetchone()
+        ok = rec is not None and rec["code"] == code and rec["expire_at"] >= now_ms()
+        if not ok:
+            raise HTTPException(status_code=400, detail="验证码错误或已过期")
+        user = c.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
+        is_new = user is None
+        nick = email.split("@")[0]
+        if is_new:
+            uid = "u_" + secrets.token_hex(8)
+            c.execute(
+                "INSERT INTO users(user_id, email, nickname, credits, created_at) VALUES(?,?,?,?,?)",
+                (uid, email, nick, SIGNUP_BONUS, now_ms()),
+            )
+        else:
+            uid = user["user_id"]
+            nick = user["nickname"] or nick
+        c.execute("DELETE FROM email_codes WHERE email = ?", (email,))
+        c.commit()
+    token = jwt_encode(
+        {"sub": uid, "email": email, "iat": int(time.time()),
+         "exp": int(time.time()) + JWT_EXPIRE_SECONDS},
+        JWT_SECRET,
+    )
+    return {"token": token, "userId": uid, "mobile": "", "email": email,
+            "isNewUser": is_new, "nickname": nick}
 
 
 # ─────────────────────────── endpoints: account ───────────────────────────
