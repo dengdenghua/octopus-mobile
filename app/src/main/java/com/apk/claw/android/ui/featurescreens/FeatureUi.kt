@@ -19,16 +19,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.apk.claw.android.ui.compose.theme.OctopusColors
 
-val FBg = OctopusColors.Background
-val FSurface = OctopusColors.Surface
-val FSurface2 = OctopusColors.SurfaceVariant
-val FPrimary = OctopusColors.Primary
-val FText = OctopusColors.TextPrimary
-val FSub = OctopusColors.TextSecondary
-val FMuted = OctopusColors.TextMuted
-val FBorder = OctopusColors.Border
-val FSuccess = OctopusColors.Success
-val FWarning = OctopusColors.Warning
+val FBg get() = OctopusColors.Background
+val FSurface get() = OctopusColors.Surface
+val FSurface2 get() = OctopusColors.SurfaceVariant
+val FPrimary get() = OctopusColors.Primary
+val FText get() = OctopusColors.TextPrimary
+val FSub get() = OctopusColors.TextSecondary
+val FMuted get() = OctopusColors.TextMuted
+val FBorder get() = OctopusColors.Border
+val FSuccess get() = OctopusColors.Success
+val FWarning get() = OctopusColors.Warning
 
 /** 通用深色页脚手架：顶栏（返回 + 标题 + 可选右侧动作）+ 内容区 */
 @Composable

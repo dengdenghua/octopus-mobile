@@ -31,7 +31,23 @@ private val DarkColorScheme = darkColorScheme(
 fun OctopusTheme(
     content: @Composable () -> Unit
 ) {
-    val colorScheme = DarkColorScheme
+    val light = OctopusColors.isLight
+    val colorScheme = if (light) lightColorScheme(
+        primary = OctopusColors.Primary,
+        onPrimary = Color.White,
+        primaryContainer = OctopusColors.SurfaceVariant,
+        secondary = OctopusColors.Accent,
+        secondaryContainer = OctopusColors.SurfaceDeep,
+        tertiary = OctopusColors.Warning,
+        background = OctopusColors.Background,
+        surface = OctopusColors.Surface,
+        surfaceVariant = OctopusColors.SurfaceVariant,
+        onBackground = OctopusColors.TextPrimary,
+        onSurface = OctopusColors.TextPrimary,
+        onSurfaceVariant = OctopusColors.TextMuted,
+        error = OctopusColors.Error,
+        outline = OctopusColors.Border,
+    ) else DarkColorScheme
     val view = LocalView.current
     val activity = view.context as? Activity
 
@@ -40,8 +56,8 @@ fun OctopusTheme(
             window.statusBarColor = colorScheme.background.toArgb()
             window.navigationBarColor = colorScheme.background.toArgb()
             WindowCompat.getInsetsController(window, view).apply {
-                isAppearanceLightStatusBars = false
-                isAppearanceLightNavigationBars = false
+                isAppearanceLightStatusBars = light
+                isAppearanceLightNavigationBars = light
             }
         }
     }

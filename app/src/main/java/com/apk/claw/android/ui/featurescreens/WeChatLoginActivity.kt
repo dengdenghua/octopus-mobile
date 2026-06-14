@@ -39,7 +39,7 @@ class WeChatLoginActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent { WeChatLoginScreen(onBack = { finish() }) }
-        runCatching { window.statusBarColor = android.graphics.Color.BLACK }
+        runCatching { window.statusBarColor = com.apk.claw.android.ui.compose.theme.OctopusColors.statusBarArgb }
     }
 }
 

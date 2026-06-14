@@ -66,18 +66,18 @@ import kotlinx.coroutines.launch
 import java.util.Calendar
 
 // 颜色
-private val PrimaryColor = OctopusColors.Primary
-private val SuccessColor = OctopusColors.Success
-private val WarningColor = OctopusColors.Warning
-private val BackgroundColor = OctopusColors.Background
-private val SurfaceColor = OctopusColors.Surface
-private val SurfaceVariantColor = OctopusColors.SurfaceVariant
-private val TextPrimary = OctopusColors.TextPrimary
-private val TextSecondary = OctopusColors.TextSecondary
-private val TextMuted = OctopusColors.TextMuted
-private val BorderColor = OctopusColors.Border
-private val AgentBubbleColor = OctopusColors.Surface
-private val UserBubbleColor = OctopusColors.Primary
+private val PrimaryColor get() = OctopusColors.Primary
+private val SuccessColor get() = OctopusColors.Success
+private val WarningColor get() = OctopusColors.Warning
+private val BackgroundColor get() = OctopusColors.Background
+private val SurfaceColor get() = OctopusColors.Surface
+private val SurfaceVariantColor get() = OctopusColors.SurfaceVariant
+private val TextPrimary get() = OctopusColors.TextPrimary
+private val TextSecondary get() = OctopusColors.TextSecondary
+private val TextMuted get() = OctopusColors.TextMuted
+private val BorderColor get() = OctopusColors.Border
+private val AgentBubbleColor get() = OctopusColors.Surface
+private val UserBubbleColor get() = OctopusColors.Primary
 
 // 消息数据模型
 sealed class ChatMessage {

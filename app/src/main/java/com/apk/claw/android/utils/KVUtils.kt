@@ -184,6 +184,10 @@ object KVUtils {
 
     fun setSearchEngine(id: String) = putString(KEY_SEARCH_ENGINE, id)
 
+    /** 明亮主题开关(默认 false=深色)。OctopusColors.isLight 启动时据此初始化。 */
+    fun isLightTheme(): Boolean = getBoolean("KEY_LIGHT_THEME", false)
+    fun setLightTheme(light: Boolean) = putBoolean("KEY_LIGHT_THEME", light)
+
     // ==================== 钉钉配置 ====================
     fun getDingtalkAppKey(): String = getString(KEY_DINGTALK_APP_KEY, "")
     fun setDingtalkAppKey(value: String) = putString(KEY_DINGTALK_APP_KEY, value)

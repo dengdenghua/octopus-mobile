@@ -41,13 +41,13 @@ import com.apk.claw.android.ui.browser.BrowserActivity
 import com.apk.claw.android.ui.compose.theme.OctopusColors
 import com.apk.claw.android.utils.KVUtils
 
-private val PrimaryColor = OctopusColors.Primary
-private val SurfaceColor = OctopusColors.Surface
-private val BackgroundColor = OctopusColors.Background
-private val TextPrimary = OctopusColors.TextPrimary
-private val TextSecondary = OctopusColors.TextSecondary
-private val TextMuted = OctopusColors.TextMuted
-private val BorderColor = OctopusColors.Border
+private val PrimaryColor get() = OctopusColors.Primary
+private val SurfaceColor get() = OctopusColors.Surface
+private val BackgroundColor get() = OctopusColors.Background
+private val TextPrimary get() = OctopusColors.TextPrimary
+private val TextSecondary get() = OctopusColors.TextSecondary
+private val TextMuted get() = OctopusColors.TextMuted
+private val BorderColor get() = OctopusColors.Border
 
 private enum class SearchMode { Web, Ai, All }
 

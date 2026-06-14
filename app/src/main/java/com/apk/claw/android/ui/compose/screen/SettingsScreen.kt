@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Hub
 import androidx.compose.material.icons.filled.Lan
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Monitor
 import androidx.compose.material.icons.filled.Notifications
@@ -83,18 +84,18 @@ private fun isShizukuReady(): Boolean = runCatching { ShizukuManager.isAvailable
 private fun selectedEngineName(c: Context): String =
     runCatching { BrowserEngineFactory.selectBest(c).name }.getOrDefault("—")
 
-private val PrimaryColor = OctopusColors.Primary
-private val SuccessColor = OctopusColors.Success
-private val WarningColor = OctopusColors.Warning
-private val ErrorColor = OctopusColors.Error
-private val AccentColor = OctopusColors.Accent
-private val SurfaceColor = OctopusColors.Surface
-private val SurfaceVariantColor = OctopusColors.SurfaceVariant
-private val BackgroundColor = OctopusColors.Background
-private val TextPrimary = OctopusColors.TextPrimary
-private val TextSecondary = OctopusColors.TextSecondary
-private val TextMuted = OctopusColors.TextMuted
-private val BorderColor = OctopusColors.Border
+private val PrimaryColor get() = OctopusColors.Primary
+private val SuccessColor get() = OctopusColors.Success
+private val WarningColor get() = OctopusColors.Warning
+private val ErrorColor get() = OctopusColors.Error
+private val AccentColor get() = OctopusColors.Accent
+private val SurfaceColor get() = OctopusColors.Surface
+private val SurfaceVariantColor get() = OctopusColors.SurfaceVariant
+private val BackgroundColor get() = OctopusColors.Background
+private val TextPrimary get() = OctopusColors.TextPrimary
+private val TextSecondary get() = OctopusColors.TextSecondary
+private val TextMuted get() = OctopusColors.TextMuted
+private val BorderColor get() = OctopusColors.Border
 
 @Composable
 fun SettingsScreen(onMessage: (String) -> Unit = {}) {
@@ -215,6 +216,20 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
                     "${cfg.count { it }}/6",
                     trailing = if (cfg.any { it }) stringResource(R.string.status_connected) else stringResource(R.string.status_not_configured),
                 )
+            }
+        }
+
+        item {
+            SettingsCard(stringResource(R.string.settings_appearance), Icons.Filled.LightMode, compact = true) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    IconBubble(Icons.Filled.LightMode, PrimaryColor)
+                    Spacer(Modifier.width(10.dp))
+                    Text(stringResource(R.string.settings_light_mode), color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    Switch(
+                        checked = OctopusColors.isLight,
+                        onCheckedChange = { v -> KVUtils.setLightTheme(v); OctopusColors.isLight = v },
+                    )
+                }
             }
         }
 
