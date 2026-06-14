@@ -104,7 +104,7 @@ TRUSTED_PROXIES = int(os.environ.get("TRUSTED_PROXIES", "1"))
 # 商品目录(kind=membership 的购买会解锁当月 BYO)
 GOODS = [
     {"id": "m_month", "title": "会员月卡", "credits": 500, "bonusCredits": 0,
-     "priceFen": 1900, "tag": "解锁自有模型", "kind": "membership"},
+     "priceFen": 3900, "tag": "解锁自有模型", "kind": "membership"},
     {"id": "g_100", "title": "100 积分", "credits": 100, "bonusCredits": 0,
      "priceFen": 990, "tag": None, "kind": "credits"},
     {"id": "g_500", "title": "500 积分", "credits": 500, "bonusCredits": 50,
