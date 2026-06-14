@@ -469,12 +469,12 @@
     <string name="routine_runner_starting_execution">実行開始</string>
     <string name="settings_llm_api_key_configured">設定済み</string>
     <string name="settings_rpc_url_default">未構成（デフォルト: ws://10.0.2.2:8765）</string>
-    <string name="settings_octopus_runtime_title">親接続 · Octopus Runtime</string>
-    <string name="settings_rpc_remote_brain_description">RPC リモートブレーン（親が tool/execute をディスパッチ）</string>
-    <string name="settings_pc_remote_desktop_title">🖥 親リモートデスクトップ</string>
+    <string name="settings_octopus_runtime_title">ホスト接続 · Octopus Runtime</string>
+    <string name="settings_rpc_remote_brain_description">RPC リモート実行（ホストが tool/execute を送信）</string>
+    <string name="settings_pc_remote_desktop_title">🖥 ホストリモートデスクトップ</string>
     <string name="settings_pc_remote_h264_description">PC画面を表示 + タッチ/キーボード操作（H.264/WS、同一LAN）</string>
     <string name="settings_webrtc_remote_desktop_title">🖥 リモートデスクトップ（WebRTC）</string>
-    <string name="settings_webrtc_p2p_description">P2P本当の接続（WebView/STUNホールパンチング、クロスネットワーク、親の pc_remote_webrtc.py が必要）</string>
+    <string name="settings_webrtc_p2p_description">P2P 直接接続（WebView/STUN ホールパンチング、クロスネットワーク、ホストの pc_remote_webrtc.py が必要）</string>
     <string name="device_detail_toolbar_title">デバイスの詳細</string>
     <string name="device_detail_status_online">● オンライン</string>
     <string name="device_detail_status_offline">○ オフライン</string>
@@ -628,7 +628,7 @@
     <string name="runtime_config_auth_hint">空白のままにすると認証なし</string>
     <string name="runtime_config_launch_mode_label">起動モード</string>
     <string name="runtime_config_mode_local_only">LOCAL_ONLY — 完全なローカル Agent</string>
-    <string name="runtime_config_mode_rpc_only">RPC_ONLY — 完全なリモート (マザーデバイスに依存)</string>
+    <string name="runtime_config_mode_rpc_only">RPC_ONLY — 完全なリモート（ホストが必要）</string>
     <string name="runtime_config_mode_dual">DUAL — リモート優先、オフラインフォールバック</string>
     <string name="runtime_config_auto_connect">起動時に自動接続</string>
     <string name="runtime_config_status_label">接続状態</string>

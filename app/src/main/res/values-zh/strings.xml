@@ -567,12 +567,12 @@
     <string name="routine_runner_starting_execution">开始运行</string>
     <string name="settings_llm_api_key_configured">已设置</string>
     <string name="settings_rpc_url_default">未配置（默认 ws://10.0.2.2:8765）</string>
-    <string name="settings_octopus_runtime_title">母体连接 · Octopus Runtime</string>
-    <string name="settings_rpc_remote_brain_description">RPC 远程大脑（母体下发 tool/execute）</string>
-    <string name="settings_pc_remote_desktop_title">🖥 母体远程桌面</string>
+    <string name="settings_octopus_runtime_title">主机连接 · Octopus Runtime</string>
+    <string name="settings_rpc_remote_brain_description">RPC 远程调度（主机下发 tool/execute）</string>
+    <string name="settings_pc_remote_desktop_title">🖥 主机远程桌面</string>
     <string name="settings_pc_remote_h264_description">看 PC 屏幕 + 触控/键盘控制（H.264/WS,同局域网）</string>
     <string name="settings_webrtc_remote_desktop_title">🖥 远程桌面 (WebRTC)</string>
-    <string name="settings_webrtc_p2p_description">P2P 真连(WebView/STUN 打洞,跨网,需母体 pc_remote_webrtc.py)</string>
+    <string name="settings_webrtc_p2p_description">P2P 直连(WebView/STUN 打洞,跨网,需主机运行 pc_remote_webrtc.py)</string>
     <string name="device_detail_toolbar_title">设备详情</string>
     <string name="device_detail_status_online">● 在线</string>
     <string name="device_detail_status_offline">○ 离线</string>
@@ -658,8 +658,8 @@
     <string name="multiwindow_shizuku_unauthorized">未授权 Shizuku，无法开小窗</string>
     <string name="multiwindow_opened_success">已在小窗打开 %1$s</string>
     <string name="multiwindow_opened_failed">打开失败：%1$s</string>
-    <string name="pcremote_waiting_screen">已连接母体,等待 PC 画面…\n（确认母体侧 pc_remote_server.py 已运行）</string>
-    <string name="pcremote_not_connected">未连接母体。\n请先在 设置 → 母体连接 配好地址并连接。</string>
+    <string name="pcremote_waiting_screen">已连接主机,等待画面…\n（确认主机已运行 pc_remote_server.py）</string>
+    <string name="pcremote_not_connected">未连接主机。\n请先在 设置 → 主机连接 配置地址并连接。</string>
     <string name="pcremote_back_button">‹ 返回</string>
     <string name="pcremote_frame_count">▶ H264 %1$d</string>
     <string name="pcremote_status_connected">● 已连接</string>
@@ -734,7 +734,7 @@
     <string name="runtime_config_auth_hint">留空则无认证</string>
     <string name="runtime_config_launch_mode_label">启动模式</string>
     <string name="runtime_config_mode_local_only">LOCAL_ONLY — 纯本地 Agent</string>
-    <string name="runtime_config_mode_rpc_only">RPC_ONLY — 纯远程 (依赖母体)</string>
+    <string name="runtime_config_mode_rpc_only">RPC_ONLY — 纯远程 (依赖主机)</string>
     <string name="runtime_config_mode_dual">DUAL — 远程优先，离线降级</string>
     <string name="runtime_config_auto_connect">启动时自动连接</string>
     <string name="runtime_config_status_label">连接状态</string>

@@ -567,12 +567,12 @@ For these, install Shizuku — a safe, open-source helper.</string>
     <string name="routine_runner_starting_execution">Starting execution</string>
     <string name="settings_llm_api_key_configured">Configured</string>
     <string name="settings_rpc_url_default">Not configured (default: ws://10.0.2.2:8765)</string>
-    <string name="settings_octopus_runtime_title">Parent Connection · Octopus Runtime</string>
-    <string name="settings_rpc_remote_brain_description">RPC Remote Brain (Parent dispatches tool/execute)</string>
-    <string name="settings_pc_remote_desktop_title">🖥 Parent Remote Desktop</string>
+    <string name="settings_octopus_runtime_title">Host Connection · Octopus Runtime</string>
+    <string name="settings_rpc_remote_brain_description">RPC Remote Execution (host dispatches tool/execute)</string>
+    <string name="settings_pc_remote_desktop_title">🖥 Host Remote Desktop</string>
     <string name="settings_pc_remote_h264_description">View PC screen + Touch/keyboard control (H.264/WS, same LAN)</string>
     <string name="settings_webrtc_remote_desktop_title">🖥 Remote Desktop (WebRTC)</string>
-    <string name="settings_webrtc_p2p_description">P2P true connection (WebView/STUN hole punching, cross-network, requires parent pc_remote_webrtc.py)</string>
+    <string name="settings_webrtc_p2p_description">P2P direct connection (WebView/STUN hole punching, cross-network, requires host pc_remote_webrtc.py)</string>
     <string name="device_detail_toolbar_title">Device Details</string>
     <string name="device_detail_status_online">● Online</string>
     <string name="device_detail_status_offline">○ Offline</string>
@@ -734,7 +734,7 @@ For these, install Shizuku — a safe, open-source helper.</string>
     <string name="runtime_config_auth_hint">Leave blank for no authentication</string>
     <string name="runtime_config_launch_mode_label">Launch Mode</string>
     <string name="runtime_config_mode_local_only">LOCAL_ONLY — Pure local Agent</string>
-    <string name="runtime_config_mode_rpc_only">RPC_ONLY — Pure remote (depends on mother device)</string>
+    <string name="runtime_config_mode_rpc_only">RPC_ONLY — Pure remote (requires host)</string>
     <string name="runtime_config_mode_dual">DUAL — Remote first, offline fallback</string>
     <string name="runtime_config_auto_connect">Auto-connect on startup</string>
     <string name="runtime_config_status_label">Connection Status</string>
