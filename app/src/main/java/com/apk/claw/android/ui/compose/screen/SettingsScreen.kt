@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Api
 import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.CloudQueue
@@ -53,6 +54,9 @@ import com.apk.claw.android.shizuku.ShizukuManager
 import com.apk.claw.android.ui.compose.theme.OctopusColors
 import com.apk.claw.android.ui.settings.LlmConfigActivity
 import com.apk.claw.android.ui.settings.RuntimeConfigActivity
+import com.apk.claw.android.account.AccountStore
+import com.apk.claw.android.ui.account.AccountActivity
+import com.apk.claw.android.ui.account.LoginActivity
 import com.apk.claw.android.utils.KVUtils
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -136,6 +140,31 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
                 apiKeyConfigured = apiKeyConfigured,
                 lanAddr = lanAddr,
             )
+        }
+
+        item {
+            val loggedIn = remember(refreshTick) { AccountStore.isLoggedIn }
+            val acct = remember(refreshTick) { AccountStore.mobile.ifEmpty { AccountStore.email } }
+            val credits = remember(refreshTick) { AccountStore.credits }
+            val isMember = remember(refreshTick) { AccountStore.byoUnlocked }
+            SettingsCard(stringResource(R.string.menu_account), Icons.Filled.AccountCircle, compact = true, onClick = {
+                val target = if (AccountStore.isLoggedIn) AccountActivity::class.java else LoginActivity::class.java
+                context.startActivity(Intent(context, target))
+            }) {
+                if (loggedIn) {
+                    SettingsRow(
+                        Icons.Filled.AccountCircle,
+                        acct,
+                        stringResource(R.string.account_credits_label) + ": " + credits + (if (isMember) " · VIP" else ""),
+                    )
+                } else {
+                    SettingsRow(
+                        Icons.Filled.AccountCircle,
+                        stringResource(R.string.account_login_title),
+                        stringResource(R.string.account_login_tip),
+                    )
+                }
+            }
         }
 
         item {

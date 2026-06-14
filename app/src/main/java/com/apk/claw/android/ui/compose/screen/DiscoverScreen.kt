@@ -130,7 +130,6 @@ fun DiscoverScreen(onNavigate: (String) -> Unit = {}) {
                     BrowserShortcut("知乎", "https://www.zhihu.com", "https://static.zhihu.com/heifetz/favicon.ico"),
                     BrowserShortcut("微博", "https://weibo.com", "https://weibo.com/favicon.ico"),
                     BrowserShortcut("AMO", "https://addons.mozilla.org", "https://addons.mozilla.org/favicon.ico"),
-                    BrowserShortcut("本机", null, null),
                 ),
                 onOpen = { openBrowser(context, it) },
             )
