@@ -35,7 +35,7 @@ object AccountRepository {
     private fun snapshot() =
         AccountState(
             loggedIn = AccountStore.isLoggedIn,
-            mobile = AccountStore.mobile,
+            mobile = AccountStore.mobile.ifEmpty { AccountStore.email },
             credits = AccountStore.credits,
             byoUnlocked = AccountStore.byoUnlocked,
             memberExpireAt = AccountStore.memberExpireAt,
@@ -50,6 +50,19 @@ object AccountRepository {
 
     suspend fun login(mobile: String, code: String): Result<LoginResult> {
         val r = runCatching { gateway().login(mobile, code) }
+        r.getOrNull()?.let {
+            AccountStore.saveLogin(it)
+            refreshBalance()
+        }
+        publish()
+        return r
+    }
+
+    suspend fun sendEmailCode(email: String): Result<SmsSendResult> =
+        runCatching { gateway().sendEmailCode(email) }
+
+    suspend fun loginEmail(email: String, code: String): Result<LoginResult> {
+        val r = runCatching { gateway().loginEmail(email, code) }
         r.getOrNull()?.let {
             AccountStore.saveLogin(it)
             refreshBalance()

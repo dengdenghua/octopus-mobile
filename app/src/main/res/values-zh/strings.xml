@@ -823,4 +823,8 @@
     <string name="account_go_recharge">去开通会员</string>
     <string name="account_member_active">会员 · 有效期至 %1$s</string>
     <string name="account_member_inactive">未开通会员 · 使用平台模型</string>
+    <string name="account_tab_phone">手机号</string>
+    <string name="account_tab_email">邮箱</string>
+    <string name="account_email_hint">请输入邮箱</string>
+    <string name="account_invalid_email">请输入正确的邮箱</string>
 </resources>

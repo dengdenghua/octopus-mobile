@@ -53,7 +53,25 @@ class MockAccountGateway : AccountGateway {
         users.getOrPut(userId) { User(credits = SIGNUP_BONUS) }
         val token = "mock-token-" + UUID.randomUUID().toString().take(8)
         tokenToUser[token] = userId
-        return LoginResult(token, userId, mobile, isNew, nickname = "用户$mobile")
+        return LoginResult(token = token, userId = userId, mobile = mobile, isNewUser = isNew,
+                           nickname = "用户$mobile")
+    }
+
+    override suspend fun sendEmailCode(email: String): SmsSendResult {
+        delay(150)
+        return SmsSendResult(ok = true, ttlSeconds = 300, devCode = MOCK_CODE)
+    }
+
+    override suspend fun loginEmail(email: String, code: String): LoginResult {
+        delay(150)
+        require(code == MOCK_CODE) { "验证码错误（mock 模式固定为 $MOCK_CODE）" }
+        val userId = "mock-email-$email"
+        val isNew = !users.containsKey(userId)
+        users.getOrPut(userId) { User(credits = SIGNUP_BONUS) }
+        val token = "mock-token-" + UUID.randomUUID().toString().take(8)
+        tokenToUser[token] = userId
+        return LoginResult(token = token, userId = userId, email = email, isNewUser = isNew,
+                           nickname = email.substringBefore("@"))
     }
 
     private fun userOf(token: String): User =

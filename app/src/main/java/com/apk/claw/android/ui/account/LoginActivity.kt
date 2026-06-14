@@ -20,6 +20,7 @@ import kotlinx.coroutines.launch
 class LoginActivity : BaseActivity() {
 
     private var countdown: CountDownTimer? = null
+    private var mode = "phone" // "phone" | "email"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -30,42 +31,61 @@ class LoginActivity : BaseActivity() {
             showBackButton(true) { finish() }
         }
 
-        val etMobile = findViewById<EditText>(R.id.etMobile)
+        val etAccount = findViewById<EditText>(R.id.etMobile)
         val etCode = findViewById<EditText>(R.id.etCode)
         val btnSendCode = findViewById<KButton>(R.id.btnSendCode)
         val btnLogin = findViewById<KButton>(R.id.btnLogin)
+        val tabPhone = findViewById<android.widget.TextView>(R.id.tvTabPhone)
+        val tabEmail = findViewById<android.widget.TextView>(R.id.tvTabEmail)
+
+        fun applyMode() {
+            val phone = mode == "phone"
+            tabPhone.setTextColor(getColor(if (phone) R.color.colorBrandPrimary else R.color.colorTextSecondary))
+            tabEmail.setTextColor(getColor(if (phone) R.color.colorTextSecondary else R.color.colorBrandPrimary))
+            etAccount.hint = getString(if (phone) R.string.account_mobile_hint else R.string.account_email_hint)
+            etAccount.inputType = if (phone) {
+                android.text.InputType.TYPE_CLASS_PHONE
+            } else {
+                android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+            }
+            etAccount.setText("")
+            etCode.setText("")
+        }
+        tabPhone.setOnClickListener { mode = "phone"; applyMode() }
+        tabEmail.setOnClickListener { mode = "email"; applyMode() }
+        applyMode()
 
         btnSendCode.setOnClickListener {
-            val mobile = etMobile.text.toString().trim()
-            if (!isValidMobile(mobile)) {
-                toast(getString(R.string.account_invalid_mobile))
+            val acct = etAccount.text.toString().trim()
+            if (!isValidAccount(acct)) {
+                toast(invalidAccountMsg())
                 return@setOnClickListener
             }
             btnSendCode.isEnabled = false
             lifecycleScope.launch {
-                AccountRepository.sendSmsCode(mobile)
-                    .onSuccess { res ->
-                        startCountdown(btnSendCode)
-                        val code = res.devCode
-                        if (!code.isNullOrEmpty()) {
-                            etCode.setText(code)
-                            toast(getString(R.string.account_mock_code_filled, code))
-                        } else {
-                            toast(getString(R.string.account_code_sent))
-                        }
+                val res = if (mode == "phone") AccountRepository.sendSmsCode(acct)
+                else AccountRepository.sendEmailCode(acct)
+                res.onSuccess { r ->
+                    startCountdown(btnSendCode)
+                    val code = r.devCode
+                    if (!code.isNullOrEmpty()) {
+                        etCode.setText(code)
+                        toast(getString(R.string.account_mock_code_filled, code))
+                    } else {
+                        toast(getString(R.string.account_code_sent))
                     }
-                    .onFailure {
-                        btnSendCode.isEnabled = true
-                        toast(it.message ?: getString(R.string.account_code_send_failed))
-                    }
+                }.onFailure {
+                    btnSendCode.isEnabled = true
+                    toast(it.message ?: getString(R.string.account_code_send_failed))
+                }
             }
         }
 
         btnLogin.setOnClickListener {
-            val mobile = etMobile.text.toString().trim()
+            val acct = etAccount.text.toString().trim()
             val code = etCode.text.toString().trim()
-            if (!isValidMobile(mobile)) {
-                toast(getString(R.string.account_invalid_mobile))
+            if (!isValidAccount(acct)) {
+                toast(invalidAccountMsg())
                 return@setOnClickListener
             }
             if (code.isEmpty()) {
@@ -74,7 +94,8 @@ class LoginActivity : BaseActivity() {
             }
             btnLogin.isEnabled = false
             lifecycleScope.launch {
-                val r = AccountRepository.login(mobile, code)
+                val r = if (mode == "phone") AccountRepository.login(acct, code)
+                else AccountRepository.loginEmail(acct, code)
                 btnLogin.isEnabled = true
                 r.onSuccess {
                     toast(getString(R.string.account_login_success))
@@ -86,6 +107,13 @@ class LoginActivity : BaseActivity() {
             }
         }
     }
+
+    private fun isValidAccount(s: String): Boolean =
+        if (mode == "phone") isValidMobile(s)
+        else s.contains("@") && s.substringAfterLast("@").contains(".")
+
+    private fun invalidAccountMsg(): String =
+        getString(if (mode == "phone") R.string.account_invalid_mobile else R.string.account_invalid_email)
 
     private fun startCountdown(btn: KButton) {
         countdown?.cancel()

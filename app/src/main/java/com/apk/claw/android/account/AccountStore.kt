@@ -14,6 +14,7 @@ object AccountStore {
     private const val K_MOBILE = "ACCOUNT_MOBILE"
     private const val K_NICKNAME = "ACCOUNT_NICKNAME"
     private const val K_AVATAR = "ACCOUNT_AVATAR"
+    private const val K_EMAIL = "ACCOUNT_EMAIL"
     private const val K_CREDITS = "ACCOUNT_CREDITS"
     private const val K_MEMBER_EXPIRE = "ACCOUNT_MEMBER_EXPIRE_AT"
 
@@ -37,6 +38,10 @@ object AccountStore {
         get() = KVUtils.getString(K_AVATAR, "")
         set(v) = run { KVUtils.putString(K_AVATAR, v) }
 
+    var email: String
+        get() = KVUtils.getString(K_EMAIL, "")
+        set(v) = run { KVUtils.putString(K_EMAIL, v) }
+
     /** Cached so the UI can show a balance offline; refreshed from the server. */
     var credits: Long
         get() = KVUtils.getString(K_CREDITS, "0").toLongOrNull() ?: 0L
@@ -56,6 +61,7 @@ object AccountStore {
         token = r.token
         userId = r.userId
         mobile = r.mobile
+        if (r.email.isNotEmpty()) email = r.email
         r.nickname?.takeIf { it.isNotEmpty() }?.let { nickname = it }
         r.avatar?.takeIf { it.isNotEmpty() }?.let { avatar = it }
     }
@@ -66,6 +72,7 @@ object AccountStore {
         mobile = ""
         nickname = ""
         avatar = ""
+        email = ""
         credits = 0
         memberExpireAt = 0
     }

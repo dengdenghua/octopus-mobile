@@ -11,6 +11,8 @@ package com.apk.claw.android.account
 interface AccountGateway {
     suspend fun sendSmsCode(mobile: String): SmsSendResult
     suspend fun login(mobile: String, code: String): LoginResult
+    suspend fun sendEmailCode(email: String): SmsSendResult
+    suspend fun loginEmail(email: String, code: String): LoginResult
     suspend fun profile(token: String): AccountProfile
     suspend fun balance(token: String): BalanceResult
     suspend fun goods(token: String): GoodsList

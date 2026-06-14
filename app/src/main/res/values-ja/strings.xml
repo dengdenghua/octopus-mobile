@@ -717,4 +717,8 @@
     <string name="account_go_recharge">会員になる</string>
     <string name="account_member_active">会員 · %1$s まで有効</string>
     <string name="account_member_inactive">非会員 · プラットフォームモデルを使用</string>
+    <string name="account_tab_phone">電話番号</string>
+    <string name="account_tab_email">メール</string>
+    <string name="account_email_hint">メールを入力</string>
+    <string name="account_invalid_email">正しいメールを入力してください</string>
 </resources>

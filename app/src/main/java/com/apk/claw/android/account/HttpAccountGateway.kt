@@ -66,6 +66,12 @@ class HttpAccountGateway(baseUrl: String) : AccountGateway {
     override suspend fun login(mobile: String, code: String): LoginResult =
         post("/auth/sms/login", mapOf("mobile" to mobile, "code" to code), null, LoginResult::class.java)
 
+    override suspend fun sendEmailCode(email: String): SmsSendResult =
+        post("/auth/email/send", mapOf("email" to email), null, SmsSendResult::class.java)
+
+    override suspend fun loginEmail(email: String, code: String): LoginResult =
+        post("/auth/email/login", mapOf("email" to email, "code" to code), null, LoginResult::class.java)
+
     override suspend fun profile(token: String): AccountProfile =
         get("/account/profile", token, AccountProfile::class.java)
 

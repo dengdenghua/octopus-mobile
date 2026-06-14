@@ -24,6 +24,7 @@ data class LoginResult(
     val token: String = "",
     val userId: String = "",
     val mobile: String = "",
+    val email: String = "",
     @SerializedName("isNewUser") val isNewUser: Boolean = false,
     val nickname: String? = null,
     val avatar: String? = null,
