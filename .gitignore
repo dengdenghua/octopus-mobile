@@ -52,3 +52,9 @@ lerna-debug.log*
 *.njsproj
 *.sln
 *.sw?
+
+# octopus account/relay server (python)
+server/__pycache__/
+server/.venv/
+server/*.db
+server/.env
