@@ -2,11 +2,11 @@ package com.apk.claw.android.ui.device
 
 import android.content.Intent
 import android.graphics.Color
-import android.graphics.Typeface
 import android.os.Bundle
 import android.view.Gravity
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -17,9 +17,11 @@ import com.apk.claw.android.ClawApplication
 import com.apk.claw.android.R
 import com.apk.claw.android.base.BaseActivity
 import com.apk.claw.android.octopus_mobile.DeviceInfo
+import com.apk.claw.android.octopus_mobile.DeviceRemoteControl
 import com.apk.claw.android.widget.CommonToolbar
 import com.apk.claw.android.widget.KButton
 import com.apk.claw.android.widget.MenuGroup
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 
 /**
@@ -33,11 +35,14 @@ class DeviceListActivity : BaseActivity() {
 
     private val registry get() = ClawApplication.instance.deviceRegistry
     private val discoveryManager get() = ClawApplication.instance.deviceDiscoveryManager
+    private val remoteControl = DeviceRemoteControl()
 
+    private lateinit var batchGroup: MenuGroup
     private lateinit var onlineGroup: MenuGroup
     private lateinit var offlineGroup: MenuGroup
     private lateinit var tvEmpty: TextView
     private lateinit var btnRefresh: KButton
+    private var onlineDevices: List<DeviceInfo> = emptyList()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -82,6 +87,20 @@ class DeviceListActivity : BaseActivity() {
                 layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
                 setPadding(dp16, dp8, dp16, dp16)
             }
+
+            // 群控快捷操作
+            batchGroup = MenuGroup(this@DeviceListActivity).apply {
+                setTitle(getString(R.string.device_batch_group_title))
+                layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
+                    bottomMargin = dp8
+                }
+            }
+            batchGroup.addMenuItem(R.drawable.ic_settings, getString(R.string.device_batch_home), { batchAction("home") }, showDivider = true)
+            batchGroup.addMenuItem(R.drawable.ic_back, getString(R.string.device_batch_back), { batchAction("back") }, showDivider = true)
+            batchGroup.addMenuItem(R.drawable.ic_settings, getString(R.string.device_batch_recent), { batchAction("recent") }, showDivider = true)
+            batchGroup.addMenuItem(R.drawable.ic_settings, getString(R.string.device_batch_input_text), { showBatchTextDialog() }, showDivider = true)
+            batchGroup.addMenuItem(R.drawable.ic_settings, getString(R.string.device_batch_open_app), { showBatchPackageDialog() }, showDivider = false)
+            scrollContent.addView(batchGroup)
 
             // 在线设备
             onlineGroup = MenuGroup(this@DeviceListActivity).apply {
@@ -147,8 +166,9 @@ class DeviceListActivity : BaseActivity() {
         onlineGroup.clearMenuItems()
         offlineGroup.clearMenuItems()
 
-        val onlineDevices = devices.filter { it.online }
+        onlineDevices = devices.filter { it.online }
         val offlineDevices = devices.filter { !it.online }
+        batchGroup.visibility = if (onlineDevices.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
 
         for (device in onlineDevices) {
             onlineGroup.addMenuItem(
@@ -180,6 +200,95 @@ class DeviceListActivity : BaseActivity() {
             putExtra(DeviceDetailActivity.EXTRA_DEVICE_ID, deviceId)
         }
         startActivity(intent)
+    }
+
+    private fun batchAction(action: String) {
+        val targets = onlineDevices
+        if (targets.isEmpty()) {
+            toast(getString(R.string.device_batch_no_online))
+            return
+        }
+        lifecycleScope.launch {
+            val results = targets.map { device ->
+                async {
+                    when (action) {
+                        "home" -> remoteControl.pressHome(device)
+                        "back" -> remoteControl.pressBack(device)
+                        "recent" -> remoteControl.pressRecents(device)
+                        else -> false
+                    }
+                }
+            }.map { it.await() }
+            showBatchResult(results.count { it }, targets.size)
+        }
+    }
+
+    private fun showBatchTextDialog() {
+        val et = EditText(this).apply {
+            hint = getString(R.string.tool_name_input_text)
+            setPadding(dp(16), dp(12), dp(16), dp(12))
+        }
+        android.app.AlertDialog.Builder(this)
+            .setTitle(getString(R.string.device_batch_input_text))
+            .setView(et)
+            .setPositiveButton(getString(R.string.screen_cast_send_button)) { _, _ ->
+                val text = et.text.toString()
+                if (text.isNotEmpty()) batchText(text)
+            }
+            .setNegativeButton(getString(R.string.common_cancel), null)
+            .show()
+    }
+
+    private fun batchText(text: String) {
+        val targets = onlineDevices
+        if (targets.isEmpty()) {
+            toast(getString(R.string.device_batch_no_online))
+            return
+        }
+        lifecycleScope.launch {
+            val results = targets.map { device ->
+                async { remoteControl.sendText(device, text) }
+            }.map { it.await() }
+            showBatchResult(results.count { it }, targets.size)
+        }
+    }
+
+    private fun showBatchPackageDialog() {
+        val et = EditText(this).apply {
+            hint = "com.tencent.mm"
+            setPadding(dp(16), dp(12), dp(16), dp(12))
+        }
+        android.app.AlertDialog.Builder(this)
+            .setTitle(getString(R.string.device_batch_open_app))
+            .setView(et)
+            .setPositiveButton(getString(R.string.screen_cast_launch_button)) { _, _ ->
+                val pkg = et.text.toString().trim()
+                if (pkg.isNotEmpty()) batchOpenApp(pkg)
+            }
+            .setNegativeButton(getString(R.string.common_cancel), null)
+            .show()
+    }
+
+    private fun batchOpenApp(packageName: String) {
+        val targets = onlineDevices
+        if (targets.isEmpty()) {
+            toast(getString(R.string.device_batch_no_online))
+            return
+        }
+        lifecycleScope.launch {
+            val results = targets.map { device ->
+                async { remoteControl.openApp(device, packageName) }
+            }.map { it.await() }
+            showBatchResult(results.count { it }, targets.size)
+        }
+    }
+
+    private fun showBatchResult(success: Int, total: Int) {
+        toast(getString(R.string.device_batch_result, success, total))
+    }
+
+    private fun toast(text: String) {
+        android.widget.Toast.makeText(this, text, android.widget.Toast.LENGTH_SHORT).show()
     }
 
     private fun dp(value: Int): Int {

@@ -8,6 +8,8 @@ import com.apk.claw.android.octopus_mobile.safety.SafetyGate
 import com.apk.claw.android.octopus_mobile.safety.ToolCallGuardrailController
 import com.apk.claw.android.octopus_mobile.safety.GuardrailDecision
 import com.apk.claw.android.octopus_mobile.safety.GuardrailAction
+import com.apk.claw.android.octopus_mobile.safety.ToolRiskPolicy
+import com.apk.claw.android.octopus_mobile.ToolAuditLog
 import com.apk.claw.android.octopus_mobile.evolution.TurnScorer
 import com.apk.claw.android.octopus_mobile.nerves.EventBus
 
@@ -183,13 +185,47 @@ object ToolRegistry {
 
     fun executeTool(name: String, params: Map<String, Any>): ToolResult {
         val tool = tools[name] ?: return ToolResult.error("Unknown tool: $name")
+        val auditStartMs = System.currentTimeMillis()
+        val auditRisk = ToolRiskPolicy.riskOf(name)
+        val auditParams = if (ToolRiskPolicy.shouldAudit(name)) {
+            ToolRiskPolicy.summarizeParams(params)
+        } else {
+            ""
+        }
+
+        fun audited(result: ToolResult, blockedBy: String? = null): ToolResult {
+            if (ToolRiskPolicy.shouldAudit(name)) {
+                val resultText = if (result.isSuccess) result.data else result.error
+                val duration = System.currentTimeMillis() - auditStartMs
+                ToolAuditLog.record(
+                    ToolAuditLog.Entry(
+                        id = "tool_${auditStartMs}_${name}",
+                        ts = auditStartMs,
+                        toolName = name,
+                        risk = auditRisk,
+                        params = auditParams,
+                        success = result.isSuccess,
+                        result = ToolRiskPolicy.summarizeResult(resultText),
+                        blockedBy = blockedBy,
+                        durationMs = duration,
+                    )
+                )
+                eventBus?.publish(EventBus.ToolAuditEvent(name, auditRisk, result.isSuccess, blockedBy, duration))
+            }
+            return result
+        }
+
+        if (!isToolEnabled(name)) {
+            eventBus?.publish(EventBus.ToolBlockedEvent(name, "tool_disabled", "settings"))
+            return audited(ToolResult.error("工具已停用: $name"), blockedBy = "settings")
+        }
 
         // ── 安全门检查（PII/Secret 扫描）──
         safetyGate?.let { gate ->
             val verdict = gate.checkToolCall(name, params)
             if (verdict.isBlocked) {
                 eventBus?.publish(EventBus.ToolBlockedEvent(name, verdict.reason, "safety"))
-                return ToolResult.error("安全拦截: ${verdict.reason}")
+                return audited(ToolResult.error("安全拦截: ${verdict.reason}"), blockedBy = "safety")
             }
         }
 
@@ -197,7 +233,7 @@ object ToolRegistry {
         val preCheck = guardrail.precheck(name, params)
         if (preCheck.shouldHalt) {
             eventBus?.publish(EventBus.ToolBlockedEvent(name, preCheck.message, "guardrail"))
-            return ToolResult.error("护栏拦截: ${preCheck.message}")
+            return audited(ToolResult.error("护栏拦截: ${preCheck.message}"), blockedBy = "guardrail")
         }
 
         // ── 执行工具 ──
@@ -224,6 +260,6 @@ object ToolRegistry {
         // ── 自进化打分（无论是否 WARN 都记录）──
         turnScorer?.record(name, success = finalResult.isSuccess, reason = finalResult.data ?: finalResult.error ?: "")
 
-        return finalResult
+        return audited(finalResult)
     }
 }

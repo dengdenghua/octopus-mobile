@@ -95,6 +95,7 @@ class ForegroundService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val notification = createNotification()
         startForeground(NOTIFICATION_ID, notification)
+        runCatching { RoutineScheduler.rescheduleAll(this) }
         return START_STICKY
     }
 

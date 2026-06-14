@@ -21,6 +21,9 @@ object RoutineScheduler {
     private const val TAG = "RoutineScheduler"
     const val ACTION = "com.apk.claw.android.RUN_ROUTINE"
     const val EXTRA_ID = "routine_id"
+    const val EXTRA_RETRY_ATTEMPT = "retry_attempt"
+    private const val RETRY_REQUEST_SALT = 0x51A7
+    private const val RETRY_DELAY_MS = 2 * 60 * 1000L
 
     /** 注册/更新一条例程的定时闹钟。 */
     fun schedule(ctx: Context, r: RoutineStore.Routine) {
@@ -48,7 +51,17 @@ object RoutineScheduler {
     fun cancel(ctx: Context, routineId: String) {
         val am = ctx.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         am.cancel(pendingIntent(ctx, routineId))
+        am.cancel(retryPendingIntent(ctx, routineId, 0))
         XLog.i(TAG, "cancelled $routineId")
+    }
+
+    /** Agent 忙时短延迟重试，不改动用户设定的原始定时。 */
+    fun scheduleRetry(ctx: Context, routineId: String, nextAttempt: Int) {
+        val am = ctx.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val at = System.currentTimeMillis() + RETRY_DELAY_MS
+        val pi = retryPendingIntent(ctx, routineId, nextAttempt)
+        am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
+        XLog.i(TAG, "scheduled retry for $routineId attempt=$nextAttempt at $at")
     }
 
     /** 开机后重新注册所有已定时的例程。 */
@@ -76,6 +89,18 @@ object RoutineScheduler {
         }
         return PendingIntent.getBroadcast(
             ctx, routineId.hashCode(), intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
+
+    private fun retryPendingIntent(ctx: Context, routineId: String, attempt: Int): PendingIntent {
+        val intent = Intent(ctx, RoutineAlarmReceiver::class.java).apply {
+            action = ACTION
+            putExtra(EXTRA_ID, routineId)
+            putExtra(EXTRA_RETRY_ATTEMPT, attempt)
+        }
+        return PendingIntent.getBroadcast(
+            ctx, routineId.hashCode() xor RETRY_REQUEST_SALT, intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
     }

@@ -13,6 +13,21 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ChatBubbleOutline
+import androidx.compose.material.icons.filled.Devices
+import androidx.compose.material.icons.filled.Keyboard
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardVoice
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,20 +61,23 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.core.content.ContextCompat
+import com.apk.claw.android.ui.compose.theme.OctopusColors
 import kotlinx.coroutines.launch
+import java.util.Calendar
 
 // 颜色
-private val PrimaryColor = Color(0xFF0A84FF)
-private val SuccessColor = Color(0xFF30D158)
-private val WarningColor = Color(0xFFFF9F0A)
-private val BackgroundColor = Color(0xFF000000)
-private val SurfaceColor = Color(0xFF1C1C1E)
-private val TextPrimary = Color(0xFFFFFFFF)
-private val TextSecondary = Color(0xFF98989D)
-private val TextMuted = Color(0xFF8E8E93)
-private val BorderColor = Color(0xFF38383A)
-private val AgentBubbleColor = Color(0xFF1C1C1E)
-private val UserBubbleColor = Color(0xFF0A84FF)
+private val PrimaryColor = OctopusColors.Primary
+private val SuccessColor = OctopusColors.Success
+private val WarningColor = OctopusColors.Warning
+private val BackgroundColor = OctopusColors.Background
+private val SurfaceColor = OctopusColors.Surface
+private val SurfaceVariantColor = OctopusColors.SurfaceVariant
+private val TextPrimary = OctopusColors.TextPrimary
+private val TextSecondary = OctopusColors.TextSecondary
+private val TextMuted = OctopusColors.TextMuted
+private val BorderColor = OctopusColors.Border
+private val AgentBubbleColor = OctopusColors.Surface
+private val UserBubbleColor = OctopusColors.Primary
 
 // 消息数据模型
 sealed class ChatMessage {
@@ -91,10 +109,11 @@ fun ChatScreen() {
     val messages = remember { mutableStateListOf<ChatMessage>() }
 
     var inputText by remember { mutableStateOf("") }
-    var remoteMode by remember { mutableStateOf(true) }
     var isRunning by remember { mutableStateOf(false) }
-    var menuOpen by remember { mutableStateOf(false) }
+    var moreMenuOpen by remember { mutableStateOf(false) }
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
     val context = LocalContext.current
+    val devices by ClawApplication.instance.deviceRegistry.deviceList.collectAsState()
     // 设备已不再独立成页：在主对话界面启动局域网发现 + 配置服务，
     // 使输入框的「目标选择器」能发现设备、本机也可被发现/被控。
     LaunchedEffect(Unit) {
@@ -226,6 +245,7 @@ fun ChatScreen() {
         }
     }
     val stop = { ChatAgentBridge.cancel() }
+    val closeDrawer = { scope.launch { drawerState.close() }; Unit }
 
     // ── 语音优先输入：麦克风「按住说话」，松手即发 ──────────────────
     var voiceMode by remember { mutableStateOf(true) }   // 默认语音优先；键盘为次选
@@ -261,95 +281,101 @@ fun ChatScreen() {
     }
     val hasMic = { ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED }
 
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        scrimColor = Color.Black.copy(alpha = 0.48f),
+        drawerContent = {
+            ChatSessionDrawer(
+                sessions = sessions,
+                currentId = currentId,
+                isRunning = isRunning,
+                llmOk = llmOk,
+                a11yOk = a11yOk,
+                deviceCount = devices.size,
+                onNewChat = {
+                    if (!isRunning) {
+                        newChat()
+                        closeDrawer()
+                    }
+                },
+                onSwitch = {
+                    switchTo(it)
+                    closeDrawer()
+                },
+                onDelete = { deleteSession(it) },
+            )
+        },
+    ) {
     Column(modifier = Modifier.fillMaxSize().background(BackgroundColor)) {
-        // 顶部栏
-        TopAppBar(
-            title = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Octopus", fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                    Spacer(modifier = Modifier.width(10.dp))
-                    // 决策模式胶囊
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = PrimaryColor.copy(alpha = 0.12f),
-                        modifier = Modifier.clickable { remoteMode = !remoteMode }
-                    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .height(56.dp)
+                .padding(start = 8.dp, end = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                Icon(Icons.Filled.Menu, contentDescription = stringResource(R.string.chat_sessions), tint = TextSecondary)
+            }
+            Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                Column {
+                    Text("Octopus", fontWeight = FontWeight.SemiBold, fontSize = 18.sp, color = TextPrimary)
+                    val ready = llmOk && a11yOk
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .background(if (ready) SuccessColor else WarningColor, RoundedCornerShape(3.dp))
+                        )
+                        Spacer(modifier = Modifier.width(5.dp))
                         Text(
-                            stringResource(if (remoteMode) R.string.chat_remote else R.string.chat_local),
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = PrimaryColor,
+                            stringResource(if (ready) R.string.chat_agent_ready else R.string.chat_agent_setup_needed),
+                            fontSize = 11.sp,
+                            color = TextMuted,
                         )
                     }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    // 在线状态
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(modifier = Modifier.size(8.dp).background(SuccessColor, RoundedCornerShape(4.dp)))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(stringResource(R.string.status_online), fontSize = 11.sp, color = TextSecondary)
-                    }
                 }
-            },
-            actions = {
-                // 例程：把对话指令存成可复用例程，一键重放
-                IconButton(onClick = {
-                    runCatching { context.startActivity(android.content.Intent(context, com.apk.claw.android.ui.featurescreens.RoutinesActivity::class.java)) }
-                }) {
-                    Text("📋", fontSize = 15.sp)
+            }
+            Box {
+                IconButton(onClick = { moreMenuOpen = true }) {
+                    Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.common_more), tint = TextPrimary)
                 }
-                // 活动审计：跨会话回看 Agent 做过什么
-                IconButton(onClick = {
-                    runCatching { context.startActivity(android.content.Intent(context, com.apk.claw.android.ui.featurescreens.ActivityActivity::class.java)) }
-                }) {
-                    Text("🕘", fontSize = 15.sp)
+                DropdownMenu(expanded = moreMenuOpen, onDismissRequest = { moreMenuOpen = false }) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.routines_title)) },
+                        onClick = {
+                            moreMenuOpen = false
+                            runCatching { context.startActivity(android.content.Intent(context, com.apk.claw.android.ui.featurescreens.RoutinesActivity::class.java)) }
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.activity_screen_title)) },
+                        onClick = {
+                            moreMenuOpen = false
+                            runCatching { context.startActivity(android.content.Intent(context, com.apk.claw.android.ui.featurescreens.ActivityActivity::class.java)) }
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.trustcenter_title)) },
+                        onClick = {
+                            moreMenuOpen = false
+                            runCatching { context.startActivity(android.content.Intent(context, com.apk.claw.android.ui.featurescreens.TrustCenterActivity::class.java)) }
+                        },
+                    )
+                    HorizontalDivider()
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.chat_clear_current)) },
+                        enabled = !isRunning,
+                        onClick = {
+                            moreMenuOpen = false
+                            messages.clear()
+                            ChatStore.clear(currentId)
+                        },
+                    )
                 }
-                // 信任中心：高权限集中查看 / 收回
-                IconButton(onClick = {
-                    runCatching { context.startActivity(android.content.Intent(context, com.apk.claw.android.ui.featurescreens.TrustCenterActivity::class.java)) }
-                }) {
-                    Text("🛡", fontSize = 16.sp)
-                }
-                // 新建会话
-                IconButton(onClick = { if (!isRunning) newChat() }) {
-                    Text("＋", fontSize = 20.sp, color = TextPrimary)
-                }
-                // 会话列表(切换/删除)
-                Box {
-                    IconButton(onClick = { menuOpen = true }) {
-                        Text("☰", fontSize = 16.sp, color = TextPrimary)
-                    }
-                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                        sessions.forEach { s ->
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        (if (s.id == currentId) "• " else "") + s.title,
-                                        fontWeight = if (s.id == currentId) FontWeight.SemiBold else FontWeight.Normal,
-                                        maxLines = 1,
-                                    )
-                                },
-                                onClick = { switchTo(s.id); menuOpen = false },
-                                trailingIcon = {
-                                    Text("✕", fontSize = 13.sp, color = TextMuted,
-                                        modifier = Modifier.clickable { deleteSession(s.id) })
-                                },
-                            )
-                        }
-                    }
-                }
-                // 清空当前会话
-                IconButton(onClick = {
-                    if (!isRunning) { messages.clear(); ChatStore.clear(currentId) }
-                }) {
-                    Text("🗑️", fontSize = 16.sp)
-                }
-            },
-            colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = BackgroundColor,
-                titleContentColor = TextPrimary,
-            )
-        )
+            }
+        }
 
         // 设置指引:未配置完成时显示,配齐后自动隐藏
         if (!llmOk || !a11yOk) {
@@ -363,12 +389,40 @@ fun ChatScreen() {
 
         // 消息列表 / 空状态
         if (messages.none { it !is ChatMessage.Thinking }) {
-            Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Column(
+                modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 18.dp),
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Text(
+                    stringResource(R.string.chat_empty_title),
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary,
+                    letterSpacing = 0.sp,
+                )
+                Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     stringResource(R.string.chat_empty_hint),
                     fontSize = 13.sp,
                     color = TextMuted,
+                    lineHeight = 18.sp,
                 )
+                Spacer(modifier = Modifier.height(16.dp))
+                AgentHomeStatusCard(
+                    llmOk = llmOk,
+                    a11yOk = a11yOk,
+                    isRunning = isRunning,
+                    target = ControlTarget.label(),
+                    deviceCount = devices.size,
+                )
+                Spacer(modifier = Modifier.height(14.dp))
+                listOf(
+                    stringResource(R.string.chat_suggestion_notifications),
+                    stringResource(R.string.chat_suggestion_files),
+                    stringResource(R.string.chat_suggestion_app),
+                ).forEach { suggestion ->
+                    PromptSuggestion(suggestion) { inputText = suggestion }
+                }
             }
         } else {
         val rows = buildChatRows(messages)
@@ -399,9 +453,10 @@ fun ChatScreen() {
         // 输入框
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            color = BackgroundColor.copy(alpha = 0.95f),
+            color = SurfaceColor,
+            border = BorderStroke(1.dp, BorderColor.copy(alpha = 0.7f)),
         ) {
-            Column(modifier = Modifier.padding(12.dp, 10.dp)) {
+            Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
             // 目标选择器：决定 Agent 在「本机」还是某台局域网设备上执行
             TargetSelector()
             Spacer(modifier = Modifier.height(8.dp))
@@ -410,14 +465,16 @@ fun ChatScreen() {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
-                            .size(44.dp)
-                            .background(SurfaceColor, RoundedCornerShape(22.dp))
+                            .size(42.dp)
+                            .background(OctopusColors.SurfaceDeep, RoundedCornerShape(21.dp))
                             .clickable { voiceMode = false },
                         contentAlignment = Alignment.Center,
-                    ) { Text("⌨", fontSize = 18.sp) }
+                    ) {
+                        Icon(Icons.Filled.Keyboard, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(19.dp))
+                    }
                     Spacer(modifier = Modifier.width(10.dp))
                     val red = Color(0xFFFF453B)
-                    val pillColor = if (isRunning || listening) red else SurfaceColor
+                    val pillColor = if (isRunning || listening) red else OctopusColors.SurfaceDeep
                     val listeningText = stringResource(R.string.chat_voice_listening_release)
                     val pillText = when {
                         isRunning -> stringResource(R.string.chat_voice_stop_agent)
@@ -443,18 +500,22 @@ fun ChatScreen() {
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .height(48.dp)
-                            .background(pillColor, RoundedCornerShape(24.dp))
+                            .height(46.dp)
+                            .background(pillColor, RoundedCornerShape(18.dp))
                             .then(pillGesture),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text(
-                            pillText,
-                            color = if (isRunning || listening) Color.White else TextSecondary,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Medium,
-                            maxLines = 1,
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.Mic, contentDescription = null, tint = if (isRunning || listening) Color.White else TextSecondary, modifier = Modifier.size(17.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                pillText,
+                                color = if (isRunning || listening) Color.White else TextSecondary,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                            )
+                        }
                     }
                 }
             } else {
@@ -462,23 +523,25 @@ fun ChatScreen() {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
-                            .size(44.dp)
-                            .background(SurfaceColor, RoundedCornerShape(22.dp))
+                            .size(42.dp)
+                            .background(OctopusColors.SurfaceDeep, RoundedCornerShape(21.dp))
                             .clickable { voiceMode = true },
                         contentAlignment = Alignment.Center,
-                    ) { Text("🎤", fontSize = 18.sp) }
+                    ) {
+                        Icon(Icons.Filled.KeyboardVoice, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(19.dp))
+                    }
                     Spacer(modifier = Modifier.width(10.dp))
                     OutlinedTextField(
                         value = inputText,
                         onValueChange = { inputText = it },
                         modifier = Modifier.weight(1f),
                         placeholder = { Text(stringResource(R.string.chat_input_hint), color = TextMuted) },
-                        shape = RoundedCornerShape(24.dp),
+                        shape = RoundedCornerShape(18.dp),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = PrimaryColor,
                             unfocusedBorderColor = BorderColor,
-                            focusedContainerColor = SurfaceColor,
-                            unfocusedContainerColor = SurfaceColor,
+                            focusedContainerColor = OctopusColors.SurfaceDeep,
+                            unfocusedContainerColor = OctopusColors.SurfaceDeep,
                             cursorColor = PrimaryColor,
                             focusedTextColor = TextPrimary,
                             unfocusedTextColor = TextPrimary,
@@ -493,23 +556,301 @@ fun ChatScreen() {
                     val btnActive = isRunning || inputText.isNotBlank()
                     Box(
                         modifier = Modifier
-                            .size(40.dp)
+                            .size(42.dp)
                             .background(
                                 (if (isRunning) Color(0xFFFF453B) else PrimaryColor)
                                     .copy(alpha = if (btnActive) 1f else 0.35f),
-                                RoundedCornerShape(20.dp)
+                                RoundedCornerShape(21.dp)
                             )
                             .clickable(onClick = if (isRunning) stop else send),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(if (isRunning) "■" else "➤", color = Color.White, fontSize = 16.sp)
+                        Icon(
+                            if (isRunning) Icons.Filled.Stop else Icons.AutoMirrored.Filled.Send,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp),
+                        )
                     }
                 }
             }
             }
         }
     }
+    }
 }
+
+@Composable
+private fun ChatSessionDrawer(
+    sessions: List<SessionStore.SessionMeta>,
+    currentId: String,
+    isRunning: Boolean,
+    llmOk: Boolean,
+    a11yOk: Boolean,
+    deviceCount: Int,
+    onNewChat: () -> Unit,
+    onSwitch: (String) -> Unit,
+    onDelete: (String) -> Unit,
+) {
+    val now = remember { System.currentTimeMillis() }
+    val grouped = remember(sessions, now) { sessions.groupBy { sessionBucket(it.updatedAt, now) } }
+    ModalDrawerSheet(
+        drawerContainerColor = BackgroundColor,
+        drawerContentColor = TextPrimary,
+        modifier = Modifier.fillMaxHeight().width(304.dp),
+    ) {
+        Column(modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 18.dp)) {
+            Text("Octopus", color = TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(4.dp))
+            Text(stringResource(R.string.chat_drawer_subtitle), color = TextMuted, fontSize = 12.sp)
+            Spacer(Modifier.height(14.dp))
+            DrawerStatusPanel(llmOk = llmOk, a11yOk = a11yOk, deviceCount = deviceCount)
+            Spacer(Modifier.height(14.dp))
+            Surface(
+                modifier = Modifier.fillMaxWidth().clickable(enabled = !isRunning, onClick = onNewChat),
+                shape = RoundedCornerShape(16.dp),
+                color = PrimaryColor.copy(alpha = if (isRunning) 0.12f else 0.18f),
+                border = BorderStroke(1.dp, PrimaryColor.copy(alpha = 0.28f)),
+            ) {
+                Row(modifier = Modifier.padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.Add, contentDescription = null, tint = PrimaryColor, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Text(stringResource(R.string.chat_new), color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(SessionBucket.Today, SessionBucket.Recent, SessionBucket.Earlier).forEach { bucket ->
+                    val bucketSessions = grouped[bucket].orEmpty()
+                    if (bucketSessions.isNotEmpty()) {
+                        item(key = "h_$bucket") { DrawerSectionTitle(bucket.label()) }
+                        items(bucketSessions, key = { it.id }) { session ->
+                            SessionDrawerRow(
+                                session = session,
+                                selected = session.id == currentId,
+                                onSwitch = onSwitch,
+                                onDelete = onDelete,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AgentHomeStatusCard(
+    llmOk: Boolean,
+    a11yOk: Boolean,
+    isRunning: Boolean,
+    target: String,
+    deviceCount: Int,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        color = SurfaceColor,
+        border = BorderStroke(1.dp, BorderColor),
+    ) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.SmartToy, contentDescription = null, tint = PrimaryColor, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.chat_home_status_title), color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.weight(1f))
+                StatusDot(if (isRunning) WarningColor else if (llmOk && a11yOk) SuccessColor else WarningColor)
+                Spacer(Modifier.width(5.dp))
+                Text(
+                    stringResource(
+                        when {
+                            isRunning -> R.string.chat_status_running
+                            llmOk && a11yOk -> R.string.chat_agent_ready
+                            else -> R.string.chat_agent_setup_needed
+                        }
+                    ),
+                    color = TextSecondary,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                MiniMetric(
+                    label = stringResource(R.string.chat_metric_model),
+                    value = if (llmOk) stringResource(R.string.status_online) else stringResource(R.string.chat_agent_setup_needed),
+                    ok = llmOk,
+                    modifier = Modifier.weight(1f),
+                )
+                MiniMetric(
+                    label = stringResource(R.string.chat_metric_target),
+                    value = target,
+                    ok = true,
+                    modifier = Modifier.weight(1f),
+                )
+                MiniMetric(
+                    label = stringResource(R.string.chat_metric_devices),
+                    value = deviceCount.toString(),
+                    ok = deviceCount > 0,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PromptSuggestion(text: String, onClick: () -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable(onClick = onClick),
+        shape = RoundedCornerShape(14.dp),
+        color = SurfaceColor,
+        border = BorderStroke(1.dp, BorderColor),
+    ) {
+        Row(modifier = Modifier.padding(horizontal = 13.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier.size(7.dp).background(OctopusColors.Accent, RoundedCornerShape(4.dp)),
+            )
+            Spacer(Modifier.width(10.dp))
+            Text(text, modifier = Modifier.weight(1f), color = TextSecondary, fontSize = 13.sp, lineHeight = 17.sp)
+        }
+    }
+}
+
+@Composable
+private fun DrawerStatusPanel(llmOk: Boolean, a11yOk: Boolean, deviceCount: Int) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        color = SurfaceColor,
+        border = BorderStroke(1.dp, BorderColor),
+    ) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+            DrawerStatusRow(Icons.Filled.SmartToy, stringResource(R.string.chat_metric_model), llmOk)
+            DrawerStatusRow(Icons.Filled.PhoneAndroid, stringResource(R.string.setup_a11y), a11yOk)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.Devices, contentDescription = null, tint = PrimaryColor, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.chat_metric_devices), modifier = Modifier.weight(1f), color = TextSecondary, fontSize = 12.sp)
+                Text(deviceCount.toString(), color = if (deviceCount > 0) SuccessColor else TextMuted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            }
+        }
+    }
+}
+
+@Composable
+private fun DrawerStatusRow(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, ok: Boolean) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, contentDescription = null, tint = if (ok) SuccessColor else TextMuted, modifier = Modifier.size(16.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(label, modifier = Modifier.weight(1f), color = TextSecondary, fontSize = 12.sp)
+        Text(
+            stringResource(if (ok) R.string.status_online else R.string.chat_agent_setup_needed),
+            color = if (ok) SuccessColor else WarningColor,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
+@Composable
+private fun MiniMetric(label: String, value: String, ok: Boolean, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(13.dp),
+        color = OctopusColors.SurfaceDeep,
+        border = BorderStroke(1.dp, if (ok) PrimaryColor.copy(alpha = 0.16f) else BorderColor),
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 9.dp, vertical = 9.dp)) {
+            Text(label, color = TextMuted, fontSize = 10.sp, maxLines = 1)
+            Spacer(Modifier.height(4.dp))
+            Text(value, color = if (ok) TextPrimary else WarningColor, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+        }
+    }
+}
+
+@Composable
+private fun DrawerSectionTitle(text: String) {
+    Text(
+        text,
+        color = TextMuted,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier.padding(start = 3.dp, top = 6.dp, bottom = 2.dp),
+    )
+}
+
+@Composable
+private fun SessionDrawerRow(
+    session: SessionStore.SessionMeta,
+    selected: Boolean,
+    onSwitch: (String) -> Unit,
+    onDelete: (String) -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().clickable { onSwitch(session.id) },
+        shape = RoundedCornerShape(14.dp),
+        color = if (selected) SurfaceVariantColor else SurfaceColor,
+        border = BorderStroke(1.dp, if (selected) PrimaryColor.copy(alpha = 0.26f) else BorderColor),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 11.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Filled.ChatBubbleOutline,
+                contentDescription = null,
+                tint = if (selected) PrimaryColor else TextMuted,
+                modifier = Modifier.size(17.dp),
+            )
+            Spacer(Modifier.width(9.dp))
+            Text(
+                session.title,
+                modifier = Modifier.weight(1f),
+                color = if (selected) TextPrimary else TextSecondary,
+                fontSize = 13.sp,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                maxLines = 1,
+            )
+            Text(
+                "×",
+                color = TextMuted,
+                fontSize = 16.sp,
+                modifier = Modifier.clickable { onDelete(session.id) }.padding(start = 8.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun StatusDot(color: Color) {
+    Box(modifier = Modifier.size(8.dp).background(color, RoundedCornerShape(4.dp)))
+}
+
+private enum class SessionBucket { Today, Recent, Earlier }
+
+private fun sessionBucket(updatedAt: Long, now: Long): SessionBucket {
+    val todayStart = Calendar.getInstance().apply {
+        timeInMillis = now
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }.timeInMillis
+    return when {
+        updatedAt >= todayStart -> SessionBucket.Today
+        updatedAt >= todayStart - 6L * 24L * 60L * 60L * 1000L -> SessionBucket.Recent
+        else -> SessionBucket.Earlier
+    }
+}
+
+@Composable
+private fun SessionBucket.label(): String = stringResource(
+    when (this) {
+        SessionBucket.Today -> R.string.chat_sessions_today
+        SessionBucket.Recent -> R.string.chat_sessions_recent
+        SessionBucket.Earlier -> R.string.chat_sessions_earlier
+    }
+)
 
 @Composable
 private fun TargetSelector() {
@@ -522,16 +863,22 @@ private fun TargetSelector() {
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .background(
-                    (if (remote) PrimaryColor else SurfaceColor).copy(alpha = if (remote) 0.18f else 1f),
+                    (if (remote) PrimaryColor else OctopusColors.SurfaceDeep).copy(alpha = if (remote) 0.16f else 1f),
                     RoundedCornerShape(12.dp)
                 )
                 .clickable { menu = true }
-                .padding(horizontal = 10.dp, vertical = 5.dp),
+                .padding(horizontal = 10.dp, vertical = 6.dp),
         ) {
-            Text(if (remote) "🖥" else "📱", fontSize = 12.sp)
+            Icon(
+                if (remote) Icons.Filled.Devices else Icons.Filled.PhoneAndroid,
+                contentDescription = null,
+                tint = if (remote) PrimaryColor else TextMuted,
+                modifier = Modifier.size(14.dp),
+            )
             Spacer(modifier = Modifier.width(5.dp))
             Text(label, color = if (remote) PrimaryColor else TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.Medium)
-            Text(" ▾", color = TextMuted, fontSize = 12.sp)
+            Spacer(modifier = Modifier.width(2.dp))
+            Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null, tint = TextMuted, modifier = Modifier.size(15.dp))
         }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
             DropdownMenuItem(
@@ -744,9 +1091,8 @@ private fun ToolGroupItem(tools: List<ChatMessage.ToolCall>, expanded: Boolean, 
         modifier = Modifier.clickable { onToggle(gid) },
     ) {
         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-            // 折叠头:🔧 N 步骤 · 最后一步 + 箭头
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("🔧", fontSize = 14.sp)
+                Icon(Icons.Filled.Build, contentDescription = null, tint = PrimaryColor, modifier = Modifier.size(15.dp))
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     stringResource(R.string.chat_tool_steps, tools.size),
@@ -761,13 +1107,13 @@ private fun ToolGroupItem(tools: List<ChatMessage.ToolCall>, expanded: Boolean, 
                     )
                 }
                 Spacer(modifier = Modifier.weight(1f))
-                Text(if (expanded) "▾" else "▸", fontSize = 12.sp, color = TextMuted)
+                Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null, tint = TextMuted, modifier = Modifier.size(16.dp))
             }
             if (expanded) {
                 tools.forEach { t ->
                     Spacer(modifier = Modifier.height(6.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(t.icon, fontSize = 13.sp)
+                        Icon(Icons.Filled.Build, contentDescription = null, tint = TextMuted, modifier = Modifier.size(13.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(t.toolName, fontSize = 11.sp, color = PrimaryColor, fontFamily = FontFamily.Monospace)
                         if (t.args.isNotEmpty()) {
@@ -794,7 +1140,7 @@ private fun ToolCallItem(msg: ChatMessage.ToolCall) {
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(msg.icon, fontSize = 14.sp)
+            Icon(Icons.Filled.Build, contentDescription = null, tint = PrimaryColor, modifier = Modifier.size(15.dp))
             Spacer(modifier = Modifier.width(8.dp))
             Text(
                 msg.toolName,

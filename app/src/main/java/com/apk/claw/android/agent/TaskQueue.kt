@@ -94,6 +94,14 @@ class TaskQueue {
         return null
     }
 
+    /** 暂停当前正在运行的任务（当前任务不在 queue 中）。 */
+    fun pauseRunningTask(task: QueuedTask): QueuedTask {
+        val paused = task.copy(status = TaskStatus.PAUSED)
+        pausedTasks[task.id] = paused
+        Log.i(TAG, "Running task paused: ${task.id}")
+        return paused
+    }
+
     /** 恢复一个被暂停的任务 */
     fun resumeTask(taskId: String): Boolean {
         val task = pausedTasks.remove(taskId) ?: return false

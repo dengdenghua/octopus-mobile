@@ -7,6 +7,7 @@ import android.content.Intent
 import androidx.core.app.NotificationCompat
 import com.apk.claw.android.R
 import com.apk.claw.android.octopus_mobile.RoutineStore
+import com.apk.claw.android.ui.compose.screen.ChatAgentBridge
 import com.apk.claw.android.ui.compose.screen.RoutineRunner
 import com.apk.claw.android.utils.XLog
 
@@ -20,29 +21,39 @@ class RoutineAlarmReceiver : BroadcastReceiver() {
 
     companion object {
         private const val TAG = "RoutineAlarmReceiver"
+        private const val MAX_BUSY_RETRIES = 3
     }
 
     override fun onReceive(context: Context, intent: Intent) {
         val id = intent.getStringExtra(RoutineScheduler.EXTRA_ID) ?: return
+        val retryAttempt = intent.getIntExtra(RoutineScheduler.EXTRA_RETRY_ATTEMPT, 0)
         val r = RoutineStore.all().find { it.id == id } ?: return
         XLog.i(TAG, "alarm fired for routine ${r.id} (${r.name})")
 
         // 保活：从后台执行长任务，先确保前台服务在跑
         runCatching { ForegroundService.start(context) }
 
-        // 续期：每天重复→排下一天；仅一次→清除定时
-        if (r.scheduleDaily) {
-            runCatching { RoutineScheduler.schedule(context, r) }
-        } else {
-            RoutineStore.update(r.copy(scheduleHour = null, scheduleMinute = null, scheduleDaily = false))
+        // 续期：只在原始闹钟触发时处理。忙时重试不改动用户设定。
+        if (retryAttempt == 0) {
+            if (r.scheduleDaily) {
+                runCatching { RoutineScheduler.schedule(context, r) }
+            } else {
+                RoutineStore.update(r.copy(scheduleHour = null, scheduleMinute = null, scheduleDaily = false))
+            }
         }
 
         // 执行
-        if (RoutineRunner.canRun()) {
+        if (!RoutineRunner.canRun()) {
+            notify(context, r.id.hashCode(), context.getString(R.string.routine_alarm_skipped_title), context.getString(R.string.routine_alarm_skipped_text, r.name))
+        } else if (ChatAgentBridge.isBusy() && retryAttempt < MAX_BUSY_RETRIES) {
+            val nextAttempt = retryAttempt + 1
+            RoutineScheduler.scheduleRetry(context, r.id, nextAttempt)
+            notify(context, r.id.hashCode(), context.getString(R.string.routine_alarm_retry_title), context.getString(R.string.routine_alarm_retry_text, r.name, nextAttempt, MAX_BUSY_RETRIES))
+        } else if (ChatAgentBridge.isBusy()) {
+            notify(context, r.id.hashCode(), context.getString(R.string.routine_alarm_skipped_title), context.getString(R.string.routine_alarm_busy_give_up_text, r.name))
+        } else {
             val status = RoutineRunner.run(context, r)
             notify(context, r.id.hashCode(), context.getString(R.string.routine_alarm_running_title), context.getString(R.string.routine_alarm_running_text, r.name, status))
-        } else {
-            notify(context, r.id.hashCode(), context.getString(R.string.routine_alarm_skipped_title), context.getString(R.string.routine_alarm_skipped_text, r.name))
         }
     }
 

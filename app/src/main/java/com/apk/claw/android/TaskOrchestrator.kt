@@ -141,7 +141,10 @@ class TaskOrchestrator(
                 // 暂停当前任务，入队新任务并立即执行
                 XLog.i(TAG, "Preempting current task: ${cur.id} with higher priority task: ${queuedTask.id}")
                 pauseCurrentTask()
-                if (!taskQueue.enqueue(queuedTask)) return false
+                if (!taskQueue.enqueue(queuedTask)) {
+                    startNextTask()
+                    return false
+                }
                 startNextTask()
                 return true
             }
@@ -160,14 +163,21 @@ class TaskOrchestrator(
      */
     private fun pauseCurrentTask() {
         val cur = currentTask ?: return
-        // 取消 Agent 执行
+        // 取消旧 Agent 执行，并重建服务，避免新任务撞上 "Agent is already running"。
         if (::agentService.isInitialized) {
-            agentService.cancel()
+            agentService.shutdown()
+        }
+        agentService = AgentServiceFactory.create()
+        try {
+            agentService.initialize(agentConfigProvider())
+        } catch (e: Exception) {
+            XLog.e(TAG, "Failed to reinitialize AgentService after preemption", e)
         }
         // 通知当前任务被暂停
         ChannelManager.sendMessage(cur.channel, ClawApplication.instance.getString(R.string.channel_msg_task_cancelled), cur.messageId)
-        // 暂停并入队等待恢复
-        taskQueue.pauseTask(cur.id)
+        // 暂停并重新排队；当前任务已出队，需显式保存运行中任务。
+        taskQueue.pauseRunningTask(cur)
+        taskQueue.resumeTask(cur.id)
         currentTask = null
         FloatingCircleManager.setErrorState()
         XLog.i(TAG, "Current task paused: ${cur.id}")
@@ -337,6 +347,9 @@ class TaskOrchestrator(
             if (!taskQueue.enqueue(queuedTask)) {
                 XLog.w(TAG, "Task queue is full, rejecting task: $taskId")
                 ChannelManager.sendMessage(channel, "任务队列已满，请稍后重试", messageID)
+                if (currentTask == null) {
+                    startNextTask()
+                }
                 return
             }
             // 如果当前无任务在执行，立即调度
@@ -363,6 +376,10 @@ class TaskOrchestrator(
         val channel = taskInfo.channel
         val task = taskInfo.task
         val messageID = taskInfo.messageId
+        val taskId = taskInfo.id
+
+        fun isCurrentCallbackTask(): Boolean =
+            synchronized(scheduleLock) { currentTask?.id == taskId }
 
         if (!::agentService.isInitialized) {
             XLog.e(TAG, "AgentService not initialized, attempting to initialize")
@@ -393,22 +410,26 @@ class TaskOrchestrator(
 
         agentService.executeTask(task, object : AgentCallback {
             override fun onLoopStart(round: Int) {
+                if (!isCurrentCallbackTask()) return
                 // 新一轮开始前，flush 上一轮积攒的消息
                 flushRoundBuffer()
                 FloatingCircleManager.setRunningState(round, channel)
             }
 
             override fun onContent(round: Int, content: String) {
+                if (!isCurrentCallbackTask()) return
                 if (content.isNotEmpty()) {
                     roundBuffer.append(content)
                 }
             }
 
             override fun onToolCall(round: Int, toolId: String, toolName: String, parameters: String) {
+                if (!isCurrentCallbackTask()) return
                 XLog.d(TAG, "onToolCall: $toolId($toolName), $parameters")
             }
 
             override fun onToolResult(round: Int, toolId: String, toolName: String, parameters: String, result: ToolResult) {
+                if (!isCurrentCallbackTask()) return
                 val app = ClawApplication.instance
                 val status = if (result.isSuccess) app.getString(R.string.channel_msg_tool_success) else app.getString(R.string.channel_msg_tool_failure)
                 var data = if (result.isSuccess) result.data else result.error
@@ -433,6 +454,10 @@ class TaskOrchestrator(
             }
 
             override fun onComplete(round: Int, finalAnswer: String, totalTokens: Int) {
+                if (!isCurrentCallbackTask()) {
+                    XLog.i(TAG, "Ignoring stale onComplete for task=$taskId")
+                    return
+                }
                 XLog.i(TAG, "onComplete: 轮数=$round, totalTokens=$totalTokens, answer=$finalAnswer")
                 flushRoundBuffer()
                 // 标记当前任务完成
@@ -464,6 +489,10 @@ class TaskOrchestrator(
             }
 
             override fun onError(round: Int, error: Exception, totalTokens: Int) {
+                if (!isCurrentCallbackTask()) {
+                    XLog.i(TAG, "Ignoring stale onError for task=$taskId: ${error.message}")
+                    return
+                }
                 XLog.e(TAG, "onError: ${error.message}, totalTokens=$totalTokens", error)
                 flushRoundBuffer()
                 synchronized(scheduleLock) {
@@ -480,6 +509,10 @@ class TaskOrchestrator(
             }
 
             override fun onSystemDialogBlocked(round: Int, totalTokens: Int) {
+                if (!isCurrentCallbackTask()) {
+                    XLog.i(TAG, "Ignoring stale onSystemDialogBlocked for task=$taskId")
+                    return
+                }
                 XLog.w(TAG, "onSystemDialogBlocked: round=$round, totalTokens=$totalTokens")
                 flushRoundBuffer()
                 synchronized(scheduleLock) {

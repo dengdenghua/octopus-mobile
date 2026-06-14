@@ -55,6 +55,25 @@ class EventBus(
         val gate: String,  // "safety" / "guardrail" / "canary"
     ) : NervesEvent()
 
+    /** 中/高风险工具审计事件 */
+    data class ToolAuditEvent(
+        val toolName: String,
+        val risk: String,
+        val success: Boolean,
+        val blockedBy: String?,
+        val durationMs: Long,
+    ) : NervesEvent()
+
+    /** 远程 HTTP/LAN 强能力入口审计事件 */
+    data class RemoteAccessAuditEvent(
+        val method: String,
+        val uri: String,
+        val source: String,
+        val action: String,
+        val success: Boolean,
+        val durationMs: Long,
+    ) : NervesEvent()
+
     /** 导航事件 */
     data class NavigationEvent(
         val url: String,

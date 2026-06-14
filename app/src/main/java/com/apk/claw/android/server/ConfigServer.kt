@@ -3,6 +3,9 @@ package com.apk.claw.android.server
 import android.content.Context
 import com.apk.claw.android.BuildConfig
 import com.apk.claw.android.channel.ChannelManager
+import com.apk.claw.android.octopus_mobile.RemoteAccessLog
+import com.apk.claw.android.octopus_mobile.nerves.EventBus
+import com.apk.claw.android.octopus_mobile.safety.ToolRiskPolicy
 import com.apk.claw.android.tool.ToolRegistry
 import com.apk.claw.android.tool.ToolResult
 import com.apk.claw.android.utils.KVUtils
@@ -78,6 +81,62 @@ class ConfigServer(
         return result == 0
     }
 
+    private fun sourceOf(session: IHTTPSession): String {
+        return session.headers["x-forwarded-for"]?.substringBefore(",")?.trim()?.takeIf { it.isNotEmpty() }
+            ?: session.headers["x-real-ip"]?.trim()?.takeIf { it.isNotEmpty() }
+            ?: session.headers["remote-addr"]?.trim()?.takeIf { it.isNotEmpty() }
+            ?: session.headers["http-client-ip"]?.trim()?.takeIf { it.isNotEmpty() }
+            ?: "unknown"
+    }
+
+    private fun recordRemoteAccess(
+        session: IHTTPSession,
+        action: String,
+        success: Boolean,
+        summary: String,
+        startMs: Long,
+    ) {
+        val duration = System.currentTimeMillis() - startMs
+        val safeSummary = summary.replace('\n', ' ').take(500)
+        RemoteAccessLog.record(
+            RemoteAccessLog.Entry(
+                id = "remote_${startMs}_${System.nanoTime()}_${action}",
+                ts = startMs,
+                method = session.method.name,
+                uri = session.uri,
+                source = sourceOf(session),
+                action = action,
+                success = success,
+                summary = safeSummary,
+                durationMs = duration,
+            )
+        )
+        runCatching {
+            com.apk.claw.android.ClawApplication.instance.eventBus.publish(
+                EventBus.RemoteAccessAuditEvent(
+                    method = session.method.name,
+                    uri = session.uri,
+                    source = sourceOf(session),
+                    action = action,
+                    success = success,
+                    durationMs = duration,
+                )
+            )
+        }
+    }
+
+    private fun jsonToSafeMap(json: JsonObject, redactKeys: Set<String> = emptySet()): Map<String, Any> {
+        return json.entrySet().associate { (key, value) ->
+            val safeValue = when {
+                key.lowercase() in redactKeys -> "<redacted>"
+                value.isJsonNull -> ""
+                value.isJsonPrimitive -> value.asString
+                else -> value.toString()
+            }
+            key to safeValue
+        }
+    }
+
     private fun unauthorizedResponse(): Response = corsResponse(
         newFixedLengthResponse(
             Response.Status.UNAUTHORIZED, MIME_JSON,
@@ -98,6 +157,7 @@ class ConfigServer(
         val isPublic = uri == "/" || uri == "/index.html" || uri == "/debug.html" ||
             uri == "/console" || uri == "/console.html"
         if (!isPublic && !validateAuth(session)) {
+            recordRemoteAccess(session, "auth_denied", false, "uri=$uri", System.currentTimeMillis())
             return unauthorizedResponse()
         }
 
@@ -152,6 +212,7 @@ class ConfigServer(
             }
         } catch (e: Exception) {
             XLog.e(TAG, "Server error: ${e.message}")
+            recordRemoteAccess(session, "server_error", false, "error=${e.message}", System.currentTimeMillis())
             corsResponse(
                 newFixedLengthResponse(
                     Response.Status.INTERNAL_ERROR, MIME_JSON,
@@ -198,12 +259,15 @@ class ConfigServer(
 
     /** POST /api/agent/run { "prompt": "..." } —— 网页发指令驱动 Agent。 */
     private fun handleAgentRun(session: IHTTPSession): Response {
+        val startMs = System.currentTimeMillis()
         val params = readJsonBody(session)
         val prompt = params.get("prompt")?.asString?.trim().orEmpty()
         if (prompt.isEmpty()) {
+            recordRemoteAccess(session, "agent_run", false, "prompt=<empty>", startMs)
             return corsResponse(newFixedLengthResponse(Response.Status.BAD_REQUEST, MIME_JSON, """{"code":-1,"message":"empty prompt"}"""))
         }
         val ok = AgentWebBridge.run(prompt)
+        recordRemoteAccess(session, "agent_run", ok, "promptChars=${prompt.length}", startMs)
         val json = gson.toJson(mapOf(
             "code" to if (ok) 0 else -1,
             "running" to AgentWebBridge.isRunning(),
@@ -426,7 +490,7 @@ class ConfigServer(
     }
 
     // ==================== Debug (仅 DEBUG 构建) ====================
-    
+
     private fun handleGetScreenFull(): Response {
         val service = com.apk.claw.android.service.ClawAccessibilityService.getInstance()
             ?: return corsResponse(
@@ -673,6 +737,7 @@ class ConfigServer(
      * 单张 JPEG 截图。
      */
     private fun handleScreenshot(session: IHTTPSession): Response {
+        val startMs = System.currentTimeMillis()
         val quality = session.parms["quality"]?.toIntOrNull() ?: 60
         val maxWidth = session.parms["maxWidth"]?.toIntOrNull() ?: 720
 
@@ -683,6 +748,7 @@ class ConfigServer(
         }
 
         if (jpeg == null) {
+            recordRemoteAccess(session, "screen_screenshot", false, "quality=$quality,maxWidth=$maxWidth", startMs)
             return corsResponse(
                 newFixedLengthResponse(
                     Response.Status.SERVICE_UNAVAILABLE, MIME_JSON,
@@ -696,6 +762,7 @@ class ConfigServer(
             java.io.ByteArrayInputStream(jpeg), jpeg.size.toLong()
         )
         response.addHeader("Cache-Control", "no-cache, no-store")
+        recordRemoteAccess(session, "screen_screenshot", true, "quality=$quality,maxWidth=$maxWidth,bytes=${jpeg.size}", startMs)
         return corsResponse(response)
     }
 
@@ -704,7 +771,9 @@ class ConfigServer(
      * MJPEG 实时流（限制 2 路并发）。
      */
     private fun handleScreenStream(session: IHTTPSession): Response {
+        val startMs = System.currentTimeMillis()
         if (!mjpegStreamLock.tryAcquire()) {
+            recordRemoteAccess(session, "screen_stream", false, "too_many_streams", startMs)
             return corsResponse(
                 newFixedLengthResponse(
                     Response.Status.TOO_MANY_REQUESTS, MIME_JSON,
@@ -754,6 +823,7 @@ class ConfigServer(
 
         val response = newFixedLengthResponse(Response.Status.OK, contentType, pipe, Long.MAX_VALUE)
         response.addHeader("Cache-Control", "no-cache, no-store")
+        recordRemoteAccess(session, "screen_stream", true, "quality=$quality,maxWidth=$maxWidth,fps=$fps", startMs)
         return corsResponse(response)
     }
 
@@ -776,14 +846,19 @@ class ConfigServer(
      * 远程读屏：返回无障碍可见的 UI 树（供远端 Agent 决策点击坐标）。
      */
     private fun handleScreenTree(session: IHTTPSession): Response {
+        val startMs = System.currentTimeMillis()
         val full = session.parms["full"]?.toBoolean() ?: false
         val svc = com.apk.claw.android.service.ClawAccessibilityService.getInstance()
-            ?: return corsResponse(newFixedLengthResponse(
-                Response.Status.SERVICE_UNAVAILABLE, MIME_JSON,
-                """{"code":-1,"message":"Accessibility service not running"}"""
-            ))
+            ?: run {
+                recordRemoteAccess(session, "screen_tree", false, "full=$full,service=unavailable", startMs)
+                return corsResponse(newFixedLengthResponse(
+                    Response.Status.SERVICE_UNAVAILABLE, MIME_JSON,
+                    """{"code":-1,"message":"Accessibility service not running"}"""
+                ))
+            }
         val tree = if (full) svc.screenTreeFull else svc.screenTree
         val json = gson.toJson(mapOf("code" to 0, "data" to (tree ?: "")))
+        recordRemoteAccess(session, "screen_tree", true, "full=$full,chars=${tree?.length ?: 0}", startMs)
         return corsResponse(newFixedLengthResponse(Response.Status.OK, MIME_JSON, json))
     }
 
@@ -850,19 +925,26 @@ class ConfigServer(
      * ```
      */
     private fun handleControlInput(session: IHTTPSession): Response {
+        val startMs = System.currentTimeMillis()
         val params = readJsonBody(session)   // 修正中文乱码(text 输入)
 
         val action = params.get("action")?.asString
-            ?: return corsResponse(newFixedLengthResponse(
-                Response.Status.BAD_REQUEST, MIME_JSON,
-                """{"code":-1,"message":"missing action"}"""
-            ))
+            ?: run {
+                recordRemoteAccess(session, "control_input", false, "action=<missing>", startMs)
+                return corsResponse(newFixedLengthResponse(
+                    Response.Status.BAD_REQUEST, MIME_JSON,
+                    """{"code":-1,"message":"missing action"}"""
+                ))
+            }
 
         val service = com.apk.claw.android.service.ClawAccessibilityService.getInstance()
-            ?: return corsResponse(newFixedLengthResponse(
-                Response.Status.SERVICE_UNAVAILABLE, MIME_JSON,
-                """{"code":-1,"message":"Accessibility service not running"}"""
-            ))
+            ?: run {
+                recordRemoteAccess(session, "control_input", false, "action=$action,service=unavailable", startMs)
+                return corsResponse(newFixedLengthResponse(
+                    Response.Status.SERVICE_UNAVAILABLE, MIME_JSON,
+                    """{"code":-1,"message":"Accessibility service not running"}"""
+                ))
+            }
 
         val success = when (action) {
             "tap" -> {
@@ -883,9 +965,9 @@ class ConfigServer(
                 service.sendKeyEvent(keyCode)
             }
             "text" -> {
-                // 通过 ToolRegistry 的 text_input 工具实现
+                // 通过 ToolRegistry 的 input_text 工具实现
                 val text = params.get("text")?.asString ?: ""
-                val result = ToolRegistry.executeTool("text_input", mapOf("text" to text))
+                val result = ToolRegistry.executeTool("input_text", mapOf("text" to text))
                 result.isSuccess
             }
             "long_press" -> {
@@ -909,6 +991,8 @@ class ConfigServer(
             "code" to if (success) 0 else -1,
             "message" to if (success) "OK" else "Action failed: $action"
         ))
+        val safeParams = ToolRiskPolicy.summarizeParams(jsonToSafeMap(params, setOf("text")))
+        recordRemoteAccess(session, "control_input", success, "action=$action,params=$safeParams", startMs)
         return corsResponse(newFixedLengthResponse(Response.Status.OK, MIME_JSON, json))
     }
 
@@ -918,21 +1002,29 @@ class ConfigServer(
      * GET /api/files/browse?path=/sdcard/Download&hidden=false
      */
     private fun handleFileBrowse(session: IHTTPSession): Response {
+        val startMs = System.currentTimeMillis()
         val path = session.parms["path"] ?: "/sdcard"
         val showHidden = session.parms["hidden"]?.toBoolean() ?: false
-        if (!isAllowedUserPath(path)) return forbiddenPathResponse()
+        if (!isAllowedUserPath(path)) {
+            recordRemoteAccess(session, "file_browse", false, "path=$path,forbidden=true", startMs)
+            return forbiddenPathResponse()
+        }
 
         val shizuku = com.apk.claw.android.shizuku.ShizukuShellService
         val listing = shizuku.listFiles(path, showHidden)
-            ?: return corsResponse(newFixedLengthResponse(
-                Response.Status.OK, MIME_JSON,
-                """{"code":-1,"message":"Shizuku not available"}"""
-            ))
+            ?: run {
+                recordRemoteAccess(session, "file_browse", false, "path=$path,shizuku=unavailable", startMs)
+                return corsResponse(newFixedLengthResponse(
+                    Response.Status.OK, MIME_JSON,
+                    """{"code":-1,"message":"Shizuku not available"}"""
+                ))
+            }
 
         val json = gson.toJson(mapOf("code" to 0, "data" to mapOf(
             "path" to path,
             "listing" to listing
         )))
+        recordRemoteAccess(session, "file_browse", true, "path=$path,hidden=$showHidden", startMs)
         return corsResponse(newFixedLengthResponse(Response.Status.OK, MIME_JSON, json))
     }
 
@@ -940,17 +1032,24 @@ class ConfigServer(
      * GET /api/files/search?path=/sdcard&pattern=*.jpg&max=30
      */
     private fun handleFileSearch(session: IHTTPSession): Response {
+        val startMs = System.currentTimeMillis()
         val path = session.parms["path"] ?: "/sdcard"
         val pattern = session.parms["pattern"] ?: "*"
         val maxResults = session.parms["max"]?.toIntOrNull() ?: 30
-        if (!isAllowedUserPath(path)) return forbiddenPathResponse()
+        if (!isAllowedUserPath(path)) {
+            recordRemoteAccess(session, "file_search", false, "path=$path,pattern=$pattern,forbidden=true", startMs)
+            return forbiddenPathResponse()
+        }
 
         val shizuku = com.apk.claw.android.shizuku.ShizukuShellService
         val result = shizuku.searchFiles(path, pattern, maxResults)
-            ?: return corsResponse(newFixedLengthResponse(
-                Response.Status.OK, MIME_JSON,
-                """{"code":-1,"message":"Shizuku not available"}"""
-            ))
+            ?: run {
+                recordRemoteAccess(session, "file_search", false, "path=$path,pattern=$pattern,shizuku=unavailable", startMs)
+                return corsResponse(newFixedLengthResponse(
+                    Response.Status.OK, MIME_JSON,
+                    """{"code":-1,"message":"Shizuku not available"}"""
+                ))
+            }
 
         val files = result.lines().filter { it.isNotBlank() }
         val json = gson.toJson(mapOf("code" to 0, "data" to mapOf(
@@ -959,6 +1058,7 @@ class ConfigServer(
             "count" to files.size,
             "files" to files
         )))
+        recordRemoteAccess(session, "file_search", true, "path=$path,pattern=$pattern,count=${files.size}", startMs)
         return corsResponse(newFixedLengthResponse(Response.Status.OK, MIME_JSON, json))
     }
 
@@ -983,26 +1083,37 @@ class ConfigServer(
      * 通过 Shizuku shell 读取文件并流式返回。
      */
     private fun handleFileDownload(session: IHTTPSession): Response {
-        val path = session.parms["path"] ?: return corsResponse(newFixedLengthResponse(
-            Response.Status.BAD_REQUEST, MIME_JSON,
-            """{"code":-1,"message":"missing path param"}"""
-        ))
+        val startMs = System.currentTimeMillis()
+        val path = session.parms["path"] ?: run {
+            recordRemoteAccess(session, "file_download", false, "path=<missing>", startMs)
+            return corsResponse(newFixedLengthResponse(
+                Response.Status.BAD_REQUEST, MIME_JSON,
+                """{"code":-1,"message":"missing path param"}"""
+            ))
+        }
 
         // 安全检查：仅允许 /sdcard，且排除 .. 与注入字符
-        if (!isAllowedUserPath(path)) return forbiddenPathResponse()
+        if (!isAllowedUserPath(path)) {
+            recordRemoteAccess(session, "file_download", false, "path=$path,forbidden=true", startMs)
+            return forbiddenPathResponse()
+        }
 
         // 复制到 cacheDir 然后返回
         // 使用 externalFilesDir（/sdcard/Android/data/<pkg>/files/），shell 可写、app 可读
         val externalDir = context.getExternalFilesDir(null)
-            ?: return corsResponse(newFixedLengthResponse(
-                Response.Status.INTERNAL_ERROR, MIME_JSON,
-                """{"code":-1,"message":"External storage not available"}"""
-            ))
+            ?: run {
+                recordRemoteAccess(session, "file_download", false, "path=$path,external_storage=unavailable", startMs)
+                return corsResponse(newFixedLengthResponse(
+                    Response.Status.INTERNAL_ERROR, MIME_JSON,
+                    """{"code":-1,"message":"External storage not available"}"""
+                ))
+            }
         val cacheFile = java.io.File(externalDir, "download_${System.currentTimeMillis()}")
         val shizuku = com.apk.claw.android.shizuku.ShizukuShellService
         val result = shizuku.exec("cp \"$path\" \"${cacheFile.absolutePath}\" && chmod 644 \"${cacheFile.absolutePath}\"")
         if (result == null || result.exitCode != 0) {
             cacheFile.delete()
+            recordRemoteAccess(session, "file_download", false, "path=$path,copy_failed=true", startMs)
             return corsResponse(newFixedLengthResponse(
                 Response.Status.INTERNAL_ERROR, MIME_JSON,
                 """{"code":-1,"message":"Failed to copy file: ${result?.stderr?.trim() ?: "Shizuku unavailable"}"}"""
@@ -1027,6 +1138,7 @@ class ConfigServer(
             cacheFile.inputStream(), cacheFile.length()
         ).also {
             it.addHeader("Content-Disposition", "attachment; filename=\"${path.substringAfterLast('/')}\"")
+            recordRemoteAccess(session, "file_download", true, "path=$path,mime=$mime,bytes=${cacheFile.length()}", startMs)
         })
     }
 
@@ -1035,30 +1147,43 @@ class ConfigServer(
      * Body: { "path": "/sdcard/Download/uploaded.pdf", "base64": "..." }
      */
     private fun handleFileUpload(session: IHTTPSession): Response {
+        val startMs = System.currentTimeMillis()
         val body = mutableMapOf<String, String>()
         session.parseBody(body)
         val postData = body["postData"] ?: "{}"
         val params = gson.fromJson(postData, JsonObject::class.java)
 
-        val path = params.get("path")?.asString ?: return corsResponse(newFixedLengthResponse(
-            Response.Status.BAD_REQUEST, MIME_JSON,
-            """{"code":-1,"message":"missing path"}"""
-        ))
-        val base64Data = params.get("base64")?.asString ?: return corsResponse(newFixedLengthResponse(
-            Response.Status.BAD_REQUEST, MIME_JSON,
-            """{"code":-1,"message":"missing base64 data"}"""
-        ))
+        val path = params.get("path")?.asString ?: run {
+            recordRemoteAccess(session, "file_upload", false, "path=<missing>", startMs)
+            return corsResponse(newFixedLengthResponse(
+                Response.Status.BAD_REQUEST, MIME_JSON,
+                """{"code":-1,"message":"missing path"}"""
+            ))
+        }
+        val base64Data = params.get("base64")?.asString ?: run {
+            recordRemoteAccess(session, "file_upload", false, "path=$path,base64=<missing>", startMs)
+            return corsResponse(newFixedLengthResponse(
+                Response.Status.BAD_REQUEST, MIME_JSON,
+                """{"code":-1,"message":"missing base64 data"}"""
+            ))
+        }
 
-        if (!isAllowedUserPath(path)) return forbiddenPathResponse()
+        if (!isAllowedUserPath(path)) {
+            recordRemoteAccess(session, "file_upload", false, "path=$path,forbidden=true", startMs)
+            return forbiddenPathResponse()
+        }
 
         try {
             val bytes = android.util.Base64.decode(base64Data, android.util.Base64.DEFAULT)
             // 写入 app 私有目录（shell 可读 /sdcard/Android/data/<pkg>/cache/）
             val externalCache = context.getExternalFilesDir(null)
-                ?: return corsResponse(newFixedLengthResponse(
-                    Response.Status.INTERNAL_ERROR, MIME_JSON,
-                    """{"code":-1,"message":"External storage not available"}"""
-                ))
+                ?: run {
+                    recordRemoteAccess(session, "file_upload", false, "path=$path,external_storage=unavailable", startMs)
+                    return corsResponse(newFixedLengthResponse(
+                        Response.Status.INTERNAL_ERROR, MIME_JSON,
+                        """{"code":-1,"message":"External storage not available"}"""
+                    ))
+                }
             val tempFile = java.io.File(externalCache, "upload_${System.currentTimeMillis()}")
             tempFile.writeBytes(bytes)
             // 通过 Shizuku 复制到目标路径
@@ -1070,9 +1195,11 @@ class ConfigServer(
                 "code" to if (ok == true) 0 else -1,
                 "message" to if (ok == true) "Uploaded to $path" else "Upload failed"
             ))
+            recordRemoteAccess(session, "file_upload", ok == true, "path=$path,bytes=${bytes.size}", startMs)
             return corsResponse(newFixedLengthResponse(Response.Status.OK, MIME_JSON, json))
         } catch (e: Exception) {
             val json = gson.toJson(mapOf("code" to -1, "message" to "Upload error: ${e.message}"))
+            recordRemoteAccess(session, "file_upload", false, "path=$path,error=${e.message}", startMs)
             return corsResponse(newFixedLengthResponse(Response.Status.OK, MIME_JSON, json))
         }
     }
@@ -1082,17 +1209,24 @@ class ConfigServer(
      * Body: { "path": "/sdcard/Download/temp.txt" }
      */
     private fun handleFileDelete(session: IHTTPSession): Response {
+        val startMs = System.currentTimeMillis()
         val body = mutableMapOf<String, String>()
         session.parseBody(body)
         val postData = body["postData"] ?: "{}"
         val params = gson.fromJson(postData, JsonObject::class.java)
 
-        val path = params.get("path")?.asString ?: return corsResponse(newFixedLengthResponse(
-            Response.Status.BAD_REQUEST, MIME_JSON,
-            """{"code":-1,"message":"missing path"}"""
-        ))
+        val path = params.get("path")?.asString ?: run {
+            recordRemoteAccess(session, "file_delete", false, "path=<missing>", startMs)
+            return corsResponse(newFixedLengthResponse(
+                Response.Status.BAD_REQUEST, MIME_JSON,
+                """{"code":-1,"message":"missing path"}"""
+            ))
+        }
 
-        if (!isAllowedUserPath(path)) return forbiddenPathResponse()
+        if (!isAllowedUserPath(path)) {
+            recordRemoteAccess(session, "file_delete", false, "path=$path,forbidden=true", startMs)
+            return forbiddenPathResponse()
+        }
 
         val shizuku = com.apk.claw.android.shizuku.ShizukuShellService
         val ok = shizuku.deleteFile(path)
@@ -1100,6 +1234,7 @@ class ConfigServer(
             "code" to if (ok == true) 0 else -1,
             "message" to if (ok == true) "Deleted: $path" else "Delete failed"
         ))
+        recordRemoteAccess(session, "file_delete", ok == true, "path=$path", startMs)
         return corsResponse(newFixedLengthResponse(Response.Status.OK, MIME_JSON, json))
     }
 

@@ -46,6 +46,8 @@ object KVUtils {
     const val KEY_OCTOPUS_AUTO_CONNECT = "DEFAULT_OCTOPUS_AUTO_CONNECT"
 
     private lateinit var mmkv: MMKV
+    private val disabledToolsFallback = mutableSetOf<String>()
+    private val stringFallback = mutableMapOf<String, String>()
 
     private const val DEFAULT_INT = 0
     private const val DEFAULT_LONG = 0L
@@ -63,10 +65,17 @@ object KVUtils {
 
     // ==================== String ====================
     fun putString(key: String, value: String?): Boolean {
+        if (!::mmkv.isInitialized) {
+            if (value == null) stringFallback.remove(key) else stringFallback[key] = value
+            return true
+        }
         return mmkv.encode(key, value)
     }
 
     fun getString(key: String, defaultValue: String = ""): String {
+        if (!::mmkv.isInitialized) {
+            return stringFallback[key] ?: defaultValue
+        }
         return mmkv.decodeString(key, defaultValue) ?: defaultValue
     }
 
@@ -211,9 +220,15 @@ object KVUtils {
 
     // ==================== 技能(工具)启停 ====================
     private const val KEY_DISABLED_TOOLS = "KEY_DISABLED_TOOLS"
-    fun getDisabledTools(): Set<String> =
-        getString(KEY_DISABLED_TOOLS, "").split(",").filter { it.isNotBlank() }.toSet()
+    fun getDisabledTools(): Set<String> {
+        if (!::mmkv.isInitialized) return disabledToolsFallback.toSet()
+        return getString(KEY_DISABLED_TOOLS, "").split(",").filter { it.isNotBlank() }.toSet()
+    }
     fun setToolDisabled(name: String, disabled: Boolean) {
+        if (!::mmkv.isInitialized) {
+            if (disabled) disabledToolsFallback.add(name) else disabledToolsFallback.remove(name)
+            return
+        }
         val s = getDisabledTools().toMutableSet()
         if (disabled) s.add(name) else s.remove(name)
         putString(KEY_DISABLED_TOOLS, s.joinToString(","))

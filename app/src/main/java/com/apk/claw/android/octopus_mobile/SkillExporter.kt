@@ -1,6 +1,7 @@
 package com.apk.claw.android.octopus_mobile
 
 import android.util.Log
+import com.apk.claw.android.octopus_mobile.safety.ToolRiskPolicy
 import com.apk.claw.android.tool.BaseTool
 import com.apk.claw.android.tool.ToolParameter
 import com.apk.claw.android.tool.ToolRegistry
@@ -38,21 +39,6 @@ object SkillExporter {
 
     private const val TAG = "SkillExporter"
     private const val PREFIX = "android."
-
-    /** 风险等级：高风险工具需 SafetyGate 二次确认 */
-    private val HIGH_RISK_TOOLS = setOf(
-        "send_sms", "install_app", "uninstall_app",
-        "send_intent", "lock_screen",
-        "file_ops", "app_backup", "launch_freeform", "resize_window",
-        "send_file", "system_key", "press_back", "press_home",
-    )
-
-    /** 中风险工具 */
-    private val MEDIUM_RISK_TOOLS = setOf(
-        "open_app", "input_text", "click_by_text", "click_by_id",
-        "tap", "long_press", "swipe", "scroll_to_find",
-        "resize_window", "send_intent", "send_sms",
-    )
 
     /** 各工具默认超时（ms） */
     private val DEFAULT_TIMEOUT_MS = mapOf(
@@ -133,11 +119,7 @@ object SkillExporter {
 
     // ==================== 辅助 ====================
 
-    private fun inferRisk(toolName: String): String = when {
-        toolName in HIGH_RISK_TOOLS -> "high"
-        toolName in MEDIUM_RISK_TOOLS -> "medium"
-        else -> "low"
-    }
+    private fun inferRisk(toolName: String): String = ToolRiskPolicy.riskOf(toolName)
 
     private fun inferTimeoutMs(toolName: String): Int =
         DEFAULT_TIMEOUT_MS[toolName] ?: 15_000

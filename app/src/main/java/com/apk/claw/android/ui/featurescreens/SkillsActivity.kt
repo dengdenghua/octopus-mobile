@@ -34,7 +34,7 @@ class SkillsActivity : ComponentActivity() {
 
 /** 核心工具:Agent 自动化的地基,不允许停用。 */
 private val CORE = setOf(
-    "tap", "long_press", "swipe", "input_text", "text_input", "find_node_info",
+    "tap", "long_press", "swipe", "input_text", "find_node_info",
     "scroll_to_find", "open_app", "take_screenshot", "get_screen_info", "system_key",
     "look_at_screen", "wait", "finish", "finish_task",
 )

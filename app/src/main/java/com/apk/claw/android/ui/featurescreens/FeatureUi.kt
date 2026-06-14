@@ -17,18 +17,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.apk.claw.android.ui.compose.theme.OctopusColors
 
-// 与各 Compose 页一致的深色 iOS 风配色
-val FBg = Color(0xFF000000)
-val FSurface = Color(0xFF1C1C1E)
-val FSurface2 = Color(0xFF2C2C2E)
-val FPrimary = Color(0xFF0A84FF)
-val FText = Color(0xFFFFFFFF)
-val FSub = Color(0xFF98989D)
-val FMuted = Color(0xFF8E8E93)
-val FBorder = Color(0xFF38383A)
-val FSuccess = Color(0xFF30D158)
-val FWarning = Color(0xFFFF9F0A)
+val FBg = OctopusColors.Background
+val FSurface = OctopusColors.Surface
+val FSurface2 = OctopusColors.SurfaceVariant
+val FPrimary = OctopusColors.Primary
+val FText = OctopusColors.TextPrimary
+val FSub = OctopusColors.TextSecondary
+val FMuted = OctopusColors.TextMuted
+val FBorder = OctopusColors.Border
+val FSuccess = OctopusColors.Success
+val FWarning = OctopusColors.Warning
 
 /** 通用深色页脚手架：顶栏（返回 + 标题 + 可选右侧动作）+ 内容区 */
 @Composable
@@ -40,7 +40,7 @@ fun FeatureScaffold(
 ) {
     Column(modifier = Modifier.fillMaxSize().background(FBg).statusBarsPadding().navigationBarsPadding()) {
         Row(
-            modifier = Modifier.fillMaxWidth().height(52.dp).padding(start = 6.dp, end = 16.dp),
+            modifier = Modifier.fillMaxWidth().height(54.dp).padding(start = 6.dp, end = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
@@ -49,7 +49,7 @@ fun FeatureScaffold(
                 fontSize = 26.sp,
                 modifier = Modifier.size(44.dp).clickable(onClick = onBack).padding(start = 12.dp),
             )
-            Text(title, color = FText, fontSize = 17.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text(title, color = FText, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             if (action != null) action()
         }
         content()
@@ -70,7 +70,7 @@ fun FSectionTitle(text: String) {
 @Composable
 fun FCard(content: @Composable ColumnScope.() -> Unit) {
     Surface(
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(18.dp),
         color = FSurface,
         border = BorderStroke(1.dp, FBorder),
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),

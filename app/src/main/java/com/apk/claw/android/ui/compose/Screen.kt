@@ -4,7 +4,8 @@ import androidx.annotation.StringRes
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Devices
-import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.apk.claw.android.R
@@ -15,14 +16,15 @@ import com.apk.claw.android.R
  * labelRes 为字符串资源 ID，渲染时用 stringResource 解析，以支持多语言。
  */
 sealed class Screen(val route: String, @StringRes val labelRes: Int, val icon: ImageVector) {
-    data object Discover : Screen("discover", R.string.nav_discover, Icons.Filled.Explore)
+    data object Discover : Screen("discover", R.string.nav_browser, Icons.Filled.Search)
     data object Chat : Screen("chat", R.string.nav_chat, Icons.Filled.Chat)
     data object Device : Screen("device", R.string.nav_device, Icons.Filled.Devices)
+    data object Features : Screen("features", R.string.nav_features, Icons.Filled.GridView)
     data object Settings : Screen("settings", R.string.nav_settings, Icons.Filled.Settings)
 
     companion object {
         /** 底部 Tab：对话优先。设备不再独立成页——设备发现/选择已并入对话目标选择器，
-         *  局域网控制与权限并入信任中心。 */
-        val bottomBar: List<Screen> = listOf(Chat, Discover, Settings)
+         *  局域网控制与权限并入信任中心。「功能」汇集技能/插件/云盘等子页入口。 */
+        val bottomBar: List<Screen> = listOf(Chat, Discover, Features, Settings)
     }
 }
