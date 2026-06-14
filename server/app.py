@@ -218,11 +218,18 @@ def send_email(email: str, code: str) -> None:
         msg["Subject"] = "登录验证码"
         msg["From"] = SMTP_FROM or SMTP_USER
         msg["To"] = email
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as s:
-            s.starttls()
-            if SMTP_USER:
-                s.login(SMTP_USER, SMTP_PASS)
-            s.sendmail(msg["From"], [email], msg.as_string())
+        sender = msg["From"]
+        if SMTP_PORT == 465:  # 隐式 SSL(网易 126/163 用 465)
+            with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=20) as s:
+                if SMTP_USER:
+                    s.login(SMTP_USER, SMTP_PASS)
+                s.sendmail(sender, [email], msg.as_string())
+        else:  # STARTTLS(587 等)
+            with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as s:
+                s.starttls()
+                if SMTP_USER:
+                    s.login(SMTP_USER, SMTP_PASS)
+                s.sendmail(sender, [email], msg.as_string())
         return
     raise HTTPException(status_code=500, detail=f"email provider '{EMAIL_PROVIDER}' not wired yet")
 
