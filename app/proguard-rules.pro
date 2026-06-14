@@ -36,6 +36,10 @@
 # Channel（钉钉/飞书回调，保留泛型签名）
 -keep class com.apk.claw.android.channel.** { *; }
 
+# 账号/计费 wire DTO：经 Gson 反射收发,且多数字段无 @SerializedName(靠字段名 == JSON 键),
+# release 下 R8 会改名导致 token/credits 等解析成 null → 登录/积分/邀请全坏。整包保留字段名。
+-keep class com.apk.claw.android.account.** { *; }
+
 # ============================================================
 # Gson
 # ============================================================
