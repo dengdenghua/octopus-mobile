@@ -60,8 +60,11 @@ CREDITS_PER_1K_TOKENS = float(os.environ.get("CREDITS_PER_1K_TOKENS", "1"))
 SIGNUP_BONUS = int(os.environ.get("SIGNUP_BONUS", "100"))
 DAILY_BONUS = int(os.environ.get("DAILY_BONUS", "20"))
 MEMBERSHIP_DAYS = int(os.environ.get("MEMBERSHIP_DAYS", "30"))
-# 内测:每账号累计「免费积分」上限(注册礼+每日领+mock充值 都算,发满即停;真实付费不受限)
+# 内测:每账号累计「免费积分」上限(注册礼+每日领+mock充值+邀请 都算,发满即停;真实付费不受限)
 FREE_CAP = int(os.environ.get("FREE_CAP", "3000"))
+# 邀请码(拉新返利):新人填码→新人得 REDEEMER、邀请人得 INVITER;均走免费上限
+REFERRAL_REDEEMER_BONUS = int(os.environ.get("REFERRAL_REDEEMER_BONUS", "200"))
+REFERRAL_INVITER_BONUS = int(os.environ.get("REFERRAL_INVITER_BONUS", "200"))
 
 # 会话:JWT(HS256,无第三方依赖)。生产务必把 JWT_SECRET 换成随机长串。
 JWT_SECRET = os.environ.get("JWT_SECRET", "dev-insecure-change-me")
@@ -146,7 +149,8 @@ def init_db() -> None:
                 credits INTEGER NOT NULL DEFAULT 0,
                 free_granted INTEGER NOT NULL DEFAULT 0,
                 member_expire_at INTEGER NOT NULL DEFAULT 0,
-                last_claim_day TEXT DEFAULT '', created_at INTEGER NOT NULL
+                last_claim_day TEXT DEFAULT '', created_at INTEGER NOT NULL,
+                invite_code TEXT, invited_by TEXT
             );
             CREATE TABLE IF NOT EXISTS sms_codes(
                 mobile TEXT PRIMARY KEY, code TEXT NOT NULL, expire_at INTEGER NOT NULL
@@ -174,6 +178,15 @@ def init_db() -> None:
             c.execute("ALTER TABLE users ADD COLUMN free_granted INTEGER NOT NULL DEFAULT 0")
         except sqlite3.OperationalError:
             pass  # 列已存在
+        for _col in ("invite_code TEXT", "invited_by TEXT"):
+            try:
+                c.execute(f"ALTER TABLE users ADD COLUMN {_col}")
+            except sqlite3.OperationalError:
+                pass  # 列已存在
+        c.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_invite "
+            "ON users(invite_code) WHERE invite_code IS NOT NULL"
+        )
         c.commit()
 
 
@@ -246,6 +259,17 @@ def _grant_free(c: sqlite3.Connection, user_id: str, want: int) -> int:
             (grant, grant, user_id),
         )
     return grant
+
+
+_INVITE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"  # 去掉易混的 0/O/1/I/L
+
+
+def _gen_invite_code(c: sqlite3.Connection) -> str:
+    for _ in range(12):
+        code = "".join(secrets.choice(_INVITE_ALPHABET) for _ in range(6))
+        if not c.execute("SELECT 1 FROM users WHERE invite_code = ?", (code,)).fetchone():
+            return code
+    return "".join(secrets.choice(_INVITE_ALPHABET) for _ in range(9))
 
 
 # ─────────────────────────── SMS (pluggable) ───────────────────────────
@@ -325,8 +349,9 @@ def sms_login(body: dict[str, Any]) -> dict[str, Any]:
         if is_new:
             uid = "u_" + secrets.token_hex(8)
             c.execute(
-                "INSERT INTO users(user_id, mobile, nickname, credits, created_at) VALUES(?,?,?,?,?)",
-                (uid, mobile, f"用户{mobile[-4:]}", 0, now_ms()),
+                "INSERT INTO users(user_id, mobile, nickname, credits, created_at, invite_code) "
+                "VALUES(?,?,?,?,?,?)",
+                (uid, mobile, f"用户{mobile[-4:]}", 0, now_ms(), _gen_invite_code(c)),
             )
             _grant_free(c, uid, SIGNUP_BONUS)
         else:
@@ -385,8 +410,9 @@ def email_login(body: dict[str, Any], request: Request) -> dict[str, Any]:
         if is_new:
             uid = "u_" + secrets.token_hex(8)
             c.execute(
-                "INSERT INTO users(user_id, email, nickname, credits, created_at) VALUES(?,?,?,?,?)",
-                (uid, email, nick, 0, now_ms()),
+                "INSERT INTO users(user_id, email, nickname, credits, created_at, invite_code) "
+                "VALUES(?,?,?,?,?,?)",
+                (uid, email, nick, 0, now_ms(), _gen_invite_code(c)),
             )
             _grant_free(c, uid, SIGNUP_BONUS)
         else:
@@ -429,6 +455,50 @@ def daily_claim(u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
         c.commit()
         bal = _user(c, u["user_id"])["credits"]
     return {"claimed": granted > 0, "credits": granted, "balance": bal}
+
+
+# ─────────────────────────── endpoints: invite(拉新返利) ───────────────────────────
+@app.get("/invite/info")
+def invite_info(u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    code = u["invite_code"]
+    with closing(db()) as c:
+        if not code:  # 老用户懒生成
+            code = _gen_invite_code(c)
+            c.execute("UPDATE users SET invite_code = ? WHERE user_id = ?", (code, u["user_id"]))
+            c.commit()
+        invited = c.execute(
+            "SELECT COUNT(*) AS n FROM users WHERE invited_by = ?", (u["user_id"],)
+        ).fetchone()["n"]
+    return {"code": code, "invitedCount": int(invited), "redeemed": bool(u["invited_by"]),
+            "redeemerBonus": REFERRAL_REDEEMER_BONUS, "inviterBonus": REFERRAL_INVITER_BONUS}
+
+
+@app.post("/invite/redeem")
+def invite_redeem(body: dict[str, Any], u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    rate_limit(f"invite_redeem:{u['user_id']}", 5, 600)
+    code = str(body.get("code", "")).strip().upper()
+    if not code:
+        raise HTTPException(status_code=400, detail="请输入邀请码")
+    with closing(db()) as c:
+        if _user(c, u["user_id"])["invited_by"]:
+            raise HTTPException(status_code=400, detail="你已使用过邀请码")
+        inviter = c.execute("SELECT * FROM users WHERE invite_code = ?", (code,)).fetchone()
+        if inviter is None:
+            raise HTTPException(status_code=400, detail="邀请码无效")
+        if inviter["user_id"] == u["user_id"]:
+            raise HTTPException(status_code=400, detail="不能使用自己的邀请码")
+        # 原子绑定:仅当还没被邀请过才生效(防并发重复)
+        upd = c.execute(
+            "UPDATE users SET invited_by = ? WHERE user_id = ? AND invited_by IS NULL",
+            (inviter["user_id"], u["user_id"]),
+        )
+        if upd.rowcount == 0:
+            raise HTTPException(status_code=400, detail="你已使用过邀请码")
+        got = _grant_free(c, u["user_id"], REFERRAL_REDEEMER_BONUS)        # 新人
+        _grant_free(c, inviter["user_id"], REFERRAL_INVITER_BONUS)         # 邀请人
+        c.commit()
+        bal = _user(c, u["user_id"])["credits"]
+    return {"ok": True, "credits": got, "balance": bal}
 
 
 # ─────────────────────────── endpoints: billing ───────────────────────────
