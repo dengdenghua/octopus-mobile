@@ -789,7 +789,7 @@ For these, install Shizuku — a safe, open-source helper.</string>
     <string name="menu_account">Account &amp; Credits</string>
     <string name="account_title">My Account</string>
     <string name="account_login_title">Sign in</string>
-    <string name="account_login_tip">Sign in with your phone number. A verification code will be sent (mock mode auto-fills it).</string>
+    <string name="account_login_tip">Sign in with your email. We\'ll send a verification code to it.</string>
     <string name="account_mobile_label">Phone number</string>
     <string name="account_mobile_hint">Enter your phone number</string>
     <string name="account_code_label">Verification code</string>

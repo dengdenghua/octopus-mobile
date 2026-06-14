@@ -683,7 +683,7 @@
     <string name="menu_account">アカウントとチャージ</string>
     <string name="account_title">マイアカウント</string>
     <string name="account_login_title">ログイン</string>
-    <string name="account_login_tip">電話番号でログインします。認証コードを送信します（モックでは自動入力）。</string>
+    <string name="account_login_tip">メールでログインします。認証コードをメールに送信します。</string>
     <string name="account_mobile_label">電話番号</string>
     <string name="account_mobile_hint">電話番号を入力</string>
     <string name="account_code_label">認証コード</string>
