@@ -20,7 +20,7 @@ import kotlinx.coroutines.launch
 class LoginActivity : BaseActivity() {
 
     private var countdown: CountDownTimer? = null
-    private var mode = "phone" // "phone" | "email"
+    private var mode = "email" // 先只用邮箱登录;手机号 tab 暂隐藏("phone" 仍可用,服务端端点保留)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -37,6 +37,7 @@ class LoginActivity : BaseActivity() {
         val btnLogin = findViewById<KButton>(R.id.btnLogin)
         val tabPhone = findViewById<android.widget.TextView>(R.id.tvTabPhone)
         val tabEmail = findViewById<android.widget.TextView>(R.id.tvTabEmail)
+        tabPhone.visibility = android.view.View.GONE // 先不用手机号登录,只留邮箱
 
         fun applyMode() {
             val phone = mode == "phone"
