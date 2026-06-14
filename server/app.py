@@ -77,6 +77,9 @@ CREDITS_PER_1K_TOKENS = float(os.environ.get("CREDITS_PER_1K_TOKENS", "1"))
 # 单次输出 token 上限(成本 + 防跑飞双保险)。请求里更大的 max_tokens 会被压到此值;未指定也设成它。
 # 思考型模型别设太小(否则正文被 reasoning 吃光),默认 8192。
 MAX_OUTPUT_TOKENS = int(os.environ.get("MAX_OUTPUT_TOKENS", "8192"))
+# 无限额度白名单(管理员/内部账号邮箱):走中转不预扣、不扣费、不被余额拦,仍记 usage_log(credits=0)。
+# 逗号分隔、大小写不敏感。
+UNLIMITED_EMAILS = {s.strip().lower() for s in os.environ.get("UNLIMITED_EMAILS", "").split(",") if s.strip()}
 SIGNUP_BONUS = int(os.environ.get("SIGNUP_BONUS", "100"))
 DAILY_BONUS = int(os.environ.get("DAILY_BONUS", "20"))
 MEMBERSHIP_DAYS = int(os.environ.get("MEMBERSHIP_DAYS", "30"))
@@ -111,14 +114,14 @@ GOODS = [
 ]
 GOODS_BY_ID = {g["id"]: g for g in GOODS}
 
-# 模型目录:每模型带 provider(走哪个上游)+ multiplier(积分倍率,向用户计费)。可用 MODELS_JSON 覆盖。
-# agnes 走"对平台免费"的上游(我们零成本),作默认档:照常按倍率扣用户积分 → 这部分近乎纯利润;
-# mimo 要花真金,留作高级档。agnes 倍率先设 0.5(与 mimo-v2.5 一致),可按需调整。
+# 模型目录 = 用户可见的「两个档位」(display_name 是档位名,不暴露底层模型名)。
+# 极速档:agnes(走对平台免费的上游=我们零成本),0.5×,快;高级档:mimo-pro,1.0×,慢但强。
+# 两档照常按 multiplier 扣用户积分。可用 MODELS_JSON 覆盖。
 _DEFAULT_MODELS = [
-    {"id": "agnes-2.0-flash", "display_name": "Agnes 2.0 Flash", "multiplier": 0.5,
+    {"id": "agnes-2.0-flash", "display_name": "极速", "tier": "fast", "multiplier": 0.5,
      "provider": "agnes", "recommended": True},
-    {"id": "mimo-v2.5", "display_name": "MiMo 2.5", "multiplier": 0.5, "provider": "mimo", "recommended": True},
-    {"id": "mimo-v2.5-pro", "display_name": "MiMo 2.5 Pro", "multiplier": 1.0, "provider": "mimo", "recommended": True},
+    {"id": "mimo-v2.5-pro", "display_name": "高级", "tier": "premium", "multiplier": 1.0,
+     "provider": "mimo", "recommended": True},
 ]
 # 模型 id -> 完整 spec(provider/multiplier/...);MODELS_JSON 里没写 provider 的默认归到 mimo(向后兼容)。
 # 坏配置(非 list / item 缺 id / 解析失败)整体回退默认,不让服务起不来。
@@ -666,10 +669,13 @@ def _reserve_credits(user_id: str, hold: int) -> bool:
         return cur.rowcount > 0
 
 
-def _reconcile_usage(user_id: str, model: str, tin: int, tout: int, mult: float, hold: int) -> int:
+def _reconcile_usage(user_id: str, model: str, tin: int, tout: int, mult: float, hold: int,
+                     free: bool = False) -> int:
     """按实际用量结算:退还(预扣 hold − 实际 cost),多退少补(clamp≥0),记 usage_log。返回实际扣费。
-    tin=tout=0(上游报错/异常)时 actual=0 → 全额退还预扣。"""
-    actual = max(1, math.ceil((tin + tout) / 1000 * CREDITS_PER_1K_TOKENS * mult)) if (tin + tout) else 0
+    tin=tout=0(上游报错/异常)时 actual=0 → 全额退还预扣。free=True(无限额度白名单)→ actual 恒 0,仍记 usage。"""
+    actual = 0 if free else (
+        max(1, math.ceil((tin + tout) / 1000 * CREDITS_PER_1K_TOKENS * mult)) if (tin + tout) else 0
+    )
     refund = hold - actual
     with closing(db()) as c:
         if refund:
@@ -692,6 +698,7 @@ def list_models() -> dict[str, Any]:
         "data": [
             {"id": m["id"], "object": "model", "owned_by": "octopus",
              "display_name": m.get("display_name", m["id"]),
+             "tier": m.get("tier", ""),
              "multiplier": float(m.get("multiplier", 1.0)),
              "free": float(m.get("multiplier", 1.0)) <= 0,
              "recommended": bool(m.get("recommended", False))}
@@ -714,6 +721,7 @@ async def chat_completions(body: dict[str, Any], request: Request, u: sqlite3.Ro
     url = f"{base}/chat/completions"
     headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
     user_id = u["user_id"]
+    unlimited = (u["email"] or "").strip().lower() in UNLIMITED_EMAILS  # 白名单:不预扣、不扣费、不被余额拦
 
     import httpx  # 惰性 import
 
@@ -722,13 +730,16 @@ async def chat_completions(body: dict[str, Any], request: Request, u: sqlite3.Ro
     max_out = min(req_max, MAX_OUTPUT_TOKENS) if isinstance(req_max, int) and req_max > 0 else MAX_OUTPUT_TOKENS
 
     # ── 预扣(pre-auth reserve):按 worst-case(prompt 估算 + max_out)原子预留积分,不足→402;
-    # 并发各自预扣,余额覆盖不了就被拒 → 杜绝超支;真实 usage 出来后 _reconcile_usage 多退少补。
+    # 并发各自预扣,余额覆盖不了就被拒 → 杜绝超支;真实 usage 出来后结算多退少补。白名单 hold=0、不扣费。
     prompt_est = sum(
         len(str(m.get("content", ""))) for m in (body.get("messages") or []) if isinstance(m, dict)
     ) // 4
-    hold = max(1, math.ceil((prompt_est + max_out) / 1000 * CREDITS_PER_1K_TOKENS * mult))
-    if not _reserve_credits(user_id, hold):
+    hold = 0 if unlimited else max(1, math.ceil((prompt_est + max_out) / 1000 * CREDITS_PER_1K_TOKENS * mult))
+    if hold and not _reserve_credits(user_id, hold):
         raise HTTPException(status_code=402, detail="积分不足,请充值")
+
+    def _settle(tin: int, tout: int) -> None:  # 统一结算入口,白名单(free)恒不扣费
+        _reconcile_usage(user_id, model, tin, tout, mult, hold, free=unlimited)
 
     # ── 非流式 ──
     if not bool(body.get("stream")):
@@ -739,20 +750,19 @@ async def chat_completions(body: dict[str, Any], request: Request, u: sqlite3.Ro
             async with httpx.AsyncClient(timeout=120) as client:
                 resp = await client.post(url, headers=headers, json=payload)
         except Exception:  # noqa: BLE001 — 上游请求异常,全额退还预扣
-            _reconcile_usage(user_id, model, 0, 0, mult, hold)
+            _settle(0, 0)
             raise HTTPException(status_code=502, detail="上游模型请求失败")
         data = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
         if resp.status_code >= 400:
-            _reconcile_usage(user_id, model, 0, 0, mult, hold)  # 上游报错,全额退
+            _settle(0, 0)  # 上游报错,全额退
             # 不回显上游原始错误体(可能含请求数据/内部细节),只给通用错误 + 状态码
             return JSONResponse(status_code=resp.status_code,
                                 content={"error": {"message": "upstream error", "status": resp.status_code}})
         usage = (data or {}).get("usage", {}) or {}
         if usage:
-            _reconcile_usage(user_id, model, int(usage.get("prompt_tokens", 0) or 0),
-                             int(usage.get("completion_tokens", 0) or 0), mult, hold)
+            _settle(int(usage.get("prompt_tokens", 0) or 0), int(usage.get("completion_tokens", 0) or 0))
         else:  # 2xx 但拿不到 usage(非 JSON/缺字段)→ 按 prompt 估算兜底,避免白嫖一次成功响应
-            _reconcile_usage(user_id, model, prompt_est, 0, mult, hold)
+            _settle(prompt_est, 0)
         return JSONResponse(content=data)
 
     # ── 流式 SSE 透传:边转发边抓 usage;客户端中途断开也按已生成内容兜底结算 ──
@@ -771,7 +781,7 @@ async def chat_completions(body: dict[str, Any], request: Request, u: sqlite3.Ro
             async with httpx.AsyncClient(timeout=None) as client:
                 async with client.stream("POST", url, headers=headers, json=payload) as r:
                     if r.status_code >= 400:
-                        _reconcile_usage(user_id, model, 0, 0, mult, hold)  # 上游报错,全额退
+                        _settle(0, 0)  # 上游报错,全额退
                         settled = True
                         # 不回显上游原始错误体,只给通用错误 + 状态码
                         yield (b"data: " + json.dumps(
@@ -796,12 +806,11 @@ async def chat_completions(body: dict[str, Any], request: Request, u: sqlite3.Ro
                 try:
                     usage = captured.get("usage")
                     if usage:  # 有真实 usage:按真实结算
-                        _reconcile_usage(user_id, model, int(usage.get("prompt_tokens", 0) or 0),
-                                         int(usage.get("completion_tokens", 0) or 0), mult, hold)
+                        _settle(int(usage.get("prompt_tokens", 0) or 0), int(usage.get("completion_tokens", 0) or 0))
                     elif out_chars > 0:  # 收到过内容但没拿到 usage(多半中途断开)→ 按 prompt+已收字符估算
-                        _reconcile_usage(user_id, model, prompt_est, out_chars // 4, mult, hold)
+                        _settle(prompt_est, out_chars // 4)
                     else:  # 没接通/零字节(连接异常等)→ 全额退,与非流式语义一致,不误扣
-                        _reconcile_usage(user_id, model, 0, 0, mult, hold)
+                        _settle(0, 0)
                 except Exception as e:  # noqa: BLE001 — 对账失败别让流清理崩溃;落日志供人工对账
                     print(f"[reconcile-fail] user={user_id} hold={hold}: {type(e).__name__}: {e}")
 
