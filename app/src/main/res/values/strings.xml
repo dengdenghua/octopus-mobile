@@ -778,4 +778,10 @@ For these, install Shizuku — a safe, open-source helper.</string>
     <string name="browser_settings_engine_kernel">Engine</string>
     <string name="browser_settings_kernel_value">Auto-selected</string>
     <string name="feat_browser_settings">Browser Settings</string>
+    <string name="settings_remote_pc_title">Remote-control your PC</string>
+    <string name="settings_remote_pc_desc">See and control your computer from your phone</string>
+    <string name="settings_advanced_title">Advanced</string>
+    <string name="settings_advanced_hint">Host connection · LAN remote desktop</string>
+    <string name="settings_remote_lan_title">Remote desktop · LAN</string>
+    <string name="settings_runtime_plain_desc">Let your PC dispatch tasks to this phone</string>
 </resources>

@@ -164,27 +164,33 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
             }
         }
 
+        // 普通人入口:一个「远程控制电脑」(默认走跨网 WebRTC,类似 ToDesk)
         item {
-            val rpcUrlDefault = stringResource(R.string.settings_rpc_url_default)
-            val rpcUrl = remember(refreshTick, rpcUrlDefault) {
-                KVUtils.getOctopusRpcUrl().ifBlank { rpcUrlDefault }
-            }
-            SettingsCard(stringResource(R.string.settings_octopus_runtime_title), Icons.Filled.Hub, onClick = {
-                context.startActivity(Intent(context, RuntimeConfigActivity::class.java))
+            SettingsCard(stringResource(R.string.settings_device_control_section), Icons.Filled.Monitor, compact = true, onClick = {
+                context.startActivity(Intent(context, com.apk.claw.android.ui.featurescreens.PcRemoteWebrtcActivity::class.java))
             }) {
-                SettingsRow(Icons.Filled.CloudQueue, stringResource(R.string.settings_rpc_remote_brain_description), rpcUrl)
+                SettingsRow(
+                    Icons.Filled.Monitor,
+                    stringResource(R.string.settings_remote_pc_title),
+                    stringResource(R.string.settings_remote_pc_desc),
+                )
             }
         }
 
+        // 高级(默认折叠):RPC 主机连接 + 局域网远程桌面,术语都收在这里,普通人看不到
         item {
-            SettingsCard(stringResource(R.string.settings_device_control_section), Icons.Filled.Monitor, compact = true) {
-                CompactSettingsGrid {
-                    CompactSettingsTile(Icons.Filled.Monitor, stringResource(R.string.settings_pc_remote_desktop_title)) {
+            var advExpanded by remember { mutableStateOf(false) }
+            SettingsCard(stringResource(R.string.settings_advanced_title), Icons.Filled.Tune, compact = true, onClick = { advExpanded = !advExpanded }) {
+                if (advExpanded) {
+                    ClickableSettingsRow(Icons.Filled.Hub, stringResource(R.string.settings_octopus_runtime_title), stringResource(R.string.settings_runtime_plain_desc)) {
+                        context.startActivity(Intent(context, RuntimeConfigActivity::class.java))
+                    }
+                    SettingsDivider()
+                    ClickableSettingsRow(Icons.Filled.GraphicEq, stringResource(R.string.settings_remote_lan_title), "") {
                         context.startActivity(Intent(context, com.apk.claw.android.ui.featurescreens.PcRemoteActivity::class.java))
                     }
-                    CompactSettingsTile(Icons.Filled.GraphicEq, stringResource(R.string.settings_webrtc_remote_desktop_title)) {
-                        context.startActivity(Intent(context, com.apk.claw.android.ui.featurescreens.PcRemoteWebrtcActivity::class.java))
-                    }
+                } else {
+                    Text(stringResource(R.string.settings_advanced_hint), color = TextMuted, fontSize = 11.sp, lineHeight = 15.sp)
                 }
             }
         }

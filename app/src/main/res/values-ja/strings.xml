@@ -672,4 +672,10 @@
     <string name="browser_settings_engine_kernel">エンジン</string>
     <string name="browser_settings_kernel_value">自動選択</string>
     <string name="feat_browser_settings">ブラウザ設定</string>
+    <string name="settings_remote_pc_title">PCをリモート操作</string>
+    <string name="settings_remote_pc_desc">スマホでPC画面を見て操作</string>
+    <string name="settings_advanced_title">詳細設定</string>
+    <string name="settings_advanced_hint">ホスト接続 · LANリモート</string>
+    <string name="settings_remote_lan_title">リモートデスクトップ · LAN</string>
+    <string name="settings_runtime_plain_desc">PCからこのスマホにタスクを送信</string>
 </resources>
