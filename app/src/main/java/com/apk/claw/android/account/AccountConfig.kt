@@ -16,16 +16,16 @@ object AccountConfig {
     private const val KEY_MODEL_SOURCE = "ACCOUNT_MODEL_SOURCE"
     private const val KEY_PLATFORM_MODEL = "ACCOUNT_PLATFORM_MODEL"
 
-    /** e.g. https://account.octopus.example/api/v1 — empty means "use mock". */
+    /** Account/relay backend. Defaults to the live server; empty → mock. */
     var baseUrl: String
-        get() = KVUtils.getString(KEY_BASE_URL, "")
+        get() = KVUtils.getString(KEY_BASE_URL, "https://api.octoapk.com")
         set(v) {
             KVUtils.putString(KEY_BASE_URL, v.trim())
         }
 
-    /** Mock when explicitly enabled OR when no base URL is configured yet. */
+    /** Mock only when explicitly enabled OR when no base URL is configured. */
     val mockMode: Boolean
-        get() = KVUtils.getString(KEY_MOCK, "1") == "1" || baseUrl.isBlank()
+        get() = KVUtils.getString(KEY_MOCK, "0") == "1" || baseUrl.isBlank()
 
     fun setMockMode(on: Boolean) {
         KVUtils.putString(KEY_MOCK, if (on) "1" else "0")
@@ -51,7 +51,7 @@ object AccountConfig {
 
     /** Default model name the platform relay serves. */
     var platformModel: String
-        get() = KVUtils.getString(KEY_PLATFORM_MODEL, "mimo-v2-flash")
+        get() = KVUtils.getString(KEY_PLATFORM_MODEL, "mimo-v2.5")
         set(v) {
             KVUtils.putString(KEY_PLATFORM_MODEL, v)
         }
