@@ -56,8 +56,15 @@ MIMO_API_KEY = os.environ.get("MIMO_API_KEY", "")
 MIMO_BASE_URL = os.environ.get("MIMO_BASE_URL", "").rstrip("/")  # OpenAI 兼容 base, 例 https://.../v1
 MIMO_DEFAULT_MODEL = os.environ.get("MIMO_DEFAULT_MODEL", "mimo-v2-flash")
 
-# 计费:多少积分/1k tokens(prompt+completion 合计)。可按模型细化,这里给个统一近似。
+# 计费:多少积分/1k tokens(输入+输出合计),再乘模型 multiplier。
+# 校准(不亏成本):CREDITS_PER_1K_TOKENS ≥ MiMo每1k_token的¥成本 ÷ (multiplier × 每积分售价¥)。
+#   例:goods「100积分=¥9.90」→ 每积分≈¥0.099;若某模型 MiMo 报价 ¥0.004/1k、mult=1,
+#   则需 ≥ 0.004/(1×0.099) ≈ 0.04。默认 1 偏保守(远高于成本、不会亏);拿到 MiMo 实际
+#   报价后按上式把它下调到贴近成本即可(越小=用户每积分能用越多 token)。
 CREDITS_PER_1K_TOKENS = float(os.environ.get("CREDITS_PER_1K_TOKENS", "1"))
+# 单次输出 token 上限(成本 + 防跑飞双保险)。请求里更大的 max_tokens 会被压到此值;未指定也设成它。
+# 思考型模型别设太小(否则正文被 reasoning 吃光),默认 8192。
+MAX_OUTPUT_TOKENS = int(os.environ.get("MAX_OUTPUT_TOKENS", "8192"))
 SIGNUP_BONUS = int(os.environ.get("SIGNUP_BONUS", "100"))
 DAILY_BONUS = int(os.environ.get("DAILY_BONUS", "20"))
 MEMBERSHIP_DAYS = int(os.environ.get("MEMBERSHIP_DAYS", "30"))
@@ -146,6 +153,7 @@ def db() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=5000")  # 并发写等锁至多 5s,避免高并发下 SQLITE_BUSY
     return conn
 
 
@@ -612,20 +620,36 @@ def _model_multiplier(model_id: str | None) -> float:
     return MODEL_MULT.get(model_id or "", 1.0)
 
 
-def _charge(user_id: str, model: str, tin: int, tout: int, mult: float) -> int:
-    """按 (输入+输出) tokens × 基准费率 × 模型倍率 扣积分,并记 usage_log。"""
-    cost = max(1, math.ceil((tin + tout) / 1000 * CREDITS_PER_1K_TOKENS * mult)) if (tin + tout) else 0
-    if cost:
-        with closing(db()) as c:
-            c.execute("UPDATE users SET credits = MAX(0, credits - ?) WHERE user_id = ?",
-                      (cost, user_id))
+def _reserve_credits(user_id: str, hold: int) -> bool:
+    """原子预扣 hold 积分(余额够才扣)。并发请求各自预扣 → 一旦余额覆盖不了下一个请求的
+    worst-case 预扣就被拒,杜绝「调用前判余额>0、扣费在响应后」导致的并发超额消费。"""
+    if hold <= 0:
+        return True
+    with closing(db()) as c:
+        cur = c.execute(
+            "UPDATE users SET credits = credits - ? WHERE user_id = ? AND credits >= ?",
+            (hold, user_id, hold),
+        )
+        c.commit()
+        return cur.rowcount > 0
+
+
+def _reconcile_usage(user_id: str, model: str, tin: int, tout: int, mult: float, hold: int) -> int:
+    """按实际用量结算:退还(预扣 hold − 实际 cost),多退少补(clamp≥0),记 usage_log。返回实际扣费。
+    tin=tout=0(上游报错/异常)时 actual=0 → 全额退还预扣。"""
+    actual = max(1, math.ceil((tin + tout) / 1000 * CREDITS_PER_1K_TOKENS * mult)) if (tin + tout) else 0
+    refund = hold - actual
+    with closing(db()) as c:
+        if refund:
+            c.execute("UPDATE users SET credits = MAX(0, credits + ?) WHERE user_id = ?", (refund, user_id))
+        if actual:
             c.execute(
                 "INSERT INTO usage_log(user_id, model, tokens_in, tokens_out, credits, ts) "
                 "VALUES(?,?,?,?,?,?)",
-                (user_id, model, tin, tout, cost, now_ms()),
+                (user_id, model, tin, tout, actual, now_ms()),
             )
-            c.commit()
-    return cost
+        c.commit()
+    return actual
 
 
 def _mimo_headers() -> dict[str, str]:
@@ -649,8 +673,6 @@ def list_models() -> dict[str, Any]:
 
 @app.post("/v1/chat/completions")
 async def chat_completions(body: dict[str, Any], request: Request, u: sqlite3.Row = Depends(actor)) -> Any:
-    if u["credits"] <= 0:
-        raise HTTPException(status_code=402, detail="积分不足,请充值")
     rate_limit(f"chat:{u['user_id']}", 60, 60)  # 每用户每分钟 60 次
     if not MIMO_API_KEY or not MIMO_BASE_URL:
         raise HTTPException(status_code=503, detail="平台模型未配置(MIMO_API_KEY/MIMO_BASE_URL)")
@@ -664,39 +686,58 @@ async def chat_completions(body: dict[str, Any], request: Request, u: sqlite3.Ro
     url = f"{MIMO_BASE_URL}/chat/completions"
     user_id = u["user_id"]
 
+    # ── max_tokens 上限:请求里更大的值压到 MAX_OUTPUT_TOKENS,未指定也设成它(成本/跑飞双保险) ──
+    req_max = body.get("max_tokens")
+    max_out = min(req_max, MAX_OUTPUT_TOKENS) if isinstance(req_max, int) and req_max > 0 else MAX_OUTPUT_TOKENS
+
+    # ── 预扣(pre-auth reserve):按 worst-case(prompt 估算 + max_out)原子预留积分,不足→402。
+    # 并发请求各自预扣,余额覆盖不了就被拒 → 杜绝超额消费;真实 usage 出来后 _reconcile_usage 多退少补。
+    prompt_est = sum(
+        len(str(m.get("content", ""))) for m in (body.get("messages") or []) if isinstance(m, dict)
+    ) // 4
+    hold = max(1, math.ceil((prompt_est + max_out) / 1000 * CREDITS_PER_1K_TOKENS * mult))
+    if not _reserve_credits(user_id, hold):
+        raise HTTPException(status_code=402, detail="积分不足,请充值")
+
     # ── 非流式 ──
     if not bool(body.get("stream")):
         payload = dict(body)
         payload["model"] = model
-        async with httpx.AsyncClient(timeout=120) as client:
-            resp = await client.post(url, headers=_mimo_headers(), json=payload)
+        payload["max_tokens"] = max_out
+        try:
+            async with httpx.AsyncClient(timeout=120) as client:
+                resp = await client.post(url, headers=_mimo_headers(), json=payload)
+        except Exception:  # noqa: BLE001 — 上游请求异常,全额退还预扣
+            _reconcile_usage(user_id, model, 0, 0, mult, hold)
+            raise HTTPException(status_code=502, detail="上游模型请求失败")
         data = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
         if resp.status_code >= 400:
+            _reconcile_usage(user_id, model, 0, 0, mult, hold)  # 上游报错,全额退
             return JSONResponse(status_code=resp.status_code, content=data or {"error": resp.text[:200]})
         usage = (data or {}).get("usage", {}) or {}
-        _charge(user_id, model, int(usage.get("prompt_tokens", 0) or 0),
-                int(usage.get("completion_tokens", 0) or 0), mult)
+        _reconcile_usage(user_id, model, int(usage.get("prompt_tokens", 0) or 0),
+                         int(usage.get("completion_tokens", 0) or 0), mult, hold)
         return JSONResponse(content=data)
 
-    # ── 流式 SSE 透传:边转发边抓 usage;客户端中途断开也按已生成内容兜底扣费 ──
+    # ── 流式 SSE 透传:边转发边抓 usage;客户端中途断开也按已生成内容兜底结算 ──
     payload = dict(body)
     payload["model"] = model
+    payload["max_tokens"] = max_out
     payload["stream"] = True
     opts = payload.get("stream_options")
     payload["stream_options"] = {**opts, "include_usage": True} if isinstance(opts, dict) else {"include_usage": True}
-    # 断连兜底:粗估 prompt token 数(拿不到 usage 时用)
-    prompt_est = sum(
-        len(str(m.get("content", ""))) for m in (body.get("messages") or []) if isinstance(m, dict)
-    ) // 4
 
     async def _gen() -> Any:
         captured: dict[str, Any] = {}
         out_chars = 0
+        settled = False
         try:
             async with httpx.AsyncClient(timeout=None) as client:
                 async with client.stream("POST", url, headers=_mimo_headers(), json=payload) as r:
                     if r.status_code >= 400:
                         err = (await r.aread()).decode("utf-8", "replace")
+                        _reconcile_usage(user_id, model, 0, 0, mult, hold)  # 上游报错,全额退
+                        settled = True
                         yield (b"data: " + json.dumps(
                             {"error": {"status": r.status_code, "body": err[:500]}}).encode() + b"\n\n")
                         yield b"data: [DONE]\n\n"
@@ -715,13 +756,14 @@ async def chat_completions(body: dict[str, Any], request: Request, u: sqlite3.Ro
                                 except Exception:  # noqa: BLE001
                                     pass
         finally:
-            usage = captured.get("usage")
-            if usage:
-                _charge(user_id, model, int(usage.get("prompt_tokens", 0) or 0),
-                        int(usage.get("completion_tokens", 0) or 0), mult)
-            elif out_chars > 0 or prompt_est > 0:
-                # 没拿到 usage(多半中途断开)→ 用 prompt + 已收输出字符估算扣费,避免白嫖
-                _charge(user_id, model, prompt_est, out_chars // 4, mult)
+            if not settled:
+                # 正常结束 / 中途断开:有真实 usage 用真实,否则用 prompt+已收输出字符估算 → 多退少补
+                usage = captured.get("usage")
+                if usage:
+                    _reconcile_usage(user_id, model, int(usage.get("prompt_tokens", 0) or 0),
+                                     int(usage.get("completion_tokens", 0) or 0), mult, hold)
+                else:
+                    _reconcile_usage(user_id, model, prompt_est, out_chars // 4, mult, hold)
 
     return StreamingResponse(
         _gen(),
