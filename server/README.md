@@ -27,7 +27,25 @@ GET  /v1/models                                     -> 公开模型目录(带每
 POST /v1/chat/completions      (Bearer) OpenAI体    -> 转发 MiMo + 按倍率扣积分(支持 stream)
 POST /billing/webhook/{prov}                        -> 生产支付回调(骨架留桩 501)
 GET  /healthz
+GET  /admin                                         -> 管理后台单页(未启用时 404)
+GET  /admin/api/*              (X-Admin-Token)       -> 后台 JSON 接口(见下)
 ```
+
+## 管理后台 /admin
+
+打开 `https://你的域名/admin`,输入 `ADMIN_TOKEN` 即可:看用户/积分/订单/用量与成本,
+手动加减积分、封禁/解封、赠送会员、导出用量 CSV;所有变更写 `admin_log` 审计表。
+
+- **默认关闭**:不设 `ADMIN_TOKEN` 时 `/admin` 返回 404、`/admin/api/*` 返回 503,不增加攻击面。
+- **启用**:`.env` 设 `ADMIN_TOKEN=$(openssl rand -hex 32)` 后重启。它是公网后台**唯一应用层防线**
+  (能改积分/封号),务必强随机。
+- **加固(强烈建议)**:① 在 nginx 给后台加 IP 白名单作第二道门 —— ② 或设 `ADMIN_IP_ALLOWLIST`
+  (应用层,基于可信来源 IP)。两者都依赖 `TRUSTED_PROXIES`(nginx 反代=1)正确,否则限流/白名单
+  可被伪造的 `X-Forwarded-For` 绕过。nginx 示例:
+
+  ```nginx
+  location /admin { allow 1.2.3.4; deny all; proxy_pass http://127.0.0.1:8081; }
+  ```
 
 鉴权用 **JWT(HS256)**:登录返回的 token 即 JWT,后续请求带 `Authorization: Bearer <token>`。
 计费 = `ceil((输入+输出 tokens)/1000 × CREDITS_PER_1K_TOKENS × 模型 multiplier)`。

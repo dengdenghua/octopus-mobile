@@ -21,6 +21,7 @@ import hmac
 import json
 import math
 import os
+import re
 import secrets
 import sqlite3
 import threading
@@ -29,7 +30,7 @@ from contextlib import closing
 from typing import Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, StreamingResponse
 
 # ─────────────────────────── 配置(env 可覆盖) ───────────────────────────
 DB_PATH = os.environ.get("OCTO_DB", os.path.join(os.path.dirname(__file__), "octo.db"))
@@ -69,6 +70,14 @@ REFERRAL_INVITER_BONUS = int(os.environ.get("REFERRAL_INVITER_BONUS", "200"))
 # 会话:JWT(HS256,无第三方依赖)。生产务必把 JWT_SECRET 换成随机长串。
 JWT_SECRET = os.environ.get("JWT_SECRET", "dev-insecure-change-me")
 JWT_EXPIRE_SECONDS = int(os.environ.get("JWT_EXPIRE_SECONDS", str(30 * 24 * 3600)))
+
+# 管理后台:设了 ADMIN_TOKEN 才开放 /admin/api/*(未设=全部 503,默认安全)。务必用随机长串。
+ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "")
+# 管理后台可选 IP 白名单(逗号分隔;空=不限,仅靠 ADMIN_TOKEN)。基于可信来源 IP 校验。
+ADMIN_IP_ALLOWLIST = [s.strip() for s in os.environ.get("ADMIN_IP_ALLOWLIST", "").split(",") if s.strip()]
+# app 与公网之间的可信反代跳数(nginx=1)。X-Forwarded-For 最左段客户端可伪造,真实客户端 IP
+# 取自右数第 TRUSTED_PROXIES 个。设 0 = 无反代,直接用 socket IP(忽略可伪造的 XFF)。
+TRUSTED_PROXIES = int(os.environ.get("TRUSTED_PROXIES", "1"))
 
 # 商品目录(kind=membership 的购买会解锁当月 BYO)
 GOODS = [
@@ -167,6 +176,10 @@ def init_db() -> None:
                 id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, model TEXT,
                 tokens_in INTEGER, tokens_out INTEGER, credits INTEGER, ts INTEGER
             );
+            CREATE TABLE IF NOT EXISTS admin_log(
+                id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER, action TEXT,
+                target_user TEXT, detail TEXT
+            );
             """
         )
         # 迁移:给已存在的 users 表补 email 列(幂等)
@@ -178,7 +191,8 @@ def init_db() -> None:
             c.execute("ALTER TABLE users ADD COLUMN free_granted INTEGER NOT NULL DEFAULT 0")
         except sqlite3.OperationalError:
             pass  # 列已存在
-        for _col in ("invite_code TEXT", "invited_by TEXT"):
+        for _col in ("invite_code TEXT", "invited_by TEXT",
+                     "banned INTEGER NOT NULL DEFAULT 0"):
             try:
                 c.execute(f"ALTER TABLE users ADD COLUMN {_col}")
             except sqlite3.OperationalError:
@@ -206,8 +220,17 @@ _rl: dict[str, list[float]] = {}
 
 
 def client_ip(request: Request) -> str:
+    """真实客户端 IP。X-Forwarded-For 最左段由客户端可伪造,故按可信代理跳数从右取:
+    nginx 用 proxy_add_x_forwarded_for 把真实 socket IP 追加到 XFF 末尾,右数第
+    TRUSTED_PROXIES 个才不可伪造。无 XFF 或跳数不足→回退连接 socket IP。"""
+    sock = request.client.host if request.client else "?"
+    if TRUSTED_PROXIES <= 0:
+        return sock
     xff = request.headers.get("x-forwarded-for")
-    return xff.split(",")[0].strip() if xff else (request.client.host if request.client else "?")
+    if not xff:
+        return sock
+    parts = [p.strip() for p in xff.split(",") if p.strip()]
+    return parts[-TRUSTED_PROXIES] if len(parts) >= TRUSTED_PROXIES else sock
 
 
 def rate_limit(key: str, limit: int, window_s: float) -> None:
@@ -226,8 +249,9 @@ def rate_limit(key: str, limit: int, window_s: float) -> None:
         if len(q) >= limit:
             raise HTTPException(status_code=429, detail="请求过于频繁,请稍后再试")
         q.append(now)
-        if len(_rl) > 5000:  # 防字典无限膨胀:清掉空桶
-            for k in [k for k, v in _rl.items() if not v]:
+        if len(_rl) > 5000:  # 防字典无限膨胀:清掉「整桶已过期」的 key(比最长窗口还旧 → 任何 key 都已失效)
+            stale = now - 3600
+            for k in [k for k, v in _rl.items() if not v or v[-1] < stale]:
                 _rl.pop(k, None)
 
 
@@ -241,6 +265,8 @@ def actor(authorization: str = Header(default="")) -> sqlite3.Row:
         row = c.execute("SELECT * FROM users WHERE user_id = ?", (claims.get("sub"),)).fetchone()
     if row is None:
         raise HTTPException(status_code=401, detail="unknown user")
+    if row["banned"]:  # 封禁:令牌即刻作废,中转/账号接口全部拒绝
+        raise HTTPException(status_code=403, detail="账号已被封禁")
     return row
 
 
@@ -345,6 +371,8 @@ def sms_login(body: dict[str, Any]) -> dict[str, Any]:
         if not ok:
             raise HTTPException(status_code=400, detail="验证码错误或已过期")
         user = c.execute("SELECT * FROM users WHERE mobile = ?", (mobile,)).fetchone()
+        if user is not None and user["banned"]:  # 封号用户不再签发新 token
+            raise HTTPException(status_code=403, detail="账号已被封禁")
         is_new = user is None
         if is_new:
             uid = "u_" + secrets.token_hex(8)
@@ -367,8 +395,12 @@ def sms_login(body: dict[str, Any]) -> dict[str, Any]:
             "nickname": f"用户{mobile[-4:]}"}
 
 
+_EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$")
+
+
 def _valid_email(s: str) -> bool:
-    return "@" in s and "." in s.split("@")[-1] and 3 < len(s) <= 254
+    # 严格白名单字符:从源头挡住换行/控制符/HTML 字符进入 users.email(否则污染 CSV 导出与后台 UI)
+    return bool(_EMAIL_RE.match(s)) and len(s) <= 254
 
 
 @app.post("/auth/email/send")
@@ -405,6 +437,8 @@ def email_login(body: dict[str, Any], request: Request) -> dict[str, Any]:
         if not ok:
             raise HTTPException(status_code=400, detail="验证码错误或已过期")
         user = c.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
+        if user is not None and user["banned"]:  # 封号用户不再签发新 token
+            raise HTTPException(status_code=403, detail="账号已被封禁")
         is_new = user is None
         nick = email.split("@")[0]
         if is_new:
@@ -696,6 +730,395 @@ async def chat_completions(body: dict[str, Any], request: Request, u: sqlite3.Ro
     )
 
 
+# ─────────────────────────── 管理后台(/admin) ───────────────────────────
+def admin_guard(request: Request, x_admin_token: str = Header(default="")) -> bool:
+    """管理鉴权:未设 ADMIN_TOKEN → 503(默认关闭);口令错 → 401。
+    可信来源 IP 限流防爆破 + 可选 IP 白名单 + 常数时间(字节)比较。"""
+    if not ADMIN_TOKEN:
+        raise HTTPException(status_code=503, detail="管理后台未启用(未设 ADMIN_TOKEN)")
+    ip = client_ip(request)
+    rate_limit(f"admin:{ip}", 120, 60)  # 同 IP 每分钟 120 次(基于不可伪造的可信 IP)
+    if ADMIN_IP_ALLOWLIST and ip not in ADMIN_IP_ALLOWLIST:
+        raise HTTPException(status_code=403, detail="forbidden")
+    # encode 成字节再比:compare_digest 对非 ASCII str 会抛 TypeError(→500),字节则恒定时间且不抛
+    if not hmac.compare_digest(x_admin_token.encode("utf-8"), ADMIN_TOKEN.encode("utf-8")):
+        raise HTTPException(status_code=401, detail="管理口令错误")
+    return True
+
+
+def _admin_log(c: sqlite3.Connection, action: str, target_user: str, detail: str) -> None:
+    c.execute("INSERT INTO admin_log(ts, action, target_user, detail) VALUES(?,?,?,?)",
+              (now_ms(), action, target_user, detail))
+
+
+@app.get("/admin", response_class=HTMLResponse)
+@app.get("/admin/", response_class=HTMLResponse)
+def admin_page() -> HTMLResponse:
+    if not ADMIN_TOKEN:  # 未启用时不暴露后台控制台的存在
+        raise HTTPException(status_code=404, detail="not found")
+    return HTMLResponse(ADMIN_HTML, headers={
+        "X-Robots-Tag": "noindex",
+        # connect-src 'self' 即便后台被 XSS 也无法把数据外传到他源;inline 脚本/样式需放行
+        "Content-Security-Policy": ("default-src 'self'; img-src 'self' data:; "
+                                    "style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; "
+                                    "connect-src 'self'; base-uri 'none'; form-action 'none'"),
+    })
+
+
+@app.get("/admin/api/stats")
+def admin_stats(_: bool = Depends(admin_guard)) -> dict[str, Any]:
+    with closing(db()) as c:
+        u = c.execute(
+            "SELECT COUNT(*) n, COALESCE(SUM(credits),0) cr, COALESCE(SUM(free_granted),0) fg, "
+            "SUM(CASE WHEN member_expire_at > ? THEN 1 ELSE 0 END) mem, "
+            "SUM(CASE WHEN banned THEN 1 ELSE 0 END) ban, "
+            "SUM(CASE WHEN invited_by IS NOT NULL THEN 1 ELSE 0 END) inv FROM users",
+            (now_ms(),),
+        ).fetchone()
+        o = c.execute(
+            "SELECT COUNT(*) n, SUM(CASE WHEN status='PAID' THEN 1 ELSE 0 END) paid, "
+            "COALESCE(SUM(CASE WHEN status='PAID' THEN amount_fen ELSE 0 END),0) rev FROM orders"
+        ).fetchone()
+        g = c.execute(
+            "SELECT COALESCE(SUM(tokens_in),0) tin, COALESCE(SUM(tokens_out),0) tout, "
+            "COALESCE(SUM(credits),0) spent, COUNT(*) calls FROM usage_log"
+        ).fetchone()
+    return {
+        "users": u["n"], "totalCredits": u["cr"], "freeGranted": u["fg"],
+        "members": u["mem"] or 0, "banned": u["ban"] or 0, "invited": u["inv"] or 0,
+        "orders": o["n"], "paidOrders": o["paid"] or 0, "revenueFen": o["rev"],
+        "tokensIn": g["tin"], "tokensOut": g["tout"], "creditsSpent": g["spent"], "calls": g["calls"],
+    }
+
+
+@app.get("/admin/api/users")
+def admin_users(_: bool = Depends(admin_guard), q: str = "", limit: int = 50, offset: int = 0) -> dict[str, Any]:
+    limit = max(1, min(200, limit))
+    offset = max(0, offset)
+    where, params = "", []
+    if q.strip():
+        like = f"%{q.strip()}%"
+        where = "WHERE user_id LIKE ? OR email LIKE ? OR mobile LIKE ? OR invite_code LIKE ?"
+        params = [like, like, like, like]
+    with closing(db()) as c:
+        total = c.execute(f"SELECT COUNT(*) n FROM users {where}", params).fetchone()["n"]
+        rows = c.execute(
+            f"SELECT user_id, email, mobile, nickname, credits, free_granted, member_expire_at, "
+            f"banned, invite_code, invited_by, created_at FROM users {where} "
+            f"ORDER BY created_at DESC LIMIT ? OFFSET ?", params + [limit, offset]
+        ).fetchall()
+    now = now_ms()
+    return {"total": total, "items": [
+        {"userId": r["user_id"], "email": r["email"], "mobile": r["mobile"], "nickname": r["nickname"],
+         "credits": r["credits"], "freeGranted": r["free_granted"],
+         "memberActive": r["member_expire_at"] > now, "memberExpireAt": r["member_expire_at"],
+         "banned": bool(r["banned"]), "inviteCode": r["invite_code"], "invitedBy": r["invited_by"],
+         "createdAt": r["created_at"]} for r in rows]}
+
+
+@app.post("/admin/api/users/{uid}/credits")
+def admin_adjust_credits(uid: str, body: dict[str, Any], _: bool = Depends(admin_guard)) -> dict[str, Any]:
+    try:
+        delta = int(body.get("delta"))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="delta 必须是整数")
+    if delta == 0 or abs(delta) > 10_000_000:
+        raise HTTPException(status_code=400, detail="delta 超出范围")
+    reason = str(body.get("reason", ""))[:200]
+    with closing(db()) as c:
+        cur = _user(c, uid)
+        if cur is None:
+            raise HTTPException(status_code=404, detail="用户不存在")
+        before = cur["credits"]
+        c.execute("UPDATE users SET credits = MAX(0, credits + ?) WHERE user_id = ?", (delta, uid))
+        bal = _user(c, uid)["credits"]
+        # 审计记真实生效量(负向调整会被 MAX(0,…) 截断,applied 可能 != 请求 delta)
+        _admin_log(c, "credits", uid, f"req_delta={delta} applied={bal - before} reason={reason} {before}->{bal}")
+        c.commit()
+    return {"ok": True, "balance": bal}
+
+
+@app.post("/admin/api/users/{uid}/membership")
+def admin_membership(uid: str, body: dict[str, Any], _: bool = Depends(admin_guard)) -> dict[str, Any]:
+    try:
+        days = int(body.get("days"))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="days 必须是整数")
+    if abs(days) > 3650:
+        raise HTTPException(status_code=400, detail="days 超出范围")
+    reason = str(body.get("reason", ""))[:200]
+    with closing(db()) as c:
+        if _user(c, uid) is None:
+            raise HTTPException(status_code=404, detail="用户不存在")
+        # 原子:在「max(现有到期, now) + days」上 clamp>=0,一条 SQL 完成,避免读改写竞态
+        c.execute(
+            "UPDATE users SET member_expire_at = MAX(0, MAX(member_expire_at, ?) + ?) WHERE user_id = ?",
+            (now_ms(), days * 24 * 3600 * 1000, uid),
+        )
+        new_exp = _user(c, uid)["member_expire_at"]
+        _admin_log(c, "membership", uid, f"days={days} reason={reason} -> exp={new_exp}")
+        c.commit()
+    return {"ok": True, "memberExpireAt": new_exp, "memberActive": new_exp > now_ms()}
+
+
+@app.post("/admin/api/users/{uid}/ban")
+def admin_ban(uid: str, body: dict[str, Any], _: bool = Depends(admin_guard)) -> dict[str, Any]:
+    if not isinstance(body.get("banned"), bool):  # 必须显式 true/false,防漏字段静默解封
+        raise HTTPException(status_code=400, detail="banned 必须是 true 或 false")
+    banned = 1 if body["banned"] else 0
+    reason = str(body.get("reason", ""))[:200]
+    with closing(db()) as c:
+        if _user(c, uid) is None:
+            raise HTTPException(status_code=404, detail="用户不存在")
+        c.execute("UPDATE users SET banned = ? WHERE user_id = ?", (banned, uid))
+        _admin_log(c, "ban", uid, f"banned={banned} reason={reason}")
+        c.commit()
+    return {"ok": True, "banned": bool(banned)}
+
+
+@app.get("/admin/api/usage")
+def admin_usage(_: bool = Depends(admin_guard), uid: str = "", limit: int = 100) -> dict[str, Any]:
+    limit = max(1, min(500, limit))
+    where, params = "", []
+    if uid.strip():
+        where = "WHERE g.user_id = ?"
+        params = [uid.strip()]
+    with closing(db()) as c:
+        rows = c.execute(
+            f"SELECT g.id, g.user_id, g.model, g.tokens_in, g.tokens_out, g.credits, g.ts, "
+            f"u.email, u.mobile FROM usage_log g LEFT JOIN users u ON u.user_id = g.user_id "
+            f"{where} ORDER BY g.id DESC LIMIT ?", params + [limit]
+        ).fetchall()
+    return {"items": [dict(r) for r in rows]}
+
+
+def _csv_cell(v: Any) -> str:
+    s = "" if v is None else str(v)
+    if s and s[0] in ("=", "+", "-", "@"):  # 防 CSV 公式注入
+        s = "'" + s
+    if any(ch in s for ch in (",", '"', "\n", "\r")):
+        s = '"' + s.replace('"', '""') + '"'
+    return s
+
+
+@app.get("/admin/api/usage.csv")
+def admin_usage_csv(request: Request, _: bool = Depends(admin_guard)) -> PlainTextResponse:
+    cols = ["id", "user_id", "email", "mobile", "model", "tokens_in", "tokens_out", "credits", "ts"]
+    with closing(db()) as c:
+        rows = c.execute(
+            "SELECT g.id, g.user_id, u.email, u.mobile, g.model, g.tokens_in, g.tokens_out, "
+            "g.credits, g.ts FROM usage_log g LEFT JOIN users u ON u.user_id = g.user_id "
+            "ORDER BY g.id DESC"
+        ).fetchall()
+        _admin_log(c, "export_usage_csv", "*", f"rows={len(rows)} ip={client_ip(request)}")  # PII 导出留痕
+        c.commit()
+    lines = [",".join(cols)] + [",".join(_csv_cell(r[k]) for k in cols) for r in rows]
+    return PlainTextResponse("\n".join(lines), media_type="text/csv",
+                             headers={"Content-Disposition": "attachment; filename=usage.csv"})
+
+
+@app.get("/admin/api/orders")
+def admin_orders(_: bool = Depends(admin_guard), limit: int = 100) -> dict[str, Any]:
+    limit = max(1, min(500, limit))
+    with closing(db()) as c:
+        rows = c.execute(
+            "SELECT o.order_no, o.user_id, u.email, u.mobile, o.goods_id, o.amount_fen, o.status, "
+            "o.created_at FROM orders o LEFT JOIN users u ON u.user_id = o.user_id "
+            "ORDER BY o.created_at DESC LIMIT ?", (limit,)
+        ).fetchall()
+    return {"items": [dict(r) for r in rows]}
+
+
+@app.get("/admin/api/logs")
+def admin_logs(_: bool = Depends(admin_guard), limit: int = 100) -> dict[str, Any]:
+    limit = max(1, min(500, limit))
+    with closing(db()) as c:
+        rows = c.execute("SELECT id, ts, action, target_user, detail FROM admin_log "
+                         "ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+    return {"items": [dict(r) for r in rows]}
+
+
 @app.get("/healthz")
 def healthz() -> dict[str, str]:
     return {"status": "ok"}
+
+
+# ─────────────────────────── 管理后台前端(单页,无依赖) ───────────────────────────
+ADMIN_HTML = r"""<!doctype html>
+<html lang="zh"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Octopus 管理后台</title>
+<style>
+:root{--bg:#0f1115;--card:#171a21;--line:#262b36;--fg:#e6e9ef;--mut:#8b93a7;--brand:#6c5ce7;--ok:#21c08b;--warn:#e0a106;--bad:#e0533d}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 -apple-system,Segoe UI,Roboto,"PingFang SC",sans-serif}
+a{color:var(--brand)}.wrap{max-width:1180px;margin:0 auto;padding:20px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+button{background:var(--brand);color:#fff;border:0;border-radius:8px;padding:7px 12px;cursor:pointer;font-size:13px}
+button.ghost{background:transparent;border:1px solid var(--line);color:var(--fg)}
+button.sm{padding:4px 9px;font-size:12px}
+input{background:#0b0d11;border:1px solid var(--line);color:var(--fg);border-radius:8px;padding:8px 10px;font-size:14px}
+h1{font-size:18px;margin:0}.mut{color:var(--mut)}.mono{font-family:ui-monospace,Menlo,monospace}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin:16px 0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+.card .k{color:var(--mut);font-size:12px}.card .v{font-size:22px;font-weight:700;margin-top:4px}
+.tabs{display:flex;gap:6px;margin:18px 0 10px}.tabs button{background:transparent;border:1px solid var(--line);color:var(--mut)}
+.tabs button.on{background:var(--brand);color:#fff;border-color:var(--brand)}
+table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--mut);font-weight:600}tr:hover td{background:#12151c}
+.pill{display:inline-block;padding:1px 8px;border-radius:99px;font-size:11px}
+.pill.ok{background:rgba(33,192,139,.15);color:var(--ok)}.pill.no{background:#20242e;color:var(--mut)}
+.pill.bad{background:rgba(224,83,61,.15);color:var(--bad)}
+#login{max-width:360px;margin:12vh auto;text-align:center}
+#login .card{padding:24px}#login input{width:100%;margin:12px 0}#login button{width:100%}
+.err{color:var(--bad);margin-top:8px;min-height:18px}.hide{display:none}
+.actbar button{margin-right:6px;margin-bottom:4px}
+</style></head><body>
+
+<div id="login">
+  <div class="card">
+    <h1>Octopus 管理后台</h1>
+    <p class="mut">输入管理口令(服务器 .env 的 ADMIN_TOKEN)</p>
+    <input id="tokIn" type="password" placeholder="管理口令" autocomplete="off">
+    <button onclick="doLogin()">进入</button>
+    <div class="err" id="loginErr"></div>
+  </div>
+</div>
+
+<div id="app" class="wrap hide">
+  <div class="row" style="justify-content:space-between">
+    <h1>Octopus 管理后台</h1>
+    <div class="row"><button class="ghost sm" onclick="refresh()">刷新</button>
+      <button class="ghost sm" onclick="logout()">退出</button></div>
+  </div>
+  <div class="cards" id="stats"></div>
+  <div class="tabs">
+    <button class="on" data-tab="users" onclick="tab('users')">用户</button>
+    <button data-tab="usage" onclick="tab('usage')">用量</button>
+    <button data-tab="orders" onclick="tab('orders')">订单</button>
+    <button data-tab="logs" onclick="tab('logs')">操作审计</button>
+  </div>
+  <div id="bar" class="row" style="margin-bottom:10px"></div>
+  <div id="view"></div>
+</div>
+
+<script>
+const SS="octo_admin"; let curTab="users";
+const $=s=>document.querySelector(s);
+const tok=()=>sessionStorage.getItem(SS)||"";
+const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const dt=ms=>ms?new Date(Number(ms)).toLocaleString():"";
+const money=fen=>"¥"+(Number(fen||0)/100).toFixed(2);
+async function api(path,opts){
+  opts=opts||{}; opts.headers=Object.assign({"X-Admin-Token":tok()},opts.headers||{});
+  const r=await fetch(path,opts);
+  if(r.status===401||r.status===503){logout(await detail(r));throw new Error("auth");}
+  if(!r.ok) throw new Error(await detail(r));
+  const ct=r.headers.get("content-type")||""; return ct.includes("json")?r.json():r.text();
+}
+async function detail(r){try{return (await r.json()).detail||("HTTP "+r.status)}catch(e){return "HTTP "+r.status}}
+function doLogin(){const v=$("#tokIn").value.trim();if(!v)return;sessionStorage.setItem(SS,v);
+  $("#loginErr").textContent="";api("/admin/api/stats").then(()=>{enter()}).catch(e=>{$("#loginErr").textContent=e.message;});}
+function enter(){$("#login").classList.add("hide");$("#app").classList.remove("hide");refresh();}
+function logout(msg){sessionStorage.removeItem(SS);$("#app").classList.add("hide");$("#login").classList.remove("hide");
+  if(msg)$("#loginErr").textContent=msg;}
+function refresh(){loadStats();tab(curTab);}
+function tab(t){curTab=t;document.querySelectorAll(".tabs button").forEach(b=>b.classList.toggle("on",b.dataset.tab===t));
+  $("#bar").innerHTML=""; ({users:loadUsers,usage:loadUsage,orders:loadOrders,logs:loadLogs}[t])();}
+
+async function loadStats(){
+  try{const s=await api("/admin/api/stats");
+  const cards=[["用户",s.users],["总积分余额",s.totalCredits],["免费已发",s.freeGranted],
+    ["有效会员",s.members],["封禁",s.banned],["邀请兑换",s.invited],
+    ["订单(已付)",s.orders+" / "+s.paidOrders],["收入",money(s.revenueFen)],
+    ["调用次数",s.calls],["消耗积分",s.creditsSpent],["输入tok",s.tokensIn],["输出tok",s.tokensOut]];
+  $("#stats").innerHTML=cards.map(([k,v])=>`<div class="card"><div class="k">${k}</div><div class="v">${esc(v)}</div></div>`).join("");
+  }catch(e){if(e.message!=="auth")$("#stats").innerHTML=`<div class="card">加载失败:${esc(e.message)}</div>`;}
+}
+
+let usersListenerBound=false;
+async function loadUsers(q){
+  $("#bar").innerHTML=`<input id="uq" placeholder="搜索 邮箱/手机/uid/邀请码" value="${esc(q||"")}" style="width:280px">
+    <button class="sm" onclick="loadUsers($('#uq').value)">搜索</button>`;
+  $("#uq").addEventListener("keydown",e=>{if(e.key==="Enter")loadUsers(e.target.value);});
+  try{const d=await api("/admin/api/users?limit=200&q="+encodeURIComponent(q||""));
+  const rows=d.items.map(u=>`<tr data-uid="${esc(u.userId)}">
+    <td><div>${esc(u.email||u.mobile||"-")}</div><div class="mut mono" style="font-size:11px">${esc(u.userId)}</div></td>
+    <td><b>${u.credits}</b><div class="mut" style="font-size:11px">免:${u.freeGranted}</div></td>
+    <td>${u.memberActive?`<span class="pill ok">会员</span><div class="mut" style="font-size:11px">${dt(u.memberExpireAt)}</div>`:'<span class="pill no">非会员</span>'}</td>
+    <td>${u.banned?'<span class="pill bad">封禁</span>':'<span class="pill ok">正常</span>'}</td>
+    <td class="mono">${esc(u.inviteCode||"-")}${u.invitedBy?`<div class="mut" style="font-size:11px">←${esc(u.invitedBy)}</div>`:""}</td>
+    <td class="mut" style="font-size:12px">${dt(u.createdAt)}</td>
+    <td class="actbar">
+      <button class="sm" data-act="cr">积分±</button>
+      <button class="sm ghost" data-act="mem">会员</button>
+      <button class="sm ghost" data-act="ban">${u.banned?"解封":"封禁"}</button>
+    </td></tr>`).join("");
+  $("#view").innerHTML=`<div class="mut" style="margin-bottom:6px">共 ${d.total} 人</div>
+    <table><thead><tr><th>账号</th><th>积分</th><th>会员</th><th>状态</th><th>邀请</th><th>注册</th><th>操作</th></tr></thead><tbody>${rows}</tbody></table>`;
+  if(!usersListenerBound){usersListenerBound=true;
+    $("#view").addEventListener("click",onUserAction);}
+  $("#view").onclick=onUserAction;
+  }catch(e){if(e.message!=="auth")$("#view").innerHTML=esc(e.message);}
+}
+async function onUserAction(ev){
+  const btn=ev.target.closest("button[data-act]"); if(!btn)return;
+  const uid=btn.closest("tr").dataset.uid; const act=btn.dataset.act;
+  try{
+    if(act==="cr"){const d=prompt("加/减积分(正数=加,负数=减),例如 +500 或 -100");if(d==null)return;
+      const delta=parseInt(d,10);if(!delta){alert("请输入非零整数");return;}
+      const reason=prompt("备注(可空)")||"";
+      const r=await api(`/admin/api/users/${encodeURIComponent(uid)}/credits`,{method:"POST",
+        headers:{"Content-Type":"application/json"},body:JSON.stringify({delta,reason})});
+      alert("新余额:"+r.balance);}
+    else if(act==="mem"){const d=prompt("会员天数(正=延长,负=减少),例如 30 或 -30");if(d==null)return;
+      const days=parseInt(d,10);if(isNaN(days)){alert("请输入整数");return;}
+      const reason=prompt("备注(可空)")||"";
+      const r=await api(`/admin/api/users/${encodeURIComponent(uid)}/membership`,{method:"POST",
+        headers:{"Content-Type":"application/json"},body:JSON.stringify({days,reason})});
+      alert(r.memberActive?("会员至 "+dt(r.memberExpireAt)):"已设为非会员");}
+    else if(act==="ban"){const isBan=btn.textContent==="封禁";
+      if(!confirm(isBan?"确认封禁该账号?其令牌将立即失效":"确认解封?"))return;
+      const reason=prompt("备注(可空)")||"";
+      await api(`/admin/api/users/${encodeURIComponent(uid)}/ban`,{method:"POST",
+        headers:{"Content-Type":"application/json"},body:JSON.stringify({banned:isBan,reason})});}
+    loadStats();loadUsers($("#uq")?$("#uq").value:"");
+  }catch(e){if(e.message!=="auth")alert("失败:"+e.message);}
+}
+
+async function loadUsage(){
+  $("#bar").innerHTML=`<button class="sm" onclick="dlCsv()">导出 CSV</button>`;
+  try{const d=await api("/admin/api/usage?limit=300");
+  $("#view").innerHTML=`<table><thead><tr><th>时间</th><th>账号</th><th>模型</th><th>输入</th><th>输出</th><th>扣分</th></tr></thead><tbody>${
+    d.items.map(r=>`<tr><td class="mut" style="font-size:12px">${dt(r.ts)}</td>
+      <td>${esc(r.email||r.mobile||r.user_id)}</td><td class="mono">${esc(r.model)}</td>
+      <td>${r.tokens_in}</td><td>${r.tokens_out}</td><td><b>${r.credits}</b></td></tr>`).join("")||
+      '<tr><td colspan=6 class="mut">暂无用量</td></tr>'}</tbody></table>`;
+  }catch(e){if(e.message!=="auth")$("#view").innerHTML=esc(e.message);}
+}
+async function dlCsv(){try{const txt=await api("/admin/api/usage.csv");
+  const blob=new Blob([txt],{type:"text/csv"});const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);a.download="usage.csv";a.click();URL.revokeObjectURL(a.href);
+  }catch(e){if(e.message!=="auth")alert("导出失败:"+e.message);}}
+
+async function loadOrders(){
+  try{const d=await api("/admin/api/orders?limit=200");
+  $("#view").innerHTML=`<table><thead><tr><th>时间</th><th>订单号</th><th>账号</th><th>商品</th><th>金额</th><th>状态</th></tr></thead><tbody>${
+    d.items.map(o=>`<tr><td class="mut" style="font-size:12px">${dt(o.created_at)}</td>
+      <td class="mono" style="font-size:12px">${esc(o.order_no)}</td><td>${esc(o.email||o.mobile||o.user_id)}</td>
+      <td>${esc(o.goods_id)}</td><td>${money(o.amount_fen)}</td>
+      <td>${o.status==="PAID"?'<span class="pill ok">已付</span>':'<span class="pill no">'+esc(o.status)+'</span>'}</td></tr>`).join("")||
+      '<tr><td colspan=6 class="mut">暂无订单</td></tr>'}</tbody></table>`;
+  }catch(e){if(e.message!=="auth")$("#view").innerHTML=esc(e.message);}
+}
+
+async function loadLogs(){
+  try{const d=await api("/admin/api/logs?limit=300");
+  $("#view").innerHTML=`<table><thead><tr><th>时间</th><th>操作</th><th>目标</th><th>详情</th></tr></thead><tbody>${
+    d.items.map(l=>`<tr><td class="mut" style="font-size:12px">${dt(l.ts)}</td><td class="mono">${esc(l.action)}</td>
+      <td class="mono" style="font-size:12px">${esc(l.target_user)}</td><td>${esc(l.detail)}</td></tr>`).join("")||
+      '<tr><td colspan=4 class="mut">暂无操作记录</td></tr>'}</tbody></table>`;
+  }catch(e){if(e.message!=="auth")$("#view").innerHTML=esc(e.message);}
+}
+
+if(tok())api("/admin/api/stats").then(enter).catch(()=>logout());
+$("#tokIn").addEventListener("keydown",e=>{if(e.key==="Enter")doLogin();});
+</script></body></html>"""
