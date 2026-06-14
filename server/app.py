@@ -23,6 +23,7 @@ import math
 import os
 import secrets
 import sqlite3
+import threading
 import time
 from contextlib import closing
 from typing import Any
@@ -179,6 +180,37 @@ def now_ms() -> int:
     return int(time.time() * 1000)
 
 
+# ── 简单进程内滑窗限流(单 worker 够用) ──
+_rl_lock = threading.Lock()
+_rl: dict[str, list[float]] = {}
+
+
+def client_ip(request: Request) -> str:
+    xff = request.headers.get("x-forwarded-for")
+    return xff.split(",")[0].strip() if xff else (request.client.host if request.client else "?")
+
+
+def rate_limit(key: str, limit: int, window_s: float) -> None:
+    """同一 key 在 window_s 内最多 limit 次,超限抛 429。"""
+    now = time.time()
+    cutoff = now - window_s
+    with _rl_lock:
+        q = _rl.setdefault(key, [])
+        drop = 0
+        for t in q:
+            if t >= cutoff:
+                break
+            drop += 1
+        if drop:
+            del q[:drop]
+        if len(q) >= limit:
+            raise HTTPException(status_code=429, detail="请求过于频繁,请稍后再试")
+        q.append(now)
+        if len(_rl) > 5000:  # 防字典无限膨胀:清掉空桶
+            for k in [k for k, v in _rl.items() if not v]:
+                _rl.pop(k, None)
+
+
 def actor(authorization: str = Header(default="")) -> sqlite3.Row:
     """Verify the bearer JWT and load the user row, or 401."""
     token = authorization[7:] if authorization.lower().startswith("bearer ") else ""
@@ -237,6 +269,8 @@ def send_email(email: str, code: str) -> None:
 # ─────────────────────────── endpoints: auth ───────────────────────────
 @app.post("/auth/sms/send")
 def sms_send(body: dict[str, Any]) -> dict[str, Any]:
+    if SMS_PROVIDER == "mock":  # mock 固定码会被滥用造号;接真短信前禁用该端点
+        raise HTTPException(status_code=403, detail="短信登录未开放")
     mobile = str(body.get("mobile", "")).strip()
     if len(mobile) != 11 or not mobile.isdigit():
         raise HTTPException(status_code=400, detail="invalid mobile")
@@ -257,6 +291,8 @@ def sms_send(body: dict[str, Any]) -> dict[str, Any]:
 
 @app.post("/auth/sms/login")
 def sms_login(body: dict[str, Any]) -> dict[str, Any]:
+    if SMS_PROVIDER == "mock":
+        raise HTTPException(status_code=403, detail="短信登录未开放")
     mobile = str(body.get("mobile", "")).strip()
     code = str(body.get("code", "")).strip()
     with closing(db()) as c:
@@ -290,10 +326,12 @@ def _valid_email(s: str) -> bool:
 
 
 @app.post("/auth/email/send")
-def email_send(body: dict[str, Any]) -> dict[str, Any]:
+def email_send(body: dict[str, Any], request: Request) -> dict[str, Any]:
     email = str(body.get("email", "")).strip().lower()
     if not _valid_email(email):
         raise HTTPException(status_code=400, detail="invalid email")
+    rate_limit(f"email_send:{email}", 1, 60)                    # 同邮箱 60s 1 条
+    rate_limit(f"email_send_ip:{client_ip(request)}", 10, 3600)  # 同 IP 每小时 10 条
     code = EMAIL_MOCK_CODE if EMAIL_PROVIDER == "mock" else f"{secrets.randbelow(1000000):06d}"
     with closing(db()) as c:
         c.execute(
@@ -310,9 +348,11 @@ def email_send(body: dict[str, Any]) -> dict[str, Any]:
 
 
 @app.post("/auth/email/login")
-def email_login(body: dict[str, Any]) -> dict[str, Any]:
+def email_login(body: dict[str, Any], request: Request) -> dict[str, Any]:
     email = str(body.get("email", "")).strip().lower()
     code = str(body.get("code", "")).strip()
+    rate_limit(f"email_login:{email}", 10, 600)                  # 同邮箱 10 分钟最多 10 次(防撞码)
+    rate_limit(f"email_login_ip:{client_ip(request)}", 30, 600)
     with closing(db()) as c:
         rec = c.execute("SELECT * FROM email_codes WHERE email = ?", (email,)).fetchone()
         ok = rec is not None and rec["code"] == code and rec["expire_at"] >= now_ms()
@@ -358,14 +398,16 @@ def balance(u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
 def daily_claim(u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
     today = time.strftime("%Y-%m-%d", time.gmtime())
     with closing(db()) as c:
-        cur = _user(c, u["user_id"])
-        if cur["last_claim_day"] == today:
-            return {"claimed": False, "credits": 0, "balance": cur["credits"]}
-        bal = cur["credits"] + DAILY_BONUS
-        c.execute("UPDATE users SET credits=?, last_claim_day=? WHERE user_id=?",
-                  (bal, today, u["user_id"]))
+        # 原子:仅当今天还没领过才加分(防并发重复领)
+        cur = c.execute(
+            "UPDATE users SET credits = credits + ?, last_claim_day = ? "
+            "WHERE user_id = ? AND last_claim_day <> ?",
+            (DAILY_BONUS, today, u["user_id"], today),
+        )
+        claimed = cur.rowcount > 0
         c.commit()
-    return {"claimed": True, "credits": DAILY_BONUS, "balance": bal}
+        bal = _user(c, u["user_id"])["credits"]
+    return {"claimed": claimed, "credits": DAILY_BONUS if claimed else 0, "balance": bal}
 
 
 # ─────────────────────────── endpoints: billing ───────────────────────────
@@ -479,9 +521,10 @@ def list_models() -> dict[str, Any]:
 
 
 @app.post("/v1/chat/completions")
-async def chat_completions(body: dict[str, Any], u: sqlite3.Row = Depends(actor)) -> Any:
+async def chat_completions(body: dict[str, Any], request: Request, u: sqlite3.Row = Depends(actor)) -> Any:
     if u["credits"] <= 0:
         raise HTTPException(status_code=402, detail="积分不足,请充值")
+    rate_limit(f"chat:{u['user_id']}", 60, 60)  # 每用户每分钟 60 次
     if not MIMO_API_KEY or not MIMO_BASE_URL:
         raise HTTPException(status_code=503, detail="平台模型未配置(MIMO_API_KEY/MIMO_BASE_URL)")
 
@@ -508,15 +551,20 @@ async def chat_completions(body: dict[str, Any], u: sqlite3.Row = Depends(actor)
                 int(usage.get("completion_tokens", 0) or 0), mult)
         return JSONResponse(content=data)
 
-    # ── 流式 SSE 透传:边转发边在末尾抓 usage,流结束后扣费 ──
+    # ── 流式 SSE 透传:边转发边抓 usage;客户端中途断开也按已生成内容兜底扣费 ──
     payload = dict(body)
     payload["model"] = model
     payload["stream"] = True
     opts = payload.get("stream_options")
     payload["stream_options"] = {**opts, "include_usage": True} if isinstance(opts, dict) else {"include_usage": True}
+    # 断连兜底:粗估 prompt token 数(拿不到 usage 时用)
+    prompt_est = sum(
+        len(str(m.get("content", ""))) for m in (body.get("messages") or []) if isinstance(m, dict)
+    ) // 4
 
     async def _gen() -> Any:
         captured: dict[str, Any] = {}
+        out_chars = 0
         try:
             async with httpx.AsyncClient(timeout=None) as client:
                 async with client.stream("POST", url, headers=_mimo_headers(), json=payload) as r:
@@ -535,12 +583,18 @@ async def chat_completions(body: dict[str, Any], u: sqlite3.Row = Depends(actor)
                                     obj = json.loads(chunk)
                                     if isinstance(obj, dict) and obj.get("usage"):
                                         captured["usage"] = obj["usage"]
+                                    for ch in (obj.get("choices") or []):
+                                        out_chars += len(str((ch.get("delta") or {}).get("content") or ""))
                                 except Exception:  # noqa: BLE001
                                     pass
         finally:
-            usage = captured.get("usage") or {}
-            _charge(user_id, model, int(usage.get("prompt_tokens", 0) or 0),
-                    int(usage.get("completion_tokens", 0) or 0), mult)
+            usage = captured.get("usage")
+            if usage:
+                _charge(user_id, model, int(usage.get("prompt_tokens", 0) or 0),
+                        int(usage.get("completion_tokens", 0) or 0), mult)
+            elif out_chars > 0 or prompt_est > 0:
+                # 没拿到 usage(多半中途断开)→ 用 prompt + 已收输出字符估算扣费,避免白嫖
+                _charge(user_id, model, prompt_est, out_chars // 4, mult)
 
     return StreamingResponse(
         _gen(),
