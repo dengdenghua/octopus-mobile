@@ -70,8 +70,8 @@ GOODS_BY_ID = {g["id"]: g for g in GOODS}
 
 # 模型目录 + 每模型积分倍率(参考 Molili 的 multiplier 定价)。可用 MODELS_JSON 覆盖。
 _DEFAULT_MODELS = [
-    {"id": "mimo-v2-flash", "display_name": "MiMo Flash", "multiplier": 0.2, "recommended": True},
-    {"id": "mimo-v2.5-pro", "display_name": "MiMo Pro", "multiplier": 1.0, "recommended": True},
+    {"id": "mimo-v2.5", "display_name": "MiMo 2.5", "multiplier": 0.5, "recommended": True},
+    {"id": "mimo-v2.5-pro", "display_name": "MiMo 2.5 Pro", "multiplier": 1.0, "recommended": True},
 ]
 try:
     MODELS = json.loads(os.environ["MODELS_JSON"]) if os.environ.get("MODELS_JSON") else _DEFAULT_MODELS
@@ -386,6 +386,8 @@ async def chat_completions(body: dict[str, Any], u: sqlite3.Row = Depends(actor)
     import httpx  # 惰性 import
 
     model = body.get("model") or MIMO_DEFAULT_MODEL
+    if model not in MODEL_MULT:  # 只服务目录内模型;未知模型回退默认(防止拿平台 key 乱调)
+        model = MIMO_DEFAULT_MODEL
     mult = _model_multiplier(model)
     url = f"{MIMO_BASE_URL}/chat/completions"
     user_id = u["user_id"]
