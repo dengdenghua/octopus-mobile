@@ -83,6 +83,21 @@ data class OrderStatusResult(
     val credits: Long = 0,
 )
 
+// ── invite(拉新返利) ──
+data class InviteInfo(
+    val code: String = "",
+    @SerializedName("invitedCount") val invitedCount: Int = 0,
+    val redeemed: Boolean = false,
+    @SerializedName("redeemerBonus") val redeemerBonus: Long = 0,
+    @SerializedName("inviterBonus") val inviterBonus: Long = 0,
+)
+
+data class RedeemResult(
+    val ok: Boolean = false,
+    val credits: Long = 0,
+    val balance: Long = 0,
+)
+
 data class DailyClaimResult(
     val claimed: Boolean = false,
     /** credits granted by this claim (0 if already claimed today). */

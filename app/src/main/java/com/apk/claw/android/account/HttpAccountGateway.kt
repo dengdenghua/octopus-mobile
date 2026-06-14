@@ -90,6 +90,12 @@ class HttpAccountGateway(baseUrl: String) : AccountGateway {
     override suspend fun dailyClaim(token: String): DailyClaimResult =
         post("/account/daily-claim", null, token, DailyClaimResult::class.java)
 
+    override suspend fun inviteInfo(token: String): InviteInfo =
+        get("/invite/info", token, InviteInfo::class.java)
+
+    override suspend fun redeemInvite(token: String, code: String): RedeemResult =
+        post("/invite/redeem", mapOf("code" to code), token, RedeemResult::class.java)
+
     companion object {
         private val JSON = "application/json; charset=utf-8".toMediaTypeOrNull()
     }

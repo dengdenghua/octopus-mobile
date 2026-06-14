@@ -105,6 +105,20 @@ object AccountRepository {
         return r
     }
 
+    suspend fun inviteInfo(): Result<InviteInfo> =
+        runCatching { gateway().inviteInfo(AccountStore.token) }
+
+    suspend fun redeemInvite(code: String): Result<RedeemResult> {
+        val r = runCatching { gateway().redeemInvite(AccountStore.token, code) }
+        r.getOrNull()?.let {
+            if (it.ok) {
+                AccountStore.credits = it.balance
+                publish()
+            }
+        }
+        return r
+    }
+
     fun logout() {
         AccountStore.clear()
         publish()

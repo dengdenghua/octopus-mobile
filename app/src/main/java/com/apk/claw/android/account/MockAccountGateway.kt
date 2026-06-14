@@ -27,6 +27,8 @@ class MockAccountGateway : AccountGateway {
         var credits: Long = 0,
         var lastClaimDay: String = "",
         var memberExpireAt: Long = 0,
+        var inviteCode: String = "",
+        var invitedBy: String = "",
     )
 
     private val users = HashMap<String, User>()          // userId -> state
@@ -133,5 +135,28 @@ class MockAccountGateway : AccountGateway {
         u.lastClaimDay = today
         u.credits += DAILY_BONUS
         return DailyClaimResult(claimed = true, credits = DAILY_BONUS, balance = u.credits)
+    }
+
+    override suspend fun inviteInfo(token: String): InviteInfo {
+        val uid = tokenToUser[token] ?: throw IllegalStateException("未登录")
+        val u = users[uid]!!
+        if (u.inviteCode.isEmpty()) {
+            u.inviteCode = UUID.randomUUID().toString().replace("-", "").uppercase().take(6)
+        }
+        val count = users.values.count { it.invitedBy == uid }
+        return InviteInfo(u.inviteCode, count, u.invitedBy.isNotEmpty(), 200, 200)
+    }
+
+    override suspend fun redeemInvite(token: String, code: String): RedeemResult {
+        val uid = tokenToUser[token] ?: throw IllegalStateException("未登录")
+        val u = users[uid]!!
+        require(u.invitedBy.isEmpty()) { "你已使用过邀请码" }
+        val inviterId = users.entries.firstOrNull { it.value.inviteCode == code.uppercase() }?.key
+            ?: throw IllegalArgumentException("邀请码无效")
+        require(inviterId != uid) { "不能使用自己的邀请码" }
+        u.invitedBy = inviterId
+        u.credits += 200
+        users[inviterId]!!.credits += 200
+        return RedeemResult(ok = true, credits = 200, balance = u.credits)
     }
 }

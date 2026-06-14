@@ -1,8 +1,12 @@
 package com.apk.claw.android.ui.account
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -35,6 +39,10 @@ class AccountActivity : BaseActivity() {
     private lateinit var tvMobile: TextView
     private lateinit var tvMember: TextView
     private lateinit var llGoods: LinearLayout
+    private lateinit var tvInviteCode: TextView
+    private lateinit var tvInviteSub: TextView
+    private lateinit var etInviteCode: EditText
+    private lateinit var llRedeem: LinearLayout
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,9 +61,15 @@ class AccountActivity : BaseActivity() {
         tvMobile = findViewById(R.id.tvMobile)
         tvMember = findViewById(R.id.tvMember)
         llGoods = findViewById(R.id.llGoods)
+        tvInviteCode = findViewById(R.id.tvInviteCode)
+        tvInviteSub = findViewById(R.id.tvInviteSub)
+        etInviteCode = findViewById(R.id.etInviteCode)
+        llRedeem = findViewById(R.id.llRedeem)
         tvMobile.text = AccountStore.mobile
 
         findViewById<KButton>(R.id.btnDailyClaim).setOnClickListener { claimDaily() }
+        findViewById<KButton>(R.id.btnCopyCode).setOnClickListener { copyInviteCode() }
+        findViewById<KButton>(R.id.btnRedeem).setOnClickListener { redeemInvite() }
         findViewById<KButton>(R.id.btnLogout).setOnClickListener {
             AccountRepository.logout()
             startActivity(Intent(this, LoginActivity::class.java))
@@ -64,6 +78,7 @@ class AccountActivity : BaseActivity() {
 
         observeState()
         loadGoods()
+        loadInvite()
         lifecycleScope.launch { AccountRepository.refreshBalance() }
     }
 
@@ -138,6 +153,45 @@ class AccountActivity : BaseActivity() {
             }
         }
         toast(getString(R.string.account_recharge_pending))
+    }
+
+    private var myInviteCode: String = ""
+
+    private fun loadInvite() {
+        lifecycleScope.launch {
+            AccountRepository.inviteInfo().onSuccess { info ->
+                myInviteCode = info.code
+                tvInviteCode.text = info.code.ifEmpty { "------" }
+                tvInviteSub.text = getString(
+                    R.string.account_invite_sub, info.invitedCount, info.inviterBonus,
+                )
+                llRedeem.visibility = if (info.redeemed) LinearLayout.GONE else LinearLayout.VISIBLE
+            }
+        }
+    }
+
+    private fun copyInviteCode() {
+        if (myInviteCode.isEmpty()) return
+        val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        cm.setPrimaryClip(ClipData.newPlainText("invite", myInviteCode))
+        toast(getString(R.string.account_invite_copied))
+    }
+
+    private fun redeemInvite() {
+        val code = etInviteCode.text.toString().trim().uppercase()
+        if (code.isEmpty()) {
+            toast(getString(R.string.account_invite_redeem_hint))
+            return
+        }
+        lifecycleScope.launch {
+            AccountRepository.redeemInvite(code)
+                .onSuccess {
+                    toast(getString(R.string.account_invite_redeem_success, it.credits))
+                    etInviteCode.setText("")
+                    loadInvite()
+                }
+                .onFailure { toast(it.message ?: getString(R.string.account_invite_redeem_failed)) }
+        }
     }
 
     private fun claimDaily() {

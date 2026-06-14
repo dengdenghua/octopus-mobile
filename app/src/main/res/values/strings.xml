@@ -818,6 +818,15 @@ For these, install Shizuku — a safe, open-source helper.</string>
     <string name="account_claim_success">Claimed +%1$d credits</string>
     <string name="account_claim_already">Already checked in today</string>
     <string name="account_claim_failed">Check-in failed</string>
+    <string name="account_invite_title">Invite friends</string>
+    <string name="account_invite_my_code">Your invite code</string>
+    <string name="account_invite_copy">Copy</string>
+    <string name="account_invite_copied">Invite code copied</string>
+    <string name="account_invite_sub">Invited %1$d · both get +%2$d credits</string>
+    <string name="account_invite_redeem_hint">Enter an invite code</string>
+    <string name="account_invite_redeem">Redeem</string>
+    <string name="account_invite_redeem_success">Redeemed +%1$d credits</string>
+    <string name="account_invite_redeem_failed">Redeem failed</string>
     <string name="account_byo_locked_title">Members only</string>
     <string name="account_byo_locked_msg">Connect your own model after becoming a member. Free users use the platform model billed in credits.</string>
     <string name="account_go_recharge">Become a member</string>

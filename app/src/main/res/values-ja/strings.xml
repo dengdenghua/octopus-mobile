@@ -712,6 +712,15 @@
     <string name="account_claim_success">チェックイン成功 +%1$d クレジット</string>
     <string name="account_claim_already">本日はチェックイン済み</string>
     <string name="account_claim_failed">チェックインに失敗</string>
+    <string name="account_invite_title">友達を招待</string>
+    <string name="account_invite_my_code">あなたの招待コード</string>
+    <string name="account_invite_copy">コピー</string>
+    <string name="account_invite_copied">招待コードをコピーしました</string>
+    <string name="account_invite_sub">%1$d 人を招待 · 双方に +%2$d クレジット</string>
+    <string name="account_invite_redeem_hint">招待コードを入力</string>
+    <string name="account_invite_redeem">交換</string>
+    <string name="account_invite_redeem_success">交換成功 +%1$d クレジット</string>
+    <string name="account_invite_redeem_failed">交換に失敗</string>
     <string name="account_byo_locked_title">会員限定</string>
     <string name="account_byo_locked_msg">会員登録後に自分のモデルを接続できます。無料ユーザーはクレジット課金のプラットフォームモデルを使用します。</string>
     <string name="account_go_recharge">会員になる</string>

@@ -19,4 +19,6 @@ interface AccountGateway {
     suspend fun createOrder(token: String, goodsId: String): CreateOrderResult
     suspend fun queryOrder(token: String, orderNo: String): OrderStatusResult
     suspend fun dailyClaim(token: String): DailyClaimResult
+    suspend fun inviteInfo(token: String): InviteInfo
+    suspend fun redeemInvite(token: String, code: String): RedeemResult
 }
