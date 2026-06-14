@@ -1,11 +1,20 @@
 package com.apk.claw.android.ui.compose.screen
 
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.viewinterop.AndroidView
+import com.apk.claw.android.widget.MjpegImageView
+import java.net.URLEncoder
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -19,6 +28,7 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChatBubbleOutline
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -27,11 +37,12 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.Build
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
@@ -111,6 +122,7 @@ fun ChatScreen() {
     var inputText by remember { mutableStateOf("") }
     var isRunning by remember { mutableStateOf(false) }
     var moreMenuOpen by remember { mutableStateOf(false) }
+    var previewDevice by remember { mutableStateOf<DeviceInfo?>(null) }
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val context = LocalContext.current
     val devices by ClawApplication.instance.deviceRegistry.deviceList.collectAsState()
@@ -337,6 +349,9 @@ fun ChatScreen() {
                     }
                 }
             }
+            // 目标选择器:决定 Agent 在「本机」还是某台局域网设备上执行(移到右上,与三点并排)
+            TargetSelector(onPreview = { previewDevice = it })
+            Spacer(modifier = Modifier.width(4.dp))
             Box {
                 IconButton(onClick = { moreMenuOpen = true }) {
                     Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.common_more), tint = TextPrimary)
@@ -374,6 +389,17 @@ fun ChatScreen() {
                         },
                     )
                 }
+            }
+        }
+
+        // 设备实时预览(选了远程设备后出现在上半屏);「进入控制」开横屏全控页
+        previewDevice?.let { dev ->
+            key(dev.deviceId) {
+                DevicePreviewPanel(
+                    device = dev,
+                    onEnter = { runCatching { com.apk.claw.android.ui.device.RemoteControlActivity.start(context, dev.deviceId) } },
+                    onClose = { previewDevice = null },
+                )
             }
         }
 
@@ -421,7 +447,7 @@ fun ChatScreen() {
                     stringResource(R.string.chat_suggestion_files),
                     stringResource(R.string.chat_suggestion_app),
                 ).forEach { suggestion ->
-                    PromptSuggestion(suggestion) { inputText = suggestion }
+                    PromptSuggestion(suggestion) { inputText = suggestion; send() }
                 }
             }
         } else {
@@ -457,9 +483,6 @@ fun ChatScreen() {
             border = BorderStroke(1.dp, BorderColor.copy(alpha = 0.7f)),
         ) {
             Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-            // 目标选择器：决定 Agent 在「本机」还是某台局域网设备上执行
-            TargetSelector()
-            Spacer(modifier = Modifier.height(8.dp))
             if (voiceMode) {
                 // ── 语音优先：左侧键盘切换（次选）+ 大麦克风「按住说话」 ──
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -676,9 +699,9 @@ private fun AgentHomeStatusCard(
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                 MiniMetric(
-                    label = stringResource(R.string.chat_metric_model),
-                    value = if (llmOk) stringResource(R.string.status_online) else stringResource(R.string.chat_agent_setup_needed),
-                    ok = llmOk,
+                    label = stringResource(R.string.setup_a11y),
+                    value = if (a11yOk) stringResource(R.string.status_online) else stringResource(R.string.chat_agent_setup_needed),
+                    ok = a11yOk,
                     modifier = Modifier.weight(1f),
                 )
                 MiniMetric(
@@ -725,7 +748,6 @@ private fun DrawerStatusPanel(llmOk: Boolean, a11yOk: Boolean, deviceCount: Int)
         border = BorderStroke(1.dp, BorderColor),
     ) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-            DrawerStatusRow(Icons.Filled.SmartToy, stringResource(R.string.chat_metric_model), llmOk)
             DrawerStatusRow(Icons.Filled.PhoneAndroid, stringResource(R.string.setup_a11y), a11yOk)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Filled.Devices, contentDescription = null, tint = PrimaryColor, modifier = Modifier.size(16.dp))
@@ -853,42 +875,33 @@ private fun SessionBucket.label(): String = stringResource(
 )
 
 @Composable
-private fun TargetSelector() {
+private fun TargetSelector(onPreview: (DeviceInfo?) -> Unit = {}) {
     val devices by ClawApplication.instance.deviceRegistry.deviceList.collectAsState()
     var menu by remember { mutableStateOf(false) }
     var label by remember { mutableStateOf(ControlTarget.label()) }
     val remote = remember(label) { ControlTarget.isRemote() }
     Box {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .background(
-                    (if (remote) PrimaryColor else OctopusColors.SurfaceDeep).copy(alpha = if (remote) 0.16f else 1f),
-                    RoundedCornerShape(12.dp)
+        // 只一个「手机/电脑」复合图标;点击才弹出设备列表。远程时高亮 + 右上角小圆点提示。
+        IconButton(onClick = { menu = true }) {
+            BadgedBox(
+                badge = { if (remote) Badge(containerColor = PrimaryColor, modifier = Modifier.size(7.dp)) }
+            ) {
+                Icon(
+                    Icons.Filled.Devices,
+                    contentDescription = label,
+                    tint = if (remote) PrimaryColor else TextSecondary,
                 )
-                .clickable { menu = true }
-                .padding(horizontal = 10.dp, vertical = 6.dp),
-        ) {
-            Icon(
-                if (remote) Icons.Filled.Devices else Icons.Filled.PhoneAndroid,
-                contentDescription = null,
-                tint = if (remote) PrimaryColor else TextMuted,
-                modifier = Modifier.size(14.dp),
-            )
-            Spacer(modifier = Modifier.width(5.dp))
-            Text(label, color = if (remote) PrimaryColor else TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.Medium)
-            Spacer(modifier = Modifier.width(2.dp))
-            Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null, tint = TextMuted, modifier = Modifier.size(15.dp))
+            }
         }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.chat_target_local_device)) },
-                onClick = { ControlTarget.setLocal(); label = ControlTarget.label(); menu = false },
+                onClick = { ControlTarget.setLocal(); label = ControlTarget.label(); menu = false; onPreview(null) },
             )
             devices.forEach { d ->
                 DropdownMenuItem(
                     text = { Text("🖥 ${d.deviceName}") },
-                    onClick = { ControlTarget.setRemote(d); label = ControlTarget.label(); menu = false },
+                    onClick = { ControlTarget.setRemote(d); label = ControlTarget.label(); menu = false; onPreview(d) },
                 )
             }
             // 调试：回环目标（远程控制自己，用于单机验证远程路由）
@@ -915,6 +928,70 @@ private fun TargetSelector() {
                     },
                 )
             }
+        }
+    }
+}
+
+/**
+ * 设备实时预览面板(上半屏)。点设备后出现:MJPEG 直播画面 + 「进入控制」开横屏全控页。
+ * 用 key(deviceId) 保证切设备时整块重建,串流随之重启;离开组合时 onRelease 停流。
+ */
+@Composable
+private fun DevicePreviewPanel(device: DeviceInfo, onEnter: () -> Unit, onClose: () -> Unit) {
+    // Marvis 风格:紧贴顶栏的一块干净圆角实时画面,无内部标题栏;点画面=进入控制,下方一根拖拽柄。
+    val previewH = (LocalConfiguration.current.screenHeightDp * 0.42f).dp
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(top = 6.dp)) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(previewH)
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color.Black)
+                .clickable { onEnter() },
+        ) {
+            AndroidView(
+                factory = { ctx ->
+                    MjpegImageView(ctx).apply {
+                        scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+                        setBackgroundColor(android.graphics.Color.BLACK)
+                        val token = URLEncoder.encode(device.authToken, "UTF-8")
+                        start("${device.getBaseUrl()}/api/screen/stream?quality=45&maxWidth=600&fps=10&token=$token")
+                    }
+                },
+                onRelease = { it.stop() },
+                modifier = Modifier.fillMaxSize(),
+            )
+            // 左上角:设备名小药丸(画面内做上下文,不占独立标题栏)
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(8.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0x80000000))
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(SuccessColor))
+                Spacer(Modifier.width(5.dp))
+                Text(device.deviceName, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+            }
+            // 右上角:关闭
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(8.dp)
+                    .size(26.dp)
+                    .clip(CircleShape)
+                    .background(Color(0x80000000))
+                    .clickable { onClose() },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Filled.Close, contentDescription = "关闭", tint = Color.White, modifier = Modifier.size(15.dp))
+            }
+        }
+        // 拖拽柄(视觉提示:可点画面进入全控)
+        Box(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp), contentAlignment = Alignment.Center) {
+            Box(modifier = Modifier.width(36.dp).height(4.dp).clip(RoundedCornerShape(2.dp)).background(BorderColor))
         }
     }
 }
@@ -1092,7 +1169,7 @@ private fun ToolGroupItem(tools: List<ChatMessage.ToolCall>, expanded: Boolean, 
     ) {
         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.Build, contentDescription = null, tint = PrimaryColor, modifier = Modifier.size(15.dp))
+                Text(tools.first().icon, fontSize = 14.sp)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     stringResource(R.string.chat_tool_steps, tools.size),
@@ -1113,7 +1190,7 @@ private fun ToolGroupItem(tools: List<ChatMessage.ToolCall>, expanded: Boolean, 
                 tools.forEach { t ->
                     Spacer(modifier = Modifier.height(6.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.Build, contentDescription = null, tint = TextMuted, modifier = Modifier.size(13.dp))
+                        Text(t.icon, fontSize = 12.sp)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(t.toolName, fontSize = 11.sp, color = PrimaryColor, fontFamily = FontFamily.Monospace)
                         if (t.args.isNotEmpty()) {
@@ -1140,7 +1217,7 @@ private fun ToolCallItem(msg: ChatMessage.ToolCall) {
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(Icons.Filled.Build, contentDescription = null, tint = PrimaryColor, modifier = Modifier.size(15.dp))
+            Text(msg.icon, fontSize = 14.sp)
             Spacer(modifier = Modifier.width(8.dp))
             Text(
                 msg.toolName,
@@ -1163,12 +1240,28 @@ private fun ToolCallItem(msg: ChatMessage.ToolCall) {
 
 @Composable
 private fun ThinkingItem(text: String) {
+    val infiniteTransition = rememberInfiniteTransition(label = "thinking")
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text("🤔", fontSize = 14.sp)
         Spacer(modifier = Modifier.width(8.dp))
         Text(text, fontSize = 12.sp, color = TextSecondary)
-        Spacer(modifier = Modifier.width(4.dp))
-        // 动画点
-        Text("...", fontSize = 12.sp, color = PrimaryColor)
+        Spacer(modifier = Modifier.width(6.dp))
+        (0..2).forEach { i ->
+            val alpha by infiniteTransition.animateFloat(
+                initialValue = 0.2f,
+                targetValue = 1f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(durationMillis = 400, delayMillis = i * 150),
+                    repeatMode = RepeatMode.Reverse,
+                ),
+                label = "dot$i",
+            )
+            Text(
+                "·",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = PrimaryColor.copy(alpha = alpha),
+            )
+        }
     }
 }

@@ -12,12 +12,11 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Api
 import androidx.compose.material.icons.filled.BatteryChargingFull
-import androidx.compose.material.icons.filled.CloudQueue
-import androidx.compose.material.icons.filled.Devices
-import androidx.compose.material.icons.filled.Extension
-import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Hub
-import androidx.compose.material.icons.filled.Lan
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Monitor
@@ -27,7 +26,6 @@ import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.SettingsAccessibility
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Storage
-import androidx.compose.material.icons.filled.TravelExplore
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -35,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
@@ -47,6 +46,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.apk.claw.android.BuildConfig
 import com.apk.claw.android.server.ConfigServerManager
 import com.apk.claw.android.service.ClawAccessibilityService
 import com.apk.claw.android.shizuku.ShizukuManager
@@ -62,7 +62,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.apk.claw.android.R
 
-// ── 真实权限/状态探测（非 Composable，可在 remember 中调用）────────────
+// ── 真实权限/状态探测 ──────────────────────────────────
+
 private fun isNotifEnabled(c: Context): Boolean =
     runCatching { NotificationManagerCompat.from(c).areNotificationsEnabled() }.getOrDefault(false)
 
@@ -74,7 +75,6 @@ private fun isBatteryUnrestricted(c: Context): Boolean = runCatching {
     pm?.isIgnoringBatteryOptimizations(c.packageName) ?: false
 }.getOrDefault(false)
 
-// Q+ 走分区存储无需授权；Q 以下检查 WRITE_EXTERNAL_STORAGE
 private fun isStorageGranted(c: Context): Boolean {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) return true
     return androidx.core.content.ContextCompat.checkSelfPermission(
@@ -84,7 +84,23 @@ private fun isStorageGranted(c: Context): Boolean {
 
 private fun isShizukuReady(): Boolean = runCatching { ShizukuManager.isAvailable() }.getOrDefault(false)
 
-// 是否开放「自定义模型配置(BYO)」入口。当前默认走平台中转积分,先关闭;后续要放开改 true。
+/** 未授权权限的跳转 Intent */
+private fun permissionIntent(index: Int, context: Context): Intent? = when (index) {
+    0 -> Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)           // 无障碍
+    1 -> Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {  // 通知
+        putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+    }
+    2 -> Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION).apply { // 悬浮窗
+        data = Uri.parse("package:${context.packageName}")
+    }
+    3 -> Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS) // 电池
+    4 -> Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply { // 存储
+        data = Uri.parse("package:${context.packageName}")
+    }
+    5 -> null // Shizuku 需要单独 App，无法直接跳转
+    else -> null
+}
+
 private const val SHOW_BYO_MODEL_CONFIG = false
 
 private val PrimaryColor get() = OctopusColors.Primary
@@ -100,10 +116,11 @@ private val TextSecondary get() = OctopusColors.TextSecondary
 private val TextMuted get() = OctopusColors.TextMuted
 private val BorderColor get() = OctopusColors.Border
 
+private data class PermissionUi(val icon: ImageVector, val name: String, val ok: Boolean)
+
 @Composable
 fun SettingsScreen(onMessage: (String) -> Unit = {}) {
     val context = LocalContext.current
-    // 离开本页去授权后回来需刷新真实状态
     val lifecycleOwner = LocalLifecycleOwner.current
     var refreshTick by remember { mutableStateOf(0) }
     DisposableEffect(lifecycleOwner) {
@@ -122,10 +139,6 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
         )
     }
     val readyCount = permissionStates.count { it }
-    // 模型状态读「实际生效路由」(平台中转登录即就绪),不再只看用户自填 key —— 配合隐藏 BYO 配置。
-    val effLlm = remember(refreshTick) { com.apk.claw.android.account.LlmRouting.effective() }
-    val modelName = remember(effLlm) { effLlm.model.ifBlank { "—" } }
-    val apiKeyConfigured = effLlm.apiKey.isNotBlank()
     val lanAddr = remember(refreshTick) { runCatching { ConfigServerManager.getAddress() }.getOrNull() }
     val loggedIn = remember(refreshTick) { AccountStore.isLoggedIn }
     val credits = remember(refreshTick) { AccountStore.credits }
@@ -139,8 +152,6 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
         item {
             SettingsHeader(
                 readyCount = readyCount,
-                modelName = modelName,
-                apiKeyConfigured = apiKeyConfigured,
                 lanAddr = lanAddr,
             )
         }
@@ -167,26 +178,51 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
             }
         }
 
+        // ── 权限：可点击跳转系统设置 ──
         item {
+            val permNames = listOf(
+                stringResource(R.string.perm_accessibility),
+                stringResource(R.string.perm_notification),
+                stringResource(R.string.perm_overlay),
+                stringResource(R.string.perm_battery),
+                stringResource(R.string.perm_storage),
+                "Shizuku",
+            )
+            val permIcons = listOf(
+                Icons.Filled.SettingsAccessibility,
+                Icons.Filled.Notifications,
+                Icons.Filled.PhoneAndroid,
+                Icons.Filled.BatteryChargingFull,
+                Icons.Filled.Storage,
+                Icons.Filled.Security,
+            )
             SettingsCard(stringResource(R.string.settings_section_permissions), Icons.Filled.Shield, compact = true) {
-                val perms = listOf(
-                    PermissionUi(Icons.Filled.SettingsAccessibility, stringResource(R.string.perm_accessibility), permissionStates[0]),
-                    PermissionUi(Icons.Filled.Notifications, stringResource(R.string.perm_notification), permissionStates[1]),
-                    PermissionUi(Icons.Filled.PhoneAndroid, stringResource(R.string.perm_overlay), permissionStates[2]),
-                    PermissionUi(Icons.Filled.BatteryChargingFull, stringResource(R.string.perm_battery), permissionStates[3]),
-                    PermissionUi(Icons.Filled.Storage, stringResource(R.string.perm_storage), permissionStates[4]),
-                    PermissionUi(Icons.Filled.Security, "Shizuku", permissionStates[5]),
-                )
+                // 摘要行
+                val perms = permNames.mapIndexed { i, name -> PermissionUi(permIcons[i], name, permissionStates[i]) }
                 PermissionSummaryRow(readyCount, perms)
+                Spacer(Modifier.height(8.dp))
+                // 逐项权限（未授权可点击跳转）
+                perms.forEachIndexed { i, perm ->
+                    PermissionItemRow(
+                        permission = perm,
+                        onClick = {
+                            if (!perm.ok) {
+                                permissionIntent(i, context)?.let {
+                                    it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    context.startActivity(it)
+                                }
+                            }
+                        },
+                    )
+                }
             }
         }
 
-        // 自定义模型配置(BYO):暂不开放——默认走平台中转积分,先不让用户配模型,后续再考虑。
-        // 把 SHOW_BYO_MODEL_CONFIG 改回 true 即恢复入口(原逻辑:仅登录后显示、积分耗尽才启用,见 LlmRouting)。
         if (loggedIn && SHOW_BYO_MODEL_CONFIG) {
             item {
                 val notConfiguredText = stringResource(R.string.status_not_configured)
                 val configuredText = stringResource(R.string.settings_llm_api_key_configured)
+                val modelName = KVUtils.getLlmModelName().ifBlank { notConfiguredText }
                 val baseUrl = KVUtils.getLlmBaseUrl().ifBlank { notConfiguredText }
                 val apiKey = KVUtils.getLlmApiKey()
                 val keyMasked = if (apiKey.length >= 8) apiKey.take(5) + "••••" + apiKey.takeLast(4) else if (apiKey.isBlank()) notConfiguredText else configuredText
@@ -207,7 +243,6 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
             }
         }
 
-        // 普通人入口:一个「远程控制电脑」(默认走跨网 WebRTC,类似 ToDesk)
         item {
             SettingsCard(stringResource(R.string.settings_device_control_section), Icons.Filled.Monitor, compact = true, onClick = {
                 context.startActivity(Intent(context, com.apk.claw.android.ui.featurescreens.PcRemoteWebrtcActivity::class.java))
@@ -220,7 +255,7 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
             }
         }
 
-        // 高级(默认折叠):RPC 主机连接 + 局域网远程桌面,术语都收在这里,普通人看不到
+        // ── 高级：折叠提示增强 ──
         item {
             var advExpanded by remember { mutableStateOf(false) }
             SettingsCard(stringResource(R.string.settings_advanced_title), Icons.Filled.Tune, compact = true, onClick = { advExpanded = !advExpanded }) {
@@ -233,12 +268,17 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
                         context.startActivity(Intent(context, com.apk.claw.android.ui.featurescreens.PcRemoteActivity::class.java))
                     }
                 } else {
-                    Text(stringResource(R.string.settings_advanced_hint), color = TextMuted, fontSize = 11.sp, lineHeight = 15.sp)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(stringResource(R.string.settings_advanced_hint), color = TextMuted, fontSize = 11.sp, lineHeight = 15.sp, modifier = Modifier.weight(1f))
+                        Icon(Icons.Filled.ExpandMore, contentDescription = null, tint = TextMuted, modifier = Modifier.size(16.dp))
+                    }
                 }
             }
         }
 
+        // ── 渠道：内联显示各渠道状态 ──
         item {
+            val channelNames = listOf("钉钉", "飞书", "QQ", "Discord", "Telegram", "微信")
             val cfg = remember(refreshTick) {
                 listOf(
                     KVUtils.getDingtalkAppKey().isNotEmpty() && KVUtils.getDingtalkAppSecret().isNotEmpty(),
@@ -252,12 +292,42 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
             SettingsCard(stringResource(R.string.settings_section_channels), Icons.Filled.Notifications, compact = true, onClick = {
                 context.startActivity(Intent(context, com.apk.claw.android.ui.featurescreens.ChannelsActivity::class.java))
             }) {
+                // 摘要
                 SettingsRow(
                     Icons.Filled.Notifications,
                     stringResource(R.string.settings_section_channels),
                     "${cfg.count { it }}/6",
                     trailing = if (cfg.any { it }) stringResource(R.string.status_connected) else stringResource(R.string.status_not_configured),
                 )
+                Spacer(Modifier.height(6.dp))
+                // 各渠道状态点
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    channelNames.forEachIndexed { i, name ->
+                        val connected = cfg[i]
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (connected) SuccessColor.copy(alpha = 0.10f) else SurfaceVariantColor,
+                            border = BorderStroke(1.dp, if (connected) SuccessColor.copy(alpha = 0.20f) else BorderColor.copy(alpha = 0.6f)),
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 5.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center,
+                            ) {
+                                Box(modifier = Modifier.size(5.dp).background(
+                                    if (connected) SuccessColor else TextMuted,
+                                    RoundedCornerShape(50),
+                                ))
+                                Spacer(Modifier.width(4.dp))
+                                Text(name, fontSize = 10.sp, color = if (connected) TextPrimary else TextMuted, maxLines = 1)
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -275,10 +345,10 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
             }
         }
 
-
+        // ── 版本号从 BuildConfig 读取 ──
         item {
             Text(
-                "Octopus Mobile v0.0.2 · Apache 2.0",
+                "Octopus Mobile v${BuildConfig.VERSION_NAME} · Apache 2.0",
                 fontSize = 11.sp, color = TextMuted,
                 modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
                 textAlign = TextAlign.Center,
@@ -287,35 +357,66 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
     }
 }
 
-@Composable
-private fun CompactSettingsGrid(content: @Composable RowScope.() -> Unit) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), content = content)
-}
+// ── 权限逐项行（未授权可点击跳转）──────────────────────────
 
 @Composable
-private fun RowScope.CompactSettingsTile(icon: ImageVector, title: String, onClick: () -> Unit) {
-    Surface(
-        modifier = Modifier.weight(1f).height(48.dp).clickable(onClick = onClick),
-        shape = RoundedCornerShape(13.dp),
-        color = SurfaceVariantColor,
-        border = BorderStroke(1.dp, BorderColor),
+private fun PermissionItemRow(permission: PermissionUi, onClick: () -> Unit) {
+    val clickable = !permission.ok
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (clickable) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center,
-        ) {
-            Icon(icon, contentDescription = null, tint = PrimaryColor, modifier = Modifier.size(16.dp))
-            Spacer(Modifier.width(7.dp))
-            Text(title, color = TextPrimary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+        Icon(
+            permission.icon,
+            contentDescription = null,
+            tint = if (permission.ok) SuccessColor else TextMuted,
+            modifier = Modifier.size(16.dp),
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            permission.name,
+            fontSize = 12.sp,
+            color = TextPrimary,
+            modifier = Modifier.weight(1f),
+            maxLines = 1,
+        )
+        if (clickable) {
+            Text(
+                "去设置",
+                fontSize = 10.sp,
+                color = PrimaryColor,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Icon(
+                Icons.Filled.ChevronRight,
+                contentDescription = null,
+                tint = PrimaryColor,
+                modifier = Modifier.size(14.dp),
+            )
+        } else {
+            Surface(
+                shape = RoundedCornerShape(9.dp),
+                color = SuccessColor.copy(alpha = 0.12f),
+            ) {
+                Text(
+                    "OK",
+                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                    fontSize = 9.sp,
+                    color = SuccessColor,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
         }
     }
 }
 
-private data class PermissionUi(val icon: ImageVector, val name: String, val ok: Boolean)
+// ── Header / Summary ──────────────────────────────────
 
 @Composable
-private fun SettingsHeader(readyCount: Int, modelName: String, apiKeyConfigured: Boolean, lanAddr: String?) {
+private fun SettingsHeader(readyCount: Int, lanAddr: String?) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             stringResource(R.string.settings_title),
@@ -332,12 +433,6 @@ private fun SettingsHeader(readyCount: Int, modelName: String, apiKeyConfigured:
                 label = stringResource(R.string.settings_metric_permissions),
                 value = "$readyCount/6",
                 ok = readyCount >= 5,
-                modifier = Modifier.weight(1f),
-            )
-            HeroMetric(
-                label = stringResource(R.string.settings_metric_model),
-                value = if (apiKeyConfigured) modelName else stringResource(R.string.status_not_configured),
-                ok = apiKeyConfigured,
                 modifier = Modifier.weight(1f),
             )
             HeroMetric(
@@ -387,93 +482,34 @@ private fun HeroMetric(label: String, value: String, ok: Boolean, modifier: Modi
         modifier = modifier,
         shape = RoundedCornerShape(12.dp),
         color = OctopusColors.SurfaceDeep,
-        border = BorderStroke(1.dp, if (ok) SuccessColor.copy(alpha = 0.16f) else BorderColor.copy(alpha = 0.8f)),
+        border = BorderStroke(
+            1.dp,
+            when {
+                ok -> SuccessColor.copy(alpha = 0.16f)
+                value.contains(stringResource(R.string.status_not_configured)) -> WarningColor.copy(alpha = 0.25f)
+                else -> BorderColor.copy(alpha = 0.8f)
+            },
+        ),
     ) {
         Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 9.dp)) {
             Text(label, color = TextMuted, fontSize = 10.sp, maxLines = 1)
             Spacer(Modifier.height(4.dp))
-            Text(value, color = if (ok) SuccessColor else TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-        }
-    }
-}
-
-@Composable
-private fun PermissionTile(permission: PermissionUi, modifier: Modifier = Modifier) {
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(13.dp),
-        color = SurfaceVariantColor,
-        border = BorderStroke(1.dp, if (permission.ok) SuccessColor.copy(alpha = 0.18f) else BorderColor),
-    ) {
-        Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(permission.icon, contentDescription = null, tint = if (permission.ok) SuccessColor else TextMuted, modifier = Modifier.size(16.dp))
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(permission.name, fontSize = 12.sp, color = TextPrimary, modifier = Modifier.weight(1f), maxLines = 1)
-            Text(if (permission.ok) "OK" else "OFF", fontSize = 9.sp, color = if (permission.ok) SuccessColor else ErrorColor, fontWeight = FontWeight.Bold)
-        }
-    }
-}
-
-@Composable
-private fun PermissionStatusRow(permission: PermissionUi) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        IconBubble(permission.icon, if (permission.ok) SuccessColor else TextMuted)
-        Spacer(Modifier.width(10.dp))
-        Text(
-            permission.name,
-            modifier = Modifier.weight(1f),
-            fontSize = 13.sp,
-            color = TextPrimary,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-        )
-        Surface(
-            shape = RoundedCornerShape(9.dp),
-            color = if (permission.ok) SuccessColor.copy(alpha = 0.12f) else ErrorColor.copy(alpha = 0.10f),
-        ) {
             Text(
-                if (permission.ok) "OK" else "OFF",
-                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
-                fontSize = 9.sp,
-                color = if (permission.ok) SuccessColor else ErrorColor,
-                fontWeight = FontWeight.Bold,
-            )
-        }
-    }
-}
-
-@Composable
-private fun ChannelTile(name: String, connected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Surface(
-        modifier = modifier.clickable(onClick = onClick),
-        shape = RoundedCornerShape(13.dp),
-        color = SurfaceVariantColor,
-        border = BorderStroke(1.dp, if (connected) SuccessColor.copy(alpha = 0.2f) else BorderColor),
-    ) {
-        Column(
-            modifier = Modifier.padding(vertical = 10.dp, horizontal = 6.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Surface(shape = RoundedCornerShape(50), color = if (connected) SuccessColor.copy(alpha = 0.12f) else OctopusColors.SurfaceDeep) {
-                Box(modifier = Modifier.size(24.dp), contentAlignment = Alignment.Center) {
-                    Text(name.take(1), fontSize = 11.sp, color = if (connected) SuccessColor else TextMuted, fontWeight = FontWeight.Bold)
-                }
-            }
-            Spacer(Modifier.height(6.dp))
-            Text(name, fontSize = 11.sp, color = TextSecondary, maxLines = 1)
-            Text(
-                if (connected) stringResource(R.string.status_connected) else stringResource(R.string.status_not_configured),
-                fontSize = 9.sp,
-                color = if (connected) SuccessColor else TextMuted,
+                value,
+                color = when {
+                    ok -> SuccessColor
+                    value.contains(stringResource(R.string.status_not_configured)) -> WarningColor
+                    else -> TextSecondary
+                },
+                fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
             )
         }
     }
 }
+
+// ── 通用组件 ──────────────────────────────────────────
 
 @Composable
 private fun SettingsRow(icon: ImageVector, title: String, subtitle: String, trailing: String? = null) {
@@ -512,7 +548,6 @@ private fun ClickableSettingsRow(icon: ImageVector, title: String, subtitle: Str
 
 @Composable
 private fun IconBubble(icon: ImageVector, tint: Color) {
-    // iOS 风格:实色圆角方形 + 白色字形(与「功能」中心一致)
     Surface(shape = RoundedCornerShape(9.dp), color = tint) {
         Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.padding(7.dp).size(18.dp))
     }

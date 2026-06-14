@@ -7,6 +7,10 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -40,15 +44,12 @@ fun FeatureScaffold(
 ) {
     Column(modifier = Modifier.fillMaxSize().background(FBg).statusBarsPadding().navigationBarsPadding()) {
         Row(
-            modifier = Modifier.fillMaxWidth().height(54.dp).padding(start = 6.dp, end = 16.dp),
+            modifier = Modifier.fillMaxWidth().height(54.dp).padding(start = 2.dp, end = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                "‹",
-                color = FText,
-                fontSize = 26.sp,
-                modifier = Modifier.size(44.dp).clickable(onClick = onBack).padding(start = 12.dp),
-            )
+            IconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回", tint = FText)
+            }
             Text(title, color = FText, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             if (action != null) action()
         }

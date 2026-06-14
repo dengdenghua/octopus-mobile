@@ -1,4 +1,4 @@
-﻿<resources>
+<resources>
     <string name="app_name">章鱼移动</string>
 
     <!-- 通用 -->
@@ -760,7 +760,7 @@
     <string name="wechat_login_linked">微信已登录。</string>
     <string name="wechat_login_relogin">重新扫码登录</string>
     <string name="wechat_login_done">完成</string>
-    <string name="nav_features">功能</string>
+    <string name="nav_features">广场</string>
     <string name="feat_section_automation">自动化</string>
     <string name="feat_section_data">数据与记忆</string>
     <string name="feat_section_advanced">进阶</string>
@@ -773,6 +773,26 @@
     <string name="feat_multiwindow">多窗口</string>
     <string name="feat_evolution">自进化</string>
     <string name="feat_trust">信任中心</string>
+    <string name="feat_toolbox_title">工具箱</string>
+    <string name="feat_explore">探索</string>
+    <string name="feat_explore_title">探索发现</string>
+    <string name="feat_explore_hot">热门</string>
+    <string name="feat_explore_recent">最近</string>
+    <string name="feat_explore_office">办公学习</string>
+    <string name="feat_explore_pc">电脑设置</string>
+    <string name="feat_explore_life">生活日常</string>
+    <string name="feat_explore_coming">敬请期待</string>
+    <string name="feat_explore_hint">精选案例与技能即将上线</string>
+    <string name="feat_skills_desc">Agent 能力与工具集</string>
+    <string name="feat_extensions_desc">浏览器扩展与插件</string>
+    <string name="feat_routines_desc">自动化任务定时执行</string>
+    <string name="feat_clouddrive_desc">云端文件访问</string>
+    <string name="feat_memory_desc">跨会话偏好记忆</string>
+    <string name="feat_video_desc">媒体库与播放</string>
+    <string name="feat_browser_desc">搜索引擎与引擎配置</string>
+    <string name="feat_multiwindow_desc">自由窗口与分屏</string>
+    <string name="feat_evolution_desc">AI 行为自我进化</string>
+    <string name="feat_trust_desc">安全审计与日志</string>
     <string name="browser_settings_title">浏览器设置</string>
     <string name="browser_settings_search_engine">默认搜索引擎</string>
     <string name="browser_settings_engine_kernel">浏览器内核</string>

@@ -1,4 +1,4 @@
-﻿<resources>
+<resources>
     <string name="app_name">Octopus Mobile</string>
 
     <!-- 共通 -->
@@ -654,7 +654,7 @@
     <string name="wechat_login_linked">WeChatは連携済みです。</string>
     <string name="wechat_login_relogin">再スキャンしてログイン</string>
     <string name="wechat_login_done">完了</string>
-    <string name="nav_features">機能</string>
+    <string name="nav_features">広場</string>
     <string name="feat_section_automation">自動化</string>
     <string name="feat_section_data">データとメモリ</string>
     <string name="feat_section_advanced">詳細</string>
@@ -667,6 +667,26 @@
     <string name="feat_multiwindow">マルチウィンドウ</string>
     <string name="feat_evolution">自己進化</string>
     <string name="feat_trust">トラストセンター</string>
+    <string name="feat_toolbox_title">ツールボックス</string>
+    <string name="feat_explore">探索</string>
+    <string name="feat_explore_title">探索・発見</string>
+    <string name="feat_explore_hot">人気</string>
+    <string name="feat_explore_recent">最近</string>
+    <string name="feat_explore_office">仕事・学習</string>
+    <string name="feat_explore_pc">PC設定</string>
+    <string name="feat_explore_life">日常生活</string>
+    <string name="feat_explore_coming">お楽しみに</string>
+    <string name="feat_explore_hint">注目の事例とスキルがまもなく登場</string>
+    <string name="feat_skills_desc">エージェントの能力とツール</string>
+    <string name="feat_extensions_desc">ブラウザ拡張機能</string>
+    <string name="feat_routines_desc">自動タスクスケジュール</string>
+    <string name="feat_clouddrive_desc">クラウドファイルアクセス</string>
+    <string name="feat_memory_desc">セッション間の記憶</string>
+    <string name="feat_video_desc">メディアライブラリ</string>
+    <string name="feat_browser_desc">検索エンジン設定</string>
+    <string name="feat_multiwindow_desc">フリーフォーム・分割ウィンドウ</string>
+    <string name="feat_evolution_desc">AI自己進化</string>
+    <string name="feat_trust_desc">セキュリティ監査ログ</string>
     <string name="browser_settings_title">ブラウザ設定</string>
     <string name="browser_settings_search_engine">既定の検索エンジン</string>
     <string name="browser_settings_engine_kernel">エンジン</string>

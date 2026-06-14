@@ -44,8 +44,13 @@ object ChatAgentBridge {
     private var curSteps = 0
     private var curStart = 0L
 
-    /** 是否已配置可用的 LLM（有 API Key 即认为可跑）。 */
-    fun isConfigured(): Boolean = KVUtils.getLlmApiKey().isNotBlank()
+    /**
+     * 是否有可用的 LLM。走与主对话页同一套路由 [LlmRouting]：
+     * 默认是平台中转(登录即有 token、扣积分),其次才是用户自填的 BYO key。
+     * 不能再只看 BYO key,否则付费用户在浏览器里会被错误地要求"先配置模型"。
+     */
+    fun isConfigured(): Boolean =
+        com.apk.claw.android.account.LlmRouting.effective().apiKey.isNotBlank()
 
     /** 中断当前正在运行的任务。 */
     fun cancel() {
@@ -76,12 +81,15 @@ object ChatAgentBridge {
     }
 
     private fun buildConfig(): AgentConfig {
-        var baseUrl = KVUtils.getLlmBaseUrl().trim()
+        // 与 AppViewModel.getAgentConfig() 一致：默认平台中转(扣积分),会员且显式选择才用 BYO,
+        // 未配置中转/未登录时回退到本地 LLM 配置。
+        val eff = com.apk.claw.android.account.LlmRouting.effective()
+        var baseUrl = eff.baseUrl
         if (baseUrl.isEmpty()) baseUrl = "https://api.deepseek.com/v1"
         return AgentConfig.Builder()
-            .apiKey(KVUtils.getLlmApiKey())
+            .apiKey(eff.apiKey)
             .baseUrl(baseUrl)
-            .modelName(KVUtils.getLlmModelName().ifBlank { "deepseek-chat" })
+            .modelName(eff.model.ifBlank { if (eff.platform) "mimo-v2-flash" else "deepseek-chat" })
             .temperature(0.1)
             .maxIterations(40)
             .enableVision(false)
