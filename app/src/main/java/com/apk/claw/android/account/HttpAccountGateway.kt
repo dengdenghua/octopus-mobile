@@ -54,11 +54,17 @@ class HttpAccountGateway(baseUrl: String) : AccountGateway {
         http.newCall(req).execute().use { resp ->
             val text = resp.body?.string().orEmpty()
             if (!resp.isSuccessful) {
-                throw RuntimeException("HTTP ${resp.code}: ${text.take(200)}")
+                throw RuntimeException(serverDetail(text) ?: "HTTP ${resp.code}: ${text.take(200)}")
             }
             return gson.fromJson(text, clazz)
         }
     }
+
+    /** Pull FastAPI's `{"detail": "..."}` so error toasts show the friendly server message. */
+    private fun serverDetail(body: String): String? = runCatching {
+        gson.fromJson(body, com.google.gson.JsonObject::class.java)
+            ?.get("detail")?.takeIf { it.isJsonPrimitive }?.asString
+    }.getOrNull()
 
     override suspend fun sendSmsCode(mobile: String): SmsSendResult =
         post("/auth/sms/send", mapOf("mobile" to mobile), null, SmsSendResult::class.java)
