@@ -712,4 +712,9 @@
     <string name="account_claim_success">チェックイン成功 +%1$d クレジット</string>
     <string name="account_claim_already">本日はチェックイン済み</string>
     <string name="account_claim_failed">チェックインに失敗</string>
+    <string name="account_byo_locked_title">会員限定</string>
+    <string name="account_byo_locked_msg">会員登録後に自分のモデルを接続できます。無料ユーザーはクレジット課金のプラットフォームモデルを使用します。</string>
+    <string name="account_go_recharge">会員になる</string>
+    <string name="account_member_active">会員 · %1$s まで有効</string>
+    <string name="account_member_inactive">非会員 · プラットフォームモデルを使用</string>
 </resources>

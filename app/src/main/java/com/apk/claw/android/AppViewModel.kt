@@ -101,16 +101,19 @@ class AppViewModel : ViewModel() {
     }
 
     fun getAgentConfig(): AgentConfig {
-        var baseUrl = KVUtils.getLlmBaseUrl().trim()
+        // 路由：默认走平台中转(共享 MiMo key + 扣积分),会员且显式选择才用自己的模型;
+        // 中转未配置/未登录时回退到本地 LLM 配置(不破坏现有行为)。
+        val eff = com.apk.claw.android.account.LlmRouting.effective()
+        var baseUrl = eff.baseUrl
         if (baseUrl.isEmpty()) baseUrl = "https://api.deepseek.com/v1"
         // 从 LessonStore 注入已有教训到 dynamicPromptSuffix
         val promptSuffix = lessonStore?.buildPromptSection() ?: ""
         // 从 MemoryStore 注入跨会话记忆到 memoryPromptSuffix
         val memorySuffix = memoryStore?.buildPromptSection() ?: ""
         return AgentConfig.Builder()
-            .apiKey(KVUtils.getLlmApiKey())
+            .apiKey(eff.apiKey)
             .baseUrl(baseUrl)
-            .modelName(KVUtils.getLlmModelName().ifBlank { "deepseek-chat" })
+            .modelName(eff.model.ifBlank { if (eff.platform) "mimo-v2-flash" else "deepseek-chat" })
             .temperature(0.1)
             .maxIterations(60)
             .dynamicPromptSuffix(promptSuffix)

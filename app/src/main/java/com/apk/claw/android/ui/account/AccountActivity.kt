@@ -20,6 +20,7 @@ import com.apk.claw.android.widget.CommonToolbar
 import com.apk.claw.android.widget.KButton
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
 import java.util.Locale
 
 /**
@@ -32,6 +33,7 @@ class AccountActivity : BaseActivity() {
 
     private lateinit var tvCredits: TextView
     private lateinit var tvMobile: TextView
+    private lateinit var tvMember: TextView
     private lateinit var llGoods: LinearLayout
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -49,6 +51,7 @@ class AccountActivity : BaseActivity() {
         }
         tvCredits = findViewById(R.id.tvCredits)
         tvMobile = findViewById(R.id.tvMobile)
+        tvMember = findViewById(R.id.tvMember)
         llGoods = findViewById(R.id.llGoods)
         tvMobile.text = AccountStore.mobile
 
@@ -70,6 +73,11 @@ class AccountActivity : BaseActivity() {
                 AccountRepository.state.collect { s ->
                     tvCredits.text = s.credits.toString()
                     if (s.mobile.isNotEmpty()) tvMobile.text = s.mobile
+                    tvMember.text = if (s.byoUnlocked) {
+                        getString(R.string.account_member_active, formatDate(s.memberExpireAt))
+                    } else {
+                        getString(R.string.account_member_inactive)
+                    }
                 }
             }
         }
@@ -142,6 +150,9 @@ class AccountActivity : BaseActivity() {
                 .onFailure { toast(it.message ?: getString(R.string.account_claim_failed)) }
         }
     }
+
+    private fun formatDate(epochMillis: Long): String =
+        SimpleDateFormat("yyyy-MM-dd", Locale.US).format(epochMillis)
 
     private fun formatPrice(fen: Long): String =
         if (fen % 100 == 0L) "¥" + (fen / 100) else "¥" + String.format(Locale.US, "%.2f", fen / 100.0)

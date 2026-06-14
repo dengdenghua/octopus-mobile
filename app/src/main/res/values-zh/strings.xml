@@ -818,4 +818,9 @@
     <string name="account_claim_success">签到成功 +%1$d 积分</string>
     <string name="account_claim_already">今日已签到</string>
     <string name="account_claim_failed">签到失败</string>
+    <string name="account_byo_locked_title">会员专享</string>
+    <string name="account_byo_locked_msg">充值会员后即可接入自己的大模型；免费用户默认使用平台模型（按积分计费）。</string>
+    <string name="account_go_recharge">去开通会员</string>
+    <string name="account_member_active">会员 · 有效期至 %1$s</string>
+    <string name="account_member_inactive">未开通会员 · 使用平台模型</string>
 </resources>

@@ -17,6 +17,7 @@ import kotlinx.coroutines.launch
 import android.content.Intent
 import com.apk.claw.android.appViewModel
 import com.apk.claw.android.server.ConfigServerManager
+import com.apk.claw.android.account.AccountConfig
 import com.apk.claw.android.account.AccountStore
 import com.apk.claw.android.ui.account.AccountActivity
 import com.apk.claw.android.ui.account.LoginActivity
@@ -290,7 +291,20 @@ class SettingsActivity : BaseActivity() {
                                 }
                             }
                             SettingsViewModel.MenuAction.LLM_CONFIG -> {
-                                llmConfigLauncher.launch(Intent(this@SettingsActivity, LlmConfigActivity::class.java))
+                                // 接自己的大模型 = 会员特权:中转已配置且非会员时上锁,引导充值
+                                if (AccountConfig.relayConfigured && !AccountStore.byoUnlocked) {
+                                    AlertDialog.showWarm(
+                                        context = this@SettingsActivity,
+                                        title = getString(R.string.account_byo_locked_title),
+                                        message = getString(R.string.account_byo_locked_msg),
+                                        actionTitle = getString(R.string.account_go_recharge),
+                                        onAction = {
+                                            startActivity(Intent(this@SettingsActivity, AccountActivity::class.java))
+                                        }
+                                    )
+                                } else {
+                                    llmConfigLauncher.launch(Intent(this@SettingsActivity, LlmConfigActivity::class.java))
+                                }
                             }
                             SettingsViewModel.MenuAction.OCTOPUS_RUNTIME -> {
                                 startActivity(Intent(this@SettingsActivity, RuntimeConfigActivity::class.java))

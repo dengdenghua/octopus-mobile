@@ -15,6 +15,7 @@ object AccountStore {
     private const val K_NICKNAME = "ACCOUNT_NICKNAME"
     private const val K_AVATAR = "ACCOUNT_AVATAR"
     private const val K_CREDITS = "ACCOUNT_CREDITS"
+    private const val K_MEMBER_EXPIRE = "ACCOUNT_MEMBER_EXPIRE_AT"
 
     var token: String
         get() = KVUtils.getString(K_TOKEN, "")
@@ -41,7 +42,15 @@ object AccountStore {
         get() = KVUtils.getString(K_CREDITS, "0").toLongOrNull() ?: 0L
         set(v) = run { KVUtils.putString(K_CREDITS, v.toString()) }
 
+    /** Membership expiry, epoch millis; 0 = none. Source of truth is the server. */
+    var memberExpireAt: Long
+        get() = KVUtils.getString(K_MEMBER_EXPIRE, "0").toLongOrNull() ?: 0L
+        set(v) = run { KVUtils.putString(K_MEMBER_EXPIRE, v.toString()) }
+
     val isLoggedIn: Boolean get() = token.isNotEmpty()
+
+    /** Whether the user may use a BYO own-model (active monthly membership). */
+    val byoUnlocked: Boolean get() = memberExpireAt > System.currentTimeMillis()
 
     fun saveLogin(r: LoginResult) {
         token = r.token
@@ -58,5 +67,6 @@ object AccountStore {
         nickname = ""
         avatar = ""
         credits = 0
+        memberExpireAt = 0
     }
 }

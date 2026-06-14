@@ -23,13 +23,18 @@ class MockAccountGateway : AccountGateway {
         private const val DAILY_BONUS = 20L
     }
 
-    private data class User(var credits: Long = 0, var lastClaimDay: String = "")
+    private data class User(
+        var credits: Long = 0,
+        var lastClaimDay: String = "",
+        var memberExpireAt: Long = 0,
+    )
 
     private val users = HashMap<String, User>()          // userId -> state
     private val tokenToUser = HashMap<String, String>()  // token  -> userId
     private val pendingOrders = HashMap<String, Goods>() // orderNo -> goods
 
     private val catalog = listOf(
+        Goods("m_month", "会员月卡", 500, 0, 1900, "解锁自有模型", "membership"),
         Goods("g_100", "100 积分", 100, 0, 990, null),
         Goods("g_500", "500 积分", 500, 50, 3990, "划算"),
         Goods("g_1000", "1000 积分", 1000, 200, 6900, "超值"),
@@ -60,8 +65,15 @@ class MockAccountGateway : AccountGateway {
         return AccountProfile(uid, mobile, "用户$mobile", null)
     }
 
-    override suspend fun balance(token: String): BalanceResult =
-        BalanceResult(userOf(token).credits)
+    override suspend fun balance(token: String): BalanceResult {
+        val u = userOf(token)
+        val active = u.memberExpireAt > System.currentTimeMillis()
+        return BalanceResult(
+            credits = u.credits,
+            membershipActive = active,
+            membershipExpireAt = if (active) u.memberExpireAt else 0L,
+        )
+    }
 
     override suspend fun goods(token: String): GoodsList = GoodsList(catalog)
 
@@ -85,7 +97,12 @@ class MockAccountGateway : AccountGateway {
         val g = pendingOrders.remove(orderNo)
             ?: return OrderStatusResult(orderNo, OrderStatus.FAILED, 0)
         val granted = g.credits + g.bonusCredits
-        userOf(token).credits += granted
+        val u = userOf(token)
+        u.credits += granted
+        if (g.kind == "membership") {
+            val base = maxOf(u.memberExpireAt, System.currentTimeMillis())
+            u.memberExpireAt = base + 30L * 24 * 60 * 60 * 1000 // +30 天
+        }
         return OrderStatusResult(orderNo, OrderStatus.PAID, granted)
     }
 

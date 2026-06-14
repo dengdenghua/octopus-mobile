@@ -45,6 +45,14 @@
                         android:textSize="13pt" />
 
                     <TextView
+                        android:id="@+id/tvMember"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4pt"
+                        android:textColor="@color/colorBrandPrimary"
+                        android:textSize="12pt" />
+
+                    <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="12pt"

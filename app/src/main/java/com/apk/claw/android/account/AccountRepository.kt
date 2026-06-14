@@ -8,6 +8,10 @@ data class AccountState(
     val loggedIn: Boolean = false,
     val mobile: String = "",
     val credits: Long = 0,
+    /** Active monthly membership → BYO own-model unlocked. */
+    val byoUnlocked: Boolean = false,
+    /** Membership expiry, epoch millis; 0 = none. */
+    val memberExpireAt: Long = 0,
 )
 
 /**
@@ -29,7 +33,13 @@ object AccountRepository {
         if (AccountConfig.mockMode) sharedMock else HttpAccountGateway(AccountConfig.baseUrl)
 
     private fun snapshot() =
-        AccountState(AccountStore.isLoggedIn, AccountStore.mobile, AccountStore.credits)
+        AccountState(
+            loggedIn = AccountStore.isLoggedIn,
+            mobile = AccountStore.mobile,
+            credits = AccountStore.credits,
+            byoUnlocked = AccountStore.byoUnlocked,
+            memberExpireAt = AccountStore.memberExpireAt,
+        )
 
     private fun publish() {
         _state.value = snapshot()
@@ -50,12 +60,13 @@ object AccountRepository {
 
     suspend fun refreshBalance(): Result<Long> {
         if (!AccountStore.isLoggedIn) return Result.success(0L)
-        val r = runCatching { gateway().balance(AccountStore.token).credits }
+        val r = runCatching { gateway().balance(AccountStore.token) }
         r.getOrNull()?.let {
-            AccountStore.credits = it
+            AccountStore.credits = it.credits
+            AccountStore.memberExpireAt = if (it.membershipActive) it.membershipExpireAt else 0L
             publish()
         }
-        return r
+        return r.map { it.credits }
     }
 
     suspend fun loadGoods(): Result<List<Goods>> =

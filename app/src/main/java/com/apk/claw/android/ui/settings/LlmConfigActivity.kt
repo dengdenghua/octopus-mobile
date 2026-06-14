@@ -51,6 +51,8 @@ class LlmConfigActivity : BaseActivity() {
             KVUtils.setLlmApiKey(apiKey)
             KVUtils.setLlmBaseUrl(baseUrl)
             KVUtils.setLlmModelName(modelName)
+            // 配置了自己的模型 = 选择 BYO 路径(会员特权);默认仍是平台路径
+            com.apk.claw.android.account.AccountConfig.modelSource = "byo"
             // 视觉模型（可选，留空则复用主模型）
             KVUtils.setVisionApiKey(etVisionApiKey.text.toString().trim())
             KVUtils.setVisionBaseUrl(etVisionBaseUrl.text.toString().trim())
