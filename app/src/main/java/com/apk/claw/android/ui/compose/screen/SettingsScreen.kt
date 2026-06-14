@@ -47,7 +47,6 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.apk.claw.android.octopus_mobile.browser.BrowserEngineFactory
 import com.apk.claw.android.server.ConfigServerManager
 import com.apk.claw.android.service.ClawAccessibilityService
 import com.apk.claw.android.shizuku.ShizukuManager
@@ -85,8 +84,8 @@ private fun isStorageGranted(c: Context): Boolean {
 
 private fun isShizukuReady(): Boolean = runCatching { ShizukuManager.isAvailable() }.getOrDefault(false)
 
-private fun selectedEngineName(c: Context): String =
-    runCatching { BrowserEngineFactory.selectBest(c).name }.getOrDefault("—")
+// 是否开放「自定义模型配置(BYO)」入口。当前默认走平台中转积分,先关闭;后续要放开改 true。
+private const val SHOW_BYO_MODEL_CONFIG = false
 
 private val PrimaryColor get() = OctopusColors.Primary
 private val SuccessColor get() = OctopusColors.Success
@@ -123,10 +122,11 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
         )
     }
     val readyCount = permissionStates.count { it }
-    val modelName = remember(refreshTick) { KVUtils.getLlmModelName().ifBlank { "—" } }
-    val apiKeyConfigured = remember(refreshTick) { KVUtils.getLlmApiKey().isNotBlank() }
+    // 模型状态读「实际生效路由」(平台中转登录即就绪),不再只看用户自填 key —— 配合隐藏 BYO 配置。
+    val effLlm = remember(refreshTick) { com.apk.claw.android.account.LlmRouting.effective() }
+    val modelName = remember(effLlm) { effLlm.model.ifBlank { "—" } }
+    val apiKeyConfigured = effLlm.apiKey.isNotBlank()
     val lanAddr = remember(refreshTick) { runCatching { ConfigServerManager.getAddress() }.getOrNull() }
-    val engineName = remember(refreshTick) { selectedEngineName(context) }
     val loggedIn = remember(refreshTick) { AccountStore.isLoggedIn }
     val credits = remember(refreshTick) { AccountStore.credits }
     val isMember = remember(refreshTick) { AccountStore.byoUnlocked }
@@ -181,8 +181,9 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
             }
         }
 
-        // 自定义模型配置:仅登录后显示;且"优先用完积分"——积分耗尽后才实际启用(见 LlmRouting)
-        if (loggedIn) {
+        // 自定义模型配置(BYO):暂不开放——默认走平台中转积分,先不让用户配模型,后续再考虑。
+        // 把 SHOW_BYO_MODEL_CONFIG 改回 true 即恢复入口(原逻辑:仅登录后显示、积分耗尽才启用,见 LlmRouting)。
+        if (loggedIn && SHOW_BYO_MODEL_CONFIG) {
             item {
                 val notConfiguredText = stringResource(R.string.status_not_configured)
                 val configuredText = stringResource(R.string.settings_llm_api_key_configured)
@@ -274,26 +275,6 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
             }
         }
 
-        item {
-            SettingsCard(stringResource(R.string.settings_section_other), Icons.Filled.Tune, compact = true) {
-                val notRunning = stringResource(R.string.status_not_connected)
-                ClickableSettingsRow(Icons.Filled.Lan, stringResource(R.string.settings_lan_config), lanAddr ?: notRunning) {
-                    onMessage("${context.getString(R.string.settings_lan_config)} · ${lanAddr ?: notRunning}")
-                }
-                SettingsDivider()
-                ClickableSettingsRow(Icons.Filled.TravelExplore, stringResource(R.string.settings_browser_engine), engineName) {
-                    onMessage("${context.getString(R.string.settings_browser_engine)} · $engineName")
-                }
-                SettingsDivider()
-                ClickableSettingsRow(Icons.Filled.Devices, stringResource(R.string.settings_device_mgmt), stringResource(R.string.settings_device_mgmt_desc)) {
-                    onMessage(context.getString(R.string.settings_device_mgmt))
-                }
-                SettingsDivider()
-                ClickableSettingsRow(Icons.Filled.Extension, stringResource(R.string.settings_plugin_mgmt), stringResource(R.string.settings_plugin_desc)) {
-                    onMessage(context.getString(R.string.settings_plugin_mgmt))
-                }
-            }
-        }
 
         item {
             Text(
