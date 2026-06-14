@@ -1,6 +1,6 @@
 # Octopus Mobile
 
-[简体中文](README_CN.md)
+[简体中文](README_CN.md) · [Changelog](CHANGELOG.md)
 
 An AI-powered Android automation app that lets an LLM agent operate an Android device (phone / TV box) through natural language. Users send instructions over a messaging channel (DingTalk, Feishu, QQ, Discord, Telegram, WeChat); the agent interprets the intent and autonomously drives the device.
 
