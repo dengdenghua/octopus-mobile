@@ -23,8 +23,10 @@ data class EffectiveLlm(
  */
 object LlmRouting {
     fun effective(): EffectiveLlm {
-        // 优先用完积分:仅当积分耗尽后才允许走自定义(BYO)模型
+        // 自定义(BYO)三重前提:① 当月会员(每月到期需重新付费,防止白嫖)
+        // ② 已用完积分(优先用完积分) ③ 已配置并选用自己的 key
         val byoChosen = AccountConfig.modelSource == "byo" &&
+            AccountStore.byoUnlocked &&
             AccountStore.credits <= 0L &&
             KVUtils.hasLlmConfig()
         val usePlatform = AccountConfig.relayConfigured &&

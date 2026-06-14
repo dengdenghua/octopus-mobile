@@ -129,6 +129,7 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
     val engineName = remember(refreshTick) { selectedEngineName(context) }
     val loggedIn = remember(refreshTick) { AccountStore.isLoggedIn }
     val credits = remember(refreshTick) { AccountStore.credits }
+    val isMember = remember(refreshTick) { AccountStore.byoUnlocked }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(BackgroundColor).statusBarsPadding(),
@@ -146,7 +147,6 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
 
         item {
             val acct = remember(refreshTick) { AccountStore.mobile.ifEmpty { AccountStore.email } }
-            val isMember = remember(refreshTick) { AccountStore.byoUnlocked }
             SettingsCard(stringResource(R.string.menu_account), Icons.Filled.AccountCircle, compact = true, onClick = {
                 val target = if (AccountStore.isLoggedIn) AccountActivity::class.java else LoginActivity::class.java
                 context.startActivity(Intent(context, target))
@@ -193,9 +193,14 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
                     context.startActivity(Intent(context, LlmConfigActivity::class.java))
                 }) {
                     SettingsRow(Icons.Filled.Api, modelName, baseUrl, trailing = keyMasked)
-                    if (credits > 0L) {
+                    val byoHint = when {
+                        !isMember -> stringResource(R.string.account_byo_member_hint)
+                        credits > 0L -> stringResource(R.string.account_byo_credits_hint)
+                        else -> null
+                    }
+                    byoHint?.let {
                         Spacer(Modifier.height(6.dp))
-                        Text(stringResource(R.string.account_byo_credits_hint), color = TextMuted, fontSize = 11.sp, lineHeight = 15.sp)
+                        Text(it, color = TextMuted, fontSize = 11.sp, lineHeight = 15.sp)
                     }
                 }
             }
