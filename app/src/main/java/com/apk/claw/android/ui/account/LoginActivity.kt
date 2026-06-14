@@ -9,6 +9,7 @@ import androidx.lifecycle.lifecycleScope
 import com.apk.claw.android.R
 import com.apk.claw.android.account.AccountRepository
 import com.apk.claw.android.base.BaseActivity
+import com.apk.claw.android.ui.compose.MainActivity
 import com.apk.claw.android.widget.CommonToolbar
 import com.apk.claw.android.widget.KButton
 import kotlinx.coroutines.launch
@@ -21,6 +22,11 @@ class LoginActivity : BaseActivity() {
 
     private var countdown: CountDownTimer? = null
     private var mode = "email" // 先只用邮箱登录;手机号 tab 暂隐藏("phone" 仍可用,服务端端点保留)
+
+    companion object {
+        /** true=从启动闸进入(未登录强制登录),登录成功后进主界面;否则进钱包页。 */
+        const val EXTRA_GATE = "gate"
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -100,7 +106,13 @@ class LoginActivity : BaseActivity() {
                 btnLogin.isEnabled = true
                 r.onSuccess {
                     toast(getString(R.string.account_login_success))
-                    startActivity(Intent(this@LoginActivity, AccountActivity::class.java))
+                    if (intent.getBooleanExtra(EXTRA_GATE, false)) {
+                        val i = Intent(this@LoginActivity, MainActivity::class.java)
+                        i.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                        startActivity(i)
+                    } else {
+                        startActivity(Intent(this@LoginActivity, AccountActivity::class.java))
+                    }
                     finish()
                 }.onFailure {
                     toast(it.message ?: getString(R.string.account_login_failed))

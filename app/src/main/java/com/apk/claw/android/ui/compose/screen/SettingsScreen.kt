@@ -127,6 +127,8 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
     val apiKeyConfigured = remember(refreshTick) { KVUtils.getLlmApiKey().isNotBlank() }
     val lanAddr = remember(refreshTick) { runCatching { ConfigServerManager.getAddress() }.getOrNull() }
     val engineName = remember(refreshTick) { selectedEngineName(context) }
+    val loggedIn = remember(refreshTick) { AccountStore.isLoggedIn }
+    val credits = remember(refreshTick) { AccountStore.credits }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(BackgroundColor).statusBarsPadding(),
@@ -143,9 +145,7 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
         }
 
         item {
-            val loggedIn = remember(refreshTick) { AccountStore.isLoggedIn }
             val acct = remember(refreshTick) { AccountStore.mobile.ifEmpty { AccountStore.email } }
-            val credits = remember(refreshTick) { AccountStore.credits }
             val isMember = remember(refreshTick) { AccountStore.byoUnlocked }
             SettingsCard(stringResource(R.string.menu_account), Icons.Filled.AccountCircle, compact = true, onClick = {
                 val target = if (AccountStore.isLoggedIn) AccountActivity::class.java else LoginActivity::class.java
@@ -181,16 +181,23 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
             }
         }
 
-        item {
-            val notConfiguredText = stringResource(R.string.status_not_configured)
-            val configuredText = stringResource(R.string.settings_llm_api_key_configured)
-            val baseUrl = KVUtils.getLlmBaseUrl().ifBlank { notConfiguredText }
-            val apiKey = KVUtils.getLlmApiKey()
-            val keyMasked = if (apiKey.length >= 8) apiKey.take(5) + "••••" + apiKey.takeLast(4) else if (apiKey.isBlank()) notConfiguredText else configuredText
-            SettingsCard(stringResource(R.string.settings_section_model), Icons.Filled.Memory, onClick = {
-                context.startActivity(Intent(context, LlmConfigActivity::class.java))
-            }) {
-                SettingsRow(Icons.Filled.Api, modelName, baseUrl, trailing = keyMasked)
+        // 自定义模型配置:仅登录后显示;且"优先用完积分"——积分耗尽后才实际启用(见 LlmRouting)
+        if (loggedIn) {
+            item {
+                val notConfiguredText = stringResource(R.string.status_not_configured)
+                val configuredText = stringResource(R.string.settings_llm_api_key_configured)
+                val baseUrl = KVUtils.getLlmBaseUrl().ifBlank { notConfiguredText }
+                val apiKey = KVUtils.getLlmApiKey()
+                val keyMasked = if (apiKey.length >= 8) apiKey.take(5) + "••••" + apiKey.takeLast(4) else if (apiKey.isBlank()) notConfiguredText else configuredText
+                SettingsCard(stringResource(R.string.settings_section_model), Icons.Filled.Memory, onClick = {
+                    context.startActivity(Intent(context, LlmConfigActivity::class.java))
+                }) {
+                    SettingsRow(Icons.Filled.Api, modelName, baseUrl, trailing = keyMasked)
+                    if (credits > 0L) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(stringResource(R.string.account_byo_credits_hint), color = TextMuted, fontSize = 11.sp, lineHeight = 15.sp)
+                    }
+                }
             }
         }
 

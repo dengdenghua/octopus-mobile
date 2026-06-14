@@ -827,6 +827,7 @@
     <string name="account_tab_email">邮箱</string>
     <string name="account_email_hint">请输入邮箱</string>
     <string name="account_invalid_email">请输入正确的邮箱</string>
+    <string name="account_byo_credits_hint">积分用完后自动启用</string>
     <string name="settings_appearance">外观</string>
     <string name="settings_light_mode">明亮模式</string>
 </resources>

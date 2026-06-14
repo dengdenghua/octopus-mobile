@@ -721,6 +721,7 @@
     <string name="account_tab_email">メール</string>
     <string name="account_email_hint">メールを入力</string>
     <string name="account_invalid_email">正しいメールを入力してください</string>
+    <string name="account_byo_credits_hint">クレジットが尽きると自動的に使用</string>
     <string name="settings_appearance">外観</string>
     <string name="settings_light_mode">ライトモード</string>
 </resources>

@@ -827,6 +827,7 @@ For these, install Shizuku — a safe, open-source helper.</string>
     <string name="account_tab_email">Email</string>
     <string name="account_email_hint">Enter your email</string>
     <string name="account_invalid_email">Please enter a valid email</string>
+    <string name="account_byo_credits_hint">Used automatically once your credits run out</string>
     <string name="settings_appearance">Appearance</string>
     <string name="settings_light_mode">Light mode</string>
 </resources>
