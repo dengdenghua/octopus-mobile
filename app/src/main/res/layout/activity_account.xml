@@ -81,6 +81,67 @@
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 
+            <!-- 对话档位(不暴露模型名,只给两个档位) -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24pt"
+                android:paddingHorizontal="4pt"
+                android:paddingBottom="4pt"
+                android:text="@string/account_tier_title"
+                android:textColor="@color/colorTextPrimary"
+                android:textSize="14pt"
+                android:textStyle="bold" />
+
+            <androidx.cardview.widget.CardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8pt"
+                app:cardBackgroundColor="@color/colorContainerBrighten"
+                app:cardCornerRadius="16pt"
+                app:cardElevation="1pt">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16pt">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal">
+
+                        <com.apk.claw.android.widget.KButton
+                            android:id="@+id/btnTierFast"
+                            android:layout_width="0dp"
+                            android:layout_height="44pt"
+                            android:layout_weight="1"
+                            android:gravity="center"
+                            android:text="@string/account_tier_fast"
+                            android:textSize="15pt" />
+
+                        <com.apk.claw.android.widget.KButton
+                            android:id="@+id/btnTierPremium"
+                            android:layout_width="0dp"
+                            android:layout_height="44pt"
+                            android:layout_marginStart="10pt"
+                            android:layout_weight="1"
+                            android:gravity="center"
+                            android:text="@string/account_tier_premium"
+                            android:textSize="15pt" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/tvTierHint"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10pt"
+                        android:textColor="@color/colorTextSecondary"
+                        android:textSize="12pt" />
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
+
             <!-- Recharge -->
             <TextView
                 android:layout_width="wrap_content"

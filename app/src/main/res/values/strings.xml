@@ -827,6 +827,11 @@ For these, install Shizuku — a safe, open-source helper.</string>
     <string name="account_invite_redeem">Redeem</string>
     <string name="account_invite_redeem_success">Redeemed +%1$d credits</string>
     <string name="account_invite_redeem_failed">Redeem failed</string>
+    <string name="account_tier_title">Chat tier</string>
+    <string name="account_tier_fast">Fast</string>
+    <string name="account_tier_premium">Premium</string>
+    <string name="account_tier_fast_hint">Faster · uses fewer credits</string>
+    <string name="account_tier_premium_hint">Smarter · uses more credits</string>
     <string name="account_byo_locked_title">Members only</string>
     <string name="account_byo_locked_msg">Connect your own model after becoming a member. Free users use the platform model billed in credits.</string>
     <string name="account_go_recharge">Become a member</string>

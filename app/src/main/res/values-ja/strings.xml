@@ -721,6 +721,11 @@
     <string name="account_invite_redeem">交換</string>
     <string name="account_invite_redeem_success">交換成功 +%1$d クレジット</string>
     <string name="account_invite_redeem_failed">交換に失敗</string>
+    <string name="account_tier_title">対話モード</string>
+    <string name="account_tier_fast">高速</string>
+    <string name="account_tier_premium">高品質</string>
+    <string name="account_tier_fast_hint">高速 · 消費が少ない</string>
+    <string name="account_tier_premium_hint">高性能 · 消費が多い</string>
     <string name="account_byo_locked_title">会員限定</string>
     <string name="account_byo_locked_msg">会員登録後に自分のモデルを接続できます。無料ユーザーはクレジット課金のプラットフォームモデルを使用します。</string>
     <string name="account_go_recharge">会員になる</string>

@@ -827,6 +827,11 @@
     <string name="account_invite_redeem">兑换</string>
     <string name="account_invite_redeem_success">兑换成功 +%1$d 积分</string>
     <string name="account_invite_redeem_failed">兑换失败</string>
+    <string name="account_tier_title">对话档位</string>
+    <string name="account_tier_fast">极速</string>
+    <string name="account_tier_premium">高级</string>
+    <string name="account_tier_fast_hint">更快 · 更省积分</string>
+    <string name="account_tier_premium_hint">更强 · 更耗积分</string>
     <string name="account_byo_locked_title">会员专享</string>
     <string name="account_byo_locked_msg">充值会员后即可接入自己的大模型；免费用户默认使用平台模型（按积分计费）。</string>
     <string name="account_go_recharge">去开通会员</string>

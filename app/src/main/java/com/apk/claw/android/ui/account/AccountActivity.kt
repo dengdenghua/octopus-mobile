@@ -14,6 +14,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.apk.claw.android.R
+import com.apk.claw.android.account.AccountConfig
 import com.apk.claw.android.account.AccountRepository
 import com.apk.claw.android.account.AccountStore
 import com.apk.claw.android.account.CreateOrderResult
@@ -43,6 +44,9 @@ class AccountActivity : BaseActivity() {
     private lateinit var tvInviteSub: TextView
     private lateinit var etInviteCode: EditText
     private lateinit var llRedeem: LinearLayout
+    private lateinit var btnTierFast: KButton
+    private lateinit var btnTierPremium: KButton
+    private lateinit var tvTierHint: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -65,7 +69,14 @@ class AccountActivity : BaseActivity() {
         tvInviteSub = findViewById(R.id.tvInviteSub)
         etInviteCode = findViewById(R.id.etInviteCode)
         llRedeem = findViewById(R.id.llRedeem)
+        btnTierFast = findViewById(R.id.btnTierFast)
+        btnTierPremium = findViewById(R.id.btnTierPremium)
+        tvTierHint = findViewById(R.id.tvTierHint)
         tvMobile.text = AccountStore.mobile
+
+        btnTierFast.setOnClickListener { setTier(AccountConfig.TIER_FAST) }
+        btnTierPremium.setOnClickListener { setTier(AccountConfig.TIER_PREMIUM) }
+        renderTier()
 
         findViewById<KButton>(R.id.btnDailyClaim).setOnClickListener { claimDaily() }
         findViewById<KButton>(R.id.btnCopyCode).setOnClickListener { copyInviteCode() }
@@ -192,6 +203,27 @@ class AccountActivity : BaseActivity() {
                 }
                 .onFailure { toast(it.message ?: getString(R.string.account_invite_redeem_failed)) }
         }
+    }
+
+    private fun setTier(tier: String) {
+        AccountConfig.modelTier = tier
+        renderTier()
+    }
+
+    /** 高亮当前档位按钮 + 更新说明文案(只显示档位,不暴露底层模型名)。 */
+    private fun renderTier() {
+        val premium = AccountConfig.modelTier == AccountConfig.TIER_PREMIUM
+        val brand = getColor(R.color.colorBrandPrimary)
+        val muted = getColor(R.color.colorContainerBrighten)
+        val onBrand = getColor(android.R.color.white)
+        val onMuted = getColor(R.color.colorTextPrimary)
+        btnTierFast.setBgColor(if (!premium) brand else muted)
+        btnTierFast.setTextColor(if (!premium) onBrand else onMuted)
+        btnTierPremium.setBgColor(if (premium) brand else muted)
+        btnTierPremium.setTextColor(if (premium) onBrand else onMuted)
+        tvTierHint.text = getString(
+            if (premium) R.string.account_tier_premium_hint else R.string.account_tier_fast_hint
+        )
     }
 
     private fun claimDaily() {
