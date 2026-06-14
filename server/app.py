@@ -60,6 +60,8 @@ CREDITS_PER_1K_TOKENS = float(os.environ.get("CREDITS_PER_1K_TOKENS", "1"))
 SIGNUP_BONUS = int(os.environ.get("SIGNUP_BONUS", "100"))
 DAILY_BONUS = int(os.environ.get("DAILY_BONUS", "20"))
 MEMBERSHIP_DAYS = int(os.environ.get("MEMBERSHIP_DAYS", "30"))
+# 内测:每账号累计「免费积分」上限(注册礼+每日领+mock充值 都算,发满即停;真实付费不受限)
+FREE_CAP = int(os.environ.get("FREE_CAP", "3000"))
 
 # 会话:JWT(HS256,无第三方依赖)。生产务必把 JWT_SECRET 换成随机长串。
 JWT_SECRET = os.environ.get("JWT_SECRET", "dev-insecure-change-me")
@@ -142,6 +144,7 @@ def init_db() -> None:
             CREATE TABLE IF NOT EXISTS users(
                 user_id TEXT PRIMARY KEY, mobile TEXT UNIQUE, nickname TEXT,
                 credits INTEGER NOT NULL DEFAULT 0,
+                free_granted INTEGER NOT NULL DEFAULT 0,
                 member_expire_at INTEGER NOT NULL DEFAULT 0,
                 last_claim_day TEXT DEFAULT '', created_at INTEGER NOT NULL
             );
@@ -165,6 +168,10 @@ def init_db() -> None:
         # 迁移:给已存在的 users 表补 email 列(幂等)
         try:
             c.execute("ALTER TABLE users ADD COLUMN email TEXT")
+        except sqlite3.OperationalError:
+            pass  # 列已存在
+        try:
+            c.execute("ALTER TABLE users ADD COLUMN free_granted INTEGER NOT NULL DEFAULT 0")
         except sqlite3.OperationalError:
             pass  # 列已存在
         c.commit()
@@ -226,6 +233,19 @@ def actor(authorization: str = Header(default="")) -> sqlite3.Row:
 
 def _user(c: sqlite3.Connection, user_id: str) -> sqlite3.Row:
     return c.execute("SELECT * FROM users WHERE user_id = ?", (user_id,)).fetchone()
+
+
+def _grant_free(c: sqlite3.Connection, user_id: str, want: int) -> int:
+    """发放免费积分,受每账号累计上限 FREE_CAP 约束。返回实际发放数。"""
+    row = c.execute("SELECT free_granted FROM users WHERE user_id = ?", (user_id,)).fetchone()
+    used = int((row["free_granted"] if row else 0) or 0)
+    grant = max(0, min(want, FREE_CAP - used))
+    if grant:
+        c.execute(
+            "UPDATE users SET credits = credits + ?, free_granted = free_granted + ? WHERE user_id = ?",
+            (grant, grant, user_id),
+        )
+    return grant
 
 
 # ─────────────────────────── SMS (pluggable) ───────────────────────────
@@ -306,8 +326,9 @@ def sms_login(body: dict[str, Any]) -> dict[str, Any]:
             uid = "u_" + secrets.token_hex(8)
             c.execute(
                 "INSERT INTO users(user_id, mobile, nickname, credits, created_at) VALUES(?,?,?,?,?)",
-                (uid, mobile, f"用户{mobile[-4:]}", SIGNUP_BONUS, now_ms()),
+                (uid, mobile, f"用户{mobile[-4:]}", 0, now_ms()),
             )
+            _grant_free(c, uid, SIGNUP_BONUS)
         else:
             uid = user["user_id"]
         c.execute("DELETE FROM sms_codes WHERE mobile = ?", (mobile,))
@@ -365,8 +386,9 @@ def email_login(body: dict[str, Any], request: Request) -> dict[str, Any]:
             uid = "u_" + secrets.token_hex(8)
             c.execute(
                 "INSERT INTO users(user_id, email, nickname, credits, created_at) VALUES(?,?,?,?,?)",
-                (uid, email, nick, SIGNUP_BONUS, now_ms()),
+                (uid, email, nick, 0, now_ms()),
             )
+            _grant_free(c, uid, SIGNUP_BONUS)
         else:
             uid = user["user_id"]
             nick = user["nickname"] or nick
@@ -398,16 +420,15 @@ def balance(u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
 def daily_claim(u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
     today = time.strftime("%Y-%m-%d", time.gmtime())
     with closing(db()) as c:
-        # 原子:仅当今天还没领过才加分(防并发重复领)
-        cur = c.execute(
-            "UPDATE users SET credits = credits + ?, last_claim_day = ? "
-            "WHERE user_id = ? AND last_claim_day <> ?",
-            (DAILY_BONUS, today, u["user_id"], today),
+        # 原子占位:今天没领过才放行(防并发重复领)
+        guard = c.execute(
+            "UPDATE users SET last_claim_day = ? WHERE user_id = ? AND last_claim_day <> ?",
+            (today, u["user_id"], today),
         )
-        claimed = cur.rowcount > 0
+        granted = _grant_free(c, u["user_id"], DAILY_BONUS) if guard.rowcount > 0 else 0
         c.commit()
         bal = _user(c, u["user_id"])["credits"]
-    return {"claimed": claimed, "credits": DAILY_BONUS if claimed else 0, "balance": bal}
+    return {"claimed": granted > 0, "credits": granted, "balance": bal}
 
 
 # ─────────────────────────── endpoints: billing ───────────────────────────
@@ -442,15 +463,17 @@ def _create_cashier(order_no: str, goods: dict[str, Any]) -> str:
 def _settle(c: sqlite3.Connection, order: sqlite3.Row) -> int:
     """Mark order PAID and grant credits / membership. Returns granted credits."""
     g = GOODS_BY_ID[order["goods_id"]]
-    granted = g["credits"] + g["bonusCredits"]
-    cur = _user(c, order["user_id"])
-    new_credits = cur["credits"] + granted
-    expire = cur["member_expire_at"]
-    if g["kind"] == "membership":
-        base = max(expire, now_ms())
-        expire = base + MEMBERSHIP_DAYS * 24 * 3600 * 1000
-    c.execute("UPDATE users SET credits=?, member_expire_at=? WHERE user_id=?",
-              (new_credits, expire, order["user_id"]))
+    want = g["credits"] + g["bonusCredits"]
+    if PAYMENT_PROVIDER == "mock":
+        granted = _grant_free(c, order["user_id"], want)  # 内测免费充值:受每账号上限约束
+    else:
+        c.execute("UPDATE users SET credits = credits + ? WHERE user_id = ?", (want, order["user_id"]))
+        granted = want  # 真实付费:不受免费上限
+    if g["kind"] == "membership":  # 会员到期(解锁 BYO,用自己 key,不耗平台成本)
+        cur = _user(c, order["user_id"])
+        base = max(cur["member_expire_at"], now_ms())
+        c.execute("UPDATE users SET member_expire_at = ? WHERE user_id = ?",
+                  (base + MEMBERSHIP_DAYS * 24 * 3600 * 1000, order["user_id"]))
     c.execute("UPDATE orders SET status='PAID' WHERE order_no=?", (order["order_no"],))
     return granted
 
