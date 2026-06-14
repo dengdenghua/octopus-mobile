@@ -39,6 +39,9 @@ DB_PATH = os.environ.get("OCTO_DB", os.path.join(os.path.dirname(__file__), "oct
 SMS_MOCK_CODE = os.environ.get("SMS_MOCK_CODE", "123456")
 SMS_PROVIDER = os.environ.get("SMS_PROVIDER", "mock")  # mock | aliyun | ...
 
+# 仅本地联调放开 mock 验证码(默认关)。否则 mock 固定码会被公网用来无限造号薅免费积分。
+# 生产用 EMAIL_PROVIDER=smtp(真实邮件),此开关无影响;本地跑 mock 流程需显式设 ALLOW_MOCK_AUTH=1。
+ALLOW_MOCK_AUTH = os.environ.get("ALLOW_MOCK_AUTH", "0").lower() in ("1", "true", "yes")
 # 邮箱验证码:mock=固定 EMAIL_MOCK_CODE;生产 EMAIL_PROVIDER=smtp 并配 SMTP_*
 EMAIL_PROVIDER = os.environ.get("EMAIL_PROVIDER", "mock")  # mock | smtp
 EMAIL_MOCK_CODE = os.environ.get("EMAIL_MOCK_CODE", "123456")
@@ -51,10 +54,19 @@ SMTP_FROM = os.environ.get("SMTP_FROM", "")
 # 支付:mock=下单后查单即视为已支付(本地跑通);生产接微信/支付宝,用 webhook 改单状态
 PAYMENT_PROVIDER = os.environ.get("PAYMENT_PROVIDER", "mock")  # mock | wechat | alipay
 
-# 平台大模型(MiMo)——只在服务端持有
+# 平台大模型上游(key 只在服务端)。支持多上游:每个模型按 provider 路由到不同 base/key。
 MIMO_API_KEY = os.environ.get("MIMO_API_KEY", "")
 MIMO_BASE_URL = os.environ.get("MIMO_BASE_URL", "").rstrip("/")  # OpenAI 兼容 base, 例 https://.../v1
-MIMO_DEFAULT_MODEL = os.environ.get("MIMO_DEFAULT_MODEL", "mimo-v2-flash")
+# 第二上游:Agnes(永久免费额度),作免费默认档。OpenAI 兼容。
+AGNES_API_KEY = os.environ.get("AGNES_API_KEY", "")
+AGNES_BASE_URL = os.environ.get("AGNES_BASE_URL", "").rstrip("/")
+# provider 注册:模型 spec 里的 "provider" 决定走哪个上游(base + key)。
+PROVIDERS = {
+    "mimo": {"base_url": MIMO_BASE_URL, "api_key": MIMO_API_KEY},
+    "agnes": {"base_url": AGNES_BASE_URL, "api_key": AGNES_API_KEY},
+}
+# 默认模型(请求未指定 model 或指定了目录外模型时回退);默认走免费的 agnes。
+DEFAULT_MODEL = os.environ.get("DEFAULT_MODEL", "agnes-2.0-flash")
 
 # 计费:多少积分/1k tokens(输入+输出合计),再乘模型 multiplier。
 # 校准(不亏成本):CREDITS_PER_1K_TOKENS ≥ MiMo每1k_token的¥成本 ÷ (multiplier × 每积分售价¥)。
@@ -99,16 +111,26 @@ GOODS = [
 ]
 GOODS_BY_ID = {g["id"]: g for g in GOODS}
 
-# 模型目录 + 每模型积分倍率(参考 Molili 的 multiplier 定价)。可用 MODELS_JSON 覆盖。
+# 模型目录:每模型带 provider(走哪个上游)+ multiplier(积分倍率,向用户计费)。可用 MODELS_JSON 覆盖。
+# agnes 走"对平台免费"的上游(我们零成本),作默认档:照常按倍率扣用户积分 → 这部分近乎纯利润;
+# mimo 要花真金,留作高级档。agnes 倍率先设 0.5(与 mimo-v2.5 一致),可按需调整。
 _DEFAULT_MODELS = [
-    {"id": "mimo-v2.5", "display_name": "MiMo 2.5", "multiplier": 0.5, "recommended": True},
-    {"id": "mimo-v2.5-pro", "display_name": "MiMo 2.5 Pro", "multiplier": 1.0, "recommended": True},
+    {"id": "agnes-2.0-flash", "display_name": "Agnes 2.0 Flash", "multiplier": 0.5,
+     "provider": "agnes", "recommended": True},
+    {"id": "mimo-v2.5", "display_name": "MiMo 2.5", "multiplier": 0.5, "provider": "mimo", "recommended": True},
+    {"id": "mimo-v2.5-pro", "display_name": "MiMo 2.5 Pro", "multiplier": 1.0, "provider": "mimo", "recommended": True},
 ]
+# 模型 id -> 完整 spec(provider/multiplier/...);MODELS_JSON 里没写 provider 的默认归到 mimo(向后兼容)。
+# 坏配置(非 list / item 缺 id / 解析失败)整体回退默认,不让服务起不来。
 try:
     MODELS = json.loads(os.environ["MODELS_JSON"]) if os.environ.get("MODELS_JSON") else _DEFAULT_MODELS
-except Exception:  # noqa: BLE001 — 配置坏了就用默认
+    MODEL_SPEC = {m["id"]: {**m, "provider": m.get("provider", "mimo")}
+                  for m in MODELS if isinstance(m, dict) and m.get("id")}
+    if not MODEL_SPEC:
+        raise ValueError("MODELS_JSON 无有效模型")
+except Exception:  # noqa: BLE001 — 配置坏了就回退默认
     MODELS = _DEFAULT_MODELS
-MODEL_MULT = {m["id"]: float(m.get("multiplier", 1.0)) for m in MODELS}
+    MODEL_SPEC = {m["id"]: {**m, "provider": m.get("provider", "mimo")} for m in MODELS}
 
 app = FastAPI(title="octopus-account-relay", version="0.2.0")
 
@@ -413,6 +435,8 @@ def _valid_email(s: str) -> bool:
 
 @app.post("/auth/email/send")
 def email_send(body: dict[str, Any], request: Request) -> dict[str, Any]:
+    if EMAIL_PROVIDER == "mock" and not ALLOW_MOCK_AUTH:  # mock 固定码会被滥用造号,默认禁用
+        raise HTTPException(status_code=403, detail="邮箱登录未开放")
     email = str(body.get("email", "")).strip().lower()
     if not _valid_email(email):
         raise HTTPException(status_code=400, detail="invalid email")
@@ -435,6 +459,8 @@ def email_send(body: dict[str, Any], request: Request) -> dict[str, Any]:
 
 @app.post("/auth/email/login")
 def email_login(body: dict[str, Any], request: Request) -> dict[str, Any]:
+    if EMAIL_PROVIDER == "mock" and not ALLOW_MOCK_AUTH:  # 与 email_send 对称:默认禁用 mock 登录
+        raise HTTPException(status_code=403, detail="邮箱登录未开放")
     email = str(body.get("email", "")).strip().lower()
     code = str(body.get("code", "")).strip()
     rate_limit(f"email_login:{email}", 10, 600)                  # 同邮箱 10 分钟最多 10 次(防撞码)
@@ -615,9 +641,15 @@ async def payment_webhook(provider: str, request: Request) -> JSONResponse:
     raise HTTPException(status_code=501, detail=f"webhook for '{provider}' not implemented")
 
 
-# ─────────────────── 模型目录 + 中转(OpenAI 兼容,按模型倍率扣积分) ───────────────────
-def _model_multiplier(model_id: str | None) -> float:
-    return MODEL_MULT.get(model_id or "", 1.0)
+# ─────────────────── 模型目录 + 中转(多上游路由,按模型倍率扣积分,0=免费) ───────────────────
+def _resolve_model(requested: str | None) -> tuple[str, dict[str, Any]]:
+    """请求的 model → (规整后 model_id, spec)。目录外/未指定 → 回退 DEFAULT_MODEL(防拿 key 乱调)。"""
+    model = requested or DEFAULT_MODEL
+    spec = MODEL_SPEC.get(model)
+    if spec is None:
+        model = DEFAULT_MODEL
+        spec = MODEL_SPEC.get(DEFAULT_MODEL) or {"multiplier": 1.0, "provider": "mimo"}
+    return model, spec
 
 
 def _reserve_credits(user_id: str, hold: int) -> bool:
@@ -642,7 +674,7 @@ def _reconcile_usage(user_id: str, model: str, tin: int, tout: int, mult: float,
     with closing(db()) as c:
         if refund:
             c.execute("UPDATE users SET credits = MAX(0, credits + ?) WHERE user_id = ?", (refund, user_id))
-        if actual:
+        if (tin + tout) > 0:  # 有真实用量就记一条(便于看调用量/成本)
             c.execute(
                 "INSERT INTO usage_log(user_id, model, tokens_in, tokens_out, credits, ts) "
                 "VALUES(?,?,?,?,?,?)",
@@ -652,19 +684,16 @@ def _reconcile_usage(user_id: str, model: str, tin: int, tout: int, mult: float,
     return actual
 
 
-def _mimo_headers() -> dict[str, str]:
-    return {"Authorization": f"Bearer {MIMO_API_KEY}", "Content-Type": "application/json"}
-
-
 @app.get("/v1/models")
 def list_models() -> dict[str, Any]:
-    """公开模型目录(带每模型积分倍率),供 App 渲染。"""
+    """公开模型目录(带每模型积分倍率 + 是否免费),供 App 渲染。"""
     return {
         "object": "list",
         "data": [
             {"id": m["id"], "object": "model", "owned_by": "octopus",
              "display_name": m.get("display_name", m["id"]),
              "multiplier": float(m.get("multiplier", 1.0)),
+             "free": float(m.get("multiplier", 1.0)) <= 0,
              "recommended": bool(m.get("recommended", False))}
             for m in MODELS
         ],
@@ -674,24 +703,26 @@ def list_models() -> dict[str, Any]:
 @app.post("/v1/chat/completions")
 async def chat_completions(body: dict[str, Any], request: Request, u: sqlite3.Row = Depends(actor)) -> Any:
     rate_limit(f"chat:{u['user_id']}", 60, 60)  # 每用户每分钟 60 次
-    if not MIMO_API_KEY or not MIMO_BASE_URL:
-        raise HTTPException(status_code=503, detail="平台模型未配置(MIMO_API_KEY/MIMO_BASE_URL)")
+
+    # ── 模型 → 上游路由:目录外回退 DEFAULT_MODEL;按 spec.provider 选 base/key ──
+    model, spec = _resolve_model(body.get("model"))
+    mult = float(spec.get("multiplier", 1.0))
+    prov = PROVIDERS.get(spec.get("provider", "mimo"), {})
+    base, key = prov.get("base_url") or "", prov.get("api_key") or ""
+    if not base or not key:
+        raise HTTPException(status_code=503, detail=f"模型 {model} 的上游未配置")
+    url = f"{base}/chat/completions"
+    headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+    user_id = u["user_id"]
 
     import httpx  # 惰性 import
-
-    model = body.get("model") or MIMO_DEFAULT_MODEL
-    if model not in MODEL_MULT:  # 只服务目录内模型;未知模型回退默认(防止拿平台 key 乱调)
-        model = MIMO_DEFAULT_MODEL
-    mult = _model_multiplier(model)
-    url = f"{MIMO_BASE_URL}/chat/completions"
-    user_id = u["user_id"]
 
     # ── max_tokens 上限:请求里更大的值压到 MAX_OUTPUT_TOKENS,未指定也设成它(成本/跑飞双保险) ──
     req_max = body.get("max_tokens")
     max_out = min(req_max, MAX_OUTPUT_TOKENS) if isinstance(req_max, int) and req_max > 0 else MAX_OUTPUT_TOKENS
 
-    # ── 预扣(pre-auth reserve):按 worst-case(prompt 估算 + max_out)原子预留积分,不足→402。
-    # 并发请求各自预扣,余额覆盖不了就被拒 → 杜绝超额消费;真实 usage 出来后 _reconcile_usage 多退少补。
+    # ── 预扣(pre-auth reserve):按 worst-case(prompt 估算 + max_out)原子预留积分,不足→402;
+    # 并发各自预扣,余额覆盖不了就被拒 → 杜绝超支;真实 usage 出来后 _reconcile_usage 多退少补。
     prompt_est = sum(
         len(str(m.get("content", ""))) for m in (body.get("messages") or []) if isinstance(m, dict)
     ) // 4
@@ -706,17 +737,22 @@ async def chat_completions(body: dict[str, Any], request: Request, u: sqlite3.Ro
         payload["max_tokens"] = max_out
         try:
             async with httpx.AsyncClient(timeout=120) as client:
-                resp = await client.post(url, headers=_mimo_headers(), json=payload)
+                resp = await client.post(url, headers=headers, json=payload)
         except Exception:  # noqa: BLE001 — 上游请求异常,全额退还预扣
             _reconcile_usage(user_id, model, 0, 0, mult, hold)
             raise HTTPException(status_code=502, detail="上游模型请求失败")
         data = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
         if resp.status_code >= 400:
             _reconcile_usage(user_id, model, 0, 0, mult, hold)  # 上游报错,全额退
-            return JSONResponse(status_code=resp.status_code, content=data or {"error": resp.text[:200]})
+            # 不回显上游原始错误体(可能含请求数据/内部细节),只给通用错误 + 状态码
+            return JSONResponse(status_code=resp.status_code,
+                                content={"error": {"message": "upstream error", "status": resp.status_code}})
         usage = (data or {}).get("usage", {}) or {}
-        _reconcile_usage(user_id, model, int(usage.get("prompt_tokens", 0) or 0),
-                         int(usage.get("completion_tokens", 0) or 0), mult, hold)
+        if usage:
+            _reconcile_usage(user_id, model, int(usage.get("prompt_tokens", 0) or 0),
+                             int(usage.get("completion_tokens", 0) or 0), mult, hold)
+        else:  # 2xx 但拿不到 usage(非 JSON/缺字段)→ 按 prompt 估算兜底,避免白嫖一次成功响应
+            _reconcile_usage(user_id, model, prompt_est, 0, mult, hold)
         return JSONResponse(content=data)
 
     # ── 流式 SSE 透传:边转发边抓 usage;客户端中途断开也按已生成内容兜底结算 ──
@@ -733,13 +769,13 @@ async def chat_completions(body: dict[str, Any], request: Request, u: sqlite3.Ro
         settled = False
         try:
             async with httpx.AsyncClient(timeout=None) as client:
-                async with client.stream("POST", url, headers=_mimo_headers(), json=payload) as r:
+                async with client.stream("POST", url, headers=headers, json=payload) as r:
                     if r.status_code >= 400:
-                        err = (await r.aread()).decode("utf-8", "replace")
                         _reconcile_usage(user_id, model, 0, 0, mult, hold)  # 上游报错,全额退
                         settled = True
+                        # 不回显上游原始错误体,只给通用错误 + 状态码
                         yield (b"data: " + json.dumps(
-                            {"error": {"status": r.status_code, "body": err[:500]}}).encode() + b"\n\n")
+                            {"error": {"message": "upstream error", "status": r.status_code}}).encode() + b"\n\n")
                         yield b"data: [DONE]\n\n"
                         return
                     async for line in r.aiter_lines():
@@ -757,13 +793,17 @@ async def chat_completions(body: dict[str, Any], request: Request, u: sqlite3.Ro
                                     pass
         finally:
             if not settled:
-                # 正常结束 / 中途断开:有真实 usage 用真实,否则用 prompt+已收输出字符估算 → 多退少补
-                usage = captured.get("usage")
-                if usage:
-                    _reconcile_usage(user_id, model, int(usage.get("prompt_tokens", 0) or 0),
-                                     int(usage.get("completion_tokens", 0) or 0), mult, hold)
-                else:
-                    _reconcile_usage(user_id, model, prompt_est, out_chars // 4, mult, hold)
+                try:
+                    usage = captured.get("usage")
+                    if usage:  # 有真实 usage:按真实结算
+                        _reconcile_usage(user_id, model, int(usage.get("prompt_tokens", 0) or 0),
+                                         int(usage.get("completion_tokens", 0) or 0), mult, hold)
+                    elif out_chars > 0:  # 收到过内容但没拿到 usage(多半中途断开)→ 按 prompt+已收字符估算
+                        _reconcile_usage(user_id, model, prompt_est, out_chars // 4, mult, hold)
+                    else:  # 没接通/零字节(连接异常等)→ 全额退,与非流式语义一致,不误扣
+                        _reconcile_usage(user_id, model, 0, 0, mult, hold)
+                except Exception as e:  # noqa: BLE001 — 对账失败别让流清理崩溃;落日志供人工对账
+                    print(f"[reconcile-fail] user={user_id} hold={hold}: {type(e).__name__}: {e}")
 
     return StreamingResponse(
         _gen(),
