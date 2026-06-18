@@ -106,6 +106,17 @@ class PluginManager(private val context: Context) {
             }
         }
 
+        // 安全(fail-closed):外部安装的 dex(source=files,经 installFromFile 从任意外部
+        // 文件复制)未经代码签名校验,DexClassLoader 会以 app 全权限执行其代码(shell/文件/
+        // 短信等)。上面的 SafetyGate 只扫 manifest 文本、不验代码真伪。在实现 APK 证书签名
+        // 校验 + 能力白名单之前,只信任随签名 APK 打包的 assets 插件,拒绝加载外部安装的 dex。
+        if (info.source != "assets") {
+            info.error = "Untrusted plugin source '${info.source}': loading external dex is " +
+                "disabled until code-signature verification is implemented (security)."
+            Log.e(TAG, info.error ?: "")
+            return false
+        }
+
         // 加载工具
         val tools = loader.loadTools(info.dexPath, info.manifest.entryClass)
         if (tools == null || tools.isEmpty()) {

@@ -34,6 +34,9 @@ class PluginLoader(private val context: Context) {
     /**
      * 从 dex 文件加载工具实例。
      *
+     * ⚠️ 安全:DexClassLoader 以 app 全权限执行 dex 代码。调用方必须先确保 dex 可信
+     * (见 PluginManager.loadAndRegister 的来源门控);本方法不做签名校验。
+     *
      * @param dexPath dex 文件绝对路径
      * @param entryClass 入口类全限定名（需实现 BaseTool）
      * @return 加载成功返回 BaseTool 列表，失败返回 null
