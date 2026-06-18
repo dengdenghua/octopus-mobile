@@ -29,6 +29,12 @@ import com.apk.claw.android.ClawApplication
  */
 class MediaTools : BaseTool() {
 
+    /** 依赖 mpv 的播放类操作 —— MpvController 是 stub 时这些全 noop,需拦截避免假成功。 */
+    private val mpvPlaybackActions = setOf(
+        "play", "pause", "resume", "stop", "seek", "seek_relative",
+        "subtitle", "audio_track", "volume", "info", "play_cloud",
+    )
+
     override fun getName(): String = "media_player"
 
     override fun getDisplayName(): String = if (useChineseDescription) "媒体播放器" else "Media Player"
@@ -68,6 +74,15 @@ class MediaTools : BaseTool() {
 
     override fun execute(params: Map<String, Any>): ToolResult {
         val action = requireString(params, "action")
+
+        // mpv 播放器当前是 stub(见 MpvController.IS_AVAILABLE),播放类操作全 noop。
+        // 返回明确"不可用",避免给 Agent 假成功、白烧推理轮;扫描/字幕查找/网盘列举不依赖 mpv,仍可用。
+        if (!MpvController.IS_AVAILABLE && action in mpvPlaybackActions) {
+            return ToolResult.error(
+                "本地 mpv 播放器尚未接入(stub),操作 '$action' 不可用。" +
+                    "仍可用:scan / find_subtitle / mount_cloud / list_cloud / cloud_status。"
+            )
+        }
 
         return when (action) {
             "play" -> {
@@ -312,6 +327,10 @@ class MediaTools : BaseTool() {
     }
 
     override fun getDescriptionEN(): String = """
+        [EXPERIMENTAL] Local mpv playback is currently a stub and UNAVAILABLE —
+        play/pause/resume/stop/seek/seek_relative/subtitle/audio_track/volume/info/play_cloud
+        return "not available". Only scan / find_subtitle / cloud listing
+        (mount_cloud/list_cloud/cloud_status/set_server) work.
         Media player powered by mpv (FFmpeg + libplacebo + libass).
         Supports all video formats, Blu-ray ISO/BDMV, HDR tone mapping, ASS subtitles.
         
@@ -336,6 +355,9 @@ class MediaTools : BaseTool() {
     """.trimIndent()
 
     override fun getDescriptionCN(): String = """
+        [实验性] 本地 mpv 播放当前是 stub、不可用 —— play/pause/resume/stop/seek/
+        seek_relative/subtitle/audio_track/volume/info/play_cloud 会返回"不可用";
+        仅 scan/find_subtitle/网盘列举(mount_cloud/list_cloud/cloud_status/set_server)可用。
         基于 mpv 的媒体播放器（FFmpeg + libplacebo + libass）。
         支持所有视频格式、蓝光 ISO/BDMV、HDR 色调映射、ASS 字幕。
         

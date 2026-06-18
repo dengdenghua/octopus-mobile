@@ -22,6 +22,13 @@ object MpvController {
 
     private const val TAG = "MpvController"
 
+    /**
+     * 本地 mpv 播放是否可用。当前为 stub(mpv-android-lib 未按新 API 接入),
+     * 所有播放方法都是 noop。工具层据此对播放类操作返回明确"不可用"而非假成功;
+     * 真正接入 mpv 后改为 true。
+     */
+    const val IS_AVAILABLE = false
+
     @Volatile
     private var initialized = false
 
