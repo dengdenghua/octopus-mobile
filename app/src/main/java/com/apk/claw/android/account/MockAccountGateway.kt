@@ -36,10 +36,10 @@ class MockAccountGateway : AccountGateway {
     private val pendingOrders = HashMap<String, Goods>() // orderNo -> goods
 
     private val catalog = listOf(
-        Goods("m_month", "会员月卡", 500, 0, 1900, "解锁自有模型", "membership"),
-        Goods("g_100", "100 积分", 100, 0, 990, null),
-        Goods("g_500", "500 积分", 500, 50, 3990, "划算"),
-        Goods("g_1000", "1000 积分", 1000, 200, 6900, "超值"),
+        Goods("m_month", "Monthly Pass", 500, 0, 1900, "Unlock built-in models", "membership"),
+        Goods("g_100", "100 Credits", 100, 0, 990, null),
+        Goods("g_500", "500 Credits", 500, 50, 3990, "Best value"),
+        Goods("g_1000", "1000 Credits", 1000, 200, 6900, "Super value"),
     )
 
     override suspend fun sendSmsCode(mobile: String): SmsSendResult {
@@ -49,14 +49,14 @@ class MockAccountGateway : AccountGateway {
 
     override suspend fun login(mobile: String, code: String): LoginResult {
         delay(150)
-        require(code == MOCK_CODE) { "验证码错误（mock 模式固定为 $MOCK_CODE）" }
+        require(code == MOCK_CODE) { "Invalid code (mock mode fixed: $MOCK_CODE)" }
         val userId = "mock-$mobile"
         val isNew = !users.containsKey(userId)
         users.getOrPut(userId) { User(credits = SIGNUP_BONUS) }
         val token = "mock-token-" + UUID.randomUUID().toString().take(8)
         tokenToUser[token] = userId
         return LoginResult(token = token, userId = userId, mobile = mobile, isNewUser = isNew,
-                           nickname = "用户$mobile")
+                           nickname = "User$mobile")
     }
 
     override suspend fun sendEmailCode(email: String): SmsSendResult {
@@ -66,7 +66,7 @@ class MockAccountGateway : AccountGateway {
 
     override suspend fun loginEmail(email: String, code: String): LoginResult {
         delay(150)
-        require(code == MOCK_CODE) { "验证码错误（mock 模式固定为 $MOCK_CODE）" }
+        require(code == MOCK_CODE) { "Invalid code (mock mode fixed: $MOCK_CODE)" }
         val userId = "mock-email-$email"
         val isNew = !users.containsKey(userId)
         users.getOrPut(userId) { User(credits = SIGNUP_BONUS) }
@@ -77,10 +77,10 @@ class MockAccountGateway : AccountGateway {
     }
 
     private fun userOf(token: String): User =
-        users[tokenToUser[token]] ?: throw IllegalStateException("未登录或会话已失效")
+        users[tokenToUser[token]] ?: throw IllegalStateException("Not logged in or session expired")
 
     override suspend fun profile(token: String): AccountProfile {
-        val uid = tokenToUser[token] ?: throw IllegalStateException("未登录")
+        val uid = tokenToUser[token] ?: throw IllegalStateException("Not logged in")
         val mobile = uid.removePrefix("mock-")
         return AccountProfile(uid, mobile, "用户$mobile", null)
     }
@@ -100,7 +100,7 @@ class MockAccountGateway : AccountGateway {
     override suspend fun createOrder(token: String, goodsId: String): CreateOrderResult {
         userOf(token)
         val g = catalog.firstOrNull { it.id == goodsId }
-            ?: throw IllegalArgumentException("套餐不存在: $goodsId")
+            ?: throw IllegalArgumentException("Package not found: $goodsId")
         val orderNo = "MOCK" + System.currentTimeMillis()
         pendingOrders[orderNo] = g
         // payUrl null => no external cashier; client polls queryOrder directly.
@@ -138,7 +138,7 @@ class MockAccountGateway : AccountGateway {
     }
 
     override suspend fun inviteInfo(token: String): InviteInfo {
-        val uid = tokenToUser[token] ?: throw IllegalStateException("未登录")
+        val uid = tokenToUser[token] ?: throw IllegalStateException("Not logged in")
         val u = users[uid]!!
         if (u.inviteCode.isEmpty()) {
             u.inviteCode = UUID.randomUUID().toString().replace("-", "").uppercase().take(6)
@@ -148,12 +148,12 @@ class MockAccountGateway : AccountGateway {
     }
 
     override suspend fun redeemInvite(token: String, code: String): RedeemResult {
-        val uid = tokenToUser[token] ?: throw IllegalStateException("未登录")
+        val uid = tokenToUser[token] ?: throw IllegalStateException("Not logged in")
         val u = users[uid]!!
-        require(u.invitedBy.isEmpty()) { "你已使用过邀请码" }
+        require(u.invitedBy.isEmpty()) { "Invite code already used" }
         val inviterId = users.entries.firstOrNull { it.value.inviteCode == code.uppercase() }?.key
-            ?: throw IllegalArgumentException("邀请码无效")
-        require(inviterId != uid) { "不能使用自己的邀请码" }
+            ?: throw IllegalArgumentException("Invalid invite code")
+        require(inviterId != uid) { "Cannot use your own invite code" }
         u.invitedBy = inviterId
         u.credits += 200
         users[inviterId]!!.credits += 200

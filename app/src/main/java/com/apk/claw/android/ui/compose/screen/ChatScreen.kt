@@ -295,7 +295,7 @@ fun ChatScreen() {
 
     ModalNavigationDrawer(
         drawerState = drawerState,
-        scrimColor = Color.Black.copy(alpha = 0.48f),
+        scrimColor = OctopusColors.OverlayDim,
         drawerContent = {
             ChatSessionDrawer(
                 sessions = sessions,
@@ -496,7 +496,7 @@ fun ChatScreen() {
                         Icon(Icons.Filled.Keyboard, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(19.dp))
                     }
                     Spacer(modifier = Modifier.width(10.dp))
-                    val red = Color(0xFFFF453B)
+                    val red = OctopusColors.Error
                     val pillColor = if (isRunning || listening) red else OctopusColors.SurfaceDeep
                     val listeningText = stringResource(R.string.chat_voice_listening_release)
                     val pillText = when {
@@ -581,7 +581,7 @@ fun ChatScreen() {
                         modifier = Modifier
                             .size(42.dp)
                             .background(
-                                (if (isRunning) Color(0xFFFF453B) else PrimaryColor)
+                                (if (isRunning) OctopusColors.Error else PrimaryColor)
                                     .copy(alpha = if (btnActive) 1f else 0.35f),
                                 RoundedCornerShape(21.dp)
                             )
@@ -880,6 +880,7 @@ private fun TargetSelector(onPreview: (DeviceInfo?) -> Unit = {}) {
     var menu by remember { mutableStateOf(false) }
     var label by remember { mutableStateOf(ControlTarget.label()) }
     val remote = remember(label) { ControlTarget.isRemote() }
+    val loopbackName = stringResource(R.string.chat_loopback_device)  // 提前取,onClick 内不能调 @Composable
     Box {
         // 只一个「手机/电脑」复合图标;点击才弹出设备列表。远程时高亮 + 右上角小圆点提示。
         IconButton(onClick = { menu = true }) {
@@ -907,7 +908,7 @@ private fun TargetSelector(onPreview: (DeviceInfo?) -> Unit = {}) {
             // 调试：回环目标（远程控制自己，用于单机验证远程路由）
             if (BuildConfig.DEBUG) {
                 DropdownMenuItem(
-                    text = { Text("🔁 回环(本机:9527)") },
+                    text = { Text(stringResource(R.string.chat_loopback)) },
                     onClick = {
                         val token = runCatching { ConfigServerManager.getAuthToken() }.getOrNull() ?: ""
                         // ConfigServer 绑定在本机 WiFi IP（非 127.0.0.1），用其真实地址回环
@@ -917,7 +918,7 @@ private fun TargetSelector(onPreview: (DeviceInfo?) -> Unit = {}) {
                         ControlTarget.setRemote(
                             DeviceInfo(
                                 deviceId = "loopback",
-                                deviceName = "回环",
+                                deviceName = loopbackName,
                                 ip = ip,
                                 configServerPort = port,
                                 authToken = token,
@@ -967,7 +968,7 @@ private fun DevicePreviewPanel(device: DeviceInfo, onEnter: () -> Unit, onClose:
                     .align(Alignment.TopStart)
                     .padding(8.dp)
                     .clip(RoundedCornerShape(10.dp))
-                    .background(Color(0x80000000))
+                    .background(OctopusColors.OverlayDim)
                     .padding(horizontal = 8.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -982,11 +983,11 @@ private fun DevicePreviewPanel(device: DeviceInfo, onEnter: () -> Unit, onClose:
                     .padding(8.dp)
                     .size(26.dp)
                     .clip(CircleShape)
-                    .background(Color(0x80000000))
+                    .background(OctopusColors.OverlayDim)
                     .clickable { onClose() },
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Filled.Close, contentDescription = "关闭", tint = Color.White, modifier = Modifier.size(15.dp))
+                Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.feature_close), tint = Color.White, modifier = Modifier.size(15.dp))
             }
         }
         // 拖拽柄(视觉提示:可点画面进入全控)

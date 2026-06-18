@@ -278,7 +278,14 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
 
         // ── 渠道：内联显示各渠道状态 ──
         item {
-            val channelNames = listOf("钉钉", "飞书", "QQ", "Discord", "Telegram", "微信")
+            val channelNames = listOf(
+                stringResource(R.string.channel_name_dingtalk),
+                stringResource(R.string.channel_name_feishu),
+                stringResource(R.string.channel_name_qq),
+                stringResource(R.string.channel_name_discord),
+                stringResource(R.string.channel_name_telegram),
+                stringResource(R.string.channel_name_wechat),
+            )
             val cfg = remember(refreshTick) {
                 listOf(
                     KVUtils.getDingtalkAppKey().isNotEmpty() && KVUtils.getDingtalkAppSecret().isNotEmpty(),
@@ -333,22 +340,46 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
 
         item {
             SettingsCard(stringResource(R.string.settings_appearance), Icons.Filled.LightMode, compact = true) {
+                // 主题模式：跟随系统 / 强制亮色 / 强制暗色（三态，统一 Compose 与 XML）
+                val themeMode = remember { KVUtils.getThemeMode() }
+                val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
+                val isLight = themeMode ?: !systemDark
+
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     IconBubble(Icons.Filled.LightMode, PrimaryColor)
                     Spacer(Modifier.width(10.dp))
                     Text(stringResource(R.string.settings_light_mode), color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                     Switch(
-                        checked = OctopusColors.isLight,
-                        onCheckedChange = { v -> KVUtils.setLightTheme(v); OctopusColors.isLight = v },
+                        checked = isLight,
+                        onCheckedChange = { v ->
+                            // 切换时强制亮/暗，写入新的三态 key
+                            KVUtils.setThemeMode(v)
+                            OctopusColors.isLight = v
+                        },
                     )
                 }
+                // 提示当前模式
+                val modeText = if (themeMode == null) {
+                    stringResource(R.string.settings_theme_follow_system)
+                } else if (themeMode) {
+                    stringResource(R.string.settings_theme_light)
+                } else {
+                    stringResource(R.string.settings_theme_dark)
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    modeText,
+                    fontSize = 11.sp,
+                    color = TextMuted,
+                    modifier = Modifier.padding(start = 44.dp),
+                )
             }
         }
 
         // ── 版本号从 BuildConfig 读取 ──
         item {
             Text(
-                "Octopus Mobile v${BuildConfig.VERSION_NAME} · Apache 2.0",
+                stringResource(R.string.settings_version_template, BuildConfig.VERSION_NAME),
                 fontSize = 11.sp, color = TextMuted,
                 modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
                 textAlign = TextAlign.Center,
@@ -385,8 +416,8 @@ private fun PermissionItemRow(permission: PermissionUi, onClick: () -> Unit) {
         )
         if (clickable) {
             Text(
-                "去设置",
-                fontSize = 10.sp,
+                    stringResource(R.string.settings_go_setup),
+                    fontSize = 10.sp,
                 color = PrimaryColor,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -402,7 +433,7 @@ private fun PermissionItemRow(permission: PermissionUi, onClick: () -> Unit) {
                 color = SuccessColor.copy(alpha = 0.12f),
             ) {
                 Text(
-                    "OK",
+                    stringResource(R.string.settings_status_ok),
                     modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
                     fontSize = 9.sp,
                     color = SuccessColor,
@@ -466,7 +497,7 @@ private fun PermissionSummaryRow(readyCount: Int, perms: List<PermissionUi>) {
             color = if (readyCount >= 5) SuccessColor.copy(alpha = 0.12f) else WarningColor.copy(alpha = 0.11f),
         ) {
             Text(
-                if (readyCount >= 5) "OK" else "SET",
+                if (readyCount >= 5) stringResource(R.string.settings_status_ok) else stringResource(R.string.settings_status_set),
                 modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
                 color = if (readyCount >= 5) SuccessColor else WarningColor,
                 fontSize = 10.sp,

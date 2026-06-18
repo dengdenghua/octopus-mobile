@@ -687,6 +687,14 @@
     <string name="feat_multiwindow_desc">フリーフォーム・分割ウィンドウ</string>
     <string name="feat_evolution_desc">AI自己進化</string>
     <string name="feat_trust_desc">セキュリティ監査ログ</string>
+    <string name="feat_explore_hot_circles">人気サークル</string>
+    <string name="feat_explore_recommended">おすすめ</string>
+    <string name="feat_explore_my_circles">マイサークル</string>
+    <string name="feat_explore_members">メンバー</string>
+    <string name="feat_explore_all_skills">全スキル</string>
+    <string name="feat_explore_all_skills_desc">エージェントの全能力を閲覧</string>
+    <string name="feat_explore_join_circle">サークルに参加</string>
+    <string name="feat_explore_join_circle_hint">コミュニティとルーチンやコツを共有</string>
     <string name="browser_settings_title">ブラウザ設定</string>
     <string name="browser_settings_search_engine">既定の検索エンジン</string>
     <string name="browser_settings_engine_kernel">エンジン</string>
@@ -759,4 +767,92 @@
     <string name="account_byo_member_hint">会員登録で自分のモデルを利用可(毎月リセット)</string>
     <string name="settings_appearance">外観</string>
     <string name="settings_light_mode">ライトモード</string>
+    <string name="settings_theme_follow_system">システムに従う</string>
+    <string name="settings_theme_light">ライト</string>
+    <string name="settings_theme_dark">ダーク</string>
+
+    <!-- ブラウザホームカテゴリ -->
+    <string name="browser_home_categories">カテゴリ</string>
+    <string name="browser_cat_ai">AIツール</string>
+    <string name="browser_cat_ai_sub">モデル、執筆、リサーチ</string>
+    <string name="browser_cat_video">動画</string>
+    <string name="browser_cat_video_sub">YouTube、Bilibili</string>
+    <string name="browser_cat_dev">開発</string>
+    <string name="browser_cat_dev_sub">コード、ドキュメント、Q&amp;A</string>
+    <string name="browser_cat_knowledge">知識</string>
+    <string name="browser_cat_knowledge_sub">Q&amp;A、百科、資料</string>
+
+    <!-- 設定ハードコード修正 -->
+    <string name="settings_go_setup">設定へ</string>
+    <string name="settings_status_ok">OK</string>
+    <string name="settings_status_set">SET</string>
+    <string name="settings_version_template">Octopus Mobile v%1$s · Apache 2.0</string>
+    <string name="channel_name_dingtalk">DingTalk</string>
+    <string name="channel_name_feishu">Feishu</string>
+    <string name="channel_name_qq">QQ</string>
+    <string name="channel_name_discord">Discord</string>
+    <string name="channel_name_telegram">Telegram</string>
+    <string name="channel_name_wechat">WeChat</string>
+
+    <!-- ブラウザハードコード修正 -->
+    <string name="browser_input_url">URLを入力…</string>
+    <string name="browser_current_tab">現在のタブ</string>
+    <string name="browser_copy_url">URLをコピー</string>
+    <string name="browser_copied">コピーしました</string>
+    <string name="browser_ai_prompt_summarize">このページの主要内容を簡潔なポイントでまとめてください。</string>
+    <string name="browser_ai_prompt_key_points">このページの最も重要な情報ポイントを抽出してください。</string>
+    <string name="browser_ai_prompt_translate">このページの主要内容を中国語に翻訳してください。</string>
+    <string name="browser_chrome_filter">X,ブラウザ,GeckoView,停止,質問,実行,✨,更新,閉じる,検索エンジン切替,AIに聞く,戻る,進む,ホーム,ブックマーク,拡張,URLを入力,読み込み中,読み込み中…,入力</string>
+    <string name="browser_page_cmd_markers">手伝って,このページ,クリック,入力,カートに追加,ログイン,送信,チェック</string>
+    <string name="browser_agent_prompt">現在のページで次の操作を完了してください（get_screen_infoでページ要素と座標を確認し、tap / input_textなどで操作）：%1$s</string>
+    <string name="browser_ai_system_prompt">あなたはウェブページ読み取りアシスタントです。下記のページ内容に基づいてのみ回答し、ツールは呼び出さないでください。\nユーザーの質問：%1$s%2$s</string>
+    <string name="browser_installing_extension_toast">拡張機能をインストール中…</string>
+    <string name="browser_home_favorites">お気に入り</string>
+    <string name="browser_home_tools">管理</string>
+
+    <!-- サークル名とタグ -->
+    <string name="circle_ai_players">AIプレイヤー</string>
+    <string name="circle_efficiency">効率マスター</string>
+    <string name="circle_digital">デジタルファン</string>
+    <string name="circle_geek">ギークゾーン</string>
+    <string name="circle_lazy">ラズハック</string>
+    <string name="circle_tv_cast">TVキャスト</string>
+    <string name="circle_tag_hot">人気</string>
+    <string name="circle_tag_recommended">おすすめ</string>
+    <string name="circle_tag_new">新着</string>
+
+    <!-- チャット画面ハードコード修正 -->
+    <string name="chat_loopback">ループバック(ローカル:9527)</string>
+    <string name="chat_loopback_device">ループバック</string>
+
+    <!-- リモコンハードコード修正 -->
+    <string name="remote_back">戻る</string>
+    <string name="remote_home">ホーム</string>
+    <string name="remote_recents">履歴</string>
+    <string name="remote_exit">終了</string>
+
+    <!-- 機能画面ハードコード修正 -->
+    <string name="feature_back">戻る</string>
+    <string name="feature_close">閉じる</string>
+
+    <!-- 壁紙ピッカー -->
+    <string name="browser_wallpaper_title">壁紙</string>
+    <string name="browser_wallpaper_presets">プリセット壁紙</string>
+    <string name="browser_wallpaper_upload">壁紙をアップロード</string>
+    <string name="browser_wallpaper_upload_hint">ギャラリーから画像を選択</string>
+    <string name="browser_wallpaper_remove_custom">カスタム壁紙を削除</string>
+    <string name="browser_wallpaper_save_failed">壁紙の保存に失敗しました</string>
+    <string name="feat_explore_circle_avatar">%1$s アバター</string>
+
+    <!-- ブランドヘッダー -->
+    <string name="browser_brand_name">Octopus</string>
+    <string name="browser_brand_slogan">AIで再定義するブラウジング</string>
+
+    <!-- 音声アシスタントオーバーレイ -->
+    <string name="voice_assistant_listening">聞いています…</string>
+    <string name="voice_assistant_stop">停止</string>
+    <string name="voice_assistant_need_mic">音声入力にはマイクの許可が必要です</string>
+
+    <!-- フローティングサークル -->
+    <string name="floating_accessibility_hint">設定でアクセシビリティを切り替え</string>
 </resources>

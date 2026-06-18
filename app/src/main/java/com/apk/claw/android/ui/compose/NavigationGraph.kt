@@ -1,6 +1,9 @@
 package com.apk.claw.android.ui.compose
 
+import android.content.Intent
 import androidx.compose.animation.core.tween
+import androidx.compose.ui.platform.LocalContext
+import com.apk.claw.android.ui.browser.BrowserActivity
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -60,6 +63,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun OctopusApp() {
     val navController = rememberNavController()
+    val context = LocalContext.current
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
     val snackbarHostState = remember { SnackbarHostState() }
@@ -80,12 +84,17 @@ fun OctopusApp() {
             CompactBottomBar(
                 currentRoute = currentDestination?.route,
                 onSelect = { screen ->
-                    navController.navigate(screen.route) {
-                        popUpTo(navController.graph.findStartDestination().id) {
-                            saveState = true
+                    if (screen == Screen.Discover) {
+                        // 「浏览器」Tab 直接打开内置浏览器本体(已有桌面式首页),不再走旧的 DiscoverScreen 落地页
+                        runCatching { context.startActivity(Intent(context, BrowserActivity::class.java)) }
+                    } else {
+                        navController.navigate(screen.route) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
                         }
-                        launchSingleTop = true
-                        restoreState = true
                     }
                 },
             )

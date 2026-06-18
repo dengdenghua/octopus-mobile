@@ -793,6 +793,14 @@
     <string name="feat_multiwindow_desc">自由窗口与分屏</string>
     <string name="feat_evolution_desc">AI 行为自我进化</string>
     <string name="feat_trust_desc">安全审计与日志</string>
+    <string name="feat_explore_hot_circles">热门圈子</string>
+    <string name="feat_explore_recommended">推荐</string>
+    <string name="feat_explore_my_circles">我的圈子</string>
+    <string name="feat_explore_members">成员</string>
+    <string name="feat_explore_all_skills">全部技能</string>
+    <string name="feat_explore_all_skills_desc">浏览所有 Agent 能力</string>
+    <string name="feat_explore_join_circle">加入圈子</string>
+    <string name="feat_explore_join_circle_hint">与社区分享例程和技巧</string>
     <string name="browser_settings_title">浏览器设置</string>
     <string name="browser_settings_search_engine">默认搜索引擎</string>
     <string name="browser_settings_engine_kernel">浏览器内核</string>
@@ -865,4 +873,90 @@
     <string name="account_byo_member_hint">开通会员后可用自定义模型(每月重置)</string>
     <string name="settings_appearance">外观</string>
     <string name="settings_light_mode">明亮模式</string>
+    <string name="settings_theme_follow_system">跟随系统</string>
+    <string name="settings_theme_light">明亮</string>
+    <string name="settings_theme_dark">深色</string>
+
+    <!-- 浏览器首页分类 -->
+    <string name="browser_home_categories">常用分类</string>
+    <string name="browser_cat_ai">AI 工具</string>
+    <string name="browser_cat_ai_sub">模型、写作、研究</string>
+    <string name="browser_cat_video">视频</string>
+    <string name="browser_cat_video_sub">YouTube、Bilibili</string>
+    <string name="browser_cat_dev">开发</string>
+    <string name="browser_cat_dev_sub">代码、文档、问答</string>
+    <string name="browser_cat_knowledge">知识</string>
+    <string name="browser_cat_knowledge_sub">问答、百科、资料</string>
+
+    <!-- 设置硬编码修复 -->
+    <string name="settings_go_setup">去设置</string>
+    <string name="settings_status_ok">OK</string>
+    <string name="settings_status_set">SET</string>
+    <string name="settings_version_template">Octopus Mobile v%1$s · Apache 2.0</string>
+    <string name="channel_name_dingtalk">钉钉</string>
+    <string name="channel_name_feishu">飞书</string>
+    <string name="channel_name_qq">QQ</string>
+    <string name="channel_name_discord">Discord</string>
+    <string name="channel_name_telegram">Telegram</string>
+    <string name="channel_name_wechat">微信</string>
+
+    <!-- 浏览器硬编码修复 -->
+    <string name="browser_input_url">输入网址…</string>
+    <string name="browser_current_tab">当前标签页</string>
+    <string name="browser_copy_url">复制 URL</string>
+    <string name="browser_copied">已复制</string>
+    <string name="browser_ai_prompt_summarize">用简洁要点总结这个网页的主要内容。</string>
+    <string name="browser_ai_prompt_key_points">提取这个网页里最关键的信息要点。</string>
+    <string name="browser_ai_prompt_translate">把这个网页的主要内容翻译成中文。</string>
+    <string name="browser_chrome_filter">X,浏览器,GeckoView,停止,问,执行,✨,刷新,关闭,切换搜索引擎,问 AI,后退,前进,首页,书签,扩展,搜索或输入网址,加载中,加载中…,搜索或输入</string>
+    <string name="browser_page_cmd_markers">帮我,这页,此页,这个页面,本页,点一下,点击,填写,填一下,加入购物车,加购,下单,结算,登录这,勾选,提交表单</string>
+    <string name="browser_agent_prompt">在当前网页上完成以下操作（用 get_screen_info 查看页面元素及坐标，用 tap / input_text 等工具操作）：%1$s</string>
+    <string name="browser_ai_system_prompt">你是网页阅读助手。请只依据下方网页内容回答，不要调用任何工具。\n用户问题：%1$s%2$s</string>
+    <string name="browser_installing_extension_toast">正在安装扩展…</string>
+
+    <!-- 圈子名称和标签 -->
+    <string name="circle_ai_players">AI 玩家</string>
+    <string name="circle_efficiency">效率达人</string>
+    <string name="circle_digital">数码控</string>
+    <string name="circle_geek">极客圈</string>
+    <string name="circle_lazy">懒人福音</string>
+    <string name="circle_tv_cast">TV 投屏党</string>
+    <string name="circle_tag_hot">热门</string>
+    <string name="circle_tag_recommended">推荐</string>
+    <string name="circle_tag_new">新锐</string>
+
+    <!-- 对话页硬编码修复 -->
+    <string name="chat_loopback">回环(本机:9527)</string>
+    <string name="chat_loopback_device">回环</string>
+
+    <!-- 远程控制硬编码修复 -->
+    <string name="remote_back">返回</string>
+    <string name="remote_home">主页</string>
+    <string name="remote_recents">任务</string>
+    <string name="remote_exit">退出</string>
+
+    <!-- 功能页硬编码修复 -->
+    <string name="feature_back">返回</string>
+    <string name="feature_close">关闭</string>
+
+    <!-- 壁纸选择器 -->
+    <string name="browser_wallpaper_title">壁纸</string>
+    <string name="browser_wallpaper_presets">预设壁纸</string>
+    <string name="browser_wallpaper_upload">上传壁纸</string>
+    <string name="browser_wallpaper_upload_hint">从相册选择图片</string>
+    <string name="browser_wallpaper_remove_custom">移除自定义壁纸</string>
+    <string name="browser_wallpaper_save_failed">壁纸保存失败</string>
+    <string name="feat_explore_circle_avatar">%1$s 头像</string>
+
+    <!-- 品牌头部 -->
+    <string name="browser_brand_name">Octopus</string>
+    <string name="browser_brand_slogan">AI 驱动，重新定义浏览</string>
+
+    <!-- 语音助手悬浮窗 -->
+    <string name="voice_assistant_listening">正在聆听…</string>
+    <string name="voice_assistant_stop">停止</string>
+    <string name="voice_assistant_need_mic">语音输入需要麦克风权限</string>
+
+    <!-- 悬浮球 -->
+    <string name="floating_accessibility_hint">前往设置开关无障碍服务</string>
 </resources>

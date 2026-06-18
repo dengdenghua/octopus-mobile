@@ -101,16 +101,17 @@ ADMIN_IP_ALLOWLIST = [s.strip() for s in os.environ.get("ADMIN_IP_ALLOWLIST", ""
 # 取自右数第 TRUSTED_PROXIES 个。设 0 = 无反代,直接用 socket IP(忽略可伪造的 XFF)。
 TRUSTED_PROXIES = int(os.environ.get("TRUSTED_PROXIES", "1"))
 
-# 商品目录(kind=membership 的购买会解锁当月 BYO)
+# 商品目录(kind=membership 的购买会解锁当月 BYO)。priceFen=人民币分;priceUsdCents=美元分
+# (英文区显示,约 = 人民币价 ÷ 汇率 × 1.5 的美区溢价,取整到干净价位)。
 GOODS = [
     {"id": "m_month", "title": "会员月卡", "credits": 500, "bonusCredits": 0,
-     "priceFen": 3900, "tag": "解锁自有模型", "kind": "membership"},
+     "priceFen": 3900, "priceUsdCents": 899, "tag": "解锁自有模型", "kind": "membership"},
     {"id": "g_100", "title": "100 积分", "credits": 100, "bonusCredits": 0,
-     "priceFen": 990, "tag": None, "kind": "credits"},
+     "priceFen": 990, "priceUsdCents": 299, "tag": None, "kind": "credits"},
     {"id": "g_500", "title": "500 积分", "credits": 500, "bonusCredits": 50,
-     "priceFen": 3990, "tag": "划算", "kind": "credits"},
+     "priceFen": 3990, "priceUsdCents": 899, "tag": "划算", "kind": "credits"},
     {"id": "g_1000", "title": "1000 积分", "credits": 1000, "bonusCredits": 200,
-     "priceFen": 6900, "tag": "超值", "kind": "credits"},
+     "priceFen": 6900, "priceUsdCents": 1499, "tag": "超值", "kind": "credits"},
 ]
 GOODS_BY_ID = {g["id"]: g for g in GOODS}
 

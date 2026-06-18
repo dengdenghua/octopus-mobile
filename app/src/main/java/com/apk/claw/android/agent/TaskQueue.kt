@@ -2,6 +2,7 @@ package com.apk.claw.android.agent
 
 import android.util.Log
 import com.apk.claw.android.channel.Channel
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.PriorityBlockingQueue
 
 /**
@@ -53,17 +54,19 @@ class TaskQueue {
     }
 
     private val queue = PriorityBlockingQueue<QueuedTask>()
-    private val pausedTasks = mutableMapOf<String, QueuedTask>()  // 被暂停的任务
+    // 被暂停的任务：用 ConcurrentHashMap 保证多线程安全（TaskOrchestrator 的抢占/恢复/取消可能并发触发）
+    private val pausedTasks = ConcurrentHashMap<String, QueuedTask>()
 
     /** 入队一个任务 */
     fun enqueue(task: QueuedTask): Boolean {
+        // 使用 putIfAbsent 保证原子性：若任务已存在（重复入队）则拒绝
         if (queue.size >= MAX_QUEUE_SIZE) {
             Log.w(TAG, "Queue is full, rejecting task: ${task.id}")
             return false
         }
-        queue.add(task)
-        Log.i(TAG, "Task enqueued: id=${task.id}, priority=${task.priority}, queueSize=${queue.size}")
-        return true
+        return queue.offer(task).also { ok ->
+            if (ok) Log.i(TAG, "Task enqueued: id=${task.id}, priority=${task.priority}, queueSize=${queue.size}")
+        }
     }
 
     /** 取出下一个要执行的任务（阻塞直到有任务） */
@@ -83,15 +86,14 @@ class TaskQueue {
 
     /** 暂停一个任务（被高优先级抢占时） */
     fun pauseTask(taskId: String): QueuedTask? {
-        val task = queue.find { it.id == taskId }
-        if (task != null) {
-            queue.remove(task)
-            val paused = task.copy(status = TaskStatus.PAUSED)
-            pausedTasks[taskId] = paused
+        // PriorityBlockingQueue 的 removeIf 是线程安全的，原子地查找+移除
+        var paused: QueuedTask? = null
+        queue.removeIf { it.id == taskId && run { paused = it.copy(status = TaskStatus.PAUSED); true } }
+        return paused?.also {
+            // putIfAbsent 避免覆盖已存在的暂停任务
+            pausedTasks.putIfAbsent(taskId, it)
             Log.i(TAG, "Task paused: $taskId")
-            return paused
         }
-        return null
     }
 
     /** 暂停当前正在运行的任务（当前任务不在 queue 中）。 */

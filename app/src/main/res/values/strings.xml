@@ -793,6 +793,14 @@ For these, install Shizuku — a safe, open-source helper.</string>
     <string name="feat_multiwindow_desc">Freeform &amp; split windows</string>
     <string name="feat_evolution_desc">Self-improving AI behavior</string>
     <string name="feat_trust_desc">Security &amp; audit logs</string>
+    <string name="feat_explore_hot_circles">Hot Circles</string>
+    <string name="feat_explore_recommended">Recommended</string>
+    <string name="feat_explore_my_circles">My Circles</string>
+    <string name="feat_explore_members">members</string>
+    <string name="feat_explore_all_skills">All Skills</string>
+    <string name="feat_explore_all_skills_desc">Browse all agent capabilities</string>
+    <string name="feat_explore_join_circle">Join a Circle</string>
+    <string name="feat_explore_join_circle_hint">Share routines &amp; tips with the community</string>
     <string name="browser_settings_title">Browser Settings</string>
     <string name="browser_settings_search_engine">Default Search Engine</string>
     <string name="browser_settings_engine_kernel">Engine</string>
@@ -865,4 +873,90 @@ For these, install Shizuku — a safe, open-source helper.</string>
     <string name="account_byo_member_hint">Become a member to use a custom model (resets monthly)</string>
     <string name="settings_appearance">Appearance</string>
     <string name="settings_light_mode">Light mode</string>
+    <string name="settings_theme_follow_system">Follow system</string>
+    <string name="settings_theme_light">Light</string>
+    <string name="settings_theme_dark">Dark</string>
+
+    <!-- Browser home categories -->
+    <string name="browser_home_categories">Categories</string>
+    <string name="browser_cat_ai">AI Tools</string>
+    <string name="browser_cat_ai_sub">Models, writing, research</string>
+    <string name="browser_cat_video">Video</string>
+    <string name="browser_cat_video_sub">YouTube, Bilibili</string>
+    <string name="browser_cat_dev">Dev</string>
+    <string name="browser_cat_dev_sub">Code, docs, Q&amp;A</string>
+    <string name="browser_cat_knowledge">Knowledge</string>
+    <string name="browser_cat_knowledge_sub">Q&amp;A, wiki, references</string>
+
+    <!-- Settings hardcoded fix -->
+    <string name="settings_go_setup">Set up</string>
+    <string name="settings_status_ok">OK</string>
+    <string name="settings_status_set">SET</string>
+    <string name="settings_version_template">Octopus Mobile v%1$s · Apache 2.0</string>
+    <string name="channel_name_dingtalk">DingTalk</string>
+    <string name="channel_name_feishu">Feishu</string>
+    <string name="channel_name_qq">QQ</string>
+    <string name="channel_name_discord">Discord</string>
+    <string name="channel_name_telegram">Telegram</string>
+    <string name="channel_name_wechat">WeChat</string>
+
+    <!-- Browser hardcoded fix -->
+    <string name="browser_input_url">Enter URL…</string>
+    <string name="browser_current_tab">Current tab</string>
+    <string name="browser_copy_url">Copy URL</string>
+    <string name="browser_copied">Copied</string>
+    <string name="browser_ai_prompt_summarize">Summarize the main content of this page in concise bullet points.</string>
+    <string name="browser_ai_prompt_key_points">Extract the most critical key information points from this page.</string>
+    <string name="browser_ai_prompt_translate">Translate the main content of this page into Chinese.</string>
+    <string name="browser_chrome_filter">X,Browser,GeckoView,Stop,Ask,Execute,✨,Refresh,Close,Switch search engine,Ask AI,Back,Forward,Home,Bookmarks,Extensions,Search or enter URL,Loading,Loading…,Search or enter</string>
+    <string name="browser_page_cmd_markers">help me,this page,click,fill,add to cart,log in,submit,check the</string>
+    <string name="browser_agent_prompt">Complete the following operation on the current page (use get_screen_info to view page elements and coordinates, use tap / input_text etc. to operate): %1$s</string>
+    <string name="browser_ai_system_prompt">You are a web page reading assistant. Please answer only based on the web page content below, do not call any tools.\nUser question: %1$s%2$s</string>
+    <string name="browser_installing_extension_toast">Installing extension…</string>
+
+    <!-- Circle names & tags -->
+    <string name="circle_ai_players">AI Players</string>
+    <string name="circle_efficiency">Efficiency Gurus</string>
+    <string name="circle_digital">Digital Fans</string>
+    <string name="circle_geek">Geek Zone</string>
+    <string name="circle_lazy">Lazy Hacks</string>
+    <string name="circle_tv_cast">TV Cast</string>
+    <string name="circle_tag_hot">Hot</string>
+    <string name="circle_tag_recommended">Recommended</string>
+    <string name="circle_tag_new">New</string>
+
+    <!-- ChatScreen hardcoded fix -->
+    <string name="chat_loopback">Loopback (local:9527)</string>
+    <string name="chat_loopback_device">Loopback</string>
+
+    <!-- RemoteControl hardcoded fix -->
+    <string name="remote_back">Back</string>
+    <string name="remote_home">Home</string>
+    <string name="remote_recents">Recents</string>
+    <string name="remote_exit">Exit</string>
+
+    <!-- FeatureUi hardcoded fix -->
+    <string name="feature_back">Back</string>
+    <string name="feature_close">Close</string>
+
+    <!-- Wallpaper picker -->
+    <string name="browser_wallpaper_title">Wallpaper</string>
+    <string name="browser_wallpaper_presets">Preset wallpapers</string>
+    <string name="browser_wallpaper_upload">Upload wallpaper</string>
+    <string name="browser_wallpaper_upload_hint">Select an image from gallery</string>
+    <string name="browser_wallpaper_remove_custom">Remove custom wallpaper</string>
+    <string name="browser_wallpaper_save_failed">Failed to save wallpaper</string>
+    <string name="feat_explore_circle_avatar">%1$s avatar</string>
+
+    <!-- Brand header -->
+    <string name="browser_brand_name">Octopus</string>
+    <string name="browser_brand_slogan">AI-powered browsing, reimagined</string>
+
+    <!-- Voice assistant overlay -->
+    <string name="voice_assistant_listening">Listening…</string>
+    <string name="voice_assistant_stop">Stop</string>
+    <string name="voice_assistant_need_mic">Microphone permission required for voice input</string>
+
+    <!-- Floating circle -->
+    <string name="floating_accessibility_hint">Go to Settings to toggle accessibility</string>
 </resources>

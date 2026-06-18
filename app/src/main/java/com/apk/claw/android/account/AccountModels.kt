@@ -56,6 +56,8 @@ data class Goods(
     val tag: String? = null,
     /** "credits" = top up balance; "membership" = unlock BYO own-model for the month. */
     val kind: String = "credits",
+    /** price in US cents (1/100 USD); shown in English locale. 0 = fall back to RMB. */
+    @SerializedName("priceUsdCents") val priceUsdCents: Long = 0,
 )
 
 data class GoodsList(

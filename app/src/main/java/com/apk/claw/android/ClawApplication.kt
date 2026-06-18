@@ -80,8 +80,9 @@ open class ClawApplication : BaseApp() {
         registerNetworkCallback()
         appViewModelInstance = getAppViewModelProvider()[AppViewModel::class.java]
         KVUtils.init(this)
-        // 主题:在任何 UI 类加载前,据持久化偏好设好深色/明亮(其余 UI 的颜色 getter 据此取值)
-        com.apk.claw.android.ui.compose.theme.OctopusColors.isLight = KVUtils.isLightTheme()
+        // 主题：由 OctopusTheme 在 Compose 入口根据系统暗色模式 + 用户偏好同步，
+        // 不再在此处手动初始化（避免与 Theme.kt 的 SideEffect 冲突）。
+        // 旧的 KEY_LIGHT_THEME 偏好会被 getThemeMode() 自动迁移。
         deviceDiscoveryManager = DeviceDiscoveryManager(this, deviceRegistry)
         pluginManager = com.apk.claw.android.plugin.PluginManager(this)
 

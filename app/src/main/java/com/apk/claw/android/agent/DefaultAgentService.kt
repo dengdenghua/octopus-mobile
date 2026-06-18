@@ -45,6 +45,8 @@ class DefaultAgentService : AgentService {
         private const val MAX_API_RETRIES = 3
         /** 死循环检测：滑动窗口大小 */
         private const val LOOP_DETECT_WINDOW = 4
+        /** 死循环检测：连续触发 N 次后强制 finish，避免无限消耗迭代 */
+        private const val MAX_LOOP_WARNINGS = 3
 
         /** base64 图片最大宽度，超过则等比缩放 */
         private const val VISION_MAX_WIDTH = 720
@@ -208,12 +210,12 @@ class DefaultAgentService : AgentService {
                     callback.onToolCall(iterations, toolName, displayName, toolArgs)
 
                     val mapType = object : TypeToken<Map<String, Any>>() {}.type
-                    var params: Map<String, Any>? = try {
-                        GSON.fromJson(toolArgs, mapType)
+                    val params: Map<String, Any> = try {
+                        GSON.fromJson(toolArgs, mapType) ?: emptyMap()
                     } catch (e: Exception) {
-                        HashMap()
+                        XLog.w(TAG, "VLM tool args parse failed for $toolName: ${e.message}")
+                        emptyMap()
                     }
-                    if (params == null) params = HashMap()
 
                     val toolResult = ToolRegistry.getInstance().executeTool(toolName, params)
                     val paramsString = if (params.isEmpty()) "" else params.toString()
@@ -315,15 +317,16 @@ class DefaultAgentService : AgentService {
                 }
             } catch (e: Exception) {
                 lastException = e
-                val msg = e.message ?: ""
-                // Token 耗尽或认证失败不重试
-                if (msg.contains("401") || msg.contains("403") || msg.contains("insufficient")) {
+                // 认证失败 / 额度不足 / 权限拒绝：不重试，立即抛出
+                if (isAuthOrQuotaError(e)) {
                     throw e
                 }
                 val delay = (Math.pow(2.0, attempt.toDouble()) * 1000).toLong()
-                XLog.w(TAG, "LLM API call failed (attempt ${attempt + 1}/$MAX_API_RETRIES), retrying in ${delay}ms: $msg")
+                // 加入 jitter，避免多客户端同步重试触发服务端限流雪崩
+                val jitter = (Math.random() * 300).toLong()
+                XLog.w(TAG, "LLM API call failed (attempt ${attempt + 1}/$MAX_API_RETRIES), retrying in ${delay + jitter}ms: ${e.message}")
                 try {
-                    Thread.sleep(delay)
+                    Thread.sleep(delay + jitter)
                 } catch (ie: InterruptedException) {
                     Thread.currentThread().interrupt()
                     throw e
@@ -331,6 +334,27 @@ class DefaultAgentService : AgentService {
             }
         }
         throw lastException!!
+    }
+
+    /**
+     * 判断异常是否为认证失败 / 额度不足 / 权限拒绝（不重试）.
+     *
+     * 优先基于 LangChain4j 的 [dev.langchain4j.exception.HttpException.statusCode]，
+     * 兜底用更严格的正则匹配（避免 "request id 40123" 这类误判）。
+     */
+    private fun isAuthOrQuotaError(e: Throwable): Boolean {
+        // 1. 优先基于 HttpException 的状态码判断（最可靠）
+        if (e is dev.langchain4j.exception.HttpException) {
+            val code = e.statusCode()
+            return code == 401 || code == 403
+        }
+        // 2. 兜底：用更严格的正则匹配 HTTP 状态码，避免 "40123" 这类数字误判
+        val msg = e.message ?: return false
+        // 匹配 "HTTP 401"、"status=403"、"code: 401" 等明确模式，或 "insufficient_quota" 等明确文案
+        val authPattern = Regex("""(?:HTTP|status|code)\D*(401|403)\b""", RegexOption.IGNORE_CASE)
+        return authPattern.containsMatchIn(msg) ||
+               msg.contains("insufficient_quota", ignoreCase = true) ||
+               msg.contains("invalid_api_key", ignoreCase = true)
     }
 
     // ==================== 死循环检测 ====================
@@ -365,18 +389,13 @@ class DefaultAgentService : AgentService {
      * - get_screen_info：全局只保留最新一条完整结果
      * - 保护区（最近 KEEP_RECENT_ROUNDS 轮）：完整保留
      * - 保护区外：AI thinking 不动，tool result 压缩为一行摘要
+     *
+     * 注：ContextCompressor.compress() 未被调用，仅复用其 config（maxChars/chunkTruncateChars）。
+     * 如需启用完整的"older 消息汇总为 [Context Summary]"策略，可替换为 compressor.compress()。
      */
     private fun compressHistoryForSend(messages: MutableList<ChatMessage>) {
         // 压缩前统计总字符数
-        val charsBefore = messages.sumOf { msg ->
-            when (msg) {
-                is AiMessage -> (msg.text()?.length ?: 0) + (msg.toolExecutionRequests()?.sumOf { it.arguments()?.length ?: 0 } ?: 0)
-                is ToolExecutionResultMessage -> msg.text().length
-                is UserMessage -> msg.singleText().length
-                is SystemMessage -> msg.text().length
-                else -> 0
-            }
-        }
+        val charsBefore = countMessagesChars(messages)
         val msgCountBefore = messages.size
 
         // 0. get_screen_info 特殊处理：无视分级，全局只保留最新一条完整结果
@@ -416,23 +435,28 @@ class DefaultAgentService : AgentService {
         }
 
         // 压缩后统计
-        val charsAfter = messages.sumOf { msg ->
-            when (msg) {
-                is AiMessage -> (msg.text()?.length ?: 0) + (msg.toolExecutionRequests()?.sumOf { it.arguments()?.length ?: 0 } ?: 0)
-                is ToolExecutionResultMessage -> msg.text().length
-                is UserMessage -> msg.singleText().length
-                is SystemMessage -> msg.text().length
-                else -> 0
-            }
-        }
+        val charsAfter = countMessagesChars(messages)
         val saved = charsBefore - charsAfter
         if (saved > 0) {
             XLog.i(TAG, "上下文压缩: ${charsBefore}→${charsAfter}字符, 节省${saved}字符(${saved * 100 / charsBefore}%), 轮数=${aiIndices.size}")
         }
 
         // ── ContextCompressor 二次压缩层 ──
-        // 如果现有压缩后总字符仍超过 maxChars，对保护区外的 UserMessage 做截断
-        val charsAfterFirstPass = messages.sumOf { msg ->
+        // 如果现有压缩后总字符仍超过 maxChars，对保护区外的 AiMessage 文本做截断
+        if (charsAfter > contextCompressor.config.maxChars && aiIndices.size > KEEP_RECENT_ROUNDS) {
+            applyContextCompressorTruncation(messages, aiIndices, KEEP_RECENT_ROUNDS)
+            val charsAfterSecondPass = countMessagesChars(messages)
+            val secondSaved = charsAfter - charsAfterSecondPass
+            if (secondSaved > 0) {
+                val ratio = (charsAfterSecondPass.toFloat() / charsAfter * 100).toInt()
+                XLog.i(TAG, "ContextCompressor 二次压缩: ${charsAfter}→${charsAfterSecondPass}字符 (${ratio}%)")
+            }
+        }
+    }
+
+    /** 统计消息列表总字符数（抽取自重复代码） */
+    private fun countMessagesChars(messages: List<ChatMessage>): Int =
+        messages.sumOf { msg ->
             when (msg) {
                 is AiMessage -> (msg.text()?.length ?: 0) + (msg.toolExecutionRequests()?.sumOf { it.arguments()?.length ?: 0 } ?: 0)
                 is ToolExecutionResultMessage -> msg.text().length
@@ -441,24 +465,6 @@ class DefaultAgentService : AgentService {
                 else -> 0
             }
         }
-        if (charsAfterFirstPass > contextCompressor.config.maxChars && aiIndices.size > KEEP_RECENT_ROUNDS) {
-            applyContextCompressorTruncation(messages, aiIndices, KEEP_RECENT_ROUNDS)
-            val charsAfterSecondPass = messages.sumOf { msg ->
-                when (msg) {
-                    is AiMessage -> (msg.text()?.length ?: 0) + (msg.toolExecutionRequests()?.sumOf { it.arguments()?.length ?: 0 } ?: 0)
-                    is ToolExecutionResultMessage -> msg.text().length
-                    is UserMessage -> msg.singleText().length
-                    is SystemMessage -> msg.text().length
-                    else -> 0
-                }
-            }
-            val secondSaved = charsAfterFirstPass - charsAfterSecondPass
-            if (secondSaved > 0) {
-                val ratio = (charsAfterSecondPass.toFloat() / charsAfterFirstPass * 100).toInt()
-                XLog.i(TAG, "ContextCompressor 二次压缩: ${charsAfterFirstPass}→${charsAfterSecondPass}字符 (${ratio}%)")
-            }
-        }
-    }
 
     /**
      * ContextCompressor 二次压缩：对保护区外的 UserMessage 文本做截断.
@@ -544,6 +550,7 @@ class DefaultAgentService : AgentService {
 
         var iterations = 0
         var totalTokens = 0
+        var loopWarningCount = 0  // 死循环检测连续触发计数
         val maxIterations = config.maxIterations
         val loopHistory = LinkedList<RoundFingerprint>()
         var lastScreenHash = 0
@@ -603,14 +610,23 @@ class DefaultAgentService : AgentService {
                 val toolArgs = toolRequest.arguments() ?: "{}"
                 callback.onToolCall(iterations, toolName, displayName, toolArgs)
 
-                // 解析参数
+                // 解析参数 —— 解析失败时把错误反馈给 LLM，而不是静默用空 Map
                 val mapType = object : TypeToken<Map<String, Any>>() {}.type
-                var params: Map<String, Any>? = try {
-                    GSON.fromJson(toolArgs, mapType)
+                val params: Map<String, Any> = try {
+                    GSON.fromJson(toolArgs, mapType) ?: emptyMap()
                 } catch (e: Exception) {
-                    HashMap()
+                    XLog.w(TAG, "Tool args parse failed for $toolName: ${e.message}, args=$toolArgs")
+                    // 把解析错误作为工具结果回填给 LLM，让它知道参数格式有问题
+                    val errorResult = ToolResult.error("参数解析失败: ${e.message}。原始参数: $toolArgs")
+                    val errorJson = GSON.toJson(mapOf(
+                        "isSuccess" to false,
+                        "data" to errorResult.data,
+                        "error" to errorResult.error
+                    ))
+                    messages.add(ToolExecutionResultMessage.from(toolRequest, errorJson))
+                    callback.onToolResult(iterations, toolName, displayName, toolArgs, errorResult)
+                    continue
                 }
-                if (params == null) params = HashMap()
 
                 val result = ToolRegistry.getInstance().executeTool(toolName, params)
                 val paramsString = if (params.isEmpty()) "" else params.toString()
@@ -646,8 +662,15 @@ class DefaultAgentService : AgentService {
                 }
 
                 // 记录指纹用于死循环检测
+                // 改进：get_screen_info 成功时也入队，让观察指纹参与死循环检测
+                // （之前只记录动作指纹，连续观察相同屏幕不动作时检测不到）
                 if (toolName == "get_screen_info" && result.isSuccess && result.data != null) {
                     lastScreenHash = result.data.hashCode()
+                    // 观察指纹入队，screenHash 作为主指纹，toolCall 为 "observe"
+                    loopHistory.addLast(RoundFingerprint(lastScreenHash, "observe:get_screen_info"))
+                    if (loopHistory.size > LOOP_DETECT_WINDOW) {
+                        loopHistory.removeFirst()
+                    }
                 } else if (toolName.isNotEmpty() && toolName != "get_screen_info") {
                     loopHistory.addLast(RoundFingerprint(lastScreenHash, "$toolName:$toolArgs"))
                     if (loopHistory.size > LOOP_DETECT_WINDOW) {
@@ -668,15 +691,33 @@ class DefaultAgentService : AgentService {
 
             // 死循环检测
             if (isStuckInLoop(loopHistory)) {
-                XLog.w(TAG, "Dead loop detected at iteration $iterations")
+                loopWarningCount++
+                XLog.w(TAG, "Dead loop detected at iteration $iterations (warning $loopWarningCount/$MAX_LOOP_WARNINGS)")
+
+                if (loopWarningCount >= MAX_LOOP_WARNINGS) {
+                    // 连续多次死循环 → 强制 finish，避免无限消耗迭代
+                    XLog.w(TAG, "Max loop warnings reached, forcing finish")
+                    callback.onComplete(
+                        iterations,
+                        ClawApplication.instance.getString(R.string.agent_task_completed) +
+                        "（检测到死循环，已自动停止）",
+                        totalTokens
+                    )
+                    return
+                }
+
                 messages.add(
                     UserMessage.from(
                         "[系统提示] 检测到你连续多轮执行了相同的操作且屏幕没有变化，你可能陷入了死循环。" +
                         "请尝试完全不同的方法：按 system_key(key=\"back\") 回退、滑动页面寻找目标、或重新打开 App。" +
-                        "如果确实无法完成任务，请调用 finish 说明原因。"
+                        "如果确实无法完成任务，请调用 finish 说明原因。" +
+                        "（警告：再检测到 ${MAX_LOOP_WARNINGS - loopWarningCount} 次死循环将强制结束任务）"
                     )
                 )
                 loopHistory.clear()
+            } else {
+                // 本轮未检测到死循环，重置计数
+                loopWarningCount = 0
             }
             XLog.d(TAG, "轮数:$iterations all=$totalTokens 本轮=${llmResponse.tokenUsage?.totalTokenCount()}")
         }

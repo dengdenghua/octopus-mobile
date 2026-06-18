@@ -1,6 +1,10 @@
 package com.apk.claw.android.octopus_mobile
 
 import android.util.Log
+import com.google.gson.Gson
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
+import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.*
 import okhttp3.*
 import okio.ByteString
@@ -34,6 +38,8 @@ open class OctopusMobileClient(
     private val authToken: String? = null
 ) {
     private val tag = "OctopusMobile"
+
+    private val gson = Gson()
 
     private val httpClient: OkHttpClient = OkHttpClient.Builder()
         .pingInterval(30, TimeUnit.SECONDS)
@@ -171,34 +177,37 @@ open class OctopusMobileClient(
 
     /**
      * 处理收到的消息 —— 解析 task/result / task/error / tool/execute / config/sync_pull_response.
+     *
+     * 使用 Gson 解析 JSON，替代之前的正则提取（正则无法正确处理嵌套 JSON、转义字符、Unicode）。
      */
     private fun handleIncomingMessage(text: String) {
         try {
-            // 母体（Python json.dumps）发的是 "method": "..."（冒号后带空格），
-            // 故用正则提取 method，避免对空白敏感的精确子串匹配漏判。
-            val method = Regex(""""method"\s*:\s*"([^"]+)"""").find(text)?.groupValues?.get(1)
+            val root = JsonParser.parseString(text).asJsonObject
+            // 母体（Python json.dumps）发的是 "method": "..."，Gson 自动处理空白
+            val method = root.get("method")?.asString ?: return
+
             when (method) {
                 // 任务结果（母体返回的任务执行结果）
                 "task/result" -> {
-                    val taskId = extractJsonField(text, "task_id") ?: return
-                    val response = extractJsonField(text, "response") ?: ""
-                    val steps = extractJsonField(text, "steps")?.toIntOrNull() ?: 0
+                    val taskId = root.get("task_id")?.asString ?: return
+                    val response = root.get("response")?.asString ?: ""
+                    val steps = root.get("steps")?.asInt ?: 0
                     val deferred = pendingTasks.remove(taskId)
                     deferred?.complete(RemoteTaskResult.Success(steps, response, TokenUsage(0, 0, 0)))
                 }
                 // 任务错误
                 "task/error" -> {
-                    val taskId = extractJsonField(text, "task_id") ?: return
-                    val error = extractJsonField(text, "error") ?: "Unknown error"
+                    val taskId = root.get("task_id")?.asString ?: return
+                    val error = root.get("error")?.asString ?: "Unknown error"
                     val deferred = pendingTasks.remove(taskId)
                     deferred?.complete(RemoteTaskResult.Failure(error))
                 }
                 // 工具执行（母体下发的 tool/execute）
                 "tool/execute" -> {
-                    val callId = extractJsonField(text, "id") ?: return
-                    val tool = extractJsonField(text, "tool") ?: return
-                    val argsJson = extractJsonObject(text, "args")
-                    val args = parseArgs(argsJson)
+                    val callId = root.get("id")?.asString ?: return
+                    val tool = root.get("tool")?.asString ?: return
+                    val argsElement = root.get("args")
+                    val args = parseArgs(argsElement)
                     val call = ToolCall(id = callId, name = tool, args = args)
                     onToolExecute?.invoke(call)
                 }
@@ -369,35 +378,18 @@ open class OctopusMobileClient(
 
     // ── 辅助 ────────────────────────────────────────────────
 
-    private fun extractJsonField(json: String, field: String): String? {
-        val pattern = """"$field"\s*:\s*"([^"]*)"""
-        val regex = Regex(pattern)
-        val match = regex.find(json)
-        return match?.groupValues?.get(1)
-    }
-
-    private fun extractJsonObject(json: String, field: String): String {
-        val pattern = """"$field"\s*:\s*(\{[^}]*\})"""
-        val regex = Regex(pattern)
-        val match = regex.find(json)
-        return match?.groupValues?.get(1) ?: "{}"
-    }
-
-    private fun parseArgs(json: String): Map<String, Any> {
-        // 简单解析：只支持 string/int/boolean
-        val result = mutableMapOf<String, Any>()
-        val pattern = """"(\w+)"\s*:\s*("[^"]*"|\d+|true|false)"""
-        val regex = Regex(pattern)
-        for (match in regex.findAll(json)) {
-            val key = match.groupValues[1]
-            val value = match.groupValues[2]
-            result[key] = when {
-                value.startsWith("\"") -> value.trim('"')
-                value == "true" -> true
-                value == "false" -> false
-                else -> value.toIntOrNull() ?: value
-            }
+    /**
+     * 解析 args 元素为 Map<String, Any>.
+     * 支持 string/int/long/double/boolean 及嵌套对象/数组（Gson 自动处理类型）。
+     */
+    private fun parseArgs(element: com.google.gson.JsonElement?): Map<String, Any> {
+        if (element == null || !element.isJsonObject) return emptyMap()
+        val mapType = object : TypeToken<Map<String, Any>>() {}.type
+        return try {
+            gson.fromJson(element, mapType) ?: emptyMap()
+        } catch (e: Exception) {
+            Log.w(tag, "parseArgs failed: ${e.message}")
+            emptyMap()
         }
-        return result
     }
 }

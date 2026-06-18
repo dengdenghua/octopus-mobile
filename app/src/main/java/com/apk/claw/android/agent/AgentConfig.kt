@@ -107,7 +107,8 @@ data class AgentConfig(
         private var baseUrl: String = ""
         private var modelName: String = ""
         private var systemPrompt: String = DEFAULT_SYSTEM_PROMPT
-        private var maxIterations: Int = 20
+        // 与 data class 主构造默认值保持一致（60），避免 Builder 与直接构造产生不同行为
+        private var maxIterations: Int = 60
         private var temperature: Double = 0.1
         private var provider: LlmProvider = LlmProvider.OPENAI
         private var streaming: Boolean = false

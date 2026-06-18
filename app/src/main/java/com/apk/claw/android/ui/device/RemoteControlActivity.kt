@@ -16,6 +16,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.lifecycle.lifecycleScope
 import com.apk.claw.android.ClawApplication
+import com.apk.claw.android.R
 import com.apk.claw.android.base.BaseActivity
 import com.apk.claw.android.octopus_mobile.DeviceInfo
 import com.apk.claw.android.octopus_mobile.DeviceRemoteControl
@@ -120,10 +121,10 @@ class RemoteControlActivity : BaseActivity() {
                 bottomMargin = dp(14)
             }
             val gap = dp(10)
-            addView(btn("‹ 返回") { act { remote.pressBack(device) } }, lp(gap))
-            addView(btn("⌂ 主页") { act { remote.pressHome(device) } }, lp(gap))
-            addView(btn("▭ 任务") { act { remote.pressRecents(device) } }, lp(gap))
-            addView(btn("✕ 退出") { finish() }, lp(gap))
+            addView(btn("‹ ${getString(R.string.remote_back)}") { act { remote.pressBack(device) } }, lp(gap))
+            addView(btn("⌂ ${getString(R.string.remote_home)}") { act { remote.pressHome(device) } }, lp(gap))
+            addView(btn("▭ ${getString(R.string.remote_recents)}") { act { remote.pressRecents(device) } }, lp(gap))
+            addView(btn("✕ ${getString(R.string.remote_exit)}") { finish() }, lp(gap))
         }
     }
 

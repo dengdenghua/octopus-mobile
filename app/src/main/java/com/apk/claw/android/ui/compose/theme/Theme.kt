@@ -9,45 +9,70 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
-// 颜色定义 - 深色主题
-private val DarkColorScheme = darkColorScheme(
-    primary = OctopusColors.Primary,
-    onPrimary = Color.White,
-    primaryContainer = OctopusColors.SurfaceVariant,
-    secondary = OctopusColors.Accent,
-    secondaryContainer = OctopusColors.SurfaceDeep,
-    tertiary = OctopusColors.Warning,
-    background = OctopusColors.Background,
-    surface = OctopusColors.Surface,
-    surfaceVariant = OctopusColors.SurfaceVariant,
-    onBackground = OctopusColors.TextPrimary,
-    onSurface = OctopusColors.TextPrimary,
-    onSurfaceVariant = OctopusColors.TextMuted,
-    error = OctopusColors.Error,
-    outline = OctopusColors.Border,
-)
-
+/**
+ * 统一主题入口。
+ *
+ * 暗色模式策略（统一双轨）：
+ * - 默认跟随系统 [isSystemInDarkTheme]。
+ * - 用户可在设置页强制切换（写入 KVUtils.isLightTheme），此时覆盖系统值。
+ * - 切换后同步更新 [OctopusColors.isLight]，保证所有读取 OctopusColors 的 Composable 重组。
+ *
+ * 颜色方案：所有 token 来自 [OctopusColors]（即 XML colors.xml 单一真源），
+ * 与 View 体系 [com.apk.claw.android.R.style.Theme_OctopusMobile] 完全对齐。
+ */
 @Composable
 fun OctopusTheme(
     content: @Composable () -> Unit
 ) {
-    val light = OctopusColors.isLight
+    // 系统暗色模式
+    val systemDark = isSystemInDarkTheme()
+    // 用户偏好（默认 null 表示跟随系统；true/false 表示强制亮/暗）
+    val userOverride = remember { com.apk.claw.android.utils.KVUtils.getThemeMode() }
+    val light = when (userOverride) {
+        null -> !systemDark           // 跟随系统
+        true -> true                  // 强制亮色
+        false -> false                // 强制暗色
+    }
+
+    // 同步给 OctopusColors，触发所有读取它的 Composable 重组
+    SideEffect {
+        if (OctopusColors.isLight != light) {
+            OctopusColors.isLight = light
+        }
+    }
+
     val colorScheme = if (light) lightColorScheme(
         primary = OctopusColors.Primary,
-        onPrimary = Color.White,
-        primaryContainer = OctopusColors.SurfaceVariant,
+        onPrimary = OctopusColors.OnPrimary,
+        primaryContainer = OctopusColors.PrimaryContainer,
+        onPrimaryContainer = OctopusColors.OnPrimaryContainer,
         secondary = OctopusColors.Accent,
-        secondaryContainer = OctopusColors.SurfaceDeep,
         tertiary = OctopusColors.Warning,
         background = OctopusColors.Background,
         surface = OctopusColors.Surface,
         surfaceVariant = OctopusColors.SurfaceVariant,
         onBackground = OctopusColors.TextPrimary,
         onSurface = OctopusColors.TextPrimary,
-        onSurfaceVariant = OctopusColors.TextMuted,
+        onSurfaceVariant = OctopusColors.TextSecondary,
         error = OctopusColors.Error,
         outline = OctopusColors.Border,
-    ) else DarkColorScheme
+    ) else darkColorScheme(
+        primary = OctopusColors.Primary,
+        onPrimary = OctopusColors.OnPrimary,
+        primaryContainer = OctopusColors.PrimaryContainer,
+        onPrimaryContainer = OctopusColors.OnPrimaryContainer,
+        secondary = OctopusColors.Accent,
+        tertiary = OctopusColors.Warning,
+        background = OctopusColors.Background,
+        surface = OctopusColors.Surface,
+        surfaceVariant = OctopusColors.SurfaceVariant,
+        onBackground = OctopusColors.TextPrimary,
+        onSurface = OctopusColors.TextPrimary,
+        onSurfaceVariant = OctopusColors.TextSecondary,
+        error = OctopusColors.Error,
+        outline = OctopusColors.Border,
+    )
+
     val view = LocalView.current
     val activity = view.context as? Activity
 

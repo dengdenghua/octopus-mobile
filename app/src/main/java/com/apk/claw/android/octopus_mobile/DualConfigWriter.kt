@@ -2,9 +2,11 @@ package com.apk.claw.android.octopus_mobile
 
 import android.content.Context
 import android.util.Log
+import com.google.gson.Gson
+import com.google.gson.JsonParser
+import com.google.gson.reflect.TypeToken
 import com.tencent.mmkv.MMKV
 import kotlinx.coroutines.*
-import org.json.JSONObject
 
 /**
  * 方案 F · MMKV ↔ Runtime 配置双写.
@@ -25,6 +27,7 @@ class DualConfigWriter(
     private val tentacleId: String,
 ) {
     private val tag = "DualConfigWriter"
+    private val gson = Gson()
 
     private val kv: MMKV = run {
         MMKV.initialize(context)
@@ -192,33 +195,34 @@ class DualConfigWriter(
 
     private fun handleIncomingMessage(rawJson: String) {
         try {
-            // 简单字符串匹配 —— 完整 JSON 解析需升级
-            if (!rawJson.contains("\"config/sync_pull_response\"")) return
+            val root = JsonParser.parseString(rawJson).asJsonObject
+            val method = root.get("method")?.asString ?: return
+            if (method != "config/sync_pull_response") return
 
-            // 解析 changes 数组（手写轻量解析）
-            val changesArray = extractJsonArray(rawJson, "changes") ?: return
+            // 用 Gson 解析 changes 数组，替代手写正则解析
+            val changesElement = root.get("changes") ?: return
+            if (!changesElement.isJsonArray) return
+
+            val changesType = object : TypeToken<List<ConfigChange>>() {}.type
+            val changes: List<ConfigChange> = try {
+                gson.fromJson(changesElement, changesType) ?: emptyList()
+            } catch (e: Exception) {
+                Log.w(tag, "parse changes failed: ${e.message}")
+                emptyList()
+            }
+
             val localVersion = getVersion()
             var maxRemoteVersion = localVersion
             var appliedCount = 0
 
-            val changesRegex = Regex(
-                """\{\s*"key"\s*:\s*"([^"]+)"\s*,\s*"value"\s*:\s*"((?:[^"\\]|\\.)*)"\s*,\s*"version"\s*:\s*(\d+)[^}]*\}""",
-            )
-            for (match in changesRegex.findAll(changesArray)) {
-                val key = match.groupValues[1]
-                val value = match.groupValues[2]
-                    .replace("\\\"", "\"")
-                    .replace("\\\\", "\\")
-                    .replace("\\n", "\n")
-                val remoteVersion = match.groupValues[3].toIntOrNull() ?: 0
-
+            for (change in changes) {
                 // 冲突解决：remote_version > local_version → 以远程为准
-                if (remoteVersion > localVersion) {
-                    kv.encode(key, value)
+                if (change.version > localVersion) {
+                    kv.encode(change.key, change.value)
                     appliedCount++
                 }
-                if (remoteVersion > maxRemoteVersion) {
-                    maxRemoteVersion = remoteVersion
+                if (change.version > maxRemoteVersion) {
+                    maxRemoteVersion = change.version
                 }
             }
             // 更新本地版本号
@@ -237,25 +241,6 @@ class DualConfigWriter(
         val newVersion = getVersion() + 1
         kv.encode(configVersionKey, newVersion)
         return newVersion
-    }
-
-    /**
-     * 极简 JSON 数组提取 —— 平衡 "config" 字段开始到对应 "]".
-     */
-    private fun extractJsonArray(json: String, field: String): String? {
-        val keyPattern = """"$field"\s*:\s*\["""
-        val start = Regex(keyPattern).find(json) ?: return null
-        val from = start.range.last + 1
-        var depth = 1
-        var i = from
-        while (i < json.length && depth > 0) {
-            when (json[i]) {
-                '[' -> depth++
-                ']' -> depth--
-            }
-            i++
-        }
-        return if (depth == 0) json.substring(from, i - 1) else null
     }
 }
 

@@ -186,7 +186,7 @@ private fun BrowserShortcutTile(shortcut: BrowserShortcut, modifier: Modifier = 
         ) {
             Surface(
                 shape = RoundedCornerShape(15.dp),
-                color = Color.White,
+                color = OctopusColors.Surface,
             ) {
                 Box(modifier = Modifier.size(50.dp), contentAlignment = Alignment.Center) {
                     if (shortcut.iconUrl != null) {

@@ -124,7 +124,7 @@ class AccountActivity : BaseActivity() {
             row.findViewById<TextView>(R.id.tvGoodsSub).text =
                 getString(R.string.account_goods_credits, g.credits) + bonus
             row.findViewById<KButton>(R.id.btnBuy).apply {
-                text = formatPrice(g.priceFen)
+                text = formatPrice(g)
                 setOnClickListener { buy(g) }
             }
             llGoods.addView(row)
@@ -240,8 +240,12 @@ class AccountActivity : BaseActivity() {
     private fun formatDate(epochMillis: Long): String =
         SimpleDateFormat("yyyy-MM-dd", Locale.US).format(epochMillis)
 
-    private fun formatPrice(fen: Long): String =
-        if (fen % 100 == 0L) "¥" + (fen / 100) else "¥" + String.format(Locale.US, "%.2f", fen / 100.0)
+    /** 英文区显示美元价(priceUsdCents),其余显示人民币(priceFen)。 */
+    private fun formatPrice(g: Goods): String {
+        val english = Locale.getDefault().language == "en"
+        val (sym, cents) = if (english && g.priceUsdCents > 0) "$" to g.priceUsdCents else "¥" to g.priceFen
+        return if (cents % 100 == 0L) sym + (cents / 100) else sym + String.format(Locale.US, "%.2f", cents / 100.0)
+    }
 
     private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 }

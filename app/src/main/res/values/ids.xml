@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 悬浮语音面板里的实时识别文本 TextView id（FloatingCircleManager 用 findViewById 取） -->
+    <item name="vaPartialText" type="id" />
+</resources>

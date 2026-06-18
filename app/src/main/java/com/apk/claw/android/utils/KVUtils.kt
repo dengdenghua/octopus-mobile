@@ -188,6 +188,36 @@ object KVUtils {
     fun isLightTheme(): Boolean = getBoolean("KEY_LIGHT_THEME", false)
     fun setLightTheme(light: Boolean) = putBoolean("KEY_LIGHT_THEME", light)
 
+    /**
+     * 主题模式（三态，统一 Compose 与 XML 的暗色模式触发源）。
+     *
+     * - null  ：跟随系统（默认，新行为）
+     * - true  ：强制亮色
+     * - false ：强制暗色
+     *
+     * 迁移策略：若旧的 KEY_LIGHT_THEME 已被用户设置过，首次读取时迁移为对应的强制模式；
+     * 未设置过则返回 null（跟随系统）。
+     */
+    fun getThemeMode(): Boolean? {
+        // 使用 contains 区分"未设置"和"设置为 false"
+        if (contains("KEY_THEME_MODE")) {
+            return getBoolean("KEY_THEME_MODE", true)
+        }
+        // 迁移旧偏好
+        if (contains("KEY_LIGHT_THEME")) {
+            return getBoolean("KEY_LIGHT_THEME", false)
+        }
+        return null
+    }
+
+    fun setThemeMode(light: Boolean?) {
+        if (light == null) {
+            remove("KEY_THEME_MODE")
+        } else {
+            putBoolean("KEY_THEME_MODE", light)
+        }
+    }
+
     // ==================== 钉钉配置 ====================
     fun getDingtalkAppKey(): String = getString(KEY_DINGTALK_APP_KEY, "")
     fun setDingtalkAppKey(value: String) = putString(KEY_DINGTALK_APP_KEY, value)
