@@ -98,7 +98,14 @@ object ChannelManager {
      */
     @JvmStatic
     fun reinitFromStorage() {
-        handlers.values.forEach { it.reinitFromStorage() }
+        // 单个通道 reinit 失败不应中断其他通道(原 forEach 一抛就全断、且静默)。
+        handlers.forEach { (channel, handler) ->
+            try {
+                handler.reinitFromStorage()
+            } catch (e: Exception) {
+                XLog.w(TAG, "通道 ${channel.displayName} reinit 失败,跳过: ${e.message}")
+            }
+        }
     }
 
     /**
@@ -109,7 +116,11 @@ object ChannelManager {
         handlers.forEach { (channel, handler) ->
             if (!handler.isConnected()) {
                 XLog.i(TAG, "重连${channel.displayName}通道")
-                handler.reinitFromStorage()
+                try {
+                    handler.reinitFromStorage()
+                } catch (e: Exception) {
+                    XLog.w(TAG, "重连 ${channel.displayName} 失败: ${e.message}")
+                }
             }
         }
     }

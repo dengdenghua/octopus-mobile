@@ -198,6 +198,9 @@ object ShizukuShellService {
             val finished = process.waitFor(SHELL_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
             if (!finished) {
                 process.destroyForcibly()
+                // 销毁后让 reader 线程随流关闭收尾,避免泄漏挂起的读线程
+                stdoutThread.join(500)
+                stderrThread.join(500)
                 Log.w(TAG, "Command timed out: $command")
                 return ShellResult(-1, "", "Command timed out after ${SHELL_TIMEOUT_MS}ms")
             }
