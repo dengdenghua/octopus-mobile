@@ -138,6 +138,7 @@ open class OctopusMobileClient(
                 Log.i(tag, "websocket closed code=$code reason=$reason")
                 this@OctopusMobileClient.webSocket = null
                 setState(ConnectionState.OFFLINE)
+                failPendingTasks("Connection closed (code=$code)")
                 scheduleReconnect()
             }
 
@@ -145,6 +146,7 @@ open class OctopusMobileClient(
                 Log.w(tag, "websocket failure: ${t.message}")
                 this@OctopusMobileClient.webSocket = null
                 setState(ConnectionState.OFFLINE)
+                failPendingTasks("Connection failed: ${t.message}")
                 scheduleReconnect()
             }
         }
@@ -173,6 +175,20 @@ open class OctopusMobileClient(
                 }
             }
         }
+    }
+
+    /**
+     * 断连时把所有在途任务标记失败并清空。
+     *
+     * 否则旧连接的 deferred 会挂起到 60s 超时；且重连后旧连接迟到的 task/result
+     * 可能错误完成新连接的任务(跨连接泄漏)。在 setState(OFFLINE) 之后调用——
+     * 此时 executeRemoteTask 因状态非 ONLINE 不会再注册新任务,无竞态。
+     */
+    private fun failPendingTasks(reason: String) {
+        if (pendingTasks.isEmpty()) return
+        val deferreds = pendingTasks.values.toList()
+        pendingTasks.clear()
+        deferreds.forEach { it.complete(RemoteTaskResult.Failure(reason)) }
     }
 
     /**
