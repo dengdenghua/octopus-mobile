@@ -12,7 +12,7 @@ import com.google.gson.reflect.TypeToken
 object ChatStore {
 
     private const val PREFIX = "chat_msgs_"
-    private const val MAX_KEEP = 200
+    private const val MAX_KEEP = 100
     private val gson = Gson()
 
     private data class Dto(

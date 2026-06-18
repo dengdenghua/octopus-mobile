@@ -343,10 +343,10 @@
     <string name="ai_browser_agent_desc">浏览器可通过无障碍读取当前页面内容，并让 Agent 点击、输入、总结、翻译或执行网页任务。</string>
     <string name="ai_browser_section_automation">自动化</string>
     <string name="ai_browser_routines_desc">已保存 %1$d 条浏览器/设备自动化</string>
-    <string name="browser_home_title">浏览器</string>
+    <string name="browser_home_title">AI 浏览器桌面</string>
     <string name="browser_home_subtitle">搜索或输入网址</string>
-    <string name="browser_home_favorites">常用网站</string>
-    <string name="browser_home_tools">网页工具</string>
+    <string name="browser_home_favorites">收藏标签</string>
+    <string name="browser_home_tools">常用入口</string>
 
     <!-- Bottom navigation -->
     <string name="nav_discover">发现</string>
@@ -355,6 +355,7 @@
     <string name="nav_chat">对话</string>
     <string name="nav_device">设备</string>
     <string name="nav_settings">设置</string>
+    <string name="nav_agent_square">Agent 广场</string>
 
     <!-- SettingsScreen (Compose) -->
     <string name="settings_center_badge">设备控制中心</string>

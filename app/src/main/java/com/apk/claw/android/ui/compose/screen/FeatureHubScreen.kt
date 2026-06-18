@@ -17,15 +17,20 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CloudQueue
+import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.PeopleOutline
+import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.filled.Tv
+import androidx.compose.material.icons.filled.Weekend
 import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
@@ -53,6 +58,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.apk.claw.android.R
 import com.apk.claw.android.ui.compose.theme.OctopusColors
+import com.apk.claw.android.ui.compose.theme.OctopusIconSize
+import com.apk.claw.android.ui.compose.theme.OctopusShape
+import com.apk.claw.android.ui.compose.theme.OctopusSpacing
+import com.apk.claw.android.ui.compose.theme.OctopusType
 import com.apk.claw.android.ui.featurescreens.BrowserSettingsActivity
 import com.apk.claw.android.ui.featurescreens.CloudDriveActivity
 import com.apk.claw.android.ui.featurescreens.EvolutionActivity
@@ -91,57 +100,65 @@ private val BrowserTint get() = com.apk.claw.android.ui.compose.theme.OctopusTin
 // ── 探索页占位数据 ──
 private data class CirclePreview(
     val nameRes: Int,
-    val avatar: String,
+    val icon: ImageVector,
+    val tint: Color,
     val members: String,
     val tagRes: Int,
 )
 
 private val sampleCircles = listOf(
-    CirclePreview(R.string.circle_ai_players, "🤖", "1.2k", R.string.circle_tag_hot),
-    CirclePreview(R.string.circle_efficiency, "⚡", "856", R.string.circle_tag_recommended),
-    CirclePreview(R.string.circle_digital, "📱", "2.3k", R.string.circle_tag_hot),
-    CirclePreview(R.string.circle_geek, "💻", "634", R.string.circle_tag_new),
-    CirclePreview(R.string.circle_lazy, "🛋", "1.8k", R.string.circle_tag_recommended),
-    CirclePreview(R.string.circle_tv_cast, "📺", "421", R.string.circle_tag_new),
+    CirclePreview(R.string.circle_ai_players, Icons.Filled.SmartToy, SkillTint, "1.2k", R.string.circle_tag_hot),
+    CirclePreview(R.string.circle_efficiency, Icons.Filled.Bolt, RoutineTint, "856", R.string.circle_tag_recommended),
+    CirclePreview(R.string.circle_digital, Icons.Filled.PhoneAndroid, WindowTint, "2.3k", R.string.circle_tag_hot),
+    CirclePreview(R.string.circle_geek, Icons.Filled.Code, MemoryTint, "634", R.string.circle_tag_new),
+    CirclePreview(R.string.circle_lazy, Icons.Filled.Weekend, CloudTint, "1.8k", R.string.circle_tag_recommended),
+    CirclePreview(R.string.circle_tv_cast, Icons.Filled.Tv, VideoTint, "421", R.string.circle_tag_new),
+)
+
+private fun featureSections(): List<Pair<Int, List<FeatureItem>>> = listOf(
+    R.string.feat_section_automation to listOf(
+        FeatureItem(R.string.feat_skills, R.string.feat_skills_desc, Icons.Filled.Bolt, SkillTint, SkillsActivity::class.java),
+        FeatureItem(R.string.feat_extensions, R.string.feat_extensions_desc, Icons.Filled.Extension, PluginTint, ExtensionsActivity::class.java),
+        FeatureItem(R.string.feat_routines, R.string.feat_routines_desc, Icons.Filled.Schedule, RoutineTint, RoutinesActivity::class.java),
+    ),
+    R.string.feat_section_data to listOf(
+        FeatureItem(R.string.feat_clouddrive, R.string.feat_clouddrive_desc, Icons.Filled.CloudQueue, CloudTint, CloudDriveActivity::class.java),
+        FeatureItem(R.string.feat_memory, R.string.feat_memory_desc, Icons.Filled.Psychology, MemoryTint, MemoryActivity::class.java),
+        FeatureItem(R.string.feat_video, R.string.feat_video_desc, Icons.Filled.Movie, VideoTint, VideoLibraryActivity::class.java),
+    ),
+    R.string.feat_section_advanced to listOf(
+        FeatureItem(R.string.feat_browser_settings, R.string.feat_browser_desc, Icons.Filled.Public, BrowserTint, BrowserSettingsActivity::class.java),
+        FeatureItem(R.string.feat_multiwindow, R.string.feat_multiwindow_desc, Icons.Filled.GridView, WindowTint, MultiWindowActivity::class.java),
+        FeatureItem(R.string.feat_evolution, R.string.feat_evolution_desc, Icons.Filled.TrendingUp, EvolveTint, EvolutionActivity::class.java),
+        FeatureItem(R.string.feat_trust, R.string.feat_trust_desc, Icons.Filled.Shield, TrustTint, TrustCenterActivity::class.java),
+    ),
 )
 
 @Composable
-fun FeatureHubScreen() {
+fun FeatureHubScreen(
+    onNavigateToAgentSquare: () -> Unit = {},
+) {
     val ctx = LocalContext.current
     var tab by remember { mutableStateOf(0) }
 
-    val sections = listOf(
-        R.string.feat_section_automation to listOf(
-            FeatureItem(R.string.feat_skills, R.string.feat_skills_desc, Icons.Filled.Bolt, SkillTint, SkillsActivity::class.java),
-            FeatureItem(R.string.feat_extensions, R.string.feat_extensions_desc, Icons.Filled.Extension, PluginTint, ExtensionsActivity::class.java),
-            FeatureItem(R.string.feat_routines, R.string.feat_routines_desc, Icons.Filled.Schedule, RoutineTint, RoutinesActivity::class.java),
-        ),
-        R.string.feat_section_data to listOf(
-            FeatureItem(R.string.feat_clouddrive, R.string.feat_clouddrive_desc, Icons.Filled.CloudQueue, CloudTint, CloudDriveActivity::class.java),
-            FeatureItem(R.string.feat_memory, R.string.feat_memory_desc, Icons.Filled.Psychology, MemoryTint, MemoryActivity::class.java),
-            FeatureItem(R.string.feat_video, R.string.feat_video_desc, Icons.Filled.Movie, VideoTint, VideoLibraryActivity::class.java),
-        ),
-        R.string.feat_section_advanced to listOf(
-            FeatureItem(R.string.feat_browser_settings, R.string.feat_browser_desc, Icons.Filled.Public, BrowserTint, BrowserSettingsActivity::class.java),
-            FeatureItem(R.string.feat_multiwindow, R.string.feat_multiwindow_desc, Icons.Filled.GridView, WindowTint, MultiWindowActivity::class.java),
-            FeatureItem(R.string.feat_evolution, R.string.feat_evolution_desc, Icons.Filled.TrendingUp, EvolveTint, EvolutionActivity::class.java),
-            FeatureItem(R.string.feat_trust, R.string.feat_trust_desc, Icons.Filled.Shield, TrustTint, TrustCenterActivity::class.java),
-        ),
-    )
+    val sections = remember { featureSections() }
 
     Column(modifier = Modifier.fillMaxSize().background(OctopusColors.Background).statusBarsPadding()) {
         // 顶部双 Tab
         Row(
-            modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 6.dp),
+            modifier = Modifier.fillMaxWidth().padding(start = OctopusSpacing.xl, end = OctopusSpacing.xl, top = OctopusSpacing.md, bottom = OctopusSpacing.xs),
             verticalAlignment = Alignment.Bottom,
         ) {
             TabLabel(stringResource(R.string.feat_explore_title), selected = tab == 0) { tab = 0 }
-            Spacer(Modifier.width(20.dp))
+            Spacer(Modifier.width(OctopusSpacing.xl))
             TabLabel(stringResource(R.string.feat_toolbox_title), selected = tab == 1) { tab = 1 }
         }
 
         when (tab) {
-            0 -> ExploreTab { ctx.open(it) }
+            0 -> ExploreTab(
+                onOpenActivity = { ctx.open(it) },
+                onNavigateToAgentSquare = onNavigateToAgentSquare,
+            )
             else -> ToolboxTab(sections) { ctx.open(it.target) }
         }
     }
@@ -154,10 +171,10 @@ private fun TabLabel(text: String, selected: Boolean, onClick: () -> Unit) {
         Text(
             text,
             color = if (selected) OctopusColors.TextPrimary else OctopusColors.TextMuted,
-            fontSize = if (selected) 22.sp else 17.sp,
+            fontSize = if (selected) OctopusType.headline else OctopusType.titleSm,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
         )
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(OctopusSpacing.xs))
         Box(
             modifier = Modifier
                 .height(3.dp)
@@ -170,13 +187,16 @@ private fun TabLabel(text: String, selected: Boolean, onClick: () -> Unit) {
 // ── 探索 Tab：INS 风格社交圈子 ──────────────────────────
 
 @Composable
-private fun ExploreTab(onOpenActivity: (Class<*>) -> Unit) {
+private fun ExploreTab(
+    onOpenActivity: (Class<*>) -> Unit,
+    onNavigateToAgentSquare: () -> Unit,
+) {
     LazyVerticalGrid(
         columns = GridCells.Fixed(2),
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 112.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(start = OctopusSpacing.lg, end = OctopusSpacing.lg, top = OctopusSpacing.xs, bottom = 112.dp),
+        horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.md),
+        verticalArrangement = Arrangement.spacedBy(OctopusSpacing.md),
     ) {
         // 热门圈子
         item(span = { GridItemSpan(maxLineSpan) }) {
@@ -206,6 +226,24 @@ private fun ExploreTab(onOpenActivity: (Class<*>) -> Unit) {
             ) { onOpenActivity(SkillsActivity::class.java) }
         }
 
+        // Agent 广场
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            SectionHeaderWithAction(
+                "Agent 广场",
+                Icons.Filled.SmartToy,
+                BrowserTint,
+            )
+        }
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            ExploreEntryCard(
+                Icons.Filled.SmartToy,
+                BrowserTint,
+                "发现 Agent 玩法",
+                "像刷小红书一样浏览 Agent 技能、教程与作品",
+                onClick = onNavigateToAgentSquare,
+            )
+        }
+
         // 我的圈子（占位）
         item(span = { GridItemSpan(maxLineSpan) }) {
             SectionHeaderWithAction(
@@ -217,20 +255,20 @@ private fun ExploreTab(onOpenActivity: (Class<*>) -> Unit) {
         item(span = { GridItemSpan(maxLineSpan) }) {
             // 空状态引导
             Surface(
-                shape = RoundedCornerShape(16.dp),
+                shape = OctopusShape.large,
                 color = OctopusColors.Surface,
                 border = BorderStroke(1.dp, OctopusColors.Border.copy(alpha = 0.6f)),
-                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).clickable { onOpenActivity(SkillsActivity::class.java) },
+                modifier = Modifier.fillMaxWidth().clip(OctopusShape.large).clickable { onOpenActivity(SkillsActivity::class.java) },
             ) {
                 Column(
-                    modifier = Modifier.padding(vertical = 24.dp),
+                    modifier = Modifier.padding(vertical = OctopusSpacing.xxl),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Icon(Icons.Filled.PeopleOutline, contentDescription = null, tint = OctopusColors.TextMuted.copy(alpha = 0.5f), modifier = Modifier.size(32.dp))
-                    Spacer(Modifier.height(8.dp))
-                    Text(stringResource(R.string.feat_explore_join_circle), color = OctopusColors.TextSecondary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                    Spacer(Modifier.height(3.dp))
-                    Text(stringResource(R.string.feat_explore_join_circle_hint), color = OctopusColors.TextMuted, fontSize = 11.sp)
+                    Spacer(Modifier.height(OctopusSpacing.sm))
+                    Text(stringResource(R.string.feat_explore_join_circle), color = OctopusColors.TextSecondary, fontSize = OctopusType.body, fontWeight = FontWeight.Medium)
+                    Spacer(Modifier.height(OctopusSpacing.xs))
+                    Text(stringResource(R.string.feat_explore_join_circle_hint), color = OctopusColors.TextMuted, fontSize = OctopusType.caption)
                 }
             }
         }
@@ -260,53 +298,54 @@ private fun CircleCard(
 
     Surface(
         color = OctopusColors.Surface,
-        shape = RoundedCornerShape(16.dp),
+        shape = OctopusShape.large,
         border = BorderStroke(1.dp, OctopusColors.Border.copy(alpha = 0.6f)),
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(OctopusShape.large)
             .clickable { onOpenActivity(SkillsActivity::class.java) }
             .alpha(alpha)
             .graphicsLayer { translationY = offsetY },
     ) {
         Column(
-            modifier = Modifier.padding(14.dp),
+            modifier = Modifier.padding(OctopusSpacing.md),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             // 头像
+            val avatarDesc = stringResource(R.string.feat_explore_circle_avatar, stringResource(circle.nameRes))
             Box(
-                modifier = Modifier.size(48.dp).background(OctopusColors.SurfaceVariant, CircleShape),
+                modifier = Modifier.size(48.dp).background(circle.tint.copy(alpha = 0.16f), CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
-                val avatarDesc = stringResource(R.string.feat_explore_circle_avatar, stringResource(circle.nameRes))
-                Text(
-                    circle.avatar,
-                    fontSize = 22.sp,
-                    modifier = Modifier.semantics { contentDescription = avatarDesc },
+                Icon(
+                    circle.icon,
+                    contentDescription = avatarDesc,
+                    tint = circle.tint,
+                    modifier = Modifier.size(24.dp),
                 )
             }
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(OctopusSpacing.sm))
             // 名称
             Text(
                 stringResource(circle.nameRes),
                 color = OctopusColors.TextPrimary,
-                fontSize = 14.sp,
+                fontSize = OctopusType.bodyStrong,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Spacer(Modifier.height(3.dp))
+            Spacer(Modifier.height(OctopusSpacing.xs))
             // 成员数
             Text(
                 "${circle.members} ${stringResource(R.string.feat_explore_members)}",
                 color = OctopusColors.TextMuted,
-                fontSize = 11.sp,
+                fontSize = OctopusType.caption,
             )
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(OctopusSpacing.sm))
             // 标签
             val tagText = stringResource(circle.tagRes)
             Surface(
-                shape = RoundedCornerShape(8.dp),
+                shape = OctopusShape.small,
                 color = when (circle.tagRes) {
                     R.string.circle_tag_hot -> com.apk.claw.android.ui.compose.theme.OctopusTints.Hot.copy(alpha = 0.12f)
                     else -> OctopusColors.Primary.copy(alpha = 0.10f)
@@ -314,12 +353,12 @@ private fun CircleCard(
             ) {
                 Text(
                     tagText,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                    modifier = Modifier.padding(horizontal = OctopusSpacing.sm, vertical = OctopusSpacing.xs),
                     color = when (circle.tagRes) {
                         R.string.circle_tag_hot -> com.apk.claw.android.ui.compose.theme.OctopusTints.Hot
                         else -> OctopusColors.Primary
                     },
-                    fontSize = 10.sp,
+                    fontSize = OctopusType.tag,
                     fontWeight = FontWeight.SemiBold,
                 )
             }
@@ -332,11 +371,11 @@ private fun CircleCard(
 private fun SectionHeaderWithAction(text: String, icon: ImageVector, tint: Color) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.padding(start = 4.dp, end = 4.dp, top = 14.dp, bottom = 2.dp),
+        modifier = Modifier.padding(start = OctopusSpacing.xs, end = OctopusSpacing.xs, top = OctopusSpacing.md, bottom = OctopusSpacing.xs),
     ) {
-        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(15.dp))
-        Spacer(Modifier.width(6.dp))
-        Text(text, color = OctopusColors.TextSecondary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(OctopusIconSize.small))
+        Spacer(Modifier.width(OctopusSpacing.sm))
+        Text(text, color = OctopusColors.TextSecondary, fontSize = OctopusType.body, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
     }
 }
 
@@ -345,22 +384,22 @@ private fun SectionHeaderWithAction(text: String, icon: ImageVector, tint: Color
 private fun ExploreEntryCard(icon: ImageVector, tint: Color, title: String, desc: String, onClick: () -> Unit) {
     Surface(
         color = OctopusColors.Surface,
-        shape = RoundedCornerShape(16.dp),
+        shape = OctopusShape.large,
         border = BorderStroke(1.dp, OctopusColors.Border.copy(alpha = 0.6f)),
-        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).clickable(onClick = onClick),
+        modifier = Modifier.fillMaxWidth().clip(OctopusShape.large).clickable(onClick = onClick),
     ) {
-        Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(modifier = Modifier.padding(OctopusSpacing.md), verticalAlignment = Alignment.CenterVertically) {
             Box(
-                modifier = Modifier.size(40.dp).background(tint.copy(alpha = 0.16f), RoundedCornerShape(12.dp)),
+                modifier = Modifier.size(40.dp).background(tint.copy(alpha = 0.16f), OctopusShape.medium),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(22.dp))
             }
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(OctopusSpacing.md))
             Column(modifier = Modifier.weight(1f)) {
-                Text(title, color = OctopusColors.TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1)
-                Spacer(Modifier.height(2.dp))
-                Text(desc, color = OctopusColors.TextMuted, fontSize = 11.sp, lineHeight = 14.sp, maxLines = 2)
+                Text(title, color = OctopusColors.TextPrimary, fontSize = OctopusType.bodyStrong, fontWeight = FontWeight.Medium, maxLines = 1)
+                Spacer(Modifier.height(OctopusSpacing.xs))
+                Text(desc, color = OctopusColors.TextMuted, fontSize = OctopusType.caption, lineHeight = 14.sp, maxLines = 2)
             }
         }
     }
@@ -373,9 +412,9 @@ private fun ToolboxTab(sections: List<Pair<Int, List<FeatureItem>>>, onClick: (F
     LazyVerticalGrid(
         columns = GridCells.Fixed(2),
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 112.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(start = OctopusSpacing.lg, end = OctopusSpacing.lg, top = OctopusSpacing.xs, bottom = 112.dp),
+        horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.md),
+        verticalArrangement = Arrangement.spacedBy(OctopusSpacing.md),
     ) {
         sections.forEach { (headerRes, items) ->
             item(span = { GridItemSpan(maxLineSpan) }) { SectionHeader(stringResource(headerRes)) }
@@ -388,30 +427,30 @@ private fun ToolboxTab(sections: List<Pair<Int, List<FeatureItem>>>, onClick: (F
 private fun ToolCard(item: FeatureItem, onClick: () -> Unit) {
     Surface(
         color = OctopusColors.Surface,
-        shape = RoundedCornerShape(16.dp),
+        shape = OctopusShape.large,
         border = BorderStroke(1.dp, OctopusColors.Border.copy(alpha = 0.6f)),
-        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).clickable(onClick = onClick),
+        modifier = Modifier.fillMaxWidth().clip(OctopusShape.large).clickable(onClick = onClick),
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
+        Column(modifier = Modifier.padding(OctopusSpacing.md)) {
             Box(
-                modifier = Modifier.size(40.dp).background(item.tint.copy(alpha = 0.16f), RoundedCornerShape(12.dp)),
+                modifier = Modifier.size(40.dp).background(item.tint.copy(alpha = 0.16f), OctopusShape.medium),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(item.icon, contentDescription = null, tint = item.tint, modifier = Modifier.size(22.dp))
             }
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(OctopusSpacing.md))
             Text(
                 stringResource(item.labelRes),
                 color = OctopusColors.TextPrimary,
-                fontSize = 14.sp,
+                fontSize = OctopusType.bodyStrong,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
             )
-            Spacer(Modifier.height(3.dp))
+            Spacer(Modifier.height(OctopusSpacing.xs))
             Text(
                 stringResource(item.descRes),
                 color = OctopusColors.TextMuted,
-                fontSize = 11.sp,
+                fontSize = OctopusType.caption,
                 lineHeight = 14.sp,
                 maxLines = 2,
             )
@@ -424,9 +463,9 @@ private fun SectionHeader(text: String) {
     Text(
         text,
         color = OctopusColors.TextMuted,
-        fontSize = 13.sp,
+        fontSize = OctopusType.body,
         fontWeight = FontWeight.Medium,
-        modifier = Modifier.padding(start = 4.dp, end = 4.dp, top = 14.dp, bottom = 2.dp),
+        modifier = Modifier.padding(start = OctopusSpacing.xs, end = OctopusSpacing.xs, top = OctopusSpacing.md, bottom = OctopusSpacing.xs),
     )
 }
 

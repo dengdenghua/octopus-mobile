@@ -6,7 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.AccountCircle
@@ -51,6 +51,10 @@ import com.apk.claw.android.server.ConfigServerManager
 import com.apk.claw.android.service.ClawAccessibilityService
 import com.apk.claw.android.shizuku.ShizukuManager
 import com.apk.claw.android.ui.compose.theme.OctopusColors
+import com.apk.claw.android.ui.compose.theme.OctopusIconSize
+import com.apk.claw.android.ui.compose.theme.OctopusShape
+import com.apk.claw.android.ui.compose.theme.OctopusSpacing
+import com.apk.claw.android.ui.compose.theme.OctopusType
 import com.apk.claw.android.ui.settings.LlmConfigActivity
 import com.apk.claw.android.ui.settings.RuntimeConfigActivity
 import com.apk.claw.android.account.AccountStore
@@ -146,8 +150,8 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(BackgroundColor).statusBarsPadding(),
-        contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 8.dp, bottom = 112.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(start = OctopusSpacing.lg, end = OctopusSpacing.lg, top = OctopusSpacing.sm, bottom = 112.dp),
+        verticalArrangement = Arrangement.spacedBy(OctopusSpacing.md),
     ) {
         item {
             SettingsHeader(
@@ -200,7 +204,7 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
                 // 摘要行
                 val perms = permNames.mapIndexed { i, name -> PermissionUi(permIcons[i], name, permissionStates[i]) }
                 PermissionSummaryRow(readyCount, perms)
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(OctopusSpacing.sm))
                 // 逐项权限（未授权可点击跳转）
                 perms.forEachIndexed { i, perm ->
                     PermissionItemRow(
@@ -236,8 +240,8 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
                         else -> null
                     }
                     byoHint?.let {
-                        Spacer(Modifier.height(6.dp))
-                        Text(it, color = TextMuted, fontSize = 11.sp, lineHeight = 15.sp)
+                        Spacer(Modifier.height(OctopusSpacing.sm))
+                        Text(it, color = TextMuted, fontSize = OctopusType.caption, lineHeight = 15.sp)
                     }
                 }
             }
@@ -269,8 +273,8 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
                     }
                 } else {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(stringResource(R.string.settings_advanced_hint), color = TextMuted, fontSize = 11.sp, lineHeight = 15.sp, modifier = Modifier.weight(1f))
-                        Icon(Icons.Filled.ExpandMore, contentDescription = null, tint = TextMuted, modifier = Modifier.size(16.dp))
+                        Text(stringResource(R.string.settings_advanced_hint), color = TextMuted, fontSize = OctopusType.caption, lineHeight = 15.sp, modifier = Modifier.weight(1f))
+                        Icon(Icons.Filled.ExpandMore, contentDescription = null, tint = TextMuted, modifier = Modifier.size(OctopusIconSize.small))
                     }
                 }
             }
@@ -306,31 +310,31 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
                     "${cfg.count { it }}/6",
                     trailing = if (cfg.any { it }) stringResource(R.string.status_connected) else stringResource(R.string.status_not_configured),
                 )
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(OctopusSpacing.sm))
                 // 各渠道状态点
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.sm),
                 ) {
                     channelNames.forEachIndexed { i, name ->
                         val connected = cfg[i]
                         Surface(
-                            shape = RoundedCornerShape(8.dp),
+                            shape = OctopusShape.small,
                             color = if (connected) SuccessColor.copy(alpha = 0.10f) else SurfaceVariantColor,
                             border = BorderStroke(1.dp, if (connected) SuccessColor.copy(alpha = 0.20f) else BorderColor.copy(alpha = 0.6f)),
                             modifier = Modifier.weight(1f),
                         ) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 5.dp),
+                                modifier = Modifier.padding(horizontal = OctopusSpacing.sm, vertical = OctopusSpacing.xs),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.Center,
                             ) {
                                 Box(modifier = Modifier.size(5.dp).background(
                                     if (connected) SuccessColor else TextMuted,
-                                    RoundedCornerShape(50),
+                                    CircleShape,
                                 ))
-                                Spacer(Modifier.width(4.dp))
-                                Text(name, fontSize = 10.sp, color = if (connected) TextPrimary else TextMuted, maxLines = 1)
+                                Spacer(Modifier.width(OctopusSpacing.xs))
+                                Text(name, fontSize = OctopusType.tag, color = if (connected) TextPrimary else TextMuted, maxLines = 1)
                             }
                         }
                     }
@@ -347,8 +351,8 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
 
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     IconBubble(Icons.Filled.LightMode, PrimaryColor)
-                    Spacer(Modifier.width(10.dp))
-                    Text(stringResource(R.string.settings_light_mode), color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    Spacer(Modifier.width(OctopusSpacing.md))
+                    Text(stringResource(R.string.settings_light_mode), color = TextPrimary, fontSize = OctopusType.body, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                     Switch(
                         checked = isLight,
                         onCheckedChange = { v ->
@@ -366,10 +370,10 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
                 } else {
                     stringResource(R.string.settings_theme_dark)
                 }
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(OctopusSpacing.sm))
                 Text(
                     modeText,
-                    fontSize = 11.sp,
+                    fontSize = OctopusType.caption,
                     color = TextMuted,
                     modifier = Modifier.padding(start = 44.dp),
                 )
@@ -380,8 +384,8 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
         item {
             Text(
                 stringResource(R.string.settings_version_template, BuildConfig.VERSION_NAME),
-                fontSize = 11.sp, color = TextMuted,
-                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                fontSize = OctopusType.caption, color = TextMuted,
+                modifier = Modifier.fillMaxWidth().padding(vertical = OctopusSpacing.sm),
                 textAlign = TextAlign.Center,
             )
         }
@@ -397,19 +401,19 @@ private fun PermissionItemRow(permission: PermissionUi, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .then(if (clickable) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(vertical = 3.dp),
+            .padding(vertical = OctopusSpacing.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
             permission.icon,
             contentDescription = null,
             tint = if (permission.ok) SuccessColor else TextMuted,
-            modifier = Modifier.size(16.dp),
+            modifier = Modifier.size(OctopusIconSize.small),
         )
-        Spacer(Modifier.width(8.dp))
+        Spacer(Modifier.width(OctopusSpacing.sm))
         Text(
             permission.name,
-            fontSize = 12.sp,
+            fontSize = OctopusType.label,
             color = TextPrimary,
             modifier = Modifier.weight(1f),
             maxLines = 1,
@@ -417,7 +421,7 @@ private fun PermissionItemRow(permission: PermissionUi, onClick: () -> Unit) {
         if (clickable) {
             Text(
                     stringResource(R.string.settings_go_setup),
-                    fontSize = 10.sp,
+                    fontSize = OctopusType.tag,
                 color = PrimaryColor,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -425,17 +429,17 @@ private fun PermissionItemRow(permission: PermissionUi, onClick: () -> Unit) {
                 Icons.Filled.ChevronRight,
                 contentDescription = null,
                 tint = PrimaryColor,
-                modifier = Modifier.size(14.dp),
+                modifier = Modifier.size(OctopusIconSize.small),
             )
         } else {
             Surface(
-                shape = RoundedCornerShape(9.dp),
+                shape = OctopusShape.small,
                 color = SuccessColor.copy(alpha = 0.12f),
             ) {
                 Text(
                     stringResource(R.string.settings_status_ok),
-                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
-                    fontSize = 9.sp,
+                    modifier = Modifier.padding(horizontal = OctopusSpacing.sm, vertical = OctopusSpacing.xs),
+                    fontSize = OctopusType.micro,
                     color = SuccessColor,
                     fontWeight = FontWeight.Bold,
                 )
@@ -451,15 +455,15 @@ private fun SettingsHeader(readyCount: Int, lanAddr: String?) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             stringResource(R.string.settings_title),
-            fontSize = 22.sp,
+            fontSize = OctopusType.headline,
             fontWeight = FontWeight.SemiBold,
             color = TextPrimary,
             letterSpacing = 0.sp,
         )
-        Spacer(Modifier.height(3.dp))
-        Text(stringResource(R.string.settings_subtitle), color = TextMuted, fontSize = 12.sp, lineHeight = 16.sp, maxLines = 2)
-        Spacer(Modifier.height(14.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        Spacer(Modifier.height(OctopusSpacing.xs))
+        Text(stringResource(R.string.settings_subtitle), color = TextMuted, fontSize = OctopusType.label, lineHeight = 16.sp, maxLines = 2)
+        Spacer(Modifier.height(OctopusSpacing.lg))
+        Row(horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.sm), modifier = Modifier.fillMaxWidth()) {
             HeroMetric(
                 label = stringResource(R.string.settings_metric_permissions),
                 value = "$readyCount/6",
@@ -481,26 +485,26 @@ private fun PermissionSummaryRow(readyCount: Int, perms: List<PermissionUi>) {
     val missing = perms.filterNot { it.ok }.take(3).joinToString(" · ") { it.name }
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
         IconBubble(Icons.Filled.Shield, if (readyCount >= 5) SuccessColor else WarningColor)
-        Spacer(Modifier.width(10.dp))
+        Spacer(Modifier.width(OctopusSpacing.md))
         Column(modifier = Modifier.weight(1f)) {
-            Text("$readyCount/6", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Text("$readyCount/6", color = TextPrimary, fontSize = OctopusType.title, fontWeight = FontWeight.Bold)
             Text(
                 if (missing.isBlank()) stringResource(R.string.status_online) else missing,
                 color = TextMuted,
-                fontSize = 11.sp,
+                fontSize = OctopusType.caption,
                 lineHeight = 15.sp,
                 maxLines = 1,
             )
         }
         Surface(
-            shape = RoundedCornerShape(12.dp),
+            shape = OctopusShape.medium,
             color = if (readyCount >= 5) SuccessColor.copy(alpha = 0.12f) else WarningColor.copy(alpha = 0.11f),
         ) {
             Text(
                 if (readyCount >= 5) stringResource(R.string.settings_status_ok) else stringResource(R.string.settings_status_set),
-                modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                modifier = Modifier.padding(horizontal = OctopusSpacing.sm, vertical = OctopusSpacing.xs),
                 color = if (readyCount >= 5) SuccessColor else WarningColor,
-                fontSize = 10.sp,
+                fontSize = OctopusType.tag,
                 fontWeight = FontWeight.Bold,
             )
         }
@@ -511,8 +515,9 @@ private fun PermissionSummaryRow(readyCount: Int, perms: List<PermissionUi>) {
 private fun HeroMetric(label: String, value: String, ok: Boolean, modifier: Modifier = Modifier) {
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(12.dp),
+        shape = OctopusShape.medium,
         color = OctopusColors.SurfaceDeep,
+        shadowElevation = 1.dp,
         border = BorderStroke(
             1.dp,
             when {
@@ -522,17 +527,17 @@ private fun HeroMetric(label: String, value: String, ok: Boolean, modifier: Modi
             },
         ),
     ) {
-        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 9.dp)) {
-            Text(label, color = TextMuted, fontSize = 10.sp, maxLines = 1)
-            Spacer(Modifier.height(4.dp))
-            Text(
-                value,
-                color = when {
+        Column(modifier = Modifier.padding(horizontal = OctopusSpacing.md, vertical = OctopusSpacing.sm)) {
+            Text(label, color = TextMuted, fontSize = OctopusType.tag, maxLines = 1)
+            Spacer(Modifier.height(OctopusSpacing.xs))
+        Text(
+            value,
+            color = when {
                     ok -> SuccessColor
                     value.contains(stringResource(R.string.status_not_configured)) -> WarningColor
                     else -> TextSecondary
                 },
-                fontSize = 12.sp,
+                fontSize = OctopusType.label,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
             )
@@ -546,49 +551,49 @@ private fun HeroMetric(label: String, value: String, ok: Boolean, modifier: Modi
 private fun SettingsRow(icon: ImageVector, title: String, subtitle: String, trailing: String? = null) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
         IconBubble(icon, PrimaryColor)
-        Spacer(Modifier.width(10.dp))
+        Spacer(Modifier.width(OctopusSpacing.md))
         Column(modifier = Modifier.weight(1f)) {
-            Text(title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary, lineHeight = 17.sp, maxLines = 2)
-            Spacer(Modifier.height(4.dp))
-            Text(subtitle, fontSize = 11.sp, color = TextMuted, lineHeight = 15.sp, maxLines = 2)
+            Text(title, fontSize = OctopusType.body, fontWeight = FontWeight.SemiBold, color = TextPrimary, lineHeight = 17.sp, maxLines = 2)
+            Spacer(Modifier.height(OctopusSpacing.xs))
+            Text(subtitle, fontSize = OctopusType.caption, color = TextMuted, lineHeight = 15.sp, maxLines = 2)
         }
         trailing?.let {
-            Spacer(Modifier.width(8.dp))
-            Text(it, color = if (it == stringResource(R.string.status_not_configured)) WarningColor else SuccessColor, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Spacer(Modifier.width(OctopusSpacing.sm))
+            Text(it, color = if (it == stringResource(R.string.status_not_configured)) WarningColor else SuccessColor, fontSize = OctopusType.caption, fontWeight = FontWeight.SemiBold, maxLines = 1)
         }
-        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = TextMuted, modifier = Modifier.size(17.dp))
+        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = TextMuted, modifier = Modifier.size(OctopusIconSize.small))
     }
 }
 
 @Composable
 private fun ClickableSettingsRow(icon: ImageVector, title: String, subtitle: String, onClick: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 3.dp),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = OctopusSpacing.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         IconBubble(icon, PrimaryColor)
-        Spacer(Modifier.width(10.dp))
+        Spacer(Modifier.width(OctopusSpacing.md))
         Column(modifier = Modifier.weight(1f)) {
-            Text(title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary, lineHeight = 17.sp, maxLines = 2)
-            Spacer(Modifier.height(3.dp))
-            Text(subtitle, fontSize = 11.sp, color = TextMuted, lineHeight = 15.sp, maxLines = 2)
+            Text(title, fontSize = OctopusType.body, fontWeight = FontWeight.SemiBold, color = TextPrimary, lineHeight = 17.sp, maxLines = 2)
+            Spacer(Modifier.height(OctopusSpacing.xs))
+            Text(subtitle, fontSize = OctopusType.caption, color = TextMuted, lineHeight = 15.sp, maxLines = 2)
         }
-        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = TextMuted, modifier = Modifier.size(17.dp))
+        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = TextMuted, modifier = Modifier.size(OctopusIconSize.small))
     }
 }
 
 @Composable
 private fun IconBubble(icon: ImageVector, tint: Color) {
-    Surface(shape = RoundedCornerShape(9.dp), color = tint) {
-        Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.padding(7.dp).size(18.dp))
+    Surface(shape = OctopusShape.small, color = tint) {
+        Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.padding(OctopusSpacing.sm).size(OctopusIconSize.medium))
     }
 }
 
 @Composable
 private fun SettingsDivider() {
-    Spacer(Modifier.height(10.dp))
+    Spacer(Modifier.height(OctopusSpacing.md))
     Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(BorderColor.copy(alpha = 0.65f)))
-    Spacer(Modifier.height(10.dp))
+    Spacer(Modifier.height(OctopusSpacing.md))
 }
 
 @Composable
@@ -600,17 +605,18 @@ private fun SettingsCard(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Surface(
-        shape = RoundedCornerShape(14.dp),
+        shape = OctopusShape.large,
         color = SurfaceColor,
         border = BorderStroke(1.dp, BorderColor.copy(alpha = 0.85f)),
+        shadowElevation = 1.dp,
         modifier = if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier,
     ) {
-        Column(modifier = Modifier.padding(if (compact) 12.dp else 13.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                Icon(icon, contentDescription = null, tint = TextMuted, modifier = Modifier.size(15.dp))
-                Text(title, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = TextSecondary, letterSpacing = 0.sp, lineHeight = 16.sp)
+        Column(modifier = Modifier.padding(OctopusSpacing.md)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.sm)) {
+                Icon(icon, contentDescription = null, tint = TextMuted, modifier = Modifier.size(OctopusIconSize.small))
+                Text(title, fontSize = OctopusType.label, fontWeight = FontWeight.SemiBold, color = TextSecondary, letterSpacing = 0.sp, lineHeight = 16.sp)
             }
-            Spacer(modifier = Modifier.height(if (compact) 8.dp else 9.dp))
+            Spacer(modifier = Modifier.height(if (compact) OctopusSpacing.sm else OctopusSpacing.md))
             content()
         }
     }

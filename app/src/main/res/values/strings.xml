@@ -348,10 +348,10 @@ For these, install Shizuku — a safe, open-source helper.</string>
     <string name="ai_browser_agent_desc">The browser can read visible page content through accessibility and use the Agent to click, type, summarize, translate, or run page tasks.</string>
     <string name="ai_browser_section_automation">Automation</string>
     <string name="ai_browser_routines_desc">%1$d saved browser/device automations</string>
-    <string name="browser_home_title">Browser</string>
+    <string name="browser_home_title">AI Browser Desktop</string>
     <string name="browser_home_subtitle">Search or enter a URL</string>
-    <string name="browser_home_favorites">Favorites</string>
-    <string name="browser_home_tools">Page tools</string>
+    <string name="browser_home_favorites">Favorite Tags</string>
+    <string name="browser_home_tools">Common entries</string>
 
     <!-- Bottom navigation -->
     <string name="nav_discover">Discover</string>
@@ -360,6 +360,7 @@ For these, install Shizuku — a safe, open-source helper.</string>
     <string name="nav_chat">Chat</string>
     <string name="nav_device">Device</string>
     <string name="nav_settings">Settings</string>
+    <string name="nav_agent_square">Agent Plaza</string>
 
     <!-- SettingsScreen (Compose) -->
     <string name="settings_center_badge">Device control center</string>

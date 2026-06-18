@@ -18,15 +18,21 @@ import java.net.URLEncoder
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Launch
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Devices
@@ -35,14 +41,19 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardVoice
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SettingsRemote
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Swipe
+import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.TouchApp
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
@@ -73,6 +84,11 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.core.content.ContextCompat
 import com.apk.claw.android.ui.compose.theme.OctopusColors
+import com.apk.claw.android.ui.compose.theme.OctopusIconSize
+import com.apk.claw.android.ui.compose.theme.OctopusShape
+import com.apk.claw.android.ui.compose.theme.OctopusSpacing
+import com.apk.claw.android.ui.compose.theme.OctopusTints
+import com.apk.claw.android.ui.compose.theme.OctopusType
 import kotlinx.coroutines.launch
 import java.util.Calendar
 
@@ -80,13 +96,19 @@ import java.util.Calendar
 private val PrimaryColor get() = OctopusColors.Primary
 private val SuccessColor get() = OctopusColors.Success
 private val WarningColor get() = OctopusColors.Warning
+private val ErrorColor get() = OctopusColors.Error
+private val AccentColor get() = OctopusColors.Accent
 private val BackgroundColor get() = OctopusColors.Background
 private val SurfaceColor get() = OctopusColors.Surface
 private val SurfaceVariantColor get() = OctopusColors.SurfaceVariant
+private val SurfaceDeepColor get() = OctopusColors.SurfaceDeep
 private val TextPrimary get() = OctopusColors.TextPrimary
 private val TextSecondary get() = OctopusColors.TextSecondary
 private val TextMuted get() = OctopusColors.TextMuted
 private val BorderColor get() = OctopusColors.Border
+private val OverlayDimColor get() = OctopusColors.OverlayDim
+private val OnPrimaryColor get() = OctopusColors.OnPrimary
+private val VideoBackgroundColor get() = Color.Black
 private val AgentBubbleColor get() = OctopusColors.Surface
 private val UserBubbleColor get() = OctopusColors.Primary
 
@@ -110,6 +132,10 @@ sealed class ChatMessage {
 /** 自增 ID 计数器（线程安全）。仅用于 UI 层稳定 key，不参与业务逻辑。 */
 private val chatIdCounter = java.util.concurrent.atomic.AtomicLong(0L)
 private fun nextId(): Long = chatIdCounter.incrementAndGet()
+
+private const val CHAT_MESSAGES_LIMIT = 240
+private const val CHAT_SCROLL_THROTTLE_MS = 180L
+private const val CHAT_STREAM_UI_THROTTLE_MS = 80L
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -149,7 +175,26 @@ fun ChatScreen() {
     val ackText = stringResource(R.string.chat_ack)
     val thinkingText = stringResource(R.string.chat_thinking)
     val newChatTitle = stringResource(R.string.chat_new)
-    val scrollEnd = { scope.launch { listState.animateScrollToItem(messages.size) }; Unit }
+    var lastScrollTs by remember { mutableLongStateOf(0L) }
+    val scrollEnd = {
+        val now = System.currentTimeMillis()
+        if (now - lastScrollTs > CHAT_SCROLL_THROTTLE_MS) {
+            lastScrollTs = now
+            scope.launch {
+                val target = (listState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0)
+                listState.scrollToItem(target)
+            }
+        }
+        Unit
+    }
+
+    // 运行时消息上限：超过则丢弃最早的部分，防止长会话 OOM/卡顿
+    LaunchedEffect(messages.size) {
+        if (messages.size > CHAT_MESSAGES_LIMIT) {
+            val drop = messages.size - CHAT_MESSAGES_LIMIT
+            repeat(drop) { messages.removeAt(0) }
+        }
+    }
 
     // 保存当前会话消息 + 用首条用户消息更新会话标题/时间并置顶
     val persist = {
@@ -216,6 +261,15 @@ fun ChatScreen() {
                 // 流式:把 token 累积进同一个气泡(live bubble),实时更新
                 var streamId: Long? = null
                 var buf = StringBuilder()
+                var lastStreamUiTs = 0L
+                val flushStream = {
+                    val id = streamId
+                    if (id != null) {
+                        val idx = messages.indexOfFirst { it.id == id }
+                        if (idx >= 0) messages[idx] = ChatMessage.AgentMessage(buf.toString(), id)
+                    }
+                    Unit
+                }
                 val appendStream = { tok: String ->
                     hideThinking()
                     val id = streamId
@@ -224,12 +278,17 @@ fun ChatScreen() {
                         val m = ChatMessage.AgentMessage(buf.toString())
                         streamId = m.id
                         messages.add(m)
+                        lastStreamUiTs = System.currentTimeMillis()
+                        scrollEnd()
                     } else {
                         buf.append(tok)
-                        val idx = messages.indexOfFirst { it.id == id }
-                        if (idx >= 0) messages[idx] = ChatMessage.AgentMessage(buf.toString(), id)
+                        val now = System.currentTimeMillis()
+                        if (now - lastStreamUiTs >= CHAT_STREAM_UI_THROTTLE_MS) {
+                            flushStream()
+                            lastStreamUiTs = now
+                            scrollEnd()
+                        }
                     }
-                    scrollEnd()
                 }
                 // 结束当前流式气泡(final!=null 时用最终文本覆盖;否则定格已流式内容)
                 val finalizeStream = { final: String? ->
@@ -237,6 +296,8 @@ fun ChatScreen() {
                     if (id != null && final != null) {
                         val idx = messages.indexOfFirst { it.id == id }
                         if (idx >= 0) messages[idx] = ChatMessage.AgentMessage(final, id)
+                    } else if (id != null) {
+                        flushStream()
                     } else if (id == null && final != null) {
                         messages.add(ChatMessage.AgentMessage(final))
                     }
@@ -295,7 +356,7 @@ fun ChatScreen() {
 
     ModalNavigationDrawer(
         drawerState = drawerState,
-        scrimColor = OctopusColors.OverlayDim,
+        scrimColor = OverlayDimColor,
         drawerContent = {
             ChatSessionDrawer(
                 sessions = sessions,
@@ -324,26 +385,35 @@ fun ChatScreen() {
                 .fillMaxWidth()
                 .statusBarsPadding()
                 .height(56.dp)
-                .padding(start = 8.dp, end = 10.dp),
+                .padding(start = OctopusSpacing.sm, end = OctopusSpacing.md),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = { scope.launch { drawerState.open() } }) {
                 Icon(Icons.Filled.Menu, contentDescription = stringResource(R.string.chat_sessions), tint = TextSecondary)
             }
             Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                Column {
-                    Text("Octopus", fontWeight = FontWeight.SemiBold, fontSize = 18.sp, color = TextPrimary)
-                    val ready = llmOk && a11yOk
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Octopus", fontWeight = FontWeight.SemiBold, fontSize = OctopusType.titleLg, color = TextPrimary)
+                Spacer(Modifier.width(OctopusSpacing.sm))
+                val ready = llmOk && a11yOk
+                Surface(
+                    shape = OctopusShape.capsule,
+                    color = SurfaceColor,
+                    border = BorderStroke(1.dp, BorderColor),
+                    shadowElevation = 1.dp,
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = OctopusSpacing.md, vertical = OctopusSpacing.xs),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         Box(
                             modifier = Modifier
                                 .size(6.dp)
-                                .background(if (ready) SuccessColor else WarningColor, RoundedCornerShape(3.dp))
+                                .background(if (ready) SuccessColor else WarningColor, CircleShape)
                         )
-                        Spacer(modifier = Modifier.width(5.dp))
+                        Spacer(modifier = Modifier.width(OctopusSpacing.xs))
                         Text(
                             stringResource(if (ready) R.string.chat_agent_ready else R.string.chat_agent_setup_needed),
-                            fontSize = 11.sp,
+                            fontSize = OctopusType.caption,
                             color = TextMuted,
                         )
                     }
@@ -351,7 +421,7 @@ fun ChatScreen() {
             }
             // 目标选择器:决定 Agent 在「本机」还是某台局域网设备上执行(移到右上,与三点并排)
             TargetSelector(onPreview = { previewDevice = it })
-            Spacer(modifier = Modifier.width(4.dp))
+            Spacer(modifier = Modifier.width(OctopusSpacing.xs))
             Box {
                 IconButton(onClick = { moreMenuOpen = true }) {
                     Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.common_more), tint = TextPrimary)
@@ -416,24 +486,24 @@ fun ChatScreen() {
         // 消息列表 / 空状态
         if (messages.none { it !is ChatMessage.Thinking }) {
             Column(
-                modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 18.dp),
+                modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = OctopusSpacing.lg),
                 verticalArrangement = Arrangement.Center,
             ) {
                 Text(
                     stringResource(R.string.chat_empty_title),
-                    fontSize = 24.sp,
+                    fontSize = OctopusType.display,
                     fontWeight = FontWeight.Bold,
                     color = TextPrimary,
                     letterSpacing = 0.sp,
                 )
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(OctopusSpacing.sm))
                 Text(
                     stringResource(R.string.chat_empty_hint),
-                    fontSize = 13.sp,
+                    fontSize = OctopusType.body,
                     color = TextMuted,
                     lineHeight = 18.sp,
                 )
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(OctopusSpacing.lg))
                 AgentHomeStatusCard(
                     llmOk = llmOk,
                     a11yOk = a11yOk,
@@ -441,7 +511,7 @@ fun ChatScreen() {
                     target = ControlTarget.label(),
                     deviceCount = devices.size,
                 )
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(OctopusSpacing.lg))
                 listOf(
                     stringResource(R.string.chat_suggestion_notifications),
                     stringResource(R.string.chat_suggestion_files),
@@ -451,11 +521,11 @@ fun ChatScreen() {
                 }
             }
         } else {
-        val rows = buildChatRows(messages)
+        val rows by remember { derivedStateOf { buildChatRows(messages) } }
         LazyColumn(
             state = listState,
-            modifier = Modifier.weight(1f).padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.weight(1f).padding(horizontal = OctopusSpacing.lg),
+            verticalArrangement = Arrangement.spacedBy(OctopusSpacing.md),
         ) {
             items(rows, key = { it.key }) { row ->
                 when (row) {
@@ -472,7 +542,7 @@ fun ChatScreen() {
                     )
                 }
             }
-            item { Spacer(modifier = Modifier.height(8.dp)) }
+            item { Spacer(modifier = Modifier.height(OctopusSpacing.sm)) }
         }
         }
 
@@ -481,23 +551,24 @@ fun ChatScreen() {
             modifier = Modifier.fillMaxWidth(),
             color = SurfaceColor,
             border = BorderStroke(1.dp, BorderColor.copy(alpha = 0.7f)),
+            shadowElevation = 1.dp,
         ) {
-            Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+            Column(modifier = Modifier.padding(horizontal = OctopusSpacing.lg, vertical = OctopusSpacing.md)) {
             if (voiceMode) {
                 // ── 语音优先：左侧键盘切换（次选）+ 大麦克风「按住说话」 ──
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
                             .size(42.dp)
-                            .background(OctopusColors.SurfaceDeep, RoundedCornerShape(21.dp))
+                            .background(SurfaceDeepColor, CircleShape)
                             .clickable { voiceMode = false },
                         contentAlignment = Alignment.Center,
                     ) {
-                        Icon(Icons.Filled.Keyboard, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(19.dp))
+                        Icon(Icons.Filled.Keyboard, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(OctopusIconSize.medium))
                     }
-                    Spacer(modifier = Modifier.width(10.dp))
-                    val red = OctopusColors.Error
-                    val pillColor = if (isRunning || listening) red else OctopusColors.SurfaceDeep
+                    Spacer(modifier = Modifier.width(OctopusSpacing.md))
+                    val red = ErrorColor
+                    val pillColor = if (isRunning || listening) red else SurfaceDeepColor
                     val listeningText = stringResource(R.string.chat_voice_listening_release)
                     val pillText = when {
                         isRunning -> stringResource(R.string.chat_voice_stop_agent)
@@ -524,17 +595,17 @@ fun ChatScreen() {
                         modifier = Modifier
                             .weight(1f)
                             .height(46.dp)
-                            .background(pillColor, RoundedCornerShape(18.dp))
+                            .background(pillColor, OctopusShape.large)
                             .then(pillGesture),
                         contentAlignment = Alignment.Center,
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.Mic, contentDescription = null, tint = if (isRunning || listening) Color.White else TextSecondary, modifier = Modifier.size(17.dp))
-                            Spacer(Modifier.width(8.dp))
+                            Icon(Icons.Filled.Mic, contentDescription = null, tint = if (isRunning || listening) OnPrimaryColor else TextSecondary, modifier = Modifier.size(OctopusIconSize.small))
+                            Spacer(Modifier.width(OctopusSpacing.sm))
                             Text(
                                 pillText,
-                                color = if (isRunning || listening) Color.White else TextSecondary,
-                                fontSize = 14.sp,
+                                color = if (isRunning || listening) OnPrimaryColor else TextSecondary,
+                                fontSize = OctopusType.bodyStrong,
                                 fontWeight = FontWeight.Medium,
                                 maxLines = 1,
                             )
@@ -547,43 +618,43 @@ fun ChatScreen() {
                     Box(
                         modifier = Modifier
                             .size(42.dp)
-                            .background(OctopusColors.SurfaceDeep, RoundedCornerShape(21.dp))
+                            .background(SurfaceDeepColor, CircleShape)
                             .clickable { voiceMode = true },
                         contentAlignment = Alignment.Center,
                     ) {
-                        Icon(Icons.Filled.KeyboardVoice, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(19.dp))
+                        Icon(Icons.Filled.KeyboardVoice, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(OctopusIconSize.medium))
                     }
-                    Spacer(modifier = Modifier.width(10.dp))
+                    Spacer(modifier = Modifier.width(OctopusSpacing.md))
                     OutlinedTextField(
                         value = inputText,
                         onValueChange = { inputText = it },
                         modifier = Modifier.weight(1f),
                         placeholder = { Text(stringResource(R.string.chat_input_hint), color = TextMuted) },
-                        shape = RoundedCornerShape(18.dp),
+                        shape = OctopusShape.large,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = PrimaryColor,
                             unfocusedBorderColor = BorderColor,
-                            focusedContainerColor = OctopusColors.SurfaceDeep,
-                            unfocusedContainerColor = OctopusColors.SurfaceDeep,
+                            focusedContainerColor = SurfaceDeepColor,
+                            unfocusedContainerColor = SurfaceDeepColor,
                             cursorColor = PrimaryColor,
                             focusedTextColor = TextPrimary,
                             unfocusedTextColor = TextPrimary,
                         ),
                         singleLine = true,
-                        textStyle = TextStyle(fontSize = 14.sp),
+                        textStyle = TextStyle(fontSize = OctopusType.bodyStrong),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                         keyboardActions = KeyboardActions(onSend = { send() }),
                     )
-                    Spacer(modifier = Modifier.width(10.dp))
+                    Spacer(modifier = Modifier.width(OctopusSpacing.md))
                     // 运行中=红色停止键(可中断);否则=发送键(无输入时淡化)
                     val btnActive = isRunning || inputText.isNotBlank()
                     Box(
                         modifier = Modifier
                             .size(42.dp)
                             .background(
-                                (if (isRunning) OctopusColors.Error else PrimaryColor)
+                                (if (isRunning) ErrorColor else PrimaryColor)
                                     .copy(alpha = if (btnActive) 1f else 0.35f),
-                                RoundedCornerShape(21.dp)
+                                CircleShape
                             )
                             .clickable(onClick = if (isRunning) stop else send),
                         contentAlignment = Alignment.Center
@@ -591,8 +662,8 @@ fun ChatScreen() {
                         Icon(
                             if (isRunning) Icons.Filled.Stop else Icons.AutoMirrored.Filled.Send,
                             contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(18.dp),
+                            tint = OnPrimaryColor,
+                            modifier = Modifier.size(OctopusIconSize.medium),
                         )
                     }
                 }
@@ -622,27 +693,27 @@ private fun ChatSessionDrawer(
         drawerContentColor = TextPrimary,
         modifier = Modifier.fillMaxHeight().width(304.dp),
     ) {
-        Column(modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 18.dp)) {
-            Text("Octopus", color = TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(4.dp))
-            Text(stringResource(R.string.chat_drawer_subtitle), color = TextMuted, fontSize = 12.sp)
-            Spacer(Modifier.height(14.dp))
+        Column(modifier = Modifier.fillMaxSize().padding(horizontal = OctopusSpacing.lg, vertical = OctopusSpacing.lg)) {
+            Text("Octopus", color = TextPrimary, fontSize = OctopusType.headlineSm, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(OctopusSpacing.xs))
+            Text(stringResource(R.string.chat_drawer_subtitle), color = TextMuted, fontSize = OctopusType.label)
+            Spacer(Modifier.height(OctopusSpacing.lg))
             DrawerStatusPanel(llmOk = llmOk, a11yOk = a11yOk, deviceCount = deviceCount)
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(OctopusSpacing.lg))
             Surface(
                 modifier = Modifier.fillMaxWidth().clickable(enabled = !isRunning, onClick = onNewChat),
-                shape = RoundedCornerShape(16.dp),
+                shape = OctopusShape.large,
                 color = PrimaryColor.copy(alpha = if (isRunning) 0.12f else 0.18f),
                 border = BorderStroke(1.dp, PrimaryColor.copy(alpha = 0.28f)),
             ) {
-                Row(modifier = Modifier.padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.Add, contentDescription = null, tint = PrimaryColor, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(10.dp))
-                    Text(stringResource(R.string.chat_new), color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                Row(modifier = Modifier.padding(OctopusSpacing.md), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.Add, contentDescription = null, tint = PrimaryColor, modifier = Modifier.size(OctopusIconSize.medium))
+                    Spacer(Modifier.width(OctopusSpacing.md))
+                    Text(stringResource(R.string.chat_new), color = TextPrimary, fontSize = OctopusType.bodyStrong, fontWeight = FontWeight.SemiBold)
                 }
             }
-            Spacer(Modifier.height(16.dp))
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Spacer(Modifier.height(OctopusSpacing.lg))
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(OctopusSpacing.sm)) {
                 listOf(SessionBucket.Today, SessionBucket.Recent, SessionBucket.Earlier).forEach { bucket ->
                     val bucketSessions = grouped[bucket].orEmpty()
                     if (bucketSessions.isNotEmpty()) {
@@ -672,18 +743,19 @@ private fun AgentHomeStatusCard(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
+        shape = OctopusShape.xl,
         color = SurfaceColor,
         border = BorderStroke(1.dp, BorderColor),
+        shadowElevation = 1.dp,
     ) {
-        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(modifier = Modifier.padding(OctopusSpacing.lg), verticalArrangement = Arrangement.spacedBy(OctopusSpacing.md)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.SmartToy, contentDescription = null, tint = PrimaryColor, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.chat_home_status_title), color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                Icon(Icons.Filled.SmartToy, contentDescription = null, tint = PrimaryColor, modifier = Modifier.size(OctopusIconSize.medium))
+                Spacer(Modifier.width(OctopusSpacing.sm))
+                Text(stringResource(R.string.chat_home_status_title), color = TextPrimary, fontSize = OctopusType.bodyStrong, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.weight(1f))
                 StatusDot(if (isRunning) WarningColor else if (llmOk && a11yOk) SuccessColor else WarningColor)
-                Spacer(Modifier.width(5.dp))
+                Spacer(Modifier.width(OctopusSpacing.xs))
                 Text(
                     stringResource(
                         when {
@@ -693,11 +765,11 @@ private fun AgentHomeStatusCard(
                         }
                     ),
                     color = TextSecondary,
-                    fontSize = 11.sp,
+                    fontSize = OctopusType.caption,
                     fontWeight = FontWeight.SemiBold,
                 )
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            Row(horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.sm), modifier = Modifier.fillMaxWidth()) {
                 MiniMetric(
                     label = stringResource(R.string.setup_a11y),
                     value = if (a11yOk) stringResource(R.string.status_online) else stringResource(R.string.chat_agent_setup_needed),
@@ -724,17 +796,18 @@ private fun AgentHomeStatusCard(
 @Composable
 private fun PromptSuggestion(text: String, onClick: () -> Unit) {
     Surface(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable(onClick = onClick),
-        shape = RoundedCornerShape(14.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = OctopusSpacing.xs).clickable(onClick = onClick),
+        shape = OctopusShape.large,
         color = SurfaceColor,
         border = BorderStroke(1.dp, BorderColor),
+        shadowElevation = 1.dp,
     ) {
-        Row(modifier = Modifier.padding(horizontal = 13.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(modifier = Modifier.padding(horizontal = OctopusSpacing.md, vertical = OctopusSpacing.md), verticalAlignment = Alignment.CenterVertically) {
             Box(
-                modifier = Modifier.size(7.dp).background(OctopusColors.Accent, RoundedCornerShape(4.dp)),
+                modifier = Modifier.size(7.dp).background(AccentColor, RoundedCornerShape(4.dp)),
             )
-            Spacer(Modifier.width(10.dp))
-            Text(text, modifier = Modifier.weight(1f), color = TextSecondary, fontSize = 13.sp, lineHeight = 17.sp)
+            Spacer(Modifier.width(OctopusSpacing.md))
+            Text(text, modifier = Modifier.weight(1f), color = TextSecondary, fontSize = OctopusType.body, lineHeight = 17.sp)
         }
     }
 }
@@ -743,17 +816,18 @@ private fun PromptSuggestion(text: String, onClick: () -> Unit) {
 private fun DrawerStatusPanel(llmOk: Boolean, a11yOk: Boolean, deviceCount: Int) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
+        shape = OctopusShape.large,
         color = SurfaceColor,
         border = BorderStroke(1.dp, BorderColor),
+        shadowElevation = 1.dp,
     ) {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+        Column(modifier = Modifier.padding(OctopusSpacing.md), verticalArrangement = Arrangement.spacedBy(OctopusSpacing.sm)) {
             DrawerStatusRow(Icons.Filled.PhoneAndroid, stringResource(R.string.setup_a11y), a11yOk)
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.Devices, contentDescription = null, tint = PrimaryColor, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.chat_metric_devices), modifier = Modifier.weight(1f), color = TextSecondary, fontSize = 12.sp)
-                Text(deviceCount.toString(), color = if (deviceCount > 0) SuccessColor else TextMuted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Icon(Icons.Filled.Devices, contentDescription = null, tint = PrimaryColor, modifier = Modifier.size(OctopusIconSize.small))
+                Spacer(Modifier.width(OctopusSpacing.sm))
+                Text(stringResource(R.string.chat_metric_devices), modifier = Modifier.weight(1f), color = TextSecondary, fontSize = OctopusType.label)
+                Text(deviceCount.toString(), color = if (deviceCount > 0) SuccessColor else TextMuted, fontSize = OctopusType.label, fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -762,13 +836,13 @@ private fun DrawerStatusPanel(llmOk: Boolean, a11yOk: Boolean, deviceCount: Int)
 @Composable
 private fun DrawerStatusRow(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, ok: Boolean) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, contentDescription = null, tint = if (ok) SuccessColor else TextMuted, modifier = Modifier.size(16.dp))
-        Spacer(Modifier.width(8.dp))
-        Text(label, modifier = Modifier.weight(1f), color = TextSecondary, fontSize = 12.sp)
+        Icon(icon, contentDescription = null, tint = if (ok) SuccessColor else TextMuted, modifier = Modifier.size(OctopusIconSize.small))
+        Spacer(Modifier.width(OctopusSpacing.sm))
+        Text(label, modifier = Modifier.weight(1f), color = TextSecondary, fontSize = OctopusType.label)
         Text(
             stringResource(if (ok) R.string.status_online else R.string.chat_agent_setup_needed),
             color = if (ok) SuccessColor else WarningColor,
-            fontSize = 11.sp,
+            fontSize = OctopusType.caption,
             fontWeight = FontWeight.SemiBold,
         )
     }
@@ -778,14 +852,15 @@ private fun DrawerStatusRow(icon: androidx.compose.ui.graphics.vector.ImageVecto
 private fun MiniMetric(label: String, value: String, ok: Boolean, modifier: Modifier = Modifier) {
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(13.dp),
-        color = OctopusColors.SurfaceDeep,
+        shape = OctopusShape.large,
+        color = SurfaceDeepColor,
         border = BorderStroke(1.dp, if (ok) PrimaryColor.copy(alpha = 0.16f) else BorderColor),
+        shadowElevation = 1.dp,
     ) {
-        Column(modifier = Modifier.padding(horizontal = 9.dp, vertical = 9.dp)) {
-            Text(label, color = TextMuted, fontSize = 10.sp, maxLines = 1)
-            Spacer(Modifier.height(4.dp))
-            Text(value, color = if (ok) TextPrimary else WarningColor, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+        Column(modifier = Modifier.padding(horizontal = OctopusSpacing.sm, vertical = OctopusSpacing.sm)) {
+            Text(label, color = TextMuted, fontSize = OctopusType.tag, maxLines = 1)
+            Spacer(Modifier.height(OctopusSpacing.xs))
+            Text(value, color = if (ok) TextPrimary else WarningColor, fontSize = OctopusType.label, fontWeight = FontWeight.SemiBold, maxLines = 1)
         }
     }
 }
@@ -795,9 +870,9 @@ private fun DrawerSectionTitle(text: String) {
     Text(
         text,
         color = TextMuted,
-        fontSize = 11.sp,
+        fontSize = OctopusType.caption,
         fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.padding(start = 3.dp, top = 6.dp, bottom = 2.dp),
+        modifier = Modifier.padding(start = OctopusSpacing.xs, top = OctopusSpacing.sm, bottom = OctopusSpacing.xs),
     )
 }
 
@@ -810,34 +885,35 @@ private fun SessionDrawerRow(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth().clickable { onSwitch(session.id) },
-        shape = RoundedCornerShape(14.dp),
+        shape = OctopusShape.large,
         color = if (selected) SurfaceVariantColor else SurfaceColor,
         border = BorderStroke(1.dp, if (selected) PrimaryColor.copy(alpha = 0.26f) else BorderColor),
+        shadowElevation = 1.dp,
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 11.dp),
+            modifier = Modifier.padding(horizontal = OctopusSpacing.md, vertical = OctopusSpacing.md),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
                 Icons.Filled.ChatBubbleOutline,
                 contentDescription = null,
                 tint = if (selected) PrimaryColor else TextMuted,
-                modifier = Modifier.size(17.dp),
+                modifier = Modifier.size(OctopusIconSize.small),
             )
-            Spacer(Modifier.width(9.dp))
+            Spacer(Modifier.width(OctopusSpacing.sm))
             Text(
                 session.title,
                 modifier = Modifier.weight(1f),
                 color = if (selected) TextPrimary else TextSecondary,
-                fontSize = 13.sp,
+                fontSize = OctopusType.body,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
                 maxLines = 1,
             )
             Text(
                 "×",
                 color = TextMuted,
-                fontSize = 16.sp,
-                modifier = Modifier.clickable { onDelete(session.id) }.padding(start = 8.dp),
+                fontSize = OctopusType.title,
+                modifier = Modifier.clickable { onDelete(session.id) }.padding(start = OctopusSpacing.sm),
             )
         }
     }
@@ -941,13 +1017,13 @@ private fun TargetSelector(onPreview: (DeviceInfo?) -> Unit = {}) {
 private fun DevicePreviewPanel(device: DeviceInfo, onEnter: () -> Unit, onClose: () -> Unit) {
     // Marvis 风格:紧贴顶栏的一块干净圆角实时画面,无内部标题栏;点画面=进入控制,下方一根拖拽柄。
     val previewH = (LocalConfiguration.current.screenHeightDp * 0.42f).dp
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(top = 6.dp)) {
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = OctopusSpacing.md).padding(top = OctopusSpacing.sm)) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(previewH)
-                .clip(RoundedCornerShape(16.dp))
-                .background(Color.Black)
+                .clip(OctopusShape.large)
+                .background(VideoBackgroundColor)
                 .clickable { onEnter() },
         ) {
             AndroidView(
@@ -966,32 +1042,32 @@ private fun DevicePreviewPanel(device: DeviceInfo, onEnter: () -> Unit, onClose:
             Row(
                 modifier = Modifier
                     .align(Alignment.TopStart)
-                    .padding(8.dp)
+                    .padding(OctopusSpacing.sm)
                     .clip(RoundedCornerShape(10.dp))
-                    .background(OctopusColors.OverlayDim)
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                    .background(OverlayDimColor)
+                    .padding(horizontal = OctopusSpacing.sm, vertical = OctopusSpacing.xs),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(SuccessColor))
-                Spacer(Modifier.width(5.dp))
-                Text(device.deviceName, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                Spacer(Modifier.width(OctopusSpacing.xs))
+                Text(device.deviceName, color = OnPrimaryColor, fontSize = OctopusType.caption, fontWeight = FontWeight.Medium, maxLines = 1)
             }
             // 右上角:关闭
             Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(8.dp)
+                    .padding(OctopusSpacing.sm)
                     .size(26.dp)
                     .clip(CircleShape)
-                    .background(OctopusColors.OverlayDim)
+                    .background(OverlayDimColor)
                     .clickable { onClose() },
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.feature_close), tint = Color.White, modifier = Modifier.size(15.dp))
+                Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.feature_close), tint = OnPrimaryColor, modifier = Modifier.size(OctopusIconSize.small))
             }
         }
         // 拖拽柄(视觉提示:可点画面进入全控)
-        Box(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp), contentAlignment = Alignment.Center) {
+        Box(modifier = Modifier.fillMaxWidth().padding(vertical = OctopusSpacing.sm), contentAlignment = Alignment.Center) {
             Box(modifier = Modifier.width(36.dp).height(4.dp).clip(RoundedCornerShape(2.dp)).background(BorderColor))
         }
     }
@@ -1025,16 +1101,17 @@ private fun UserBubble(text: String) {
     ) {
         Box {
             Surface(
-                shape = RoundedCornerShape(18.dp, 18.dp, 4.dp, 18.dp),
+                shape = OctopusShape.userBubble,
                 color = UserBubbleColor,
+                shadowElevation = 1.dp,
                 // 长按一条指令 → 存为可复用例程
                 modifier = Modifier.combinedClickable(onClick = {}, onLongClick = { menu = true }),
             ) {
                 Text(
                     text,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                    fontSize = 14.sp,
-                    color = Color.White,
+                    modifier = Modifier.padding(horizontal = OctopusSpacing.lg, vertical = OctopusSpacing.md),
+                    fontSize = OctopusType.bodyStrong,
+                    color = OnPrimaryColor,
                     lineHeight = 21.sp,
                 )
             }
@@ -1069,14 +1146,15 @@ private fun AgentBubble(text: String) {
         contentAlignment = Alignment.CenterStart
     ) {
         Surface(
-            shape = RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp),
+            shape = OctopusShape.agentBubble,
             color = AgentBubbleColor,
             border = BorderStroke(1.dp, BorderColor),
+            shadowElevation = 1.dp,
         ) {
             Text(
                 text,
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                fontSize = 14.sp,
+                modifier = Modifier.padding(horizontal = OctopusSpacing.lg, vertical = OctopusSpacing.md),
+                fontSize = OctopusType.bodyStrong,
                 color = TextPrimary,
                 lineHeight = 21.sp,
             )
@@ -1094,19 +1172,20 @@ private fun SetupGuideCard(
     onEnableA11y: () -> Unit,
 ) {
     Surface(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-        shape = RoundedCornerShape(14.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = OctopusSpacing.lg, vertical = OctopusSpacing.sm),
+        shape = OctopusShape.large,
         color = PrimaryColor.copy(alpha = 0.10f),
         border = BorderStroke(1.dp, PrimaryColor.copy(alpha = 0.25f)),
+        shadowElevation = 1.dp,
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
+        Column(modifier = Modifier.padding(OctopusSpacing.lg)) {
             Text(
                 stringResource(R.string.setup_title),
-                fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary,
+                fontSize = OctopusType.body, fontWeight = FontWeight.SemiBold, color = TextPrimary,
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(OctopusSpacing.sm))
             SetupRow(stringResource(R.string.setup_llm), llmOk, onConfigLlm)
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(OctopusSpacing.xs))
             SetupRow(stringResource(R.string.setup_a11y), a11yOk, onEnableA11y)
         }
     }
@@ -1115,17 +1194,17 @@ private fun SetupGuideCard(
 @Composable
 private fun SetupRow(label: String, done: Boolean, onClick: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().clickable(enabled = !done, onClick = onClick).padding(vertical = 6.dp),
+        modifier = Modifier.fillMaxWidth().clickable(enabled = !done, onClick = onClick).padding(vertical = OctopusSpacing.sm),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(if (done) "✓" else "○", fontSize = 13.sp, color = if (done) SuccessColor else TextMuted)
-        Spacer(modifier = Modifier.width(8.dp))
+        Text(if (done) "✓" else "○", fontSize = OctopusType.body, color = if (done) SuccessColor else TextMuted)
+        Spacer(modifier = Modifier.width(OctopusSpacing.sm))
         Text(
-            label, fontSize = 12.sp,
+            label, fontSize = OctopusType.label,
             color = if (done) TextMuted else TextPrimary,
             modifier = Modifier.weight(1f),
         )
-        if (!done) Text(stringResource(R.string.setup_go), fontSize = 11.sp, color = PrimaryColor, fontWeight = FontWeight.SemiBold)
+        if (!done) Text(stringResource(R.string.setup_go), fontSize = OctopusType.caption, color = PrimaryColor, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -1157,49 +1236,85 @@ private fun buildChatRows(msgs: List<ChatMessage>): List<ChatRow> {
     return out
 }
 
+private fun toolIcon(name: String): androidx.compose.ui.graphics.vector.ImageVector = when (name) {
+    "get_screen_info" -> Icons.Filled.Visibility
+    "open_app" -> Icons.AutoMirrored.Filled.Launch
+    "tap", "long_press" -> Icons.Filled.TouchApp
+    "input_text" -> Icons.Filled.Keyboard
+    "swipe", "scroll_to_find" -> Icons.Filled.Swipe
+    "take_screenshot" -> Icons.Filled.CameraAlt
+    "wait" -> Icons.Filled.Timer
+    "system_key" -> Icons.Filled.SettingsRemote
+    "find_and_tap", "find_text", "find_node" -> Icons.Filled.Search
+    "launch_freeform" -> Icons.AutoMirrored.Filled.OpenInNew
+    else -> Icons.Filled.Build
+}
+
+private fun toolColor(name: String): Color = when (name) {
+    "get_screen_info" -> OctopusTints.Window
+    "open_app" -> OctopusTints.Plugin
+    "tap", "long_press", "swipe", "scroll_to_find" -> OctopusTints.Routine
+    "input_text" -> OctopusTints.Memory
+    "take_screenshot" -> OctopusTints.Video
+    "wait" -> OctopusTints.Trust
+    "system_key" -> OctopusTints.Skill
+    "find_and_tap", "find_text", "find_node" -> OctopusTints.Browser
+    "launch_freeform" -> OctopusTints.Cloud
+    else -> PrimaryColor
+}
+
 /** 单个工具直接显示;多个工具折叠成可展开的「N 步骤」块。 */
 @Composable
 private fun ToolGroupItem(tools: List<ChatMessage.ToolCall>, expanded: Boolean, onToggle: (Long) -> Unit) {
     if (tools.size == 1) { ToolCallItem(tools[0]); return }
     val gid = tools.first().id
+    val firstTint = toolColor(tools.first().toolName)
+    val firstIcon = toolIcon(tools.first().toolName)
     Surface(
-        shape = RoundedCornerShape(12.dp),
+        shape = OctopusShape.medium,
         color = PrimaryColor.copy(alpha = 0.08f),
         border = BorderStroke(1.dp, PrimaryColor.copy(alpha = 0.15f)),
         modifier = Modifier.clickable { onToggle(gid) },
+        shadowElevation = 1.dp,
     ) {
-        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+        Column(modifier = Modifier.padding(horizontal = OctopusSpacing.md, vertical = OctopusSpacing.sm)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(tools.first().icon, fontSize = 14.sp)
-                Spacer(modifier = Modifier.width(8.dp))
+                ToolColorBar(firstTint)
+                Spacer(modifier = Modifier.width(OctopusSpacing.sm))
+                Icon(firstIcon, contentDescription = null, tint = firstTint, modifier = Modifier.size(OctopusIconSize.small))
+                Spacer(modifier = Modifier.width(OctopusSpacing.sm))
                 Text(
                     stringResource(R.string.chat_tool_steps, tools.size),
-                    fontSize = 11.sp, color = PrimaryColor, fontWeight = FontWeight.SemiBold,
+                    fontSize = OctopusType.caption, color = PrimaryColor, fontWeight = FontWeight.SemiBold,
                 )
                 if (!expanded) {
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(OctopusSpacing.sm))
                     Text(
                         "· ${tools.last().toolName}",
-                        fontSize = 11.sp, color = TextMuted,
+                        fontSize = OctopusType.caption, color = TextMuted,
                         fontFamily = FontFamily.Monospace, maxLines = 1,
                     )
                 }
                 Spacer(modifier = Modifier.weight(1f))
-                Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null, tint = TextMuted, modifier = Modifier.size(16.dp))
+                Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null, tint = TextMuted, modifier = Modifier.size(OctopusIconSize.small))
             }
             if (expanded) {
                 tools.forEach { t ->
-                    Spacer(modifier = Modifier.height(6.dp))
+                    val tint = toolColor(t.toolName)
+                    val icon = toolIcon(t.toolName)
+                    Spacer(modifier = Modifier.height(OctopusSpacing.sm))
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(t.icon, fontSize = 12.sp)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(t.toolName, fontSize = 11.sp, color = PrimaryColor, fontFamily = FontFamily.Monospace)
+                        ToolColorBar(tint)
+                        Spacer(modifier = Modifier.width(OctopusSpacing.sm))
+                        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(OctopusIconSize.small))
+                        Spacer(modifier = Modifier.width(OctopusSpacing.sm))
+                        Text(t.toolName, fontSize = OctopusType.caption, color = PrimaryColor, fontFamily = FontFamily.Monospace)
                         if (t.args.isNotEmpty()) {
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(t.args, fontSize = 10.sp, color = TextMuted, fontFamily = FontFamily.Monospace, maxLines = 1)
+                            Spacer(modifier = Modifier.width(OctopusSpacing.xs))
+                            Text(t.args, fontSize = OctopusType.tag, color = TextMuted, fontFamily = FontFamily.Monospace, maxLines = 1)
                         }
                         Spacer(modifier = Modifier.weight(1f))
-                        if (t.result != null) Text(t.result, fontSize = 10.sp, color = SuccessColor, maxLines = 1)
+                        if (t.result != null) Text(t.result, fontSize = OctopusType.tag, color = SuccessColor, maxLines = 1)
                     }
                 }
             }
@@ -1208,32 +1323,47 @@ private fun ToolGroupItem(tools: List<ChatMessage.ToolCall>, expanded: Boolean, 
 }
 
 @Composable
+private fun ToolColorBar(color: Color) {
+    Box(
+        modifier = Modifier
+            .width(3.dp)
+            .height(20.dp)
+            .background(color, RoundedCornerShape(2.dp))
+    )
+}
+
+@Composable
 private fun ToolCallItem(msg: ChatMessage.ToolCall) {
+    val tint = toolColor(msg.toolName)
+    val icon = toolIcon(msg.toolName)
     Surface(
-        shape = RoundedCornerShape(12.dp),
+        shape = OctopusShape.medium,
         color = PrimaryColor.copy(alpha = 0.08f),
         border = BorderStroke(1.dp, PrimaryColor.copy(alpha = 0.15f)),
+        shadowElevation = 1.dp,
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            modifier = Modifier.padding(horizontal = OctopusSpacing.md, vertical = OctopusSpacing.sm),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(msg.icon, fontSize = 14.sp)
-            Spacer(modifier = Modifier.width(8.dp))
+            ToolColorBar(tint)
+            Spacer(modifier = Modifier.width(OctopusSpacing.sm))
+            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(OctopusIconSize.small))
+            Spacer(modifier = Modifier.width(OctopusSpacing.sm))
             Text(
                 msg.toolName,
-                fontSize = 11.sp,
+                fontSize = OctopusType.caption,
                 color = PrimaryColor,
                 fontWeight = FontWeight.Medium,
                 fontFamily = FontFamily.Monospace
             )
             if (msg.args.isNotEmpty()) {
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(msg.args, fontSize = 11.sp, color = TextMuted, fontFamily = FontFamily.Monospace)
+                Spacer(modifier = Modifier.width(OctopusSpacing.xs))
+                Text(msg.args, fontSize = OctopusType.caption, color = TextMuted, fontFamily = FontFamily.Monospace)
             }
             Spacer(modifier = Modifier.weight(1f))
             if (msg.result != null) {
-                Text(msg.result, fontSize = 11.sp, color = SuccessColor)
+                Text(msg.result, fontSize = OctopusType.caption, color = SuccessColor)
             }
         }
     }
@@ -1243,10 +1373,22 @@ private fun ToolCallItem(msg: ChatMessage.ToolCall) {
 private fun ThinkingItem(text: String) {
     val infiniteTransition = rememberInfiniteTransition(label = "thinking")
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text("🤔", fontSize = 14.sp)
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(text, fontSize = 12.sp, color = TextSecondary)
-        Spacer(modifier = Modifier.width(6.dp))
+        Box(
+            modifier = Modifier
+                .size(28.dp)
+                .background(PrimaryColor.copy(alpha = 0.12f), CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.Filled.Psychology,
+                contentDescription = null,
+                tint = PrimaryColor,
+                modifier = Modifier.size(OctopusIconSize.medium),
+            )
+        }
+        Spacer(modifier = Modifier.width(OctopusSpacing.sm))
+        Text(text, fontSize = OctopusType.label, color = TextSecondary)
+        Spacer(modifier = Modifier.width(OctopusSpacing.sm))
         (0..2).forEach { i ->
             val alpha by infiniteTransition.animateFloat(
                 initialValue = 0.2f,
@@ -1259,7 +1401,7 @@ private fun ThinkingItem(text: String) {
             )
             Text(
                 "·",
-                fontSize = 16.sp,
+                fontSize = OctopusType.title,
                 fontWeight = FontWeight.Bold,
                 color = PrimaryColor.copy(alpha = alpha),
             )

@@ -271,6 +271,7 @@
     <string name="nav_chat">チャット</string>
     <string name="nav_device">デバイス</string>
     <string name="nav_settings">設定</string>
+    <string name="nav_agent_square">Agent 広場</string>
 
     <!-- SettingsScreen (Compose) -->
     <string name="settings_section_permissions">権限の状態</string>
@@ -807,8 +808,8 @@
     <string name="browser_agent_prompt">現在のページで次の操作を完了してください（get_screen_infoでページ要素と座標を確認し、tap / input_textなどで操作）：%1$s</string>
     <string name="browser_ai_system_prompt">あなたはウェブページ読み取りアシスタントです。下記のページ内容に基づいてのみ回答し、ツールは呼び出さないでください。\nユーザーの質問：%1$s%2$s</string>
     <string name="browser_installing_extension_toast">拡張機能をインストール中…</string>
-    <string name="browser_home_favorites">お気に入り</string>
-    <string name="browser_home_tools">管理</string>
+    <string name="browser_home_favorites">お気に入りタグ</string>
+    <string name="browser_home_tools">よく使う入口</string>
 
     <!-- サークル名とタグ -->
     <string name="circle_ai_players">AIプレイヤー</string>

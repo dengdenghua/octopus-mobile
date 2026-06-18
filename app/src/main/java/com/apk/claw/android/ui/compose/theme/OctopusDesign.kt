@@ -4,6 +4,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 /**
  * 全局配色 —— 与 XML colors.xml 保持视觉一致的单一调色板。
@@ -117,4 +118,62 @@ object OctopusShape {
     val Card = 16.dp
     val Panel = 20.dp
     val Control = 12.dp
+
+    /** 对话气泡专用：大半圆 + 小尾角 */
+    val agentBubble = androidx.compose.foundation.shape.RoundedCornerShape(16.dp, 16.dp, 16.dp, 4.dp)
+    val userBubble = androidx.compose.foundation.shape.RoundedCornerShape(16.dp, 16.dp, 4.dp, 16.dp)
+}
+
+/**
+ * 统一的间距网格（4dp 基准）。
+ */
+object OctopusSpacing {
+    val xs = 4.dp
+    val sm = 8.dp
+    val md = 12.dp
+    val lg = 16.dp
+    val xl = 20.dp
+    val xxl = 24.dp
+}
+
+/**
+ * 统一的图标尺寸。
+ */
+object OctopusIconSize {
+    val small = 16.dp
+    val medium = 20.dp
+    val large = 24.dp
+}
+
+/**
+ * 统一的字号阶梯（sp）。token 取值与现有 UI 实际字号一一对齐，迁移为纯别名、零视觉变化。
+ *
+ * - micro      = 9sp （极小徽章，如「已就绪」状态点）
+ * - tag        = 10sp（标签、计数）
+ * - caption    = 11sp（辅助说明、副标题）
+ * - label      = 12sp（次要正文、分区标签）
+ * - body       = 13sp（正文）
+ * - bodyStrong = 14sp（强调正文）
+ * - bodyLg     = 15sp（大正文 / 搜索提示）
+ * - title      = 16sp（卡片 / 分区标题）
+ * - titleSm    = 17sp（次级标题，如未选中 Tab）
+ * - titleLg    = 18sp（页面标题）
+ * - headlineSm = 20sp（小号大标题：顶栏品牌名 / 首页标题）
+ * - headline   = 22sp（大标题 / Tab 选中态）
+ * - display    = 24sp（空状态 Hero 标题）
+ */
+object OctopusType {
+    val micro = 9.sp
+    val tag = 10.sp
+    val caption = 11.sp
+    val label = 12.sp
+    val body = 13.sp
+    val bodyStrong = 14.sp
+    val bodyLg = 15.sp
+    val title = 16.sp
+    val titleSm = 17.sp
+    val titleLg = 18.sp
+    val headlineSm = 20.sp
+    val headline = 22.sp
+    val display = 24.sp
 }

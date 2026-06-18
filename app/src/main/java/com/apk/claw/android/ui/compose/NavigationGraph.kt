@@ -1,9 +1,6 @@
 package com.apk.claw.android.ui.compose
 
-import android.content.Intent
 import androidx.compose.animation.core.tween
-import androidx.compose.ui.platform.LocalContext
-import com.apk.claw.android.ui.browser.BrowserActivity
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -46,11 +43,15 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.apk.claw.android.ui.compose.screen.AgentSquareScreen
 import com.apk.claw.android.ui.compose.screen.ChatScreen
 import com.apk.claw.android.ui.compose.screen.DiscoverScreen
 import com.apk.claw.android.ui.compose.screen.FeatureHubScreen
 import com.apk.claw.android.ui.compose.screen.SettingsScreen
 import com.apk.claw.android.ui.compose.theme.OctopusColors
+import com.apk.claw.android.ui.compose.theme.OctopusIconSize
+import com.apk.claw.android.ui.compose.theme.OctopusShape
+import com.apk.claw.android.ui.compose.theme.OctopusSpacing
 import kotlinx.coroutines.launch
 
 /**
@@ -63,7 +64,6 @@ import kotlinx.coroutines.launch
 @Composable
 fun OctopusApp() {
     val navController = rememberNavController()
-    val context = LocalContext.current
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
     val snackbarHostState = remember { SnackbarHostState() }
@@ -84,17 +84,12 @@ fun OctopusApp() {
             CompactBottomBar(
                 currentRoute = currentDestination?.route,
                 onSelect = { screen ->
-                    if (screen == Screen.Discover) {
-                        // 「浏览器」Tab 直接打开内置浏览器本体(已有桌面式首页),不再走旧的 DiscoverScreen 落地页
-                        runCatching { context.startActivity(Intent(context, BrowserActivity::class.java)) }
-                    } else {
-                        navController.navigate(screen.route) {
-                            popUpTo(navController.graph.findStartDestination().id) {
-                                saveState = true
-                            }
-                            launchSingleTop = true
-                            restoreState = true
+                    navController.navigate(screen.route) {
+                        popUpTo(navController.graph.findStartDestination().id) {
+                            saveState = true
                         }
+                        launchSingleTop = true
+                        restoreState = true
                     }
                 },
             )
@@ -108,6 +103,12 @@ fun OctopusApp() {
     }
 }
 
+// 底部导航栏专用颜色别名（跟随主题切换）
+private val NavSurfaceColor get() = OctopusColors.Surface
+private val NavBorderColor get() = OctopusColors.Border
+private val NavPrimaryColor get() = OctopusColors.Primary
+private val NavTextMutedColor get() = OctopusColors.TextMuted
+
 @Composable
 private fun CompactBottomBar(
     currentRoute: String?,
@@ -117,11 +118,15 @@ private fun CompactBottomBar(
         modifier = Modifier
             .fillMaxWidth()
             .navigationBarsPadding(),
-        color = OctopusColors.Surface.copy(alpha = 0.98f),
-        border = BorderStroke(1.dp, OctopusColors.Border.copy(alpha = 0.65f)),
+        color = NavSurfaceColor.copy(alpha = 0.98f),
+        border = BorderStroke(1.dp, NavBorderColor.copy(alpha = 0.65f)),
+        shadowElevation = 4.dp,
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().height(60.dp).padding(horizontal = 16.dp, vertical = 5.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(60.dp)
+                .padding(horizontal = OctopusSpacing.lg, vertical = OctopusSpacing.xs),
             horizontalArrangement = Arrangement.SpaceAround,
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -139,21 +144,21 @@ private fun CompactBottomBar(
                         modifier = Modifier
                             .size(width = 52.dp, height = 28.dp)
                             .background(
-                                if (selected) OctopusColors.Primary.copy(alpha = 0.12f) else androidx.compose.ui.graphics.Color.Transparent,
-                                RoundedCornerShape(14.dp),
+                                if (selected) NavPrimaryColor.copy(alpha = 0.12f) else androidx.compose.ui.graphics.Color.Transparent,
+                                OctopusShape.capsule,
                             ),
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
                             screen.icon,
                             contentDescription = stringResource(screen.labelRes),
-                            tint = if (selected) OctopusColors.Primary else OctopusColors.TextMuted,
-                            modifier = Modifier.size(21.dp),
+                            tint = if (selected) NavPrimaryColor else NavTextMutedColor,
+                            modifier = Modifier.size(OctopusIconSize.medium),
                         )
                     }
                     Text(
                         stringResource(screen.labelRes),
-                        color = if (selected) OctopusColors.Primary else OctopusColors.TextMuted,
+                        color = if (selected) NavPrimaryColor else NavTextMutedColor,
                         fontSize = 10.sp,
                         fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
                         maxLines = 1,
@@ -195,7 +200,14 @@ fun OctopusNavHost(
             })
         }
         composable(Screen.Chat.route) { ChatScreen() }
-        composable(Screen.Features.route) { FeatureHubScreen() }
+        composable(Screen.Features.route) { FeatureHubScreen(onNavigateToAgentSquare = { navController.navigate(Screen.AgentSquare.route) }) }
+        composable(Screen.AgentSquare.route) {
+            AgentSquareScreen(
+                onBack = { navController.popBackStack() },
+                onOpenSearch = { /* TODO */ },
+                onCreatePost = { /* TODO */ },
+            )
+        }
         composable(Screen.Settings.route) { SettingsScreen(onMessage = showMessage) }
     }
 }
