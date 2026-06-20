@@ -252,6 +252,48 @@ object KVUtils {
     fun getWechatUpdatesCursor(): String = getString(KEY_WECHAT_UPDATES_CURSOR, "")
     fun setWechatUpdatesCursor(value: String) = putString(KEY_WECHAT_UPDATES_CURSOR, value)
 
+    // ==================== 通道发送者鉴权(ACL) ====================
+    // 安全:仅授权用户可驱动 Agent 控制设备。默认启用 + TOFU(首个发送者自动绑定为该通道 owner)。
+    private const val KEY_CHANNEL_ACL_ENABLED = "KEY_CHANNEL_ACL_ENABLED"
+    fun isChannelAclEnabled(): Boolean = getBoolean(KEY_CHANNEL_ACL_ENABLED, true)
+    fun setChannelAclEnabled(enabled: Boolean) = putBoolean(KEY_CHANNEL_ACL_ENABLED, enabled)
+
+    private fun channelAclKey(channel: String) = "KEY_CHANNEL_ACL_$channel"
+
+    /** 指定通道的授权发送者白名单（空=尚未配对）。 */
+    fun getChannelAllowedSenders(channel: String): Set<String> =
+        getString(channelAclKey(channel), "").split(",").filter { it.isNotBlank() }.toSet()
+
+    fun addChannelAllowedSender(channel: String, senderId: String) {
+        if (senderId.isBlank()) return
+        val s = getChannelAllowedSenders(channel).toMutableSet()
+        if (s.add(senderId)) putString(channelAclKey(channel), s.joinToString(","))
+    }
+
+    fun removeChannelAllowedSender(channel: String, senderId: String) {
+        val s = getChannelAllowedSenders(channel).toMutableSet()
+        if (s.remove(senderId)) putString(channelAclKey(channel), s.joinToString(","))
+    }
+
+    /** 清空某通道白名单 —— 让下一个发送者重新成为 owner（重新配对）。 */
+    fun clearChannelAllowedSenders(channel: String) = remove(channelAclKey(channel))
+
+    // 是否允许"远程/自动来源"(母体 WS、LAN HTTP、主动规则)调用高危工具。默认 false=拦截(安全)。
+    private const val KEY_REMOTE_HIGH_RISK = "KEY_REMOTE_HIGH_RISK_ALLOWED"
+    fun isRemoteHighRiskAllowed(): Boolean = getBoolean(KEY_REMOTE_HIGH_RISK, false)
+    fun setRemoteHighRiskAllowed(enabled: Boolean) = putBoolean(KEY_REMOTE_HIGH_RISK, enabled)
+
+    // ── 高级自动化模式(满血) ──
+    // 专用自动化设备总开关：解除「高危工具来源闸门 + 主动规则高危限制 + 文件工具 /sdcard 沙箱」，
+    // 让母体/LAN/主动规则可无确认执行全部高危工具、访问完整文件系统(仍受 shell UID 与注入校验约束)。
+    // 默认 false。仅用于你完全掌控的闲置/专用自动化设备。不影响"防外部攻击"类加固(发送者 ACL、密钥脱敏等)。
+    private const val KEY_ADVANCED_AUTOMATION = "KEY_ADVANCED_AUTOMATION_MODE"
+    fun isAdvancedAutomationMode(): Boolean {
+        if (!::mmkv.isInitialized) return false
+        return mmkv.decodeBool(KEY_ADVANCED_AUTOMATION, false)
+    }
+    fun setAdvancedAutomationMode(enabled: Boolean) = putBoolean(KEY_ADVANCED_AUTOMATION, enabled)
+
     // ==================== 技能(工具)启停 ====================
     private const val KEY_DISABLED_TOOLS = "KEY_DISABLED_TOOLS"
     fun getDisabledTools(): Set<String> {

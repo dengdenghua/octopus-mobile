@@ -35,6 +35,19 @@ class ChannelSetup(
                     ChannelManager.flushMessages(channel)
                     return
                 }
+                // 安全：发送者鉴权（ACL）—— 仅授权用户可驱动 Agent 控制设备。
+                // 默认 TOFU：首个发送者自动绑定为该通道 owner，其后未授权发送者一律拒绝。
+                val senderId = ChannelManager.getLastSenderId(channel)
+                if (ChannelAccessControl.authorize(channel, senderId) == ChannelAccessControl.Decision.DENY) {
+                    ChannelManager.sendMessage(
+                        channel,
+                        "⚠️ 你没有该机器人的控制授权（仅授权用户可操作设备）。" +
+                            "若这是你本人的机器人，请在 App 设置中清空该通道白名单后重新发送以重新配对。",
+                        messageID,
+                    )
+                    ChannelManager.flushMessages(channel)
+                    return
+                }
                 // 直接通过 startNewTask 入队并调度，无需先 tryAcquireTask
                 taskOrchestrator.startNewTask(channel, message, messageID)
             }

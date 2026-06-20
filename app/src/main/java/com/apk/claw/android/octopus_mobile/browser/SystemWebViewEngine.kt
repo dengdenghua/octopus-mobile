@@ -68,17 +68,22 @@ class SystemWebViewEngine : BrowserEngine {
 
             allowFileAccess = true
             allowContentAccess = true
-            allowFileAccessFromFileURLs = true
-            allowUniversalAccessFromFileURLs = true
+            // 安全:禁止 file:// 页面跨源读取本地文件 / 其它 file:// 源。
+            // 开着这两项时,恶意本地页面可越权读取 app 私有文件,浏览器场景必须关。
+            allowFileAccessFromFileURLs = false
+            allowUniversalAccessFromFileURLs = false
 
             mediaPlaybackRequiresUserGesture = false
 
             userAgentString = DESKTOP_CHROME_UA
 
-            mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+            // 安全:HTTPS 页面只放行被动混合内容(图片等),拦截 HTTP 脚本/iframe,
+            // 防中间人注入。ALWAYS_ALLOW 会让"安全"连接被降级,改用 COMPATIBILITY。
+            mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
         }
 
-        WebView.setWebContentsDebuggingEnabled(true)
+        // 仅 DEBUG 构建开启 WebView 远程调试，避免 release 版被 adb chrome://inspect 注入已登录会话。
+        WebView.setWebContentsDebuggingEnabled(com.apk.claw.android.BuildConfig.DEBUG)
 
         webView.webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {

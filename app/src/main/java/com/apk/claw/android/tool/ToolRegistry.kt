@@ -36,6 +36,31 @@ object ToolRegistry {
     /** 事件总线（模块间解耦通知） */
     var eventBus: EventBus? = null
 
+    // ── 来源信任闸门(R2/R3/R12) ──
+    // 标记一段调用来自"不可信来源"：远程母体 WS 的 tool/execute、LAN HTTP debug execute、
+    // 由不可信触发源(通知/短信/屏幕文本)自动触发的主动规则。这些路径不经过 LLM agent，
+    // 也没有人工确认，历史上可直接驱动最高权限工具。
+    private val untrustedDepth = ThreadLocal.withInitial { 0 }
+
+    /** 在 block 内把当前线程的工具调用标记为"不可信来源"（同步执行，结束后恢复）。 */
+    fun <T> withUntrustedSource(block: () -> T): T {
+        untrustedDepth.set(untrustedDepth.get() + 1)
+        return try {
+            block()
+        } finally {
+            untrustedDepth.set((untrustedDepth.get() - 1).coerceAtLeast(0))
+        }
+    }
+
+    fun isUntrustedSource(): Boolean = untrustedDepth.get() > 0
+
+    /**
+     * 不可信来源调用高危工具时的确认回调（供 UI 接入"逐次人工确认"）。
+     * 返回 true=放行。未注册时回退到 [com.apk.claw.android.utils.KVUtils.isRemoteHighRiskAllowed]
+     * （默认 false=拦截）。
+     */
+    var highRiskConfirmer: ((toolName: String, params: Map<String, Any>) -> Boolean)? = null
+
     @JvmStatic
     fun getInstance(): ToolRegistry = this
 
@@ -218,6 +243,21 @@ object ToolRegistry {
         if (!isToolEnabled(name)) {
             eventBus?.publish(EventBus.ToolBlockedEvent(name, "tool_disabled", "settings"))
             return audited(ToolResult.error("工具已停用: $name"), blockedBy = "settings")
+        }
+
+        // ── 高危工具来源闸门(R2/R12)：远程/自动来源调用 HIGH_RISK 工具需确认，默认拦截 ──
+        // 「高级自动化模式」开启时完全放行（专用自动化设备满血）。
+        if (!com.apk.claw.android.utils.KVUtils.isAdvancedAutomationMode()
+            && isUntrustedSource() && ToolRiskPolicy.riskOf(name) == ToolRiskPolicy.RISK_HIGH) {
+            val approved = highRiskConfirmer?.invoke(name, params)
+                ?: com.apk.claw.android.utils.KVUtils.isRemoteHighRiskAllowed()
+            if (!approved) {
+                eventBus?.publish(EventBus.ToolBlockedEvent(name, "high_risk_untrusted", "policy"))
+                return audited(
+                    ToolResult.error("高危工具「$name」来自远程或自动触发来源，已被安全策略拦截（需用户确认，或在设置中显式允许远程高危调用）。"),
+                    blockedBy = "policy",
+                )
+            }
         }
 
         // ── 安全门检查（PII/Secret 扫描）──

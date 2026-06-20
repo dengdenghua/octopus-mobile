@@ -21,6 +21,7 @@ object ToolRiskPolicy {
         "launch_freeform",
         "resize_window",
         "browser_install_extension",
+        "browser_evaluate",
         "install_app",
         "send_file",
     )

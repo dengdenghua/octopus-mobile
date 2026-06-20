@@ -1,5 +1,6 @@
 package com.apk.claw.android.tool.impl
 
+import com.apk.claw.android.octopus_mobile.safety.PathGuard
 import com.apk.claw.android.shizuku.ShizukuShellService
 import com.apk.claw.android.tool.BaseTool
 import com.apk.claw.android.tool.ToolParameter
@@ -47,6 +48,11 @@ class AppBackupTool : BaseTool() {
     override fun execute(params: Map<String, Any>): ToolResult {
         val action = requireString(params, "action")
         val backupDir = optionalString(params, "backup_dir", DEFAULT_BACKUP_DIR)
+
+        // 备份目录限制在 /sdcard 沙箱内，防止把任意 App 数据写出到 /system 等位置。
+        PathGuard.underSdcard(backupDir).let {
+            if (!it.allow) return ToolResult.error("Access denied: backup_dir 越界或敏感 (${it.reason})。仅允许 /sdcard 下的路径。")
+        }
 
         return when (action) {
             "backup" -> {

@@ -175,10 +175,17 @@ class DeviceDiscoveryManager(
             // 忽略自己的 beacon
             if (deviceId == localDeviceId) return
 
+            // 安全：以 UDP 实际源地址为准，忽略 beacon 内自报的 ip，防止注册表投毒
+            // （攻击者广播"他人 ip + 自己的 token"诱导控制端把指令发到错误设备）。
+            val advertisedIp = map["ip"] as? String
+            if (advertisedIp != null && advertisedIp != sourceIp) {
+                XLog.w(TAG, "Beacon ip($advertisedIp) 与 UDP 源($sourceIp)不一致，以源地址为准")
+            }
+
             val device = DeviceInfo(
                 deviceId = deviceId,
                 deviceName = map["deviceName"] as? String ?: deviceId,
-                ip = map["ip"] as? String ?: sourceIp,
+                ip = sourceIp,
                 configServerPort = (map["configServerPort"] as? Double)?.toInt() ?: ConfigServer.PORT,
                 androidVersion = map["androidVersion"] as? String ?: "",
                 appVersion = map["appVersion"] as? String ?: "",

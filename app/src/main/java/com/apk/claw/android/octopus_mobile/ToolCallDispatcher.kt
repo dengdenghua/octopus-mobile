@@ -106,7 +106,10 @@ class ToolCallDispatcher(
         val shortName = stripAndroidPrefix(name)
         // 转换 Any? 到 Any（ToolRegistry.executeTool 需要非空 Map）
         val cleanArgs = args.filterValues { it != null }.mapValues { it.value!! }
-        return toolRegistry.executeTool(shortName, cleanArgs)
+        // 远程母体下发的 tool/execute 标记为"不可信来源"：高危工具默认被来源闸门拦截(R2/R3)。
+        return ToolRegistry.withUntrustedSource {
+            toolRegistry.executeTool(shortName, cleanArgs)
+        }
     }
 
     /**

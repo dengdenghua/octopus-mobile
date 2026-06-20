@@ -28,7 +28,7 @@ class ToolCallGuardrailController(
         val IDEMPOTENT_TOOLS: Set<String> = setOf(
             "get_screen_info", "find_node_info", "get_installed_apps",
             "take_screenshot", "find_text", "wait",
-            "browser_get_dom", "browser_screenshot", "browser_evaluate",
+            "browser_get_dom", "browser_screenshot",
             "read_file", "get_clipboard", "get_current_app",
         )
 
@@ -43,6 +43,7 @@ class ToolCallGuardrailController(
         /** 危险工具（需要额外审批） */
         val DANGEROUS_TOOLS: Set<String> = setOf(
             "browser_install_extension",  // 装 CRX 有风险
+            "browser_evaluate",           // 在任意已登录页面执行任意 JS（会话/Cookie 窃取）
         )
 
         fun classifyTool(name: String): ToolKind {

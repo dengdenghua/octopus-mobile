@@ -323,7 +323,16 @@ object ShizukuShellService {
             "system", "secure", "global" -> namespace.lowercase()
             else -> return false
         }
-        val result = exec("settings put $ns $key $value") ?: return null
+        // 命令注入防护：key 限白名单字符，value（可含任意内容）单引号转义。
+        if (!key.matches(Regex("""^[a-zA-Z0-9_.:]+$"""))) {
+            Log.w(TAG, "Invalid setting key: $key")
+            return false
+        }
+        if (value.contains('\n') || value.contains('\r')) {
+            Log.w(TAG, "Invalid setting value")
+            return false
+        }
+        val result = exec("settings put $ns $key ${sanitizeShellArg(value)}") ?: return null
         return result.exitCode == 0
     }
 
@@ -736,7 +745,22 @@ object ShizukuShellService {
      * @param maxResults 最大返回数量
      */
     fun searchByContent(basePath: String, text: String, filePattern: String = "*", maxResults: Int = 20): String? {
-        val result = exec("grep -rl \"$text\" \"$basePath\" --include=\"$filePattern\" 2>/dev/null | head -n $maxResults")
+        // 命令注入防护：basePath/filePattern 走白名单校验，text（完全用户可控）走单引号转义。
+        if (!isValidPath(basePath)) {
+            Log.w(TAG, "Invalid basePath: $basePath")
+            return "Error: invalid path"
+        }
+        if (!filePattern.matches(Regex("""[a-zA-Z0-9_.?*\[\]-]+"""))) {
+            Log.w(TAG, "Invalid filePattern: $filePattern")
+            return "Error: invalid pattern"
+        }
+        if (text.isEmpty() || text.contains('\n') || text.contains('\r')) {
+            Log.w(TAG, "Invalid search text")
+            return "Error: invalid search text"
+        }
+        if (!INT_REGEX.matches(maxResults.toString())) return null
+        val safeText = sanitizeShellArg(text)
+        val result = exec("grep -rl $safeText \"$basePath\" --include=\"$filePattern\" 2>/dev/null | head -n $maxResults")
             ?: return null
         return result.stdout.trim()
     }
@@ -749,6 +773,11 @@ object ShizukuShellService {
      * @return 重复文件列表
      */
     fun findDuplicateFiles(basePath: String, minSizeMB: Int = 1): String? {
+        if (!isValidPath(basePath)) {
+            Log.w(TAG, "Invalid basePath: $basePath")
+            return "Error: invalid path"
+        }
+        if (!INT_REGEX.matches(minSizeMB.toString())) return null
         // 先找出大于 minSize 的文件，按大小排序找重复
         val cmd = """find "$basePath" -type f -size +${minSizeMB}M -exec ls -l {} \; 2>/dev/null | awk '{print \$5, \$9}' | sort -n | uniq -d -w 20 | head -n 30"""
         val result = exec(cmd) ?: return null

@@ -31,6 +31,19 @@ public class FileLoggingInterceptor implements Interceptor {
 
     private static final String TAG = "FileLoggingInterceptor";
 
+    /** 敏感请求/响应头：写日志时只保留前缀，避免把 token / cookie / api-key 落盘。 */
+    private static final java.util.Set<String> SENSITIVE_HEADERS = new java.util.HashSet<>(java.util.Arrays.asList(
+            "authorization", "proxy-authorization", "cookie", "set-cookie",
+            "x-api-key", "api-key", "x-auth-token", "x-goog-api-key"
+    ));
+
+    private static String redactHeaderValue(String name, String value) {
+        if (name != null && value != null && SENSITIVE_HEADERS.contains(name.toLowerCase(Locale.US))) {
+            return value.length() > 8 ? value.substring(0, 8) + "...[REDACTED]" : "[REDACTED]";
+        }
+        return value;
+    }
+
     private final File logDir;
 
     public FileLoggingInterceptor(File cacheDir) {
@@ -124,7 +137,8 @@ public class FileLoggingInterceptor implements Interceptor {
                 writer.write("Time: " + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US).format(new Date()) + "\n");
                 writer.write("\n--- Headers ---\n");
                 for (int i = 0; i < request.headers().size(); i++) {
-                    writer.write(request.headers().name(i) + ": " + request.headers().value(i) + "\n");
+                    String hn = request.headers().name(i);
+                    writer.write(hn + ": " + redactHeaderValue(hn, request.headers().value(i)) + "\n");
                 }
                 writer.write("\n--- Body ---\n");
                 writer.write(requestBody.isEmpty() ? "(empty)\n" : requestBody + "\n");
@@ -138,7 +152,8 @@ public class FileLoggingInterceptor implements Interceptor {
                 if (response != null) {
                     writer.write("\n--- Headers ---\n");
                     for (int i = 0; i < response.headers().size(); i++) {
-                        writer.write(response.headers().name(i) + ": " + response.headers().value(i) + "\n");
+                        String hn = response.headers().name(i);
+                        writer.write(hn + ": " + redactHeaderValue(hn, response.headers().value(i)) + "\n");
                     }
                 }
                 writer.write("\n--- Body ---\n");

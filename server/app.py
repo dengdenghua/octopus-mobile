@@ -26,11 +26,12 @@ import secrets
 import sqlite3
 import threading
 import time
+import asyncio
 from contextlib import closing
 from typing import Any
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, StreamingResponse
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, StreamingResponse
 
 # ─────────────────────────── 配置(env 可覆盖) ───────────────────────────
 DB_PATH = os.environ.get("OCTO_DB", os.path.join(os.path.dirname(__file__), "octo.db"))
@@ -90,8 +91,27 @@ REFERRAL_REDEEMER_BONUS = int(os.environ.get("REFERRAL_REDEEMER_BONUS", "200"))
 REFERRAL_INVITER_BONUS = int(os.environ.get("REFERRAL_INVITER_BONUS", "200"))
 
 # 会话:JWT(HS256,无第三方依赖)。生产务必把 JWT_SECRET 换成随机长串。
-JWT_SECRET = os.environ.get("JWT_SECRET", "dev-insecure-change-me")
+_jwt_secret_env = os.environ.get("JWT_SECRET", "")
+if not _jwt_secret_env:
+    if os.environ.get("ENV", "dev") == "production":
+        raise RuntimeError("JWT_SECRET must be set in production. Generate one with: python -c \"import secrets; print(secrets.token_urlsafe(48))\"")
+    # 未配置且非生产:生成一次性随机密钥(进程级),绝不回退到源码里的公开占位符,
+    # 避免误部署(忘了设 ENV=production)时任何人都能用已知 key 离线伪造任意账号 token。
+    # 代价:进程重启后旧 token 失效;多 worker 部署务必显式设置 JWT_SECRET。
+    _jwt_secret_env = secrets.token_urlsafe(48)
+    print("[WARN] JWT_SECRET 未设置,已生成一次性随机密钥(重启后失效)。生产环境请显式配置 JWT_SECRET。", flush=True)
+JWT_SECRET = _jwt_secret_env
 JWT_EXPIRE_SECONDS = int(os.environ.get("JWT_EXPIRE_SECONDS", str(30 * 24 * 3600)))
+
+# 第三方辅助工具下载镜像。生产把 Shizuku 官方 APK 放到 SHIZUKU_APK_PATH 指向的位置;
+# 没有配置文件时接口会返回 available=false, App 可提示稍后重试或打开官方文档。
+SHIZUKU_APK_PATH = os.environ.get(
+    "SHIZUKU_APK_PATH",
+    os.path.join(os.path.dirname(__file__), "downloads", "shizuku.apk"),
+)
+SHIZUKU_VERSION = os.environ.get("SHIZUKU_VERSION", "latest")
+SHIZUKU_SOURCE_URL = os.environ.get("SHIZUKU_SOURCE_URL", "https://shizuku.rikka.app/download/")
+SHIZUKU_LICENSE_URL = os.environ.get("SHIZUKU_LICENSE_URL", "https://github.com/RikkaApps/Shizuku")
 
 # 管理后台:设了 ADMIN_TOKEN 才开放 /admin/api/*(未设=全部 503,默认安全)。务必用随机长串。
 ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "")
@@ -115,13 +135,15 @@ GOODS = [
 ]
 GOODS_BY_ID = {g["id"]: g for g in GOODS}
 
-# 模型目录 = 用户可见的「两个档位」(display_name 是档位名,不暴露底层模型名)。
-# 极速档:agnes(走对平台免费的上游=我们零成本),0.5×,快;高级档:mimo-pro,1.0×,慢但强。
-# 两档照常按 multiplier 扣用户积分。可用 MODELS_JSON 覆盖。
+# 模型目录 = 用户可见的「三个档位」(display_name 是档位名,不暴露底层模型名)。
+# 极速档:agnes,0.2×;标准档:mimo flash,0.45×;高级档:mimo pro,0.8×。
+# 三档照常按 multiplier 扣用户积分。可用 MODELS_JSON 覆盖。
 _DEFAULT_MODELS = [
-    {"id": "agnes-2.0-flash", "display_name": "极速", "tier": "fast", "multiplier": 0.5,
+    {"id": "agnes-2.0-flash", "display_name": "极速", "tier": "fast", "multiplier": 0.2,
      "provider": "agnes", "recommended": True},
-    {"id": "mimo-v2.5-pro", "display_name": "高级", "tier": "premium", "multiplier": 1.0,
+    {"id": "mimo-v2-flash", "display_name": "标准", "tier": "flash", "multiplier": 0.45,
+     "provider": "mimo", "recommended": True},
+    {"id": "mimo-v2.5-pro", "display_name": "高级", "tier": "premium", "multiplier": 0.8,
      "provider": "mimo", "recommended": True},
 ]
 # 模型 id -> 完整 spec(provider/multiplier/...);MODELS_JSON 里没写 provider 的默认归到 mimo(向后兼容)。
@@ -214,6 +236,17 @@ def init_db() -> None:
                 id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER, action TEXT,
                 target_user TEXT, detail TEXT
             );
+            CREATE TABLE IF NOT EXISTS remote_devices(
+                device_id TEXT PRIMARY KEY, user_id TEXT NOT NULL,
+                device_name TEXT NOT NULL, token_hash TEXT NOT NULL,
+                created_at INTEGER NOT NULL, last_seen INTEGER NOT NULL,
+                revoked INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS remote_pair_codes(
+                code TEXT PRIMARY KEY, user_id TEXT NOT NULL,
+                device_name TEXT NOT NULL DEFAULT '', expires_at INTEGER NOT NULL,
+                claimed_device_id TEXT DEFAULT '', created_at INTEGER NOT NULL
+            );
             """
         )
         # 迁移:给已存在的 users 表补 email 列(幂等)
@@ -235,6 +268,8 @@ def init_db() -> None:
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_invite "
             "ON users(invite_code) WHERE invite_code IS NOT NULL"
         )
+        c.execute("CREATE INDEX IF NOT EXISTS idx_remote_devices_user ON remote_devices(user_id, revoked)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_remote_pair_codes_user ON remote_pair_codes(user_id, expires_at)")
         c.commit()
 
 
@@ -302,6 +337,121 @@ def actor(authorization: str = Header(default="")) -> sqlite3.Row:
     if row["banned"]:  # 封禁:令牌即刻作废,中转/账号接口全部拒绝
         raise HTTPException(status_code=403, detail="账号已被封禁")
     return row
+
+
+def user_from_bearer_token(token: str) -> sqlite3.Row | None:
+    """Load a user row from a raw JWT token. Used by WebSocket endpoints."""
+    claims = jwt_decode(token, JWT_SECRET) if token else None
+    if not claims:
+        return None
+    with closing(db()) as c:
+        row = c.execute("SELECT * FROM users WHERE user_id = ?", (claims.get("sub"),)).fetchone()
+    if row is None or row["banned"]:
+        return None
+    return row
+
+
+def _remote_secret_hash(secret: str) -> str:
+    return hmac.new(JWT_SECRET.encode("utf-8"), secret.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def _new_pair_code(c: sqlite3.Connection) -> str:
+    for _ in range(24):
+        code = f"{secrets.randbelow(1_000_000):06d}"
+        if not c.execute("SELECT 1 FROM remote_pair_codes WHERE code = ?", (code,)).fetchone():
+            return code
+    return f"{secrets.randbelow(1_000_000_000):09d}"
+
+
+class RemoteRelayHub:
+    """In-memory WebSocket switchboard for website console <-> online phone."""
+
+    def __init__(self) -> None:
+        self._lock = asyncio.Lock()
+        self._devices: dict[str, WebSocket] = {}
+        self._consoles: dict[str, set[WebSocket]] = {}
+        self._device_info: dict[str, dict[str, str]] = {}
+
+    async def attach_device(self, device_id: str, ws: WebSocket) -> None:
+        async with self._lock:
+            old = self._devices.get(device_id)
+            if old is not None and old is not ws:
+                await old.close(code=4001, reason="replaced")
+            self._devices[device_id] = ws
+            consoles = list(self._consoles.get(device_id, set()))
+        await self._broadcast(consoles, {"type": "device_status", "deviceId": device_id, "online": True})
+
+    async def detach_device(self, device_id: str, ws: WebSocket) -> None:
+        async with self._lock:
+            if self._devices.get(device_id) is ws:
+                self._devices.pop(device_id, None)
+                self._device_info.pop(device_id, None)
+            consoles = list(self._consoles.get(device_id, set()))
+        await self._broadcast(consoles, {"type": "device_status", "deviceId": device_id, "online": False})
+
+    async def update_device_info(self, device_id: str, info: dict[str, Any]) -> None:
+        lan_base_url = str(info.get("lanBaseUrl") or "").strip()
+        lan_auth_token = str(info.get("lanAuthToken") or "").strip()
+        lan_console_url = str(info.get("lanConsoleUrl") or "").strip()
+        safe_info = {
+            "lanBaseUrl": lan_base_url if lan_base_url.startswith("http://") else "",
+            "lanAuthToken": lan_auth_token[:256],
+            "lanConsoleUrl": lan_console_url if lan_console_url.startswith("http://") else "",
+        }
+        async with self._lock:
+            self._device_info[device_id] = safe_info
+            targets = list(self._consoles.get(device_id, set()))
+        await self._broadcast(targets, {
+            "type": "device_status",
+            "deviceId": device_id,
+            "online": True,
+            **safe_info,
+        })
+
+    async def attach_console(self, device_id: str, ws: WebSocket) -> bool:
+        async with self._lock:
+            self._consoles.setdefault(device_id, set()).add(ws)
+            online = device_id in self._devices
+        return online
+
+    async def detach_console(self, device_id: str, ws: WebSocket) -> None:
+        async with self._lock:
+            bucket = self._consoles.get(device_id)
+            if bucket is not None:
+                bucket.discard(ws)
+                if not bucket:
+                    self._consoles.pop(device_id, None)
+
+    async def send_to_device(self, device_id: str, message: dict[str, Any]) -> bool:
+        async with self._lock:
+            ws = self._devices.get(device_id)
+        if ws is None:
+            return False
+        await ws.send_json(message)
+        return True
+
+    async def send_to_consoles(self, device_id: str, message: dict[str, Any]) -> None:
+        async with self._lock:
+            targets = list(self._consoles.get(device_id, set()))
+        await self._broadcast(targets, message)
+
+    async def is_online(self, device_id: str) -> bool:
+        async with self._lock:
+            return device_id in self._devices
+
+    async def device_info(self, device_id: str) -> dict[str, str]:
+        async with self._lock:
+            return dict(self._device_info.get(device_id, {}))
+
+    async def _broadcast(self, targets: list[WebSocket], message: dict[str, Any]) -> None:
+        for target in targets:
+            try:
+                await target.send_json(message)
+            except Exception:
+                pass
+
+
+remote_hub = RemoteRelayHub()
 
 
 def _user(c: sqlite3.Connection, user_id: str) -> sqlite3.Row:
@@ -454,7 +604,18 @@ def email_send(body: dict[str, Any], request: Request) -> dict[str, Any]:
             (email, code, now_ms() + 300_000),
         )
         c.commit()
-    send_email(email, code)
+    try:
+        send_email(email, code)
+    except HTTPException:
+        with closing(db()) as c:
+            c.execute("DELETE FROM email_codes WHERE email = ?", (email,))
+            c.commit()
+        raise
+    except Exception as exc:  # noqa: BLE001 — SMTP 授权/网络失败时不要暴露裸 500
+        with closing(db()) as c:
+            c.execute("DELETE FROM email_codes WHERE email = ?", (email,))
+            c.commit()
+        raise HTTPException(status_code=502, detail="email send failed") from exc
     out = {"ok": True, "ttlSeconds": 300}
     if EMAIL_PROVIDER == "mock":
         out["devCode"] = code
@@ -527,6 +688,242 @@ def daily_claim(u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
         c.commit()
         bal = _user(c, u["user_id"])["credits"]
     return {"claimed": granted > 0, "credits": granted, "balance": bal}
+
+
+# ─────────────────────────── endpoints: remote console pairing / relay ───────────────────────────
+@app.post("/remote/pair/start")
+def remote_pair_start(body: dict[str, Any] = None, u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    """Create a short-lived pairing code from the website console."""
+    device_name = str((body or {}).get("deviceName", "")).strip()[:64]
+    ttl_ms = 5 * 60 * 1000
+    with closing(db()) as c:
+        code = _new_pair_code(c)
+        c.execute(
+            "INSERT INTO remote_pair_codes(code, user_id, device_name, expires_at, created_at) "
+            "VALUES(?,?,?,?,?)",
+            (code, u["user_id"], device_name, now_ms() + ttl_ms, now_ms()),
+        )
+        c.commit()
+    return {"code": code, "ttlSeconds": ttl_ms // 1000}
+
+
+@app.post("/remote/pair/claim")
+def remote_pair_claim(body: dict[str, Any], u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    """Claim a website-generated pairing code from the phone app."""
+    code = str(body.get("code", "")).strip()
+    device_name = str(body.get("deviceName", "")).strip()[:64] or "Octopus Mobile"
+    if not re.fullmatch(r"\d{6,9}", code):
+        raise HTTPException(status_code=400, detail="配对码格式不正确")
+    device_id = str(body.get("deviceId", "")).strip() or ("d_" + secrets.token_hex(8))
+    secret = "rt_" + secrets.token_urlsafe(32)
+    with closing(db()) as c:
+        rec = c.execute("SELECT * FROM remote_pair_codes WHERE code = ?", (code,)).fetchone()
+        if rec is None or rec["expires_at"] < now_ms() or rec["claimed_device_id"]:
+            raise HTTPException(status_code=400, detail="配对码无效或已过期")
+        if rec["user_id"] != u["user_id"]:
+            raise HTTPException(status_code=403, detail="配对码不属于当前账号")
+        c.execute(
+            "INSERT INTO remote_devices(device_id, user_id, device_name, token_hash, created_at, last_seen, revoked) "
+            "VALUES(?,?,?,?,?,?,0) "
+            "ON CONFLICT(device_id) DO UPDATE SET user_id=excluded.user_id, device_name=excluded.device_name, "
+            "token_hash=excluded.token_hash, last_seen=excluded.last_seen, revoked=0",
+            (device_id, u["user_id"], device_name, _remote_secret_hash(secret), now_ms(), now_ms()),
+        )
+        c.execute("UPDATE remote_pair_codes SET claimed_device_id = ? WHERE code = ?", (device_id, code))
+        c.commit()
+    return {"deviceId": device_id, "deviceToken": secret, "deviceName": device_name}
+
+
+@app.get("/remote/devices")
+async def remote_devices(u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    with closing(db()) as c:
+        rows = c.execute(
+            "SELECT device_id, device_name, created_at, last_seen, revoked FROM remote_devices "
+            "WHERE user_id = ? ORDER BY last_seen DESC",
+            (u["user_id"],),
+        ).fetchall()
+    items = []
+    for r in rows:
+        online = (not r["revoked"]) and await remote_hub.is_online(r["device_id"])
+        lan_info = await remote_hub.device_info(r["device_id"]) if online else {}
+        items.append({
+            "deviceId": r["device_id"],
+            "deviceName": r["device_name"],
+            "createdAt": r["created_at"],
+            "lastSeen": r["last_seen"],
+            "revoked": bool(r["revoked"]),
+            "online": online,
+            "lanBaseUrl": lan_info.get("lanBaseUrl", ""),
+            "lanAuthToken": lan_info.get("lanAuthToken", ""),
+            "lanConsoleUrl": lan_info.get("lanConsoleUrl", ""),
+            "directControlAvailable": bool(lan_info.get("lanConsoleUrl")),
+        })
+    return {
+        "items": items
+    }
+
+
+@app.post("/remote/devices/{device_id}/revoke")
+async def remote_device_revoke(device_id: str, u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    with closing(db()) as c:
+        cur = c.execute(
+            "UPDATE remote_devices SET revoked = 1 WHERE device_id = ? AND user_id = ?",
+            (device_id, u["user_id"]),
+        )
+        c.commit()
+    if cur.rowcount == 0:
+        raise HTTPException(status_code=404, detail="设备不存在")
+    await remote_hub.send_to_device(device_id, {"type": "revoked"})
+    return {"ok": True}
+
+
+@app.get("/remote/console", response_class=HTMLResponse)
+@app.get("/remote/console/", response_class=HTMLResponse)
+def remote_console_page() -> HTMLResponse:
+    return HTMLResponse(REMOTE_CONSOLE_HTML, headers={
+        "X-Robots-Tag": "noindex",
+        "Content-Security-Policy": ("default-src 'self'; img-src 'self' data:; "
+                                    "style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; "
+                                    "connect-src 'self' ws: wss:; base-uri 'none'; form-action 'none'"),
+    })
+
+
+def _load_remote_device(device_id: str) -> sqlite3.Row | None:
+    with closing(db()) as c:
+        return c.execute("SELECT * FROM remote_devices WHERE device_id = ?", (device_id,)).fetchone()
+
+
+@app.websocket("/remote/device/ws")
+async def remote_device_ws(ws: WebSocket, device_id: str = "", device_token: str = "") -> None:
+    await ws.accept()
+    row = _load_remote_device(device_id)
+    if (
+        row is None
+        or row["revoked"]
+        or not hmac.compare_digest(row["token_hash"], _remote_secret_hash(device_token))
+    ):
+        await ws.close(code=4003, reason="device auth failed")
+        return
+    with closing(db()) as c:
+        c.execute("UPDATE remote_devices SET last_seen = ? WHERE device_id = ?", (now_ms(), device_id))
+        c.commit()
+    await remote_hub.attach_device(device_id, ws)
+    await ws.send_json({"type": "hello", "deviceId": device_id})
+    try:
+        while True:
+            msg = await ws.receive_json()
+            if isinstance(msg, dict):
+                msg.setdefault("deviceId", device_id)
+                if msg.get("type") == "device_info":
+                    await remote_hub.update_device_info(device_id, msg)
+                else:
+                    await remote_hub.send_to_consoles(device_id, msg)
+    except WebSocketDisconnect:
+        pass
+    finally:
+        await remote_hub.detach_device(device_id, ws)
+        with closing(db()) as c:
+            c.execute("UPDATE remote_devices SET last_seen = ? WHERE device_id = ?", (now_ms(), device_id))
+            c.commit()
+
+
+@app.websocket("/remote/console/ws")
+async def remote_console_ws(ws: WebSocket, device_id: str = "", token: str = "") -> None:
+    await ws.accept()
+    u = user_from_bearer_token(token)
+    row = _load_remote_device(device_id)
+    if u is None or row is None or row["user_id"] != u["user_id"] or row["revoked"]:
+        await ws.close(code=4003, reason="console auth failed")
+        return
+    online = await remote_hub.attach_console(device_id, ws)
+    await ws.send_json({
+        "type": "device_status",
+        "deviceId": device_id,
+        "online": online,
+        **(await remote_hub.device_info(device_id) if online else {}),
+    })
+    try:
+        while True:
+            msg = await ws.receive_json()
+            if not isinstance(msg, dict):
+                continue
+            msg.setdefault("from", "console")
+            ok = await remote_hub.send_to_device(device_id, msg)
+            if not ok:
+                await ws.send_json({"type": "error", "id": msg.get("id"), "message": "设备不在线"})
+    except WebSocketDisconnect:
+        pass
+    finally:
+        await remote_hub.detach_console(device_id, ws)
+
+
+REMOTE_CONSOLE_HTML = r"""<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Octopus 远程控制台</title>
+<style>
+*{box-sizing:border-box}body{margin:0;min-height:100vh;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#172033;background:linear-gradient(145deg,#eef4ff,#f7fbff 46%,#eef8f1)}
+.wrap{max-width:1100px;margin:0 auto;padding:28px 16px 40px}.top{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:18px}
+h1{margin:0;font-size:30px;letter-spacing:0}.sub{margin:6px 0 0;color:#63708a;font-size:14px}.grid{display:grid;grid-template-columns:360px 1fr;gap:16px}
+.card{background:rgba(255,255,255,.72);border:1px solid rgba(255,255,255,.8);border-radius:22px;padding:18px;box-shadow:0 18px 48px rgba(61,83,123,.13);backdrop-filter:blur(18px)}
+.title{font-weight:800;margin-bottom:12px}.field{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}label{font-size:12px;color:#63708a;font-weight:700}
+input,textarea{width:100%;border:1px solid rgba(90,107,134,.18);background:rgba(255,255,255,.78);border-radius:14px;padding:11px 12px;font-size:14px;outline:none;color:#172033}
+textarea{min-height:110px;resize:vertical;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.row{display:flex;gap:8px;flex-wrap:wrap}.btn{border:0;border-radius:14px;padding:10px 14px;font-weight:800;cursor:pointer;color:white;background:linear-gradient(135deg,#4f6df5,#35b87a);box-shadow:0 12px 26px rgba(79,109,245,.2)}
+.btn.secondary{color:#22345a;background:rgba(255,255,255,.82);border:1px solid rgba(90,107,134,.14);box-shadow:none}.btn.danger{background:linear-gradient(135deg,#e34f61,#ff826a)}
+.device{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px;border-radius:16px;background:rgba(255,255,255,.54);border:1px solid rgba(90,107,134,.1);margin-bottom:8px}
+.name{font-weight:800}.meta{font-size:12px;color:#63708a;margin-top:3px}.pill{font-size:12px;font-weight:800;border-radius:999px;padding:5px 8px;background:#edf2ff;color:#4f6df5}.pill.on{background:#e8f8ee;color:#159354}.pill.off{background:#f4f0ef;color:#8a6a60}
+.log{height:360px;overflow:auto;background:#10131c;color:#dce6f7;border-radius:18px;padding:12px;font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap}
+.code{font-size:34px;font-weight:900;letter-spacing:8px;color:#22345a}.hint{font-size:12px;color:#63708a;line-height:1.6}.hidden{display:none}
+@media(max-width:820px){.top{display:block}.grid{grid-template-columns:1fr}.wrap{padding:20px 12px}.log{height:260px}}
+</style>
+</head>
+<body><div class="wrap">
+  <div class="top"><div><h1>Octopus 远程控制台</h1><p class="sub">通过官网域名配对手机,授权后控制在线设备。</p></div><button class="btn secondary" onclick="refreshDevices()">刷新设备</button></div>
+  <div class="grid">
+    <section class="card">
+      <div class="title">账号与配对</div>
+      <div class="field"><label>登录 token</label><input id="token" placeholder="粘贴网页登录返回的 JWT"></div>
+      <div class="row"><button class="btn" onclick="saveToken()">保存 token</button><button class="btn secondary" onclick="clearToken()">清除</button></div>
+      <hr style="border:0;border-top:1px solid rgba(90,107,134,.12);margin:16px 0">
+      <div class="field"><label>设备备注</label><input id="pairName" placeholder="例如: 我的安卓手机"></div>
+      <div class="row"><button class="btn" onclick="startPair()">生成配对码</button></div>
+      <div id="pairBox" class="hidden" style="margin-top:14px"><div class="hint">在手机 App 中输入该配对码,5 分钟内有效。</div><div class="code" id="pairCode"></div></div>
+      <hr style="border:0;border-top:1px solid rgba(90,107,134,.12);margin:16px 0">
+      <div class="title">设备</div>
+      <div id="devices"></div>
+    </section>
+    <section class="card">
+      <div class="title">控制会话</div>
+      <div class="hint" id="sessionHint">选择一台在线设备后连接。</div>
+      <div class="row" style="margin:12px 0"><button class="btn" onclick="connectSelected()">优先直连</button><button class="btn secondary" onclick="connectRelay()">服务器中转</button><button class="btn secondary" onclick="disconnect()">断开</button><button class="btn danger" onclick="revokeSelected()">撤销授权</button></div>
+      <div class="field"><label>发送 JSON 指令</label><textarea id="payload">{"type":"control","action":"home"}</textarea></div>
+      <div class="row"><button class="btn" onclick="sendPayload()">发送</button><button class="btn secondary" onclick="quick('back')">返回</button><button class="btn secondary" onclick="quick('home')">主屏</button><button class="btn secondary" onclick="quick('recent')">最近</button></div>
+      <div style="height:12px"></div><div class="log" id="log"></div>
+    </section>
+  </div>
+</div>
+<script>
+const $=s=>document.querySelector(s);let selected="",ws=null,devices={};
+$("#token").value=localStorage.octoRemoteToken||"";
+function tok(){return $("#token").value.trim()}function auth(){return {"Authorization":"Bearer "+tok(),"Content-Type":"application/json"}}
+function log(x){const el=$("#log");el.textContent+=((typeof x==="string")?x:JSON.stringify(x,null,2))+"\n";el.scrollTop=el.scrollHeight}
+function saveToken(){localStorage.octoRemoteToken=tok();refreshDevices()}function clearToken(){localStorage.removeItem("octoRemoteToken");$("#token").value="";$("#devices").innerHTML=""}
+async function api(path,opt={}){const r=await fetch(path,{...opt,headers:{...auth(),...(opt.headers||{})}});if(!r.ok)throw new Error(await r.text());return r.json()}
+async function startPair(){try{const d=await api("/remote/pair/start",{method:"POST",body:JSON.stringify({deviceName:$("#pairName").value})});$("#pairCode").textContent=d.code;$("#pairBox").classList.remove("hidden");log("配对码已生成: "+d.code)}catch(e){log("生成失败: "+e.message)}}
+async function refreshDevices(){try{const d=await api("/remote/devices");devices={};(d.items||[]).forEach(x=>devices[x.deviceId]=x);$("#devices").innerHTML=(d.items||[]).map(x=>`<div class="device" onclick="selectDevice('${x.deviceId}')"><div><div class="name">${esc(x.deviceName)}</div><div class="meta">${esc(x.deviceId)} · ${x.revoked?"已撤销":"最后在线 "+new Date(x.lastSeen).toLocaleString()}${x.directControlAvailable?" · 局域网直连可用":""}</div></div><span class="pill ${x.online?"on":"off"}">${x.directControlAvailable?"直连":(x.online?"在线":"离线")}</span></div>`).join("")||"<div class='hint'>暂无设备,先生成配对码。</div>"}catch(e){log("设备加载失败: "+e.message)}}
+function selectDevice(id){selected=id;const d=devices[id]||{};$("#sessionHint").textContent="已选择: "+(d.deviceName||id)+(d.directControlAvailable?" · 将优先打开局域网直连控制台":" · 可用服务器中转")}
+function wsUrl(){const p=location.protocol==="https:"?"wss:":"ws:";return p+"//"+location.host+"/remote/console/ws?device_id="+encodeURIComponent(selected)+"&token="+encodeURIComponent(tok())}
+function connectSelected(){if(!selected){log("请先选择设备");return}const d=devices[selected]||{};if(d.lanConsoleUrl){log("正在打开局域网直连控制台: "+d.lanConsoleUrl);window.open(d.lanConsoleUrl,"_blank","noopener");return}connectRelay()}
+function connectRelay(){if(!selected){log("请先选择设备");return}disconnect();ws=new WebSocket(wsUrl());ws.onopen=()=>log("服务器中转已连接");ws.onmessage=e=>{try{const msg=JSON.parse(e.data);log(msg);if(msg.type==="device_status"&&msg.deviceId){devices[msg.deviceId]={...(devices[msg.deviceId]||{}),...msg,directControlAvailable:!!msg.lanConsoleUrl}}}catch(_){log(e.data)}};ws.onclose=e=>log("连接关闭: "+e.code+" "+e.reason);ws.onerror=()=>log("连接异常")}
+function disconnect(){if(ws){ws.close(1000,"console disconnect");ws=null}}
+function sendPayload(){if(!ws||ws.readyState!==1){log("尚未连接设备");return}try{const msg=JSON.parse($("#payload").value);msg.id=msg.id||Date.now().toString(36);ws.send(JSON.stringify(msg));log({sent:msg})}catch(e){log("JSON 格式错误: "+e.message)}}
+function quick(action){$("#payload").value=JSON.stringify({type:"control",action},null,2);sendPayload()}
+async function revokeSelected(){if(!selected){log("请先选择设备");return}try{await api("/remote/devices/"+encodeURIComponent(selected)+"/revoke",{method:"POST",body:"{}"});log("已撤销授权");refreshDevices()}catch(e){log("撤销失败: "+e.message)}}
+function esc(s){return String(s||"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]))}
+refreshDevices();
+</script></body></html>"""
 
 
 # ─────────────────────────── endpoints: invite(拉新返利) ───────────────────────────
@@ -643,6 +1040,51 @@ def query_order(order_no: str, u: sqlite3.Row = Depends(actor)) -> dict[str, Any
 @app.post("/billing/webhook/{provider}")
 async def payment_webhook(provider: str, request: Request) -> JSONResponse:
     raise HTTPException(status_code=501, detail=f"webhook for '{provider}' not implemented")
+
+
+# ─────────────────── 第三方辅助工具下载镜像 ───────────────────
+def _file_sha256(path: str) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+@app.get("/downloads/shizuku/latest")
+def shizuku_latest(request: Request) -> dict[str, Any]:
+    """App 内一键安装入口的元信息。APK 文件由运维放置,服务端只做受控静态分发。"""
+    exists = os.path.isfile(SHIZUKU_APK_PATH)
+    info: dict[str, Any] = {
+        "name": "Shizuku",
+        "packageName": "moe.shizuku.privileged.api",
+        "version": SHIZUKU_VERSION,
+        "available": exists,
+        "sourceUrl": SHIZUKU_SOURCE_URL,
+        "licenseUrl": SHIZUKU_LICENSE_URL,
+    }
+    if not exists:
+        info["detail"] = "Shizuku APK is not configured on this server"
+        return info
+    info.update(
+        {
+            "downloadUrl": str(request.url_for("download_shizuku_apk")),
+            "sizeBytes": os.path.getsize(SHIZUKU_APK_PATH),
+            "sha256": _file_sha256(SHIZUKU_APK_PATH),
+        }
+    )
+    return info
+
+
+@app.get("/downloads/shizuku.apk", name="download_shizuku_apk")
+def download_shizuku_apk() -> FileResponse:
+    if not os.path.isfile(SHIZUKU_APK_PATH):
+        raise HTTPException(status_code=404, detail="Shizuku APK is not configured")
+    return FileResponse(
+        SHIZUKU_APK_PATH,
+        media_type="application/vnd.android.package-archive",
+        filename="Shizuku.apk",
+    )
 
 
 # ─────────────────── 模型目录 + 中转(多上游路由,按模型倍率扣积分,0=免费) ───────────────────
