@@ -2,11 +2,15 @@ package com.apk.claw.android.ui.featurescreens
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudQueue
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -29,8 +33,7 @@ import kotlinx.coroutines.withContext
 class CloudDriveActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { CloudDriveScreen(onBack = { finish() }) }
-        runCatching { window.statusBarColor = com.apk.claw.android.ui.compose.theme.OctopusColors.statusBarArgb }
+        setFeatureContent { CloudDriveScreen(onBack = { finish() }) }
     }
 }
 
@@ -91,7 +94,7 @@ fun CloudDriveScreen(onBack: () -> Unit) {
                     items(mounts, key = { it.id }) { m ->
                         FCard {
                             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { open(m) }) {
-                                Text("🗄️", fontSize = 18.sp)
+                                Icon(Icons.Filled.CloudQueue, contentDescription = null, tint = FPrimary, modifier = Modifier.size(20.dp))
                                 Spacer(Modifier.width(10.dp))
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(m.name, color = FText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
@@ -118,7 +121,7 @@ fun CloudDriveScreen(onBack: () -> Unit) {
                     items(folders, key = { "d" + it.href }) { e ->
                         FCard {
                             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { enter(e.href) }) {
-                                Text("📁", fontSize = 16.sp)
+                                Icon(Icons.Filled.Folder, contentDescription = null, tint = FPrimary, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(10.dp))
                                 Text(e.name, color = FText, fontSize = 14.sp, modifier = Modifier.weight(1f), maxLines = 1)
                                 Text("›", color = FMuted, fontSize = 18.sp)
@@ -137,7 +140,12 @@ fun CloudDriveScreen(onBack: () -> Unit) {
                                     } else it
                                 },
                             ) {
-                                Text(if (playable) "🎬" else "📄", fontSize = 16.sp)
+                                Icon(
+                                    if (playable) Icons.Filled.Movie else Icons.Filled.Description,
+                                    contentDescription = null,
+                                    tint = if (playable) FPrimary else FMuted,
+                                    modifier = Modifier.size(18.dp),
+                                )
                                 Spacer(Modifier.width(10.dp))
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(e.name, color = if (playable) FText else FMuted, fontSize = 14.sp, maxLines = 1)

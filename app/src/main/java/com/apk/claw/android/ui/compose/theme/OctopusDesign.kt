@@ -1,6 +1,7 @@
 package com.apk.claw.android.ui.compose.theme
 
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
@@ -57,7 +58,8 @@ object OctopusColors {
     // ── Text（与 XML colorText* 对齐）──
     val TextPrimary: Color get() = if (isLight) Color(0xF5000000) else Color(0xEBFFFFFF)
     val TextSecondary: Color get() = if (isLight) Color(0xAD000000) else Color(0xA3FFFFFF)
-    val TextTertiary: Color get() = if (isLight) Color(0x61000000) else Color(0x52FFFFFF)
+    // 提到 WCAG AA(≈4.5:1)：原 0x61/0x52 在白/暗底仅 ~2.7:1，正文级副文本不达标。
+    val TextTertiary: Color get() = if (isLight) Color(0x8A000000) else Color(0x8AFFFFFF)
     val TextDisabled: Color get() = if (isLight) Color(0x33000000) else Color(0x33FFFFFF)
     val TextInverse: Color get() = if (isLight) Color(0xFFFFFFFF) else Color(0xFF000000)
 
@@ -93,6 +95,12 @@ object OctopusTints {
 
     /** 热门标签红色（FeatureHubScreen 重复使用 3 次） */
     val Hot = Color(0xFFFF6B6B)
+
+    /** 浏览器分类色（DiscoverScreen 分类图标 + 快捷方式） */
+    val CatAI = Color(0xFF7C6BFF)
+    val CatVideo = Color(0xFFFF6B7A)
+    val CatDev = Color(0xFF5B9BFF)
+    val CatKnowledge = Color(0xFF30B889)
 }
 
 /**
@@ -143,6 +151,52 @@ object OctopusIconSize {
     val small = 16.dp
     val medium = 20.dp
     val large = 24.dp
+}
+
+/**
+ * 顶级 Compose 页面通用布局尺寸。
+ *
+ * Scaffold 已经把底部导航高度注入 innerPadding，页面只需要再留出少量
+ * 视觉呼吸空间；集中在这里，避免各 Tab 各写一套 magic number。
+ */
+object OctopusLayout {
+    val bottomNavContentPadding = 24.dp
+    val bottomNavHeight = 64.dp
+    val bottomNavItemHeight = 48.dp
+    val bottomNavElevation = 14.dp
+    val bottomNavBorder = 1.dp
+}
+
+/**
+ * 全局玻璃背景 token。
+ *
+ * 浏览器首页先完成了暖色液态玻璃方向，这里把同一套背景/玻璃面板语义提升为
+ * App 级别 token，避免一级页面各自散落一套颜色。
+ */
+object OctopusBackground {
+    fun pageBrush(): Brush = if (OctopusColors.isLight) {
+        Brush.linearGradient(
+            listOf(
+                Color(0xFF91A3B7),
+                Color(0xFFADA9B8),
+                Color(0xFFC0A197),
+            )
+        )
+    } else {
+        Brush.linearGradient(
+            listOf(
+                Color(0xFF17151D),
+                Color(0xFF211C24),
+                Color(0xFF2B2421),
+            )
+        )
+    }
+
+    val glassSurface: Color
+        get() = if (OctopusColors.isLight) Color.White.copy(alpha = 0.82f) else Color(0xFF222225).copy(alpha = 0.72f)
+
+    val glassBorder: Color
+        get() = if (OctopusColors.isLight) Color.White.copy(alpha = 0.82f) else Color.White.copy(alpha = 0.14f)
 }
 
 /**

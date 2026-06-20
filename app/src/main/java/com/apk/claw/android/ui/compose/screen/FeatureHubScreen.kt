@@ -2,30 +2,43 @@ package com.apk.claw.android.ui.compose.screen
 
 import android.content.Context
 import android.content.Intent
+import android.widget.Toast
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
+import androidx.compose.foundation.lazy.staggeredgrid.items as staggeredItems
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudQueue
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Extension
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.PeopleOutline
 import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.TrendingUp
@@ -45,9 +58,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -57,8 +72,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.apk.claw.android.R
+import com.apk.claw.android.octopus_mobile.RoutineStore
+import com.apk.claw.android.ui.compose.component.GlassBottomSheet
+import com.apk.claw.android.ui.compose.component.GlassCard
+import com.apk.claw.android.ui.compose.component.GlassPill
+import com.apk.claw.android.ui.compose.component.GlassTextPill
+import com.apk.claw.android.ui.compose.theme.OctopusBackground
 import com.apk.claw.android.ui.compose.theme.OctopusColors
 import com.apk.claw.android.ui.compose.theme.OctopusIconSize
+import com.apk.claw.android.ui.compose.theme.OctopusLayout
 import com.apk.claw.android.ui.compose.theme.OctopusShape
 import com.apk.claw.android.ui.compose.theme.OctopusSpacing
 import com.apk.claw.android.ui.compose.theme.OctopusType
@@ -72,6 +94,7 @@ import com.apk.claw.android.ui.featurescreens.RoutinesActivity
 import com.apk.claw.android.ui.featurescreens.SkillsActivity
 import com.apk.claw.android.ui.featurescreens.TrustCenterActivity
 import com.apk.claw.android.ui.featurescreens.VideoLibraryActivity
+import java.util.UUID
 
 /**
  * 「广场」中心 —— 双 Tab:
@@ -115,6 +138,129 @@ private val sampleCircles = listOf(
     CirclePreview(R.string.circle_tv_cast, Icons.Filled.Tv, VideoTint, "421", R.string.circle_tag_new),
 )
 
+private data class AgentDiscoveryPost(
+    val id: String,
+    val titleRes: Int,
+    val descRes: Int,
+    val authorRes: Int,
+    val authorInitialRes: Int,
+    val likes: String,
+    val topicRes: Int,
+    val tagRes: Int,
+    val tagColor: Color,
+    val coverHeight: Int,
+    val cover: List<Color>,
+    val usage: String,
+    val successRate: String,
+    val durationRes: Int,
+    val permissionsRes: List<Int>,
+)
+
+private val agentDiscoveryPosts = listOf(
+    AgentDiscoveryPost(
+        id = "agent-travel",
+        titleRes = R.string.agent_post_travel_title,
+        descRes = R.string.agent_post_travel_desc,
+        authorRes = R.string.agent_post_travel_author,
+        authorInitialRes = R.string.agent_post_travel_initial,
+        likes = "3.2k",
+        topicRes = R.string.agent_topic_life,
+        tagRes = R.string.agent_topic_life,
+        tagColor = RoutineTint,
+        coverHeight = 168,
+        cover = listOf(Color(0xFFFFB199), Color(0xFFFF0844)),
+        usage = "18.6k",
+        successRate = "92%",
+        durationRes = R.string.agent_post_travel_duration,
+        permissionsRes = listOf(R.string.agent_perm_browser, R.string.agent_perm_location, R.string.agent_perm_screenshot),
+    ),
+    AgentDiscoveryPost(
+        id = "agent-weekly",
+        titleRes = R.string.agent_post_weekly_title,
+        descRes = R.string.agent_post_weekly_desc,
+        authorRes = R.string.agent_post_weekly_author,
+        authorInitialRes = R.string.agent_post_weekly_initial,
+        likes = "2.8k",
+        topicRes = R.string.agent_topic_efficiency,
+        tagRes = R.string.agent_topic_efficiency,
+        tagColor = SkillTint,
+        coverHeight = 138,
+        cover = listOf(Color(0xFF667EEA), Color(0xFF764BA2)),
+        usage = "12.4k",
+        successRate = "95%",
+        durationRes = R.string.agent_post_weekly_duration,
+        permissionsRes = listOf(R.string.agent_perm_calendar, R.string.agent_perm_clipboard, R.string.agent_perm_document),
+    ),
+    AgentDiscoveryPost(
+        id = "agent-phone",
+        titleRes = R.string.agent_post_phone_title,
+        descRes = R.string.agent_post_phone_desc,
+        authorRes = R.string.agent_post_phone_author,
+        authorInitialRes = R.string.agent_post_phone_initial,
+        likes = "1.7k",
+        topicRes = R.string.agent_topic_device,
+        tagRes = R.string.agent_topic_device,
+        tagColor = WindowTint,
+        coverHeight = 190,
+        cover = listOf(Color(0xFF134E5E), Color(0xFF71B280)),
+        usage = "8.1k",
+        successRate = "89%",
+        durationRes = R.string.agent_post_phone_duration,
+        permissionsRes = listOf(R.string.agent_perm_accessibility, R.string.agent_perm_notification, R.string.agent_perm_background),
+    ),
+    AgentDiscoveryPost(
+        id = "agent-shopping",
+        titleRes = R.string.agent_post_shopping_title,
+        descRes = R.string.agent_post_shopping_desc,
+        authorRes = R.string.agent_post_shopping_author,
+        authorInitialRes = R.string.agent_post_shopping_initial,
+        likes = "4.6k",
+        topicRes = R.string.agent_topic_automation,
+        tagRes = R.string.agent_topic_automation,
+        tagColor = com.apk.claw.android.ui.compose.theme.OctopusTints.Hot,
+        coverHeight = 156,
+        cover = listOf(Color(0xFFFFD194), Color(0xFFD1913C)),
+        usage = "23.9k",
+        successRate = "91%",
+        durationRes = R.string.agent_post_shopping_duration,
+        permissionsRes = listOf(R.string.agent_perm_browser, R.string.agent_perm_notification, R.string.agent_perm_timer),
+    ),
+    AgentDiscoveryPost(
+        id = "agent-paper",
+        titleRes = R.string.agent_post_paper_title,
+        descRes = R.string.agent_post_paper_desc,
+        authorRes = R.string.agent_post_paper_author,
+        authorInitialRes = R.string.agent_post_paper_initial,
+        likes = "986",
+        topicRes = R.string.agent_topic_learning,
+        tagRes = R.string.agent_topic_learning,
+        tagColor = MemoryTint,
+        coverHeight = 176,
+        cover = listOf(Color(0xFF00C6FF), Color(0xFF0072FF)),
+        usage = "6.5k",
+        successRate = "94%",
+        durationRes = R.string.agent_post_paper_duration,
+        permissionsRes = listOf(R.string.agent_perm_file, R.string.agent_perm_browser, R.string.agent_perm_clipboard),
+    ),
+    AgentDiscoveryPost(
+        id = "agent-voice",
+        titleRes = R.string.agent_post_voice_title,
+        descRes = R.string.agent_post_voice_desc,
+        authorRes = R.string.agent_post_voice_author,
+        authorInitialRes = R.string.agent_post_voice_initial,
+        likes = "742",
+        topicRes = R.string.agent_topic_automation,
+        tagRes = R.string.agent_tag_voice,
+        tagColor = TrustTint,
+        coverHeight = 146,
+        cover = listOf(Color(0xFFF2994A), Color(0xFFF2C94C)),
+        usage = "5.7k",
+        successRate = "88%",
+        durationRes = R.string.agent_post_voice_duration,
+        permissionsRes = listOf(R.string.agent_perm_mic, R.string.agent_perm_notification, R.string.agent_perm_accessibility),
+    ),
+)
+
 private fun featureSections(): List<Pair<Int, List<FeatureItem>>> = listOf(
     R.string.feat_section_automation to listOf(
         FeatureItem(R.string.feat_skills, R.string.feat_skills_desc, Icons.Filled.Bolt, SkillTint, SkillsActivity::class.java),
@@ -140,26 +286,58 @@ fun FeatureHubScreen(
 ) {
     val ctx = LocalContext.current
     var tab by remember { mutableStateOf(0) }
+    var selectedPost by remember { mutableStateOf<AgentDiscoveryPost?>(null) }
 
     val sections = remember { featureSections() }
 
-    Column(modifier = Modifier.fillMaxSize().background(OctopusColors.Background).statusBarsPadding()) {
-        // 顶部双 Tab
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(start = OctopusSpacing.xl, end = OctopusSpacing.xl, top = OctopusSpacing.md, bottom = OctopusSpacing.xs),
-            verticalAlignment = Alignment.Bottom,
-        ) {
-            TabLabel(stringResource(R.string.feat_explore_title), selected = tab == 0) { tab = 0 }
-            Spacer(Modifier.width(OctopusSpacing.xl))
-            TabLabel(stringResource(R.string.feat_toolbox_title), selected = tab == 1) { tab = 1 }
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize().background(OctopusBackground.pageBrush()).statusBarsPadding()) {
+            // 顶部双 Tab
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(start = OctopusSpacing.xl, end = OctopusSpacing.xl, top = OctopusSpacing.md, bottom = OctopusSpacing.xs),
+                verticalAlignment = Alignment.Bottom,
+            ) {
+                TabLabel(stringResource(R.string.feat_explore_title), selected = tab == 0) { tab = 0 }
+                Spacer(Modifier.width(OctopusSpacing.xl))
+                TabLabel(stringResource(R.string.feat_toolbox_title), selected = tab == 1) { tab = 1 }
+            }
+
+            when (tab) {
+                0 -> ExploreTab(
+                    onOpenActivity = { ctx.open(it) },
+                    onNavigateToAgentSquare = onNavigateToAgentSquare,
+                    onOpenPost = { selectedPost = it },
+                )
+                else -> ToolboxTab(sections) { ctx.open(it.target) }
+            }
         }
 
-        when (tab) {
-            0 -> ExploreTab(
-                onOpenActivity = { ctx.open(it) },
-                onNavigateToAgentSquare = onNavigateToAgentSquare,
+        selectedPost?.let { post ->
+            // Pre-resolve strings outside the non-composable onRun lambda
+            val postTitle = stringResource(post.titleRes)
+            val postDesc = stringResource(post.descRes)
+            val reproducePrefix = stringResource(R.string.agent_reproduce_prefix)
+            val reproduceTarget = stringResource(R.string.agent_reproduce_target)
+            val reproduceSuffix = stringResource(R.string.agent_reproduce_suffix)
+            val targetLabel = stringResource(R.string.control_target_local)
+
+            AgentDiscoveryDetail(
+                post = post,
+                onDismiss = { selectedPost = null },
+                onRun = {
+                    val routineName = savePostAsRoutine(
+                        title = postTitle,
+                        desc = postDesc,
+                        reproducePrefix = reproducePrefix,
+                        reproduceTarget = reproduceTarget,
+                        reproduceSuffix = reproduceSuffix,
+                        targetLabel = targetLabel,
+                    )
+                    Toast.makeText(ctx, ctx.getString(R.string.agent_reproduce_toast, routineName), Toast.LENGTH_SHORT).show()
+                    selectedPost = null
+                    ctx.open(RoutinesActivity::class.java)
+                },
             )
-            else -> ToolboxTab(sections) { ctx.open(it.target) }
         }
     }
 }
@@ -184,92 +362,447 @@ private fun TabLabel(text: String, selected: Boolean, onClick: () -> Unit) {
     }
 }
 
-// ── 探索 Tab：INS 风格社交圈子 ──────────────────────────
+// ── 探索 Tab：灵感瀑布流 ──────────────────────────
 
 @Composable
 private fun ExploreTab(
     onOpenActivity: (Class<*>) -> Unit,
     onNavigateToAgentSquare: () -> Unit,
+    onOpenPost: (AgentDiscoveryPost) -> Unit,
 ) {
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(2),
+    var selectedTopic by remember { mutableStateOf(R.string.agent_square_tab_recommend) }
+    val filteredPosts = remember(selectedTopic) {
+        if (selectedTopic == R.string.agent_square_tab_recommend) agentDiscoveryPosts else agentDiscoveryPosts.filter { it.topicRes == selectedTopic }
+    }
+    LazyVerticalStaggeredGrid(
+        columns = StaggeredGridCells.Fixed(2),
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = OctopusSpacing.lg, end = OctopusSpacing.lg, top = OctopusSpacing.xs, bottom = 112.dp),
+        contentPadding = PaddingValues(
+            start = OctopusSpacing.lg,
+            end = OctopusSpacing.lg,
+            top = OctopusSpacing.sm,
+            bottom = OctopusLayout.bottomNavContentPadding,
+        ),
         horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.md),
-        verticalArrangement = Arrangement.spacedBy(OctopusSpacing.md),
+        verticalItemSpacing = OctopusSpacing.md,
     ) {
-        // 热门圈子
-        item(span = { GridItemSpan(maxLineSpan) }) {
+        item(span = StaggeredGridItemSpan.FullLine) {
+            AgentDiscoveryHeader(
+                onSearch = onNavigateToAgentSquare,
+                onCreate = { onOpenActivity(SkillsActivity::class.java) },
+            )
+        }
+
+        item(span = StaggeredGridItemSpan.FullLine) {
+            AgentTopicChips(selectedTopic = selectedTopic, onSelect = { selectedTopic = it })
+        }
+
+        item(span = StaggeredGridItemSpan.FullLine) {
             SectionHeaderWithAction(
-                stringResource(R.string.feat_explore_hot_circles),
+                if (selectedTopic == R.string.agent_square_tab_recommend) stringResource(R.string.agent_trending_now) else stringResource(R.string.agent_topic_inspiration, stringResource(selectedTopic)),
                 Icons.Filled.Whatshot,
                 com.apk.claw.android.ui.compose.theme.OctopusTints.Hot,
             )
         }
-        itemsIndexed(sampleCircles) { index, circle ->
-            CircleCard(circle, index, onOpenActivity)
-        }
 
-        // 推荐技能
-        item(span = { GridItemSpan(maxLineSpan) }) {
-            SectionHeaderWithAction(
-                stringResource(R.string.feat_explore_recommended),
-                Icons.Filled.Bolt,
-                SkillTint,
-            )
+        staggeredItems(filteredPosts, key = { it.id }) { post ->
+            AgentDiscoveryCard(post, onClick = { onOpenPost(post) })
         }
-        item(span = { GridItemSpan(maxLineSpan) }) {
-            ExploreEntryCard(
-                Icons.Filled.Bolt, SkillTint,
-                stringResource(R.string.feat_explore_all_skills),
-                stringResource(R.string.feat_explore_all_skills_desc),
-            ) { onOpenActivity(SkillsActivity::class.java) }
-        }
+    }
+}
 
-        // Agent 广场
-        item(span = { GridItemSpan(maxLineSpan) }) {
-            SectionHeaderWithAction(
-                "Agent 广场",
-                Icons.Filled.SmartToy,
-                BrowserTint,
-            )
-        }
-        item(span = { GridItemSpan(maxLineSpan) }) {
-            ExploreEntryCard(
-                Icons.Filled.SmartToy,
-                BrowserTint,
-                "发现 Agent 玩法",
-                "像刷小红书一样浏览 Agent 技能、教程与作品",
-                onClick = onNavigateToAgentSquare,
-            )
-        }
-
-        // 我的圈子（占位）
-        item(span = { GridItemSpan(maxLineSpan) }) {
-            SectionHeaderWithAction(
-                stringResource(R.string.feat_explore_my_circles),
-                Icons.Filled.PeopleOutline,
-                OctopusColors.Primary,
-            )
-        }
-        item(span = { GridItemSpan(maxLineSpan) }) {
-            // 空状态引导
-            Surface(
-                shape = OctopusShape.large,
-                color = OctopusColors.Surface,
-                border = BorderStroke(1.dp, OctopusColors.Border.copy(alpha = 0.6f)),
-                modifier = Modifier.fillMaxWidth().clip(OctopusShape.large).clickable { onOpenActivity(SkillsActivity::class.java) },
-            ) {
-                Column(
-                    modifier = Modifier.padding(vertical = OctopusSpacing.xxl),
-                    horizontalAlignment = Alignment.CenterHorizontally,
+@Composable
+private fun AgentDiscoveryHeader(
+    onSearch: () -> Unit,
+    onCreate: () -> Unit,
+) {
+    GlassCard(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(OctopusSpacing.lg)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .background(BrowserTint.copy(alpha = 0.18f), CircleShape),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Filled.PeopleOutline, contentDescription = null, tint = OctopusColors.TextMuted.copy(alpha = 0.5f), modifier = Modifier.size(32.dp))
-                    Spacer(Modifier.height(OctopusSpacing.sm))
-                    Text(stringResource(R.string.feat_explore_join_circle), color = OctopusColors.TextSecondary, fontSize = OctopusType.body, fontWeight = FontWeight.Medium)
-                    Spacer(Modifier.height(OctopusSpacing.xs))
-                    Text(stringResource(R.string.feat_explore_join_circle_hint), color = OctopusColors.TextMuted, fontSize = OctopusType.caption)
+                    Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = BrowserTint, modifier = Modifier.size(22.dp))
                 }
+                Spacer(Modifier.width(OctopusSpacing.md))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        stringResource(R.string.agent_inspiration_plaza),
+                        color = OctopusColors.TextPrimary,
+                        fontSize = OctopusType.title,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                    )
+                    Spacer(Modifier.height(OctopusSpacing.xs))
+                    Text(
+                        stringResource(R.string.agent_inspiration_desc),
+                        color = OctopusColors.TextMuted,
+                        fontSize = OctopusType.caption,
+                        lineHeight = 15.sp,
+                        maxLines = 2,
+                    )
+                }
+            }
+            Spacer(Modifier.height(OctopusSpacing.md))
+            Row(horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.sm), modifier = Modifier.fillMaxWidth()) {
+                AgentActionPill(Icons.Filled.Search, stringResource(R.string.agent_action_search), BrowserTint, Modifier.weight(1f), onSearch)
+                AgentActionPill(Icons.Filled.Add, stringResource(R.string.agent_action_publish), SkillTint, Modifier.weight(1f), onCreate)
+            }
+        }
+    }
+}
+
+@Composable
+private fun AgentActionPill(
+    icon: ImageVector,
+    text: String,
+    tint: Color,
+    modifier: Modifier,
+    onClick: () -> Unit,
+) {
+    GlassPill(icon = icon, text = text, tint = tint, modifier = modifier, onClick = onClick)
+}
+
+@Composable
+private fun AgentTopicChips(
+    selectedTopic: Int,
+    onSelect: (Int) -> Unit,
+) {
+    val topics = listOf(
+        R.string.agent_square_tab_recommend to com.apk.claw.android.ui.compose.theme.OctopusTints.Hot,
+        R.string.agent_topic_automation to RoutineTint,
+        R.string.agent_topic_efficiency to SkillTint,
+        R.string.agent_topic_life to CloudTint,
+        R.string.agent_topic_learning to MemoryTint,
+        R.string.agent_topic_device to WindowTint,
+    )
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(OctopusSpacing.sm),
+    ) {
+        topics.chunked(3).forEach { row ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.sm),
+            ) {
+                row.forEach { (label, tint) ->
+                    GlassTextPill(
+                        text = stringResource(label),
+                        tint = tint,
+                        selected = selectedTopic == label,
+                        onClick = { onSelect(label) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun savePostAsRoutine(title: String, desc: String, reproducePrefix: String, reproduceTarget: String, reproduceSuffix: String, targetLabel: String): String {
+    val name = title.take(24)
+    val prompt = buildString {
+        append(reproducePrefix)
+        append(title)
+        append(reproduceTarget)
+        append(desc)
+        append(reproduceSuffix)
+    }
+    RoutineStore.add(
+        RoutineStore.Routine(
+            id = "inspiration-${UUID.randomUUID()}",
+            name = name,
+            prompt = prompt,
+            targetId = "local",
+            targetLabel = targetLabel,
+            createdAt = System.currentTimeMillis(),
+        )
+    )
+    return name
+}
+
+/** 按主题给灵感卡片不同的封面图标，避免所有卡片都用同一个机器人图标。 */
+private fun discoveryIconFor(topicRes: Int): androidx.compose.ui.graphics.vector.ImageVector = when (topicRes) {
+    R.string.agent_topic_automation -> Icons.Filled.Bolt
+    R.string.agent_topic_efficiency -> Icons.Filled.TrendingUp
+    R.string.agent_topic_life -> Icons.Filled.Weekend
+    R.string.agent_topic_learning -> Icons.Filled.Psychology
+    R.string.agent_topic_device -> Icons.Filled.PhoneAndroid
+    else -> Icons.Filled.AutoAwesome
+}
+
+@Composable
+private fun AgentDiscoveryCard(post: AgentDiscoveryPost, onClick: () -> Unit) {
+    GlassCard(modifier = Modifier.fillMaxWidth(), onClick = onClick) {
+        Column {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(post.coverHeight.dp)
+                    .background(Brush.verticalGradient(post.cover)),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(OctopusSpacing.sm)
+                        .background(Color.Black.copy(alpha = 0.34f), OctopusShape.capsule)
+                        .padding(horizontal = OctopusSpacing.sm, vertical = OctopusSpacing.xs),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(modifier = Modifier.size(6.dp).background(post.tagColor, CircleShape))
+                    Spacer(Modifier.width(OctopusSpacing.xs))
+                    Text(stringResource(post.tagRes), color = Color.White, fontSize = OctopusType.tag, fontWeight = FontWeight.SemiBold)
+                }
+                Icon(
+                    discoveryIconFor(post.topicRes),
+                    contentDescription = null,
+                    tint = Color.White.copy(alpha = 0.78f),
+                    modifier = Modifier.align(Alignment.Center).size(34.dp),
+                )
+            }
+            Column(modifier = Modifier.padding(OctopusSpacing.md)) {
+                Text(
+                    stringResource(post.titleRes),
+                    color = OctopusColors.TextPrimary,
+                    fontSize = OctopusType.body,
+                    fontWeight = FontWeight.SemiBold,
+                    lineHeight = 18.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(OctopusSpacing.xs))
+                Text(
+                    stringResource(post.descRes),
+                    color = OctopusColors.TextMuted,
+                    fontSize = OctopusType.caption,
+                    lineHeight = 15.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(OctopusSpacing.sm))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(22.dp)
+                            .background(post.tagColor.copy(alpha = 0.18f), CircleShape),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(stringResource(post.authorInitialRes), color = post.tagColor, fontSize = OctopusType.tag, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(Modifier.width(OctopusSpacing.xs))
+                    Text(
+                        stringResource(post.authorRes),
+                        modifier = Modifier.weight(1f),
+                        color = OctopusColors.TextMuted,
+                        fontSize = OctopusType.caption,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Icon(
+                        Icons.Filled.Favorite,
+                        contentDescription = null,
+                        tint = OctopusColors.TextMuted.copy(alpha = 0.58f),
+                        modifier = Modifier.size(OctopusIconSize.small),
+                    )
+                    Spacer(Modifier.width(OctopusSpacing.xs))
+                    Text(post.likes, color = OctopusColors.TextMuted, fontSize = OctopusType.tag, maxLines = 1)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AgentDiscoveryDetail(
+    post: AgentDiscoveryPost,
+    onDismiss: () -> Unit,
+    onRun: () -> Unit,
+) {
+    val maxSheetHeight = (LocalConfiguration.current.screenHeightDp * 0.64f).dp
+    val scrollState = rememberScrollState()
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(OctopusColors.OverlayScrim)
+            .padding(horizontal = OctopusSpacing.lg)
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .padding(bottom = 96.dp),
+        contentAlignment = Alignment.BottomCenter,
+    ) {
+        GlassBottomSheet(
+            modifier = Modifier
+                .fillMaxWidth(),
+            maxHeight = maxSheetHeight,
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(scrollState)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(150.dp)
+                        .clip(OctopusShape.large)
+                        .background(Brush.verticalGradient(post.cover)),
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(OctopusSpacing.md)
+                            .background(Color.Black.copy(alpha = 0.34f), OctopusShape.capsule)
+                            .padding(horizontal = OctopusSpacing.sm, vertical = OctopusSpacing.xs),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(modifier = Modifier.size(6.dp).background(post.tagColor, CircleShape))
+                        Spacer(Modifier.width(OctopusSpacing.xs))
+                        Text(stringResource(post.tagRes), color = Color.White, fontSize = OctopusType.tag, fontWeight = FontWeight.SemiBold)
+                    }
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(OctopusSpacing.sm)
+                            .size(34.dp)
+                            .clip(CircleShape)
+                            .background(Color.Black.copy(alpha = 0.24f))
+                            .clickable(onClick = onDismiss),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(Icons.Filled.Close, contentDescription = null, tint = Color.White, modifier = Modifier.size(OctopusIconSize.medium))
+                    }
+                    Icon(
+                        Icons.Filled.SmartToy,
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.78f),
+                        modifier = Modifier.align(Alignment.Center).size(42.dp),
+                    )
+                }
+
+                Spacer(Modifier.height(OctopusSpacing.md))
+                Text(
+                    stringResource(post.titleRes),
+                    color = OctopusColors.TextPrimary,
+                    fontSize = OctopusType.title,
+                    fontWeight = FontWeight.Bold,
+                    lineHeight = 22.sp,
+                )
+                Spacer(Modifier.height(OctopusSpacing.xs))
+                Text(
+                    stringResource(post.descRes),
+                    color = OctopusColors.TextSecondary,
+                    fontSize = OctopusType.body,
+                    lineHeight = 19.sp,
+                )
+
+                Spacer(Modifier.height(OctopusSpacing.md))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .background(post.tagColor.copy(alpha = 0.18f), CircleShape),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(stringResource(post.authorInitialRes), color = post.tagColor, fontSize = OctopusType.label, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(Modifier.width(OctopusSpacing.sm))
+                    Text(stringResource(post.authorRes), color = OctopusColors.TextSecondary, fontSize = OctopusType.body, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.weight(1f))
+                    Icon(Icons.Filled.Favorite, contentDescription = null, tint = OctopusColors.TextMuted.copy(alpha = 0.65f), modifier = Modifier.size(OctopusIconSize.small))
+                    Spacer(Modifier.width(OctopusSpacing.xs))
+                    Text(post.likes, color = OctopusColors.TextMuted, fontSize = OctopusType.caption)
+                }
+
+                Spacer(Modifier.height(OctopusSpacing.md))
+                Row(horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.sm), modifier = Modifier.fillMaxWidth()) {
+                    DetailMetric(stringResource(R.string.agent_metric_usage), post.usage, post.tagColor, Modifier.weight(1f))
+                    DetailMetric(stringResource(R.string.agent_metric_success_rate), post.successRate, RoutineTint, Modifier.weight(1f))
+                    DetailMetric(stringResource(R.string.agent_metric_duration), stringResource(post.durationRes), BrowserTint, Modifier.weight(1f))
+                }
+
+                Spacer(Modifier.height(OctopusSpacing.md))
+                DetailSection(stringResource(R.string.agent_detail_how_to_use), listOf(stringResource(R.string.agent_detail_use_1), stringResource(R.string.agent_detail_use_2), stringResource(R.string.agent_detail_use_3)))
+
+                Spacer(Modifier.height(OctopusSpacing.md))
+                DetailSection(stringResource(R.string.agent_detail_prerequisites), listOf(stringResource(R.string.agent_detail_prereq_1), stringResource(R.string.agent_detail_prereq_2), stringResource(R.string.agent_detail_prereq_3)))
+
+                Spacer(Modifier.height(OctopusSpacing.md))
+                PermissionChips(stringResource(R.string.agent_detail_permissions), post.permissionsRes.map { stringResource(it) }, post.tagColor)
+
+                Spacer(Modifier.height(OctopusSpacing.lg))
+                Row(horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.sm), modifier = Modifier.fillMaxWidth()) {
+                    AgentActionPill(Icons.Filled.Favorite, stringResource(R.string.agent_action_favorite), post.tagColor, Modifier.weight(1f), onDismiss)
+                    AgentActionPill(Icons.Filled.PlayArrow, stringResource(R.string.agent_action_reproduce), OctopusColors.Primary, Modifier.weight(1f), onRun)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DetailMetric(label: String, value: String, tint: Color, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .clip(OctopusShape.large)
+            .background(tint.copy(alpha = if (OctopusColors.isLight) 0.11f else 0.16f))
+            .padding(horizontal = OctopusSpacing.sm, vertical = OctopusSpacing.sm),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(label, color = OctopusColors.TextMuted, fontSize = OctopusType.tag, maxLines = 1)
+        Spacer(Modifier.height(2.dp))
+        Text(value, color = tint, fontSize = OctopusType.caption, fontWeight = FontWeight.Bold, maxLines = 1)
+    }
+}
+
+@Composable
+private fun PermissionChips(title: String, permissions: List<String>, tint: Color) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(OctopusShape.large)
+            .background(if (OctopusColors.isLight) Color.White.copy(alpha = 0.72f) else Color.White.copy(alpha = 0.08f))
+            .padding(OctopusSpacing.md),
+    ) {
+        Text(title, color = OctopusColors.TextPrimary, fontSize = OctopusType.label, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(OctopusSpacing.sm))
+        Row(horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.sm), modifier = Modifier.fillMaxWidth()) {
+            permissions.take(3).forEach { permission ->
+                GlassTextPill(
+                    text = permission,
+                    tint = tint,
+                    onClick = {},
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DetailSection(title: String, lines: List<String>) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(OctopusShape.large)
+            .background(if (OctopusColors.isLight) Color.White.copy(alpha = 0.72f) else Color.White.copy(alpha = 0.08f))
+            .padding(OctopusSpacing.md),
+    ) {
+        Text(title, color = OctopusColors.TextPrimary, fontSize = OctopusType.label, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(OctopusSpacing.sm))
+        lines.forEach { line ->
+            Row(verticalAlignment = Alignment.Top, modifier = Modifier.padding(vertical = 2.dp)) {
+                Box(
+                    modifier = Modifier
+                        .padding(top = 6.dp)
+                        .size(5.dp)
+                        .background(OctopusColors.Primary.copy(alpha = 0.55f), CircleShape),
+                )
+                Spacer(Modifier.width(OctopusSpacing.sm))
+                Text(line, color = OctopusColors.TextSecondary, fontSize = OctopusType.caption, lineHeight = 16.sp)
             }
         }
     }
@@ -296,16 +829,12 @@ private fun CircleCard(
         label = "circle_offset",
     )
 
-    Surface(
-        color = OctopusColors.Surface,
-        shape = OctopusShape.large,
-        border = BorderStroke(1.dp, OctopusColors.Border.copy(alpha = 0.6f)),
+    GlassCard(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(OctopusShape.large)
-            .clickable { onOpenActivity(SkillsActivity::class.java) }
             .alpha(alpha)
             .graphicsLayer { translationY = offsetY },
+        onClick = { onOpenActivity(SkillsActivity::class.java) },
     ) {
         Column(
             modifier = Modifier.padding(OctopusSpacing.md),
@@ -382,11 +911,9 @@ private fun SectionHeaderWithAction(text: String, icon: ImageVector, tint: Color
 /** 整行入口卡片（图标 + 标题 + 描述 + 右箭头） */
 @Composable
 private fun ExploreEntryCard(icon: ImageVector, tint: Color, title: String, desc: String, onClick: () -> Unit) {
-    Surface(
-        color = OctopusColors.Surface,
-        shape = OctopusShape.large,
-        border = BorderStroke(1.dp, OctopusColors.Border.copy(alpha = 0.6f)),
-        modifier = Modifier.fillMaxWidth().clip(OctopusShape.large).clickable(onClick = onClick),
+    GlassCard(
+        modifier = Modifier.fillMaxWidth(),
+        onClick = onClick,
     ) {
         Row(modifier = Modifier.padding(OctopusSpacing.md), verticalAlignment = Alignment.CenterVertically) {
             Box(
@@ -412,24 +939,27 @@ private fun ToolboxTab(sections: List<Pair<Int, List<FeatureItem>>>, onClick: (F
     LazyVerticalGrid(
         columns = GridCells.Fixed(2),
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = OctopusSpacing.lg, end = OctopusSpacing.lg, top = OctopusSpacing.xs, bottom = 112.dp),
+        contentPadding = PaddingValues(
+            start = OctopusSpacing.lg,
+            end = OctopusSpacing.lg,
+            top = OctopusSpacing.xs,
+            bottom = OctopusLayout.bottomNavContentPadding,
+        ),
         horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.md),
         verticalArrangement = Arrangement.spacedBy(OctopusSpacing.md),
     ) {
         sections.forEach { (headerRes, items) ->
             item(span = { GridItemSpan(maxLineSpan) }) { SectionHeader(stringResource(headerRes)) }
-            items(items) { item -> ToolCard(item) { onClick(item) } }
+            items(items, key = { it.labelRes }) { item -> ToolCard(item) { onClick(item) } }
         }
     }
 }
 
 @Composable
 private fun ToolCard(item: FeatureItem, onClick: () -> Unit) {
-    Surface(
-        color = OctopusColors.Surface,
-        shape = OctopusShape.large,
-        border = BorderStroke(1.dp, OctopusColors.Border.copy(alpha = 0.6f)),
-        modifier = Modifier.fillMaxWidth().clip(OctopusShape.large).clickable(onClick = onClick),
+    GlassCard(
+        modifier = Modifier.fillMaxWidth(),
+        onClick = onClick,
     ) {
         Column(modifier = Modifier.padding(OctopusSpacing.md)) {
             Box(

@@ -7,19 +7,22 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -30,64 +33,28 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.apk.claw.android.ui.compose.theme.OctopusBackground
 import com.apk.claw.android.ui.compose.theme.OctopusColors
+import com.apk.claw.android.ui.compose.theme.OctopusIconSize
+import com.apk.claw.android.ui.compose.theme.OctopusShape
+import com.apk.claw.android.ui.compose.theme.OctopusSpacing
+import com.apk.claw.android.ui.compose.theme.OctopusType
 
-// ── Spacing Tokens ──
-object OctopusSpacing {
-    val xs = 4.dp
-    val sm = 8.dp
-    val md = 12.dp
-    val lg = 16.dp
-    val xl = 20.dp
-    val xxl = 24.dp
-    val xxxl = 32.dp
-}
-
-// ── Shape Tokens ──
-// 已统一到 OctopusShape（见 OctopusDesign.kt），保留 OctopusShapes 作为别名向后兼容
+// OctopusShapes 已统一到 OctopusShape（见 OctopusDesign.kt），以下为向后兼容别名
 object OctopusShapes {
-    val small get() = com.apk.claw.android.ui.compose.theme.OctopusShape.small
-    val medium get() = com.apk.claw.android.ui.compose.theme.OctopusShape.medium
-    val large get() = com.apk.claw.android.ui.compose.theme.OctopusShape.large
-    val xl get() = com.apk.claw.android.ui.compose.theme.OctopusShape.xl
-    val capsule get() = com.apk.claw.android.ui.compose.theme.OctopusShape.capsule
+    val small get() = OctopusShape.small
+    val medium get() = OctopusShape.medium
+    val large get() = OctopusShape.large
+    val xl get() = OctopusShape.xl
+    val capsule get() = OctopusShape.capsule
 }
-
-// ── Typography Tokens ──
-// 对齐 XML type.xml 的 TS.* 层级，补充 lineHeight（之前缺失）
-object OctopusTypography {
-    // 标题级（对齐 TS.Headline / TS.Title）
-    val h1 = TextStyle(22.sp, FontWeight.Bold, lineHeight = 28.sp)
-    val h2 = TextStyle(18.sp, FontWeight.Bold, lineHeight = 24.sp)
-    val h3 = TextStyle(15.sp, FontWeight.SemiBold, lineHeight = 20.sp)
-    // 正文级（对齐 TS.Body）
-    val body = TextStyle(14.sp, FontWeight.Normal, lineHeight = 20.sp)
-    val bodyEmphasized = TextStyle(14.sp, FontWeight.Medium, lineHeight = 20.sp)
-    // 辅助级（对齐 TS.Caption / TS.Label）
-    val caption = TextStyle(12.sp, FontWeight.Normal, lineHeight = 16.sp)
-    val captionEmphasized = TextStyle(12.sp, FontWeight.Medium, lineHeight = 16.sp)
-    val tiny = TextStyle(10.sp, FontWeight.Normal, lineHeight = 14.sp)
-
-    /** 旧 API 兼容：Pair<sp, FontWeight> */
-    val h1Pair get() = h1.size to h1.weight
-    val h2Pair get() = h2.size to h2.weight
-    val h3Pair get() = h3.size to h3.weight
-    val bodyPair get() = body.size to body.weight
-    val captionPair get() = caption.size to caption.weight
-    val tinyPair get() = tiny.size to tiny.weight
-}
-
-/** Typography 文本样式数据类 */
-data class TextStyle(
-    val size: androidx.compose.ui.unit.TextUnit,
-    val weight: FontWeight,
-    val lineHeight: androidx.compose.ui.unit.TextUnit,
-)
 
 // ── Capsule Button ──
 @Composable
@@ -99,10 +66,10 @@ fun CapsuleButton(
     icon: ImageVector? = null,
 ) {
     val bg = if (accent) OctopusColors.Primary else OctopusColors.SurfaceVariant
-    val fg = if (accent) Color.White else OctopusColors.TextPrimary
+    val fg = if (accent) OctopusColors.OnPrimary else OctopusColors.TextPrimary
     Row(
         modifier = modifier
-            .clip(OctopusShapes.capsule)
+            .clip(OctopusShape.capsule)
             .background(bg)
             .clickable(onClick = onClick)
             .padding(horizontal = OctopusSpacing.lg, vertical = OctopusSpacing.sm),
@@ -110,10 +77,10 @@ fun CapsuleButton(
         horizontalArrangement = Arrangement.Center,
     ) {
         icon?.let {
-            Icon(it, contentDescription = null, tint = fg, modifier = Modifier.size(16.dp))
+            Icon(it, contentDescription = null, tint = fg, modifier = Modifier.size(OctopusIconSize.small))
             Spacer(Modifier.width(OctopusSpacing.xs))
         }
-        Text(text, color = fg, fontSize = OctopusTypography.body.size, fontWeight = FontWeight.Medium)
+        Text(text, color = fg, fontSize = OctopusType.bodyStrong, fontWeight = FontWeight.Medium)
     }
 }
 
@@ -121,15 +88,122 @@ fun CapsuleButton(
 @Composable
 fun GlassCard(
     modifier: Modifier = Modifier,
-    content: @Composable () -> Unit,
+    onClick: (() -> Unit)? = null,
+    content: @Composable BoxScope.() -> Unit,
+) {
+    val shape = OctopusShape.large
+    Box(
+        modifier = modifier
+            .clip(shape)
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        Color.White.copy(alpha = if (OctopusColors.isLight) 0.28f else 0.06f),
+                        OctopusBackground.glassSurface,
+                    )
+                ),
+                shape,
+            )
+            .border(1.dp, OctopusBackground.glassBorder, shape)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+        content = content,
+    )
+}
+
+@Composable
+fun GlassPill(
+    icon: ImageVector,
+    text: String,
+    tint: Color,
+    modifier: Modifier = Modifier,
+    selected: Boolean = false,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = modifier
+            .clip(OctopusShape.capsule)
+            .background(
+                if (selected) tint.copy(alpha = 0.18f)
+                else Color.White.copy(alpha = if (OctopusColors.isLight) 0.42f else 0.08f),
+            )
+            .border(
+                1.dp,
+                if (selected) tint.copy(alpha = 0.42f) else OctopusBackground.glassBorder,
+                OctopusShape.capsule,
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = OctopusSpacing.md, vertical = OctopusSpacing.sm),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+    ) {
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(OctopusIconSize.small))
+        Spacer(Modifier.width(OctopusSpacing.xs))
+        Text(
+            text,
+            color = if (selected) tint else OctopusColors.TextSecondary,
+            fontSize = OctopusType.label,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+        )
+    }
+}
+
+@Composable
+fun GlassTextPill(
+    text: String,
+    tint: Color,
+    modifier: Modifier = Modifier,
+    selected: Boolean = false,
+    onClick: () -> Unit,
 ) {
     Box(
         modifier = modifier
-            .clip(OctopusShapes.large)
-            .background(OctopusColors.Surface.copy(alpha = 0.7f))
-            .padding(OctopusSpacing.lg),
+            .clip(OctopusShape.capsule)
+            .background(
+                if (selected) tint.copy(alpha = 0.20f)
+                else tint.copy(alpha = 0.12f),
+            )
+            .border(
+                1.dp,
+                // 未选中也给清晰的描边，避免胶囊在渐变玻璃上"隐形"
+                if (selected) tint.copy(alpha = 0.55f) else tint.copy(alpha = 0.45f),
+                OctopusShape.capsule,
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = OctopusSpacing.md, vertical = OctopusSpacing.sm),
+        contentAlignment = Alignment.Center,
     ) {
-        content()
+        Text(
+            text,
+            // 选中=同色高亮；未选中=高对比深色文字（同色字压同色底对比太低、会看不清）
+            color = if (selected) tint else OctopusColors.TextSecondary,
+            fontSize = OctopusType.tag,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+        )
+    }
+}
+
+@Composable
+fun GlassBottomSheet(
+    modifier: Modifier = Modifier,
+    maxHeight: Dp? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .then(if (maxHeight != null) Modifier.heightIn(max = maxHeight) else Modifier)
+            .clip(OctopusShape.xl)
+            .background(OctopusColors.SurfaceDeep, OctopusShape.xl)
+            .border(1.dp, OctopusBackground.glassBorder, OctopusShape.xl),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(OctopusSpacing.lg),
+            content = content,
+        )
     }
 }
 
@@ -144,17 +218,17 @@ fun AppCard(
 ) {
     Column(
         modifier = modifier
-            .clip(OctopusShapes.large)
+            .clip(OctopusShape.large)
             .background(OctopusColors.Surface)
             .clickable(onClick = onClick)
             .padding(OctopusSpacing.lg),
     ) {
         Text(emoji, fontSize = 28.sp)
         Spacer(Modifier.height(OctopusSpacing.sm))
-        Text(title, color = OctopusColors.TextPrimary, fontSize = OctopusTypography.h3.size, fontWeight = OctopusTypography.h3.weight)
+        Text(title, color = OctopusColors.TextPrimary, fontSize = OctopusType.bodyLg, fontWeight = FontWeight.SemiBold)
         subtitle?.let {
             Spacer(Modifier.height(OctopusSpacing.xs))
-            Text(it, color = OctopusColors.TextMuted, fontSize = OctopusTypography.caption.size)
+            Text(it, color = OctopusColors.TextMuted, fontSize = OctopusType.label)
         }
     }
 }
@@ -174,15 +248,15 @@ fun SectionHeader(
         Text(
             title,
             color = OctopusColors.TextPrimary,
-            fontSize = OctopusTypography.h3.size,
-            fontWeight = OctopusTypography.h3.weight,
+            fontSize = OctopusType.bodyLg,
+            fontWeight = FontWeight.SemiBold,
             modifier = Modifier.weight(1f),
         )
         action?.let {
             Text(
                 it,
                 color = OctopusColors.Primary,
-                fontSize = OctopusTypography.caption.size,
+                fontSize = OctopusType.label,
                 modifier = Modifier.clickable { onAction?.invoke() },
             )
         }
@@ -230,11 +304,11 @@ fun StatusChip(
 ) {
     Box(
         modifier = modifier
-            .clip(OctopusShapes.capsule)
+            .clip(OctopusShape.capsule)
             .background(color.copy(alpha = 0.12f))
             .padding(horizontal = OctopusSpacing.md, vertical = OctopusSpacing.xs),
     ) {
-        Text(text, color = color, fontSize = OctopusTypography.tiny.size, fontWeight = FontWeight.Medium)
+        Text(text, color = color, fontSize = OctopusType.tag, fontWeight = FontWeight.Medium)
     }
 }
 
@@ -244,8 +318,6 @@ fun LoadingDots(
     modifier: Modifier = Modifier,
     color: Color = OctopusColors.Primary,
 ) {
-    // 修复：原 animateFloatAsState(targetValue=0f) 恒为 0 无可见动画
-    // 改用 rememberInfiniteTransition 实现真正的循环跳动
     val transition = rememberInfiniteTransition(label = "loading_dots")
     Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.xs)) {
         repeat(3) { i ->
@@ -262,7 +334,7 @@ fun LoadingDots(
                 modifier = Modifier
                     .size(6.dp)
                     .scale(scale)
-                    .clip(OctopusShapes.capsule)
+                    .clip(OctopusShape.capsule)
                     .background(color),
             )
         }
