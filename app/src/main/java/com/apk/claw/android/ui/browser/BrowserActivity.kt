@@ -2,6 +2,7 @@ package com.apk.claw.android.ui.browser
 
 import android.app.AlertDialog
 import android.content.Intent
+import androidx.activity.addCallback
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
@@ -122,23 +123,6 @@ class BrowserActivity : BaseActivity() {
     private var wallpaperIndex = 0
     private var useCustomWallpaper = false
 
-    // ── 分类应用数据 ──
-    private data class DesktopApp(
-        val name: String,
-        val url: String,
-        val color: Int,
-        val category: String,
-    ) {
-        val initial: String get() = name.firstOrNull()?.toString() ?: ""
-    }
-
-    private data class AppGroup(
-        val id: String,
-        val title: String,
-        val subtitle: String,
-        val apps: List<DesktopApp>,
-    )
-
     private val cPrimary get() = OctopusColors.Primary.toArgb()
     private val cText get() = OctopusColors.TextPrimary.toArgb()
     private val cMuted get() = OctopusColors.TextMuted.toArgb()
@@ -150,7 +134,7 @@ class BrowserActivity : BaseActivity() {
     // 壁纸上的浅色文字（壁纸始终深色，故文字始终浅色，不随主题变）
     private val cOnWallpaper: Int get() = withAlpha(cOnPrimary, 235)
     private val cOnWallpaperMuted: Int get() = withAlpha(cOnPrimary, 170)
-    private val cOnWallpaperFaint: Int get() = withAlpha(cOnPrimary, 140)
+    private val cOnWallpaperFaint: Int get() = withAlpha(cOnPrimary, 190)
 
     // 毛玻璃颜色 —— 基于 OctopusColors.Surface 派生，自动适配亮/暗模式
     // 亮色模式：浅色毛玻璃（透出深色壁纸）；暗色模式：深色毛玻璃
@@ -205,9 +189,6 @@ class BrowserActivity : BaseActivity() {
         }
     }
 
-    private val appGroups by lazy { buildAppGroups() }
-    private val dockApps by lazy { buildDockApps() }
-
     private lateinit var engine: BrowserEngine
     private lateinit var etUrl: EditText
     private lateinit var progressBar: ProgressBar
@@ -220,7 +201,7 @@ class BrowserActivity : BaseActivity() {
     private lateinit var wallpaperBg: ImageView
 
     // 首页相关
-    private lateinit var homeLayer: LinearLayout
+    private lateinit var homeLayer: FrameLayout
     private lateinit var contentLayer: LinearLayout
     private var isHomeVisible = true
     private val bookmarkManager = BookmarkManager()
@@ -282,6 +263,23 @@ class BrowserActivity : BaseActivity() {
         } else {
             // 默认显示首页
             showHome()
+        }
+
+        // 系统返回手势 → 网页历史后退（取代底栏已移除的 ‹ 键）：
+        // 首页时退出浏览器；网页有历史则后退一步；无历史则回到首页。
+        onBackPressedDispatcher.addCallback(this) { handleWebBack() }
+    }
+
+    private fun handleWebBack() {
+        if (isHomeVisible) {
+            finish()
+            return
+        }
+        engine.evaluateJs("window.history.length") { len ->
+            val n = len?.trim()?.trim('"')?.toIntOrNull() ?: 1
+            runOnUiThread {
+                if (n > 1) engine.evaluateJs("window.history.back()") else showHome()
+            }
         }
     }
 
@@ -375,573 +373,43 @@ class BrowserActivity : BaseActivity() {
 
     // ── 首页 ─────────────────────────────────────────
 
-    private fun buildHomeLayer(): LinearLayout {
-        return LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
+    private fun buildHomeLayer(): FrameLayout {
+        return FrameLayout(this).apply {
             layoutParams = FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT)
             visibility = if (isHomeVisible) View.VISIBLE else View.GONE
 
-            // 顶部控制条(首页隐藏了网页顶栏,这里保留壁纸/关闭入口),含状态栏安全区
-            addView(LinearLayout(this@BrowserActivity).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
-                setPadding(dp(SPACING_MD), dp(32), dp(SPACING_MD), dp(SPACING_XS))
-                addView(View(this@BrowserActivity).apply {
-                    layoutParams = LinearLayout.LayoutParams(0, dp(1), 1f)
-                })
-                addView(ImageView(this@BrowserActivity).apply {
-                    layoutParams = LinearLayout.LayoutParams(dp(ICON_SIZE_SM), dp(ICON_SIZE_SM))
-                    setImageResource(android.R.drawable.ic_menu_gallery)
-                    setColorFilter(cOnWallpaper)
-                    scaleType = ImageView.ScaleType.FIT_CENTER
-                    setPadding(dp(SPACING_XS), dp(SPACING_XS), dp(SPACING_XS), dp(SPACING_XS))
-                    background = capsuleBg(withAlpha(cOnWallpaper, 25), RADIUS_LG)
-                    setOnClickListener { showWallpaperPicker() }
-                    contentDescription = "Wallpaper"
-                })
-                addView(TextView(this@BrowserActivity).apply {
-                    text = "×"
-                    textSize = 20f
-                    gravity = Gravity.CENTER
-                    setTextColor(cOnWallpaper)
-                    val s = dp(ICON_SIZE_SM)
-                    layoutParams = LinearLayout.LayoutParams(s, s).apply { marginStart = dp(SPACING_SM) }
-                    background = capsuleBg(withAlpha(cOnWallpaper, 25), RADIUS_LG)
-                    setOnClickListener { finish() }
-                    contentDescription = getString(R.string.advanced_action_close)
-                })
+            // 统一首页：直接复用底部导航的「浏览器桌面」(DiscoverScreen)，不再维护第二套老首页。
+            // 点击分类/收藏/搜索 → onOpenUrl 在「当前 WebView」内导航(navigateTo)，不嵌套再起一个浏览器。
+            addView(androidx.compose.ui.platform.ComposeView(this@BrowserActivity).apply {
+                layoutParams = FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT)
+                setContent {
+                    com.apk.claw.android.ui.compose.theme.OctopusTheme {
+                        com.apk.claw.android.ui.compose.screen.DiscoverScreen(
+                            onOpenUrl = { url -> url?.takeIf { it.isNotBlank() }?.let { navigateTo(it) } },
+                        )
+                    }
+                }
             })
 
-            // 品牌区域 —— 品牌名 + Slogan
-            addView(buildBrandHeader())
-
-            // 搜索栏
-            addView(buildHomeSearchBar())
-
-            // 中间滚动区域
-            addView(ScrollView(this@BrowserActivity).apply {
-                layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, 0, 1f)
-                isFillViewport = true
-
-                val scrollContent = LinearLayout(this@BrowserActivity).apply {
-                    orientation = LinearLayout.VERTICAL
-                    layoutParams = FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
-                    setPadding(dp(SPACING_LG), dp(SPACING_MD), dp(SPACING_LG), dp(SPACING_MD))
-
-                    // 分类图标网格
-                    addView(buildCategoryGrid())
-
-                    // 收藏标签
-                    addView(buildBookmarksSection())
+            // 右上角关闭(回收旧首页的 ×)；首页态系统返回手势也会退出浏览器。
+            addView(TextView(this@BrowserActivity).apply {
+                text = "×"
+                textSize = 20f
+                gravity = Gravity.CENTER
+                setTextColor(cText)
+                val s = dp(ICON_SIZE_SM)
+                layoutParams = FrameLayout.LayoutParams(s, s, Gravity.TOP or Gravity.END).apply {
+                    topMargin = dp(40)
+                    marginEnd = dp(SPACING_MD)
                 }
-                addView(scrollContent)
+                background = capsuleBg(withAlpha(cSurface, 210), RADIUS_LG)
+                setOnClickListener { finish() }
+                contentDescription = getString(R.string.advanced_action_close)
             })
         }
     }
 
     /** 品牌头部区域 */
-    private fun buildBrandHeader(): LinearLayout {
-        return LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
-            setPadding(0, dp(SPACING_XL), 0, dp(SPACING_LG))
-
-            // 品牌名
-            addView(TextView(this@BrowserActivity).apply {
-                text = getString(R.string.browser_brand_name)
-                textSize = 26f
-                setTypeface(typeface, Typeface.BOLD)
-                setTextColor(cPrimary)
-                gravity = Gravity.CENTER
-                layoutParams = LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT)
-            })
-
-            // Slogan
-            addView(TextView(this@BrowserActivity).apply {
-                text = getString(R.string.browser_brand_slogan)
-                textSize = 13f
-                setTextColor(cOnWallpaperMuted)
-                gravity = Gravity.CENTER
-                layoutParams = LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply {
-                    topMargin = dp(SPACING_XS)
-                }
-            })
-        }
-    }
-
-    /** 首页搜索栏 */
-    private fun buildHomeSearchBar(): LinearLayout {
-        return LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
-                marginStart = dp(SPACING_LG)
-                marginEnd = dp(SPACING_LG)
-            }
-            setPadding(0, dp(SPACING_SM), 0, dp(SPACING_SM))
-
-            // 搜索输入框
-            val searchBox = LinearLayout(this@BrowserActivity).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                layoutParams = LinearLayout.LayoutParams(0, dp(46), 1f)
-                background = capsuleBg(withAlpha(cOnPrimary, 160), RADIUS_XL, withAlpha(cPrimary, 40), 1)
-                setPadding(dp(SPACING_MD), 0, dp(SPACING_SM), 0)
-
-                // 搜索图标
-                addView(ImageView(this@BrowserActivity).apply {
-                    layoutParams = LinearLayout.LayoutParams(dp(20), dp(20))
-                    setImageResource(android.R.drawable.ic_menu_search)
-                    setColorFilter(cText)
-                    scaleType = ImageView.ScaleType.FIT_CENTER
-                })
-
-                // 输入框
-                addView(EditText(this@BrowserActivity).apply {
-                    hint = getString(R.string.browser_url_hint)
-                    setSingleLine(true)
-                    textSize = 14f
-                    setTextColor(cText)
-                    setHintTextColor(cMuted)
-                    background = null
-                    layoutParams = LinearLayout.LayoutParams(0, MATCH_PARENT, 1f)
-                    setPadding(dp(SPACING_SM), 0, dp(SPACING_XS), 0)
-                    imeOptions = EditorInfo.IME_ACTION_GO
-                    inputType = InputType.TYPE_TEXT_VARIATION_URI
-                    setOnEditorActionListener { _, actionId, _ ->
-                        if (actionId == EditorInfo.IME_ACTION_GO || actionId == EditorInfo.IME_ACTION_DONE) {
-                            val t = text.toString().trim()
-                            if (t.isNotEmpty()) {
-                                hideKeyboard()
-                                navigateTo(t)
-                            }
-                            true
-                        } else false
-                    }
-                })
-            }
-            addView(searchBox)
-
-            // AI 按钮
-            addView(TextView(this@BrowserActivity).apply {
-                text = "AI"
-                textSize = 13f
-                setTypeface(Typeface.DEFAULT_BOLD)
-                gravity = Gravity.CENTER
-                setTextColor(cOnPrimary)
-                val s = dp(42)
-                layoutParams = LinearLayout.LayoutParams(s, s).apply { marginStart = dp(SPACING_SM) }
-                background = capsuleBg(cPrimary, RADIUS_XL)
-                setOnClickListener { showAiSheet() }
-                contentDescription = getString(R.string.browser_ask_ai_button)
-            })
-        }
-    }
-
-    /** 分类图标网格 */
-    private fun buildCategoryGrid(): LinearLayout {
-        val container = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
-        }
-
-        // 标题
-        container.addView(TextView(this).apply {
-            text = getString(R.string.browser_home_categories)
-            textSize = 14f
-            setTypeface(typeface, Typeface.BOLD)
-            setTextColor(cOnWallpaper)
-            setPadding(0, dp(SPACING_XS), 0, dp(SPACING_MD))
-        })
-
-        // 2x2 网格
-        val gridContainer = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
-        }
-
-        for (rowIdx in appGroups.indices step 2) {
-            val row = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
-            }
-
-            for (colIdx in 0..1) {
-                val groupIdx = rowIdx + colIdx
-                if (groupIdx < appGroups.size) {
-                    row.addView(buildCategoryCard(appGroups[groupIdx]))
-                }
-            }
-            gridContainer.addView(row)
-        }
-
-        container.addView(gridContainer)
-        return container
-    }
-
-    /** 单个分类:紧凑卡片(只包住 2×2 图标)+ 卡外下方分类标题(避免外围撑大) */
-    private fun buildCategoryCard(group: AppGroup): LinearLayout {
-        return LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply {
-                marginStart = dp(SPACING_XS)
-                marginEnd = dp(SPACING_XS)
-                bottomMargin = dp(SPACING_MD)
-            }
-
-            // 紧凑卡片:宽度 WRAP_CONTENT,刚好包住 2×2 图标(不再填满半屏)
-            addView(LinearLayout(this@BrowserActivity).apply {
-                orientation = LinearLayout.VERTICAL
-                layoutParams = LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT)
-                background = capsuleBg(withAlpha(cOnWallpaper, 70), RADIUS_LG, withAlpha(cOnWallpaper, 35), 1)
-                setPadding(dp(SPACING_MD), dp(SPACING_MD), dp(SPACING_MD), dp(SPACING_MD))
-                elevation = dp(2).toFloat()
-                isClickable = true
-                setOnClickListener { showGroupDetail(group) }
-
-                for (r in 0..1) {
-                    addView(LinearLayout(this@BrowserActivity).apply {
-                        orientation = LinearLayout.HORIZONTAL
-                        gravity = Gravity.CENTER
-                        layoutParams = LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply {
-                            if (r == 1) topMargin = dp(SPACING_SM)
-                        }
-                        for (c in 0..1) {
-                            val idx = r * 2 + c
-                            if (idx < group.apps.size) {
-                                addView(buildAppIcon(group.apps[idx]))
-                            } else {
-                                addView(View(this@BrowserActivity).apply {
-                                    layoutParams = LinearLayout.LayoutParams(dp(ICON_SIZE_LG), dp(44)).apply {
-                                        marginStart = dp(SPACING_XS)
-                                        marginEnd = dp(SPACING_XS)
-                                    }
-                                })
-                            }
-                        }
-                    })
-                }
-            })
-
-            // 卡外下方:分类标题,居中
-            addView(TextView(this@BrowserActivity).apply {
-                text = group.title
-                textSize = 12f
-                setTypeface(typeface, Typeface.BOLD)
-                setTextColor(cOnWallpaper)
-                gravity = Gravity.CENTER
-                layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
-                setPadding(0, dp(SPACING_SM), 0, 0)
-            })
-        }
-    }
-
-    /** 单个应用图标 */
-    private fun buildAppIcon(app: DesktopApp): LinearLayout {
-        return LinearLayout(this@BrowserActivity).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(dp(ICON_SIZE_LG), WRAP_CONTENT).apply {
-                marginStart = dp(SPACING_XS)
-                marginEnd = dp(SPACING_XS)
-            }
-
-            // 真实网站图标(favicon);加载前/失败用品牌首字母兜底
-            addView(makeAppIconWithFavicon(app))
-
-            // 名称
-            addView(TextView(this@BrowserActivity).apply {
-                text = app.name
-                textSize = 9f
-                setTextColor(cOnWallpaperMuted)
-                gravity = Gravity.CENTER
-                layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
-                setPadding(0, dp(3), 0, 0)
-                setSingleLine(true)
-            })
-
-            setOnClickListener { navigateTo(app.url) }
-        }
-    }
-
-    private fun makeAppIconWithFavicon(app: DesktopApp): FrameLayout {
-        val frame = FrameLayout(this).apply {
-            val s = dp(ICON_SIZE_MD)
-            layoutParams = LinearLayout.LayoutParams(s, s)
-            background = GradientDrawable().apply {
-                setColor(app.color)
-                cornerRadius = dp(RADIUS_MD).toFloat()
-            }
-        }
-        val iv = ImageView(this).apply {
-            layoutParams = FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT)
-            scaleType = ImageView.ScaleType.FIT_CENTER
-            val pad = dp(SPACING_XS)
-            setPadding(pad, pad, pad, pad)
-        }
-        val initial = TextView(this).apply {
-            text = app.initial
-            textSize = 18f
-            setTypeface(Typeface.DEFAULT_BOLD)
-            setTextColor(contrastText(app.color))
-            gravity = Gravity.CENTER
-            layoutParams = FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT)
-        }
-        frame.addView(iv)
-        frame.addView(initial)
-        runCatching {
-            com.bumptech.glide.Glide.with(this)
-                .load(faviconUrl(app.url))
-                .listener(object : com.bumptech.glide.request.RequestListener<android.graphics.drawable.Drawable> {
-                    override fun onLoadFailed(
-                        e: com.bumptech.glide.load.engine.GlideException?,
-                        model: Any?,
-                        target: com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable>?,
-                        isFirstResource: Boolean
-                    ): Boolean = false
-
-                    override fun onResourceReady(
-                        resource: android.graphics.drawable.Drawable?,
-                        model: Any?,
-                        target: com.bumptech.glide.request.target.Target<android.graphics.drawable.Drawable>?,
-                        dataSource: com.bumptech.glide.load.DataSource?,
-                        isFirstResource: Boolean
-                    ): Boolean {
-                        initial.visibility = View.GONE
-                        return false
-                    }
-                })
-                .into(iv)
-        }
-        return frame
-    }
-
-    private fun makeTintIcon(app: DesktopApp, sizeDp: Int, radiusDp: Int = RADIUS_MD): FrameLayout {
-        return FrameLayout(this).apply {
-            layoutParams = LinearLayout.LayoutParams(dp(sizeDp), dp(sizeDp))
-            background = GradientDrawable().apply {
-                setColor(app.color)
-                cornerRadius = dp(radiusDp).toFloat()
-            }
-            addView(TextView(this@BrowserActivity).apply {
-                text = app.initial
-                textSize = when (sizeDp) {
-                    ICON_SIZE_SM -> 16f
-                    ICON_SIZE_MD -> 18f
-                    ICON_SIZE_LG -> 20f
-                    else -> 18f
-                }
-                setTypeface(Typeface.DEFAULT_BOLD)
-                setTextColor(contrastText(app.color))
-                gravity = Gravity.CENTER
-                layoutParams = FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT)
-            })
-        }
-    }
-
-    /** 由站点 URL 取真实 favicon(Google s2 服务,稳定可用)。 */
-    private fun faviconUrl(url: String): String {
-        val host = runCatching { java.net.URI(url).host }.getOrNull()?.takeIf { it.isNotBlank() } ?: url
-        return "https://www.google.com/s2/favicons?sz=128&domain=$host"
-    }
-
-    /** 收藏标签区 */
-    private fun buildBookmarksSection(): LinearLayout {
-        val container = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
-            setPadding(0, dp(SPACING_SM), 0, 0)
-        }
-
-        container.addView(LinearLayout(this@BrowserActivity).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
-
-            addView(TextView(this@BrowserActivity).apply {
-                text = getString(R.string.browser_home_favorites)
-                textSize = 14f
-                setTypeface(typeface, Typeface.BOLD)
-                setTextColor(cOnWallpaper)
-                layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f)
-            })
-
-            addView(TextView(this@BrowserActivity).apply {
-                text = getString(R.string.browser_home_tools)
-                textSize = 11f
-                setTextColor(cOnWallpaperFaint)
-                setOnClickListener { showBookmarkDialog() }
-            })
-        })
-
-        // 收藏标签横向滚动
-        val chipScroll = HorizontalScrollView(this).apply {
-            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
-            isHorizontalScrollBarEnabled = false
-        }
-
-        val chipRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            layoutParams = FrameLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT)
-            setPadding(0, dp(SPACING_SM), 0, dp(SPACING_XS))
-        }
-
-        // 默认收藏标签
-        val defaultBookmarks = listOf(
-            "• GitHub" to "https://github.com/",
-            "• Bilibili" to "https://www.bilibili.com/",
-            "• YouTube" to "https://www.youtube.com/",
-            "• 知乎" to "https://www.zhihu.com/",
-            "• Wikipedia" to "https://www.wikipedia.org/",
-        )
-
-        for ((label, url) in defaultBookmarks) {
-            chipRow.addView(TextView(this).apply {
-                text = label
-                textSize = 12f
-                setTextColor(cOnWallpaper)
-                background = capsuleBg(withAlpha(cOnWallpaper, 70), RADIUS_LG, withAlpha(cOnWallpaper, 30), 1)
-                setPadding(dp(SPACING_MD), dp(SPACING_XS + 3), dp(SPACING_MD), dp(SPACING_XS + 3))
-                layoutParams = LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply {
-                    marginEnd = dp(SPACING_SM)
-                }
-                elevation = dp(2).toFloat()
-                setOnClickListener { navigateTo(url) }
-            })
-        }
-
-        chipScroll.addView(chipRow)
-        container.addView(chipScroll)
-        return container
-    }
-
-    /** Dock 栏 */
-    private fun buildDockBar(): LinearLayout {
-        return LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
-            setPadding(dp(SPACING_SM), dp(6), dp(SPACING_SM), dp(SPACING_MD))
-
-            // 毛玻璃背景
-            background = capsuleBg(withAlpha(cOnWallpaper, 120), RADIUS_CAPSULE, withAlpha(cOnWallpaper, 50), 1)
-            elevation = dp(6).toFloat()
-
-            for (app in dockApps) {
-                addView(LinearLayout(this@BrowserActivity).apply {
-                    orientation = LinearLayout.VERTICAL
-                    gravity = Gravity.CENTER
-                    layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f)
-
-                    addView(makeTintIcon(app, ICON_SIZE_MD, RADIUS_MD))
-
-                    addView(TextView(this@BrowserActivity).apply {
-                        text = app.name
-                        textSize = 9f
-                        setTextColor(cOnWallpaperMuted)
-                        gravity = Gravity.CENTER
-                        setSingleLine(true)
-                        setPadding(0, dp(2), 0, 0)
-                    })
-
-                    setOnClickListener { navigateTo(app.url) }
-                })
-            }
-        }
-    }
-
-    /** 展开分类详情 */
-    private fun showGroupDetail(group: AppGroup) {
-        val sheet = com.google.android.material.bottomsheet.BottomSheetDialog(this)
-        val container = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundColor(glassOverlay)
-            setPadding(dp(SPACING_XL), dp(SPACING_XL), dp(SPACING_XL), dp(SPACING_XL))
-        }
-
-        // 标题行
-        container.addView(LinearLayout(this@BrowserActivity).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
-
-            addView(TextView(this@BrowserActivity).apply {
-                text = group.title
-                textSize = 18f
-                setTypeface(typeface, Typeface.BOLD)
-                setTextColor(cOnWallpaper)
-                layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f)
-            })
-
-            addView(TextView(this@BrowserActivity).apply {
-                text = "×"
-                textSize = 20f
-                setTextColor(cOnWallpaperMuted)
-                val s = dp(ICON_SIZE_SM)
-                layoutParams = LinearLayout.LayoutParams(s, s)
-                gravity = Gravity.CENTER
-                background = capsuleBg(withAlpha(cOnWallpaper, 60), RADIUS_LG)
-                setOnClickListener { sheet.dismiss() }
-            })
-        })
-
-        container.addView(TextView(this@BrowserActivity).apply {
-            text = group.subtitle
-            textSize = 12f
-            setTextColor(cOnWallpaperFaint)
-            setPadding(0, dp(SPACING_XS), 0, dp(SPACING_MD))
-        })
-
-        // 应用列表
-        for (app in group.apps) {
-            container.addView(LinearLayout(this@BrowserActivity).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
-                    bottomMargin = dp(SPACING_SM)
-                }
-                background = capsuleBg(withAlpha(cOnWallpaper, 60), RADIUS_LG)
-                setPadding(dp(SPACING_MD), dp(SPACING_MD), dp(SPACING_MD), dp(SPACING_MD))
-                elevation = dp(2).toFloat()
-
-                addView(makeTintIcon(app, ICON_SIZE_SM, RADIUS_MD))
-
-                addView(LinearLayout(this@BrowserActivity).apply {
-                    orientation = LinearLayout.VERTICAL
-                    layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply {
-                        marginStart = dp(SPACING_MD)
-                    }
-
-                    addView(TextView(this@BrowserActivity).apply {
-                        text = app.name
-                        textSize = 14f
-                        setTextColor(cOnWallpaper)
-                        setTypeface(typeface, Typeface.BOLD)
-                    })
-
-                    addView(TextView(this@BrowserActivity).apply {
-                        text = app.url
-                        textSize = 10f
-                        setTextColor(cOnWallpaperFaint)
-                        setSingleLine(true)
-                    })
-                })
-
-                setOnClickListener {
-                    navigateTo(app.url)
-                    sheet.dismiss()
-                }
-            })
-        }
-
-        sheet.setContentView(container)
-        sheet.show()
-        applyDialogBlur(sheet)
-    }
-
     // ── 首页/浏览页切换 ──
 
     private fun showHome() {
@@ -967,48 +435,6 @@ class BrowserActivity : BaseActivity() {
     }
 
     // ── 分类数据 ──
-
-    private fun buildAppGroups(): List<AppGroup> {
-        return listOf(
-            AppGroup("ai", getString(R.string.browser_cat_ai),
-                getString(R.string.browser_cat_ai_sub), listOf(
-                    DesktopApp("Gemini", "https://gemini.google.com/app", Color.parseColor("#4285F4"), "ai"),
-                    DesktopApp("ChatGPT", "https://chatgpt.com/", Color.parseColor("#10A37F"), "ai"),
-                    DesktopApp("DeepSeek", "https://chat.deepseek.com/", Color.parseColor("#4D6BFE"), "ai"),
-                    DesktopApp("豆包", "https://www.doubao.com/chat/", Color.parseColor("#1664FF"), "ai"),
-                    DesktopApp("Kimi", "https://www.kimi.com/", Color.parseColor("#6A5BFF"), "ai"),
-                    DesktopApp("Claude", "https://claude.ai/", Color.parseColor("#D97757"), "ai"),
-                    DesktopApp("通义", "https://chat.qwen.ai/", Color.parseColor("#615CED"), "ai"),
-                    DesktopApp("Perplexity", "https://www.perplexity.ai/", Color.parseColor("#20B8CD"), "ai"),
-                )),
-            AppGroup("video", getString(R.string.browser_cat_video),
-                getString(R.string.browser_cat_video_sub), listOf(
-                    DesktopApp("YouTube", "https://www.youtube.com/", Color.parseColor("#FF0000"), "video"),
-                    DesktopApp("Bilibili", "https://www.bilibili.com/", Color.parseColor("#00AEEC"), "video"),
-                )),
-            AppGroup("dev", getString(R.string.browser_cat_dev),
-                getString(R.string.browser_cat_dev_sub), listOf(
-                    DesktopApp("GitHub", "https://github.com/", Color.parseColor("#24292F"), "dev"),
-                    DesktopApp("StackOverflow", "https://stackoverflow.com/", Color.parseColor("#F48024"), "dev"),
-                    DesktopApp("MDN", "https://developer.mozilla.org/", Color.parseColor("#000000"), "dev"),
-                )),
-            AppGroup("knowledge", getString(R.string.browser_cat_knowledge),
-                getString(R.string.browser_cat_knowledge_sub), listOf(
-                    DesktopApp("知乎", "https://www.zhihu.com/", Color.parseColor("#0084FF"), "knowledge"),
-                    DesktopApp("Wikipedia", "https://www.wikipedia.org/", Color.parseColor("#636466"), "knowledge"),
-                )),
-        )
-    }
-
-    private fun buildDockApps(): List<DesktopApp> {
-        return listOf(
-            DesktopApp("Gemini", "https://gemini.google.com/app", Color.parseColor("#4285F4"), "ai"),
-            DesktopApp("DeepSeek", "https://chat.deepseek.com/", Color.parseColor("#4D6BFE"), "ai"),
-            DesktopApp("YouTube", "https://www.youtube.com/", Color.parseColor("#FF0000"), "video"),
-            DesktopApp("GitHub", "https://github.com/", Color.parseColor("#24292F"), "dev"),
-            DesktopApp("Bilibili", "https://www.bilibili.com/", Color.parseColor("#00AEEC"), "video"),
-        )
-    }
 
     // ── 毛玻璃顶栏 ──
 
@@ -1148,10 +574,8 @@ class BrowserActivity : BaseActivity() {
             }
 
             // 左:三横 → 上滑出浏览器设置
-            addView(makeCapsuleIcon("≡", "浏览器设置") { showBrowserSettingsSheet() })
-            // 中:后退 / 前进 / AI(主页键地址栏已有,这里精简掉以缩短)
-            addView(makeCapsuleIcon("‹", getString(R.string.browser_back_button)) { engine.evaluateJs("window.history.back()") })
-            addView(makeCapsuleIcon("›", getString(R.string.browser_forward_button)) { engine.evaluateJs("window.history.forward()") })
+            addView(makeCapsuleIcon("≡", getString(R.string.browser_settings_title)) { showBrowserSettingsSheet() })
+            // 中:AI(后退/前进改用系统返回手势,不再占用底栏胶囊)
             addView(makeCapsuleIcon("AI", getString(R.string.browser_ask_ai_button), accent = true) { showAiSheet() })
             // 右:窗口数 → 弹出所有窗口
             windowCountView = TextView(this@BrowserActivity).apply {
@@ -1163,7 +587,7 @@ class BrowserActivity : BaseActivity() {
                 val s = dp(32)
                 layoutParams = LinearLayout.LayoutParams(s, s).apply { marginStart = dp(3); marginEnd = dp(1) }
                 background = capsuleBg(withAlpha(cPrimary, 70), RADIUS_SM, withAlpha(cPrimary, 160), 1)
-                contentDescription = "窗口"
+                contentDescription = getString(R.string.browser_windows)
                 setOnClickListener { showWindowsSheet() }
             }
             addView(windowCountView)
@@ -1193,7 +617,7 @@ class BrowserActivity : BaseActivity() {
             setPadding(dp(SPACING_LG), dp(SPACING_LG), dp(SPACING_LG), dp(SPACING_XXL))
         }
         container.addView(TextView(this).apply {
-            text = "浏览器设置"
+            text = getString(R.string.browser_settings_title)
             textSize = 17f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(cText)
@@ -1211,19 +635,19 @@ class BrowserActivity : BaseActivity() {
                 setOnClickListener { sheet.dismiss(); onClick() }
             })
         }
-        row("刷新页面") { navigateTo(engine.currentUrl()) }
-        row("浏览器与引擎设置") {
+        row(getString(R.string.browser_refresh_page)) { navigateTo(engine.currentUrl()) }
+        row(getString(R.string.browser_engine_settings)) {
             runCatching { startActivity(Intent(this, com.apk.claw.android.ui.featurescreens.BrowserSettingsActivity::class.java)) }
         }
-        row("更换壁纸") { showWallpaperPicker() }
-        row("书签") { showBookmarkDialog() }
-        row("扩展") { showExtensionDialog() }
-        row("复制链接") {
+        row(getString(R.string.browser_change_wallpaper)) { showWallpaperPicker() }
+        row(getString(R.string.browser_bookmarks_button)) { showBookmarkDialog() }
+        row(getString(R.string.browser_extensions)) { showExtensionDialog() }
+        row(getString(R.string.browser_copy_link)) {
             val cm = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
             cm.setPrimaryClip(android.content.ClipData.newPlainText("url", engine.currentUrl()))
-            Toast.makeText(this, "已复制链接", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.browser_link_copied), Toast.LENGTH_SHORT).show()
         }
-        row("用系统浏览器打开") {
+        row(getString(R.string.browser_open_in_system)) {
             runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(engine.currentUrl()))) }
         }
         sheet.setContentView(container)
@@ -1235,7 +659,7 @@ class BrowserActivity : BaseActivity() {
 
     private fun ensureWindow() {
         if (windows.isEmpty()) {
-            val w = BrowserWindow("新标签页", "", windowSeq++)
+            val w = BrowserWindow(getString(R.string.browser_new_tab), "", windowSeq++)
             windows.add(w)
             currentWindowId = w.id
         }
@@ -1249,7 +673,7 @@ class BrowserActivity : BaseActivity() {
     }
 
     private fun newWindow() {
-        val w = BrowserWindow("新标签页", "", windowSeq++)
+        val w = BrowserWindow(getString(R.string.browser_new_tab), "", windowSeq++)
         windows.add(w)
         currentWindowId = w.id
         updateWindowCount()
@@ -1281,7 +705,7 @@ class BrowserActivity : BaseActivity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             addView(TextView(this@BrowserActivity).apply {
-                text = "窗口 (${windows.size})"
+                text = getString(R.string.browser_windows_count, windows.size)
                 textSize = 17f
                 setTypeface(typeface, Typeface.BOLD)
                 setTextColor(cText)
@@ -1317,7 +741,7 @@ class BrowserActivity : BaseActivity() {
                     orientation = LinearLayout.VERTICAL
                     layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f)
                     addView(TextView(this@BrowserActivity).apply {
-                        text = w.title.ifBlank { "新标签页" }
+                        text = w.title.ifBlank { getString(R.string.browser_new_tab) }
                         textSize = 14f
                         setTextColor(cText)
                         setSingleLine(true)

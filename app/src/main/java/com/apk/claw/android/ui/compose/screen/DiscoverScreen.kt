@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -14,19 +15,23 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Public
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -38,12 +43,21 @@ import androidx.compose.ui.unit.sp
 import com.apk.claw.android.R
 import com.apk.claw.android.octopus_mobile.browser.SearchEngines
 import com.apk.claw.android.ui.browser.BrowserActivity
+import com.apk.claw.android.ui.compose.theme.OctopusBackground
 import com.apk.claw.android.ui.compose.theme.OctopusColors
+import com.apk.claw.android.ui.compose.theme.OctopusIconSize
+import com.apk.claw.android.ui.compose.theme.OctopusLayout
+import com.apk.claw.android.ui.compose.theme.OctopusShape
+import com.apk.claw.android.ui.compose.theme.OctopusSpacing
+import com.apk.claw.android.ui.compose.theme.OctopusTints
+import com.apk.claw.android.ui.compose.theme.OctopusType
 import com.apk.claw.android.utils.KVUtils
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
 
 private val PrimaryColor get() = OctopusColors.Primary
 private val SurfaceColor get() = OctopusColors.Surface
-private val BackgroundColor get() = OctopusColors.Background
 private val TextPrimary get() = OctopusColors.TextPrimary
 private val TextSecondary get() = OctopusColors.TextSecondary
 private val TextMuted get() = OctopusColors.TextMuted
@@ -58,6 +72,22 @@ private data class BrowserSearchOption(
     val mode: SearchMode,
 )
 
+private data class BrowserCategory(
+    val titleRes: Int,
+    val icon: ImageVector,
+    val tint: Color,
+    val target: String,
+)
+
+private data class BrowserShortcut(
+    val label: String,
+    val categoryRes: Int,
+    val url: String,
+    val iconUrl: String?,
+    val fallbackIcon: ImageVector,
+    val tint: Color,
+)
+
 private fun openBrowser(context: Context, query: String?) {
     val intent = Intent(context, BrowserActivity::class.java)
     if (!query.isNullOrBlank()) intent.putExtra(BrowserActivity.EXTRA_URL, query)
@@ -65,8 +95,11 @@ private fun openBrowser(context: Context, query: String?) {
 }
 
 @Composable
-fun DiscoverScreen(onNavigate: (String) -> Unit = {}) {
+fun DiscoverScreen(onOpenUrl: ((String?) -> Unit)? = null) {
     val context = LocalContext.current
+    // 默认：启动独立浏览器 Activity（底部导航 Tab 用）。
+    // 被浏览器内嵌为"新标签首页"时，宿主传入 onOpenUrl → 在当前 WebView 内导航，避免嵌套再起一个浏览器。
+    val openUrl: (String?) -> Unit = onOpenUrl ?: { url -> openBrowser(context, url) }
     var query by remember { mutableStateOf("") }
     var engineId by remember { mutableStateOf(KVUtils.getSearchEngine()) }
     var engineMenuOpen by remember { mutableStateOf(false) }
@@ -86,14 +119,41 @@ fun DiscoverScreen(onNavigate: (String) -> Unit = {}) {
     }
     val submit = {
         val text = query.trim()
-        openBrowser(context, text.ifBlank { null })
+        openUrl(text.ifBlank { null })
         query = ""
+    }
+    val categories = remember {
+        listOf(
+            BrowserCategory(R.string.browser_cat_ai, Icons.Filled.AutoAwesome, OctopusTints.CatAI, "https://chat.deepseek.com"),
+            BrowserCategory(R.string.browser_cat_video, Icons.Filled.Movie, OctopusTints.CatVideo, "https://www.youtube.com"),
+            BrowserCategory(R.string.browser_cat_dev, Icons.Filled.Code, OctopusTints.CatDev, "https://github.com"),
+            BrowserCategory(R.string.browser_cat_knowledge, Icons.Filled.School, OctopusTints.CatKnowledge, "https://www.perplexity.ai"),
+        )
+    }
+    val tongyiQianwenLabel = stringResource(R.string.browser_app_tongyi_qianwen)
+    val shortcuts = remember(tongyiQianwenLabel) {
+        listOf(
+            BrowserShortcut("DeepSeek", R.string.browser_cat_ai, "https://chat.deepseek.com", "https://www.deepseek.com/favicon.ico", Icons.Filled.AutoAwesome, OctopusTints.CatAI),
+            BrowserShortcut(tongyiQianwenLabel, R.string.browser_cat_ai, "https://tongyi.aliyun.com/qianwen", "https://img.alicdn.com/imgextra/i3/O1CN01X1H2wE1eJxXvX9v7P_!!6000000003854-2-tps-180-180.png", Icons.Filled.AutoAwesome, OctopusTints.CatAI),
+            BrowserShortcut("YouTube", R.string.browser_cat_video, "https://www.youtube.com", "https://www.youtube.com/s/desktop/6d0b8f16/img/favicon_32x32.png", Icons.Filled.Movie, OctopusTints.CatVideo),
+            BrowserShortcut("GitHub", R.string.browser_cat_dev, "https://github.com", "https://github.githubassets.com/favicons/favicon.png", Icons.Filled.Code, OctopusTints.CatDev),
+            BrowserShortcut("Bilibili", R.string.browser_cat_video, "https://www.bilibili.com", "https://www.bilibili.com/favicon.ico", Icons.Filled.Movie, OctopusTints.CatVideo),
+            BrowserShortcut("Perplexity", R.string.browser_cat_ai, "https://www.perplexity.ai", "https://www.perplexity.ai/favicon.ico", Icons.Filled.School, OctopusTints.CatKnowledge),
+        )
     }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize().background(BackgroundColor).statusBarsPadding(),
-        contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 10.dp, bottom = 112.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .background(OctopusBackground.pageBrush())
+            .statusBarsPadding(),
+        contentPadding = PaddingValues(
+            start = OctopusSpacing.lg,
+            end = OctopusSpacing.lg,
+            top = OctopusSpacing.sm,
+            bottom = OctopusLayout.bottomNavContentPadding,
+        ),
+        verticalArrangement = Arrangement.spacedBy(OctopusSpacing.md),
     ) {
         item {
             BrowserHomeTopBar()
@@ -118,92 +178,127 @@ fun DiscoverScreen(onNavigate: (String) -> Unit = {}) {
             )
         }
 
-        item { SectionTitle(stringResource(R.string.browser_home_favorites)) }
+        item {
+            BrowserCategoryGrid(
+                categories = categories,
+                onOpen = { openUrl(it) },
+            )
+        }
 
         item {
-            BrowserShortcutGrid(
-                shortcuts = listOf(
-                    BrowserShortcut("百度", "https://www.baidu.com", "https://www.baidu.com/favicon.ico"),
-                    BrowserShortcut("Google", "https://www.google.com", "https://www.google.com/favicon.ico"),
-                    BrowserShortcut("GitHub", "https://github.com", "https://github.githubassets.com/favicons/favicon.png"),
-                    BrowserShortcut("Bilibili", "https://www.bilibili.com", "https://www.bilibili.com/favicon.ico"),
-                    BrowserShortcut("知乎", "https://www.zhihu.com", "https://static.zhihu.com/heifetz/favicon.ico"),
-                    BrowserShortcut("微博", "https://weibo.com", "https://weibo.com/favicon.ico"),
-                    BrowserShortcut("AMO", "https://addons.mozilla.org", "https://addons.mozilla.org/favicon.ico"),
-                ),
-                onOpen = { openBrowser(context, it) },
-            )
+            FavoriteDeskCard(shortcuts = shortcuts) { openUrl(it) }
         }
 
     }
 }
-
-private data class BrowserShortcut(val label: String, val url: String?, val iconUrl: String?)
 
 @Composable
 private fun BrowserHomeTopBar() {
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    val calendar = remember { Calendar.getInstance() }
+    val monthText = remember {
+        SimpleDateFormat("MMM yyyy", Locale.getDefault()).format(calendar.time)
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        GlassPanel(
+            modifier = Modifier.size(width = 76.dp, height = 60.dp),
+            shape = RoundedCornerShape(20.dp),
+            contentPadding = OctopusSpacing.xs,
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    calendar.get(Calendar.DAY_OF_MONTH).toString(),
+                    color = Color.White,
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.sp,
+                )
+                Text(monthText, color = Color.White.copy(alpha = 0.78f), fontSize = OctopusType.tag, maxLines = 1)
+            }
+        }
+        Spacer(Modifier.width(OctopusSpacing.md))
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 stringResource(R.string.browser_home_title),
-                color = TextPrimary,
-                fontSize = 20.sp,
+                color = Color.White,
+                fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 0.sp,
             )
-            Text(stringResource(R.string.browser_home_subtitle), color = TextMuted, fontSize = 11.sp, lineHeight = 15.sp, maxLines = 1)
+            Text(
+                SimpleDateFormat("EEEE", Locale.getDefault()).format(calendar.time),
+                color = Color.White.copy(alpha = 0.78f),
+                fontSize = OctopusType.body,
+                maxLines = 1,
+            )
         }
     }
 }
 
 @Composable
-private fun BrowserShortcutGrid(shortcuts: List<BrowserShortcut>, onOpen: (String?) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        shortcuts.chunked(4).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                row.forEach { shortcut ->
-                    BrowserShortcutTile(shortcut, Modifier.weight(1f)) { onOpen(shortcut.url) }
-                }
-                repeat(4 - row.size) {
-                    Spacer(Modifier.weight(1f))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun BrowserShortcutTile(shortcut: BrowserShortcut, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Surface(
-        modifier = modifier.height(82.dp).clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        color = Color.Transparent,
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 4.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally,
+private fun BrowserCategoryGrid(categories: List<BrowserCategory>, onOpen: (String) -> Unit) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        GlassPanel(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(18.dp),
+            contentPadding = OctopusSpacing.xs,
         ) {
-            Surface(
-                shape = RoundedCornerShape(15.dp),
-                color = OctopusColors.Surface,
-            ) {
-                Box(modifier = Modifier.size(50.dp), contentAlignment = Alignment.Center) {
-                    if (shortcut.iconUrl != null) {
-                        coil.compose.AsyncImage(
-                            model = shortcut.iconUrl,
-                            contentDescription = shortcut.label,
-                            modifier = Modifier.size(28.dp).clip(RoundedCornerShape(7.dp)),
-                            contentScale = ContentScale.Fit,
-                        )
-                    } else {
-                        Icon(Icons.Filled.PhoneAndroid, contentDescription = null, tint = PrimaryColor, modifier = Modifier.size(24.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(OctopusSpacing.sm)) {
+                categories.chunked(2).forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.sm), modifier = Modifier.fillMaxWidth()) {
+                        row.forEach { category ->
+                            BrowserCategoryTile(
+                                category = category,
+                                modifier = Modifier.weight(1f),
+                            ) { onOpen(category.target) }
+                        }
                     }
                 }
             }
-            Spacer(Modifier.height(7.dp))
-            Text(shortcut.label, color = TextSecondary, fontSize = 10.sp, fontWeight = FontWeight.Medium, maxLines = 1)
         }
+        Spacer(Modifier.height(OctopusSpacing.sm))
+        Text(
+            stringResource(R.string.browser_home_categories),
+            color = Color.White.copy(alpha = 0.84f),
+            fontSize = OctopusType.caption,
+            fontWeight = FontWeight.Medium,
+        )
+    }
+}
+
+@Composable
+private fun BrowserCategoryTile(
+    category: BrowserCategory,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    Column(
+        modifier = modifier
+            .clip(OctopusShape.large)
+            .clickable(onClick = onClick)
+            .padding(vertical = OctopusSpacing.xs),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Surface(
+            modifier = Modifier.size(42.dp),
+            shape = OctopusShape.large,
+            color = Color.White.copy(alpha = 0.78f),
+            shadowElevation = 2.dp,
+        ) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Icon(category.icon, contentDescription = null, tint = category.tint, modifier = Modifier.size(OctopusIconSize.large))
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            stringResource(category.titleRes),
+            color = TextPrimary,
+            fontSize = OctopusType.caption,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+        )
     }
 }
 
@@ -219,13 +314,14 @@ private fun BrowserOmnibox(
     onSubmit: () -> Unit,
 ) {
     Surface(
-        modifier = Modifier.fillMaxWidth().height(58.dp),
-        shape = RoundedCornerShape(20.dp),
-        color = OctopusColors.SurfaceDeep,
-        border = BorderStroke(1.dp, BorderColor.copy(alpha = 0.9f)),
+        modifier = Modifier.fillMaxWidth().height(54.dp),
+        shape = RoundedCornerShape(22.dp),
+        color = Color.White.copy(alpha = 0.82f),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.58f)),
+        shadowElevation = 8.dp,
     ) {
         Row(
-            modifier = Modifier.fillMaxSize().padding(start = 12.dp, end = 6.dp),
+            modifier = Modifier.fillMaxSize().padding(start = OctopusSpacing.md, end = OctopusSpacing.sm),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box {
@@ -233,13 +329,13 @@ private fun BrowserOmnibox(
                     modifier = Modifier
                         .height(42.dp)
                         .clickable { onEngineMenuChange(true) }
-                        .padding(horizontal = 2.dp),
+                        .padding(horizontal = OctopusSpacing.xs),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    SearchOptionIcon(selectedOption, Modifier.size(22.dp))
-                    Spacer(Modifier.width(7.dp))
-                    Text(selectedOption.label, color = TextSecondary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                    Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null, tint = TextMuted, modifier = Modifier.size(17.dp))
+                    SearchOptionIcon(selectedOption, Modifier.size(OctopusIconSize.medium))
+                    Spacer(Modifier.width(OctopusSpacing.sm))
+                    Text(selectedOption.label, color = TextSecondary, fontSize = OctopusType.body, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                    Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null, tint = TextMuted, modifier = Modifier.size(OctopusIconSize.small))
                 }
                 DropdownMenu(
                     expanded = engineMenuOpen,
@@ -248,11 +344,11 @@ private fun BrowserOmnibox(
                 ) {
                     options.forEach { option ->
                         DropdownMenuItem(
-                            leadingIcon = { SearchOptionIcon(option, Modifier.size(20.dp)) },
-                            text = { Text(option.label, color = TextPrimary, fontSize = 14.sp) },
+                            leadingIcon = { SearchOptionIcon(option, Modifier.size(OctopusIconSize.medium)) },
+                            text = { Text(option.label, color = TextPrimary, fontSize = OctopusType.bodyStrong) },
                             trailingIcon = {
                                 if (option.id == selectedOption.id) {
-                                    Icon(Icons.Filled.Check, contentDescription = null, tint = PrimaryColor, modifier = Modifier.size(18.dp))
+                                    Icon(Icons.Filled.Check, contentDescription = null, tint = PrimaryColor, modifier = Modifier.size(OctopusIconSize.medium))
                                 }
                             },
                             onClick = {
@@ -264,7 +360,7 @@ private fun BrowserOmnibox(
                 }
             }
 
-            Box(modifier = Modifier.padding(horizontal = 10.dp).width(1.dp).height(24.dp).background(BorderColor.copy(alpha = 0.75f)))
+            Box(modifier = Modifier.padding(horizontal = OctopusSpacing.md).width(1.dp).height(24.dp).background(BorderColor))
 
             Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                 BasicTextField(
@@ -272,7 +368,7 @@ private fun BrowserOmnibox(
                     onValueChange = onValueChange,
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    textStyle = TextStyle(color = TextPrimary, fontSize = 16.sp),
+                    textStyle = TextStyle(color = TextPrimary, fontSize = OctopusType.title),
                     cursorBrush = SolidColor(PrimaryColor),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
                     keyboardActions = KeyboardActions(onGo = { onSubmit() }),
@@ -304,9 +400,112 @@ private fun SearchOptionIcon(option: BrowserSearchOption, modifier: Modifier = M
 }
 
 @Composable
-private fun SectionTitle(text: String) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-        Icon(Icons.Filled.Search, contentDescription = null, tint = TextMuted, modifier = Modifier.size(15.dp))
-        Text(text, color = TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+private fun FavoriteDeskCard(shortcuts: List<BrowserShortcut>, onOpen: (String) -> Unit) {
+    GlassPanel(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        contentPadding = OctopusSpacing.sm,
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(OctopusSpacing.sm)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    stringResource(R.string.browser_home_favorites),
+                    color = TextPrimary,
+                    fontSize = OctopusType.bodyStrong,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    stringResource(R.string.browser_home_tools),
+                    color = TextSecondary,
+                    fontSize = OctopusType.caption,
+                )
+            }
+            shortcuts.chunked(2).forEach { row ->
+                Row(horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.sm), modifier = Modifier.fillMaxWidth()) {
+                    row.forEach { shortcut ->
+                        BrowserShortcutTile(
+                            shortcut = shortcut,
+                            modifier = Modifier.weight(1f),
+                        ) { onOpen(shortcut.url) }
+                    }
+                    if (row.size == 1) Spacer(Modifier.weight(1f))
+                }
+            }
+        }
     }
+}
+
+@Composable
+private fun BrowserShortcutTile(
+    shortcut: BrowserShortcut,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = modifier
+            .height(52.dp)
+            .clip(OctopusShape.large)
+            .background(Color.White.copy(alpha = 0.22f))
+            .clickable(onClick = onClick)
+            .padding(horizontal = OctopusSpacing.xs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Surface(
+            modifier = Modifier.size(32.dp),
+            shape = RoundedCornerShape(10.dp),
+            color = Color.White.copy(alpha = 0.72f),
+        ) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                if (shortcut.iconUrl != null) {
+                    coil.compose.SubcomposeAsyncImage(
+                        model = shortcut.iconUrl,
+                        contentDescription = shortcut.label,
+                        modifier = Modifier.size(20.dp).clip(RoundedCornerShape(6.dp)),
+                        contentScale = ContentScale.Fit,
+                        loading = { ShortcutFallbackIcon(shortcut) },
+                        error = { ShortcutFallbackIcon(shortcut) },
+                    )
+                } else {
+                    ShortcutFallbackIcon(shortcut)
+                }
+            }
+        }
+        Spacer(Modifier.width(OctopusSpacing.sm))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(shortcut.label, color = TextPrimary, fontSize = OctopusType.caption, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Text(stringResource(shortcut.categoryRes), color = TextSecondary, fontSize = OctopusType.tag, maxLines = 1)
+        }
+    }
+}
+
+@Composable
+private fun GlassPanel(
+    modifier: Modifier = Modifier,
+    shape: RoundedCornerShape,
+    contentPadding: androidx.compose.ui.unit.Dp = OctopusSpacing.md,
+    content: @Composable () -> Unit,
+) {
+    Box(
+        modifier = modifier
+            .clip(shape)
+            .background(Color.White.copy(alpha = 0.2f))
+            .border(1.dp, Color.White.copy(alpha = 0.54f), shape)
+            .padding(contentPadding),
+    ) {
+        content()
+    }
+}
+
+@Composable
+private fun ShortcutFallbackIcon(shortcut: BrowserShortcut) {
+    Icon(
+        shortcut.fallbackIcon,
+        contentDescription = null,
+        tint = shortcut.tint,
+        modifier = Modifier.size(OctopusIconSize.medium),
+    )
 }
