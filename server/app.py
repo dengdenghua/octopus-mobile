@@ -126,16 +126,76 @@ TRUSTED_PROXIES = int(os.environ.get("TRUSTED_PROXIES", "1"))
 # 商品目录(kind=membership 的购买会解锁当月 BYO)。priceFen=人民币分;priceUsdCents=美元分
 # (英文区显示,约 = 人民币价 ÷ 汇率 × 1.5 的美区溢价,取整到干净价位)。
 GOODS = [
-    {"id": "m_month", "title": "会员月卡", "credits": 500, "bonusCredits": 0,
-     "priceFen": 3900, "priceUsdCents": 899, "tag": "解锁自有模型", "kind": "membership"},
-    {"id": "g_100", "title": "100 积分", "credits": 100, "bonusCredits": 0,
-     "priceFen": 990, "priceUsdCents": 299, "tag": None, "kind": "credits"},
-    {"id": "g_500", "title": "500 积分", "credits": 500, "bonusCredits": 50,
-     "priceFen": 3990, "priceUsdCents": 899, "tag": "划算", "kind": "credits"},
-    {"id": "g_1000", "title": "1000 积分", "credits": 1000, "bonusCredits": 200,
-     "priceFen": 6900, "priceUsdCents": 1499, "tag": "超值", "kind": "credits"},
+    # 月度订阅:credits=永久积分(滚存)、bonusCredits=月度赠送(月底清零)、memberDays=30(解锁 BYO)。
+    {"id": "sub_19", "title": "入门月卡", "credits": 1000, "bonusCredits": 500,
+     "priceFen": 9900, "priceUsdCents": 1990, "tag": "含自带模型(BYO)", "memberDays": 30, "kind": "subscription"},
+    {"id": "sub_29", "title": "划算月卡", "credits": 1500, "bonusCredits": 1500,
+     "priceFen": 14900, "priceUsdCents": 2990, "tag": "划算 · 含BYO", "memberDays": 30, "kind": "subscription"},
+    {"id": "sub_99", "title": "旗舰月卡", "credits": 5000, "bonusCredits": 7500,
+     "priceFen": 49900, "priceUsdCents": 9990, "tag": "超值 · 含BYO", "memberDays": 30, "kind": "subscription"},
 ]
 GOODS_BY_ID = {g["id"]: g for g in GOODS}
+
+# 广场目录(公开下发)。后台改这里即可全量更新，App 无需发版；
+# 颜色用 "#RRGGBB"，App 侧解析。与本机强相关的技能/插件不放这里(走 App 本地注册)。
+SQUARE_FEED: dict[str, Any] = {
+    "posts": [
+        {"id": "s1", "title": "让 AI 每天自动整理手机相册，生成回忆视频", "author": "影像助手", "authorInitial": "影",
+         "authorColor": "#8B5CF6", "likes": "1.2k", "tag": "自动化", "tagColor": "#6366F1", "coverHeightDp": 180,
+         "coverGradient": ["#667EEA", "#764BA2"]},
+        {"id": "s2", "title": "3 步搭一个会订外卖的助手", "author": "效率玩家", "authorInitial": "效",
+         "authorColor": "#10B981", "likes": "856", "tag": "教程", "tagColor": "#3B82F6", "coverHeightDp": 140,
+         "coverGradient": ["#11998E", "#38EF7D"]},
+        {"id": "s3", "title": "自动写一周周报，老板直呼专业", "author": "打工侠", "authorInitial": "打",
+         "authorColor": "#F59E0B", "likes": "2.3k", "tag": "职场", "tagColor": "#EC4899", "coverHeightDp": 200,
+         "coverGradient": ["#FC466B", "#3F5EFB"]},
+        {"id": "s4", "title": "自动比价，618 我省了 2000+", "author": "省钱 Bot", "authorInitial": "省",
+         "authorColor": "#06B6D4", "likes": "3.1k", "tag": "购物", "tagColor": "#EF4444", "coverHeightDp": 170,
+         "coverGradient": ["#00C6FF", "#0072FF"]},
+        {"id": "s5", "title": "接入智能家居，一句话控制全屋", "author": "极客居", "authorInitial": "极",
+         "authorColor": "#A855F7", "likes": "1.5k", "tag": "IoT", "tagColor": "#8B5CF6", "coverHeightDp": 150,
+         "coverGradient": ["#8E2DE2", "#4A00E0"]},
+        {"id": "s6", "title": "让助手帮你读论文，10 分钟抓重点", "author": "学术喵", "authorInitial": "学",
+         "authorColor": "#EC4899", "likes": "742", "tag": "学习", "tagColor": "#10B981", "coverHeightDp": 145,
+         "coverGradient": ["#134E5E", "#71B280"]},
+    ]
+}
+
+# 灵感发现流(公开下发)。topic 用 key(automation/efficiency/life/learning/device)，App 映射到本地化分类胶囊。
+SQUARE_DISCOVERY: dict[str, Any] = {
+    "posts": [
+        {"id": "agent-travel", "title": "Travel Planner: Flights to Itinerary in One Tap",
+         "desc": "Enter destination and budget to auto-search attractions, plan routes, and generate a shareable checklist.",
+         "author": "Travel Inspiration", "authorInitial": "T", "likes": "3.2k", "topic": "life", "tag": "Lifestyle",
+         "tagColor": "#F59E0B", "coverHeight": 168, "cover": ["#FFB199", "#FF0844"], "usage": "18.6k",
+         "successRate": "92%", "duration": "About 4 min", "permissions": ["Browser", "Location", "Screenshot"]},
+        {"id": "agent-weekly", "title": "Weekly Report Auto-Saver Template",
+         "desc": "Pulls chat logs, task lists, and schedules to auto-write a report your boss will love.",
+         "author": "Efficiency Player", "authorInitial": "E", "likes": "2.8k", "topic": "efficiency", "tag": "Efficiency",
+         "tagColor": "#6366F1", "coverHeight": 138, "cover": ["#667EEA", "#764BA2"], "usage": "12.4k",
+         "successRate": "95%", "duration": "About 2 min", "permissions": ["Calendar", "Clipboard", "Documents"]},
+        {"id": "agent-phone", "title": "Turn Old Phone into 24/7 Executor",
+         "desc": "Let your backup handle messages, screenshots, forwarding, and scheduled tasks while your main phone stays quiet.",
+         "author": "Geek Hub", "authorInitial": "G", "likes": "1.7k", "topic": "device", "tag": "Device",
+         "tagColor": "#14B8A6", "coverHeight": 190, "cover": ["#134E5E", "#71B280"], "usage": "8.1k",
+         "successRate": "89%", "duration": "About 6 min", "permissions": ["Accessibility", "Notifications", "Background"]},
+        {"id": "agent-shopping", "title": "Price Tracker Saved Me 2000+",
+         "desc": "Monitors historical prices, coupons, and platform promos, and alerts you when the price drops.",
+         "author": "Savings Bot", "authorInitial": "S", "likes": "4.6k", "topic": "automation", "tag": "Automation",
+         "tagColor": "#EF4444", "coverHeight": 156, "cover": ["#FFD194", "#D1913C"], "usage": "23.9k",
+         "successRate": "91%", "duration": "About 3 min", "permissions": ["Browser", "Notifications", "Timer"]},
+        {"id": "agent-paper", "title": "Paper Reader: Key Points in 10 Minutes",
+         "desc": "Reads PDFs, web pages, and screenshots, auto-extracts conclusions and citable insights.",
+         "author": "Academic Assistant", "authorInitial": "A", "likes": "986", "topic": "learning", "tag": "Learning",
+         "tagColor": "#A855F7", "coverHeight": 176, "cover": ["#00C6FF", "#0072FF"], "usage": "6.5k",
+         "successRate": "94%", "duration": "About 5 min", "permissions": ["Files", "Browser", "Clipboard"]},
+        {"id": "agent-voice", "title": "Voice Assistant: Handle Messages While Driving",
+         "desc": "Press and speak, auto-detects recipient, adjusts tone, and sends.",
+         "author": "Car Enthusiast", "authorInitial": "C", "likes": "742", "topic": "automation", "tag": "Voice",
+         "tagColor": "#22C55E", "coverHeight": 146, "cover": ["#F2994A", "#F2C94C"], "usage": "5.7k",
+         "successRate": "88%", "duration": "About 2 min", "permissions": ["Microphone", "Notifications", "Accessibility"]},
+    ]
+}
 
 # 模型目录 = 用户可见的「三个档位」(display_name 是档位名,不暴露底层模型名)。
 # 极速档:agnes,0.2×;标准档:mimo flash,0.45×;高级档:mimo pro,1.2×。
@@ -279,7 +339,10 @@ def init_db() -> None:
         for _col in ("invite_code TEXT", "invited_by TEXT",
                      "banned INTEGER NOT NULL DEFAULT 0",
                      "daily_free_used INTEGER NOT NULL DEFAULT 0",
-                     "daily_free_date TEXT DEFAULT ''"):
+                     "daily_free_date TEXT DEFAULT ''",
+                     "gift_credits INTEGER NOT NULL DEFAULT 0",  # 赠送积分(月清),与永久 credits 分桶
+                     "gift_month TEXT DEFAULT ''",               # 赠送所属月份 YYYYMM;跨月即失效
+                     "sub_goods_id TEXT DEFAULT ''"):            # 当前订阅档(续费用)
             try:
                 c.execute(f"ALTER TABLE users ADD COLUMN {_col}")
             except sqlite3.OperationalError:
@@ -722,7 +785,11 @@ def profile(u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
 @app.get("/account/balance")
 def balance(u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
     active = u["member_expire_at"] > now_ms()
-    return {"credits": u["credits"], "membershipActive": active,
+    with closing(db()) as c:
+        gift = _gift_available(c, u["user_id"])
+    paid = int(u["credits"] or 0)
+    return {"credits": paid + gift, "paidCredits": paid, "giftCredits": gift,
+            "membershipActive": active,
             "membershipExpireAt": u["member_expire_at"] if active else 0}
 
 
@@ -1226,6 +1293,33 @@ def goods(u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
     return {"items": GOODS}
 
 
+@app.get("/square/feed")
+def square_feed() -> dict[str, Any]:
+    """广场目录(公开，无需登录)。后台改 SQUARE_FEED 即可全量下发，App 无需发版。"""
+    return SQUARE_FEED
+
+
+@app.get("/square/discovery")
+def square_discovery() -> dict[str, Any]:
+    """灵感发现流(公开)。topic 用 key(automation/efficiency/life/learning/device)，App 侧映射到本地化分类。"""
+    return SQUARE_DISCOVERY
+
+
+@app.get("/config")
+def app_config(request: Request) -> dict[str, Any]:
+    """App 启动配置(公开)。技能中心(skill hub)子域名由服务端生成：
+    默认把请求主域 api.<root> 自动派生为 club.<root>；可用环境变量 SQUARE_BASE_URL 覆盖。
+    后台改一处，全网 App 下次进广场即切换，无需发版。"""
+    env = (os.environ.get("SQUARE_BASE_URL") or "").strip()
+    if env:
+        square = env
+    else:
+        host = (request.headers.get("host") or "").split(":")[0]
+        root = host[4:] if host.startswith("api.") else host
+        square = f"https://club.{root}" if root else "https://club.octoapk.com"
+    return {"squareBaseUrl": square}
+
+
 @app.post("/billing/estimate")
 def billing_estimate(body: dict[str, Any], u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
     """根据 prompt + 预期输出长度预估一次调用会扣多少积分、折合人民币多少。
@@ -1282,24 +1376,34 @@ def _create_cashier(order_no: str, goods: dict[str, Any]) -> str:
 def _settle(c: sqlite3.Connection, order: sqlite3.Row) -> int:
     """Mark order PAID and grant credits / membership. Returns granted credits."""
     g = GOODS_BY_ID[order["goods_id"]]
-    want = g["credits"] + g["bonusCredits"]
+    uid = order["user_id"]
+    paid = int(g["credits"])               # 永久积分(滚存,不过期)
+    gift = int(g.get("bonusCredits", 0))   # 月度赠送(月底清零)
     if PAYMENT_PROVIDER == "mock":
-        granted = _grant_free(c, order["user_id"], want, source="order",
-                              detail=f"订单 {order['order_no']} 充值 {g['title']}",
+        granted = _grant_free(c, uid, paid, source="order",
+                              detail=f"订单 {order['order_no']} {g['title']}",
                               ref_id=order["order_no"])  # 内测免费充值:受每账号上限约束
     else:
-        c.execute("UPDATE users SET credits = credits + ? WHERE user_id = ?", (want, order["user_id"]))
-        _record_credit_txn(c, order["user_id"], want, source="order",
-                           detail=f"订单 {order['order_no']} 充值 {g['title']}",
+        c.execute("UPDATE users SET credits = credits + ? WHERE user_id = ?", (paid, uid))
+        _record_credit_txn(c, uid, paid, source="order",
+                           detail=f"订单 {order['order_no']} {g['title']}",
                            ref_id=order["order_no"])
-        granted = want  # 真实付费:不受免费上限
-    if g["kind"] == "membership":  # 会员到期(解锁 BYO,用自己 key,不耗平台成本)
-        cur = _user(c, order["user_id"])
+        granted = paid  # 真实付费:不受免费上限
+    # 月度赠送积分:覆盖为本月赠送额(订阅每月续费时刷新;跨月自动清零见 _gift_available)。
+    if gift > 0:
+        c.execute("UPDATE users SET gift_credits = ?, gift_month = ? WHERE user_id = ?",
+                  (gift, _this_month(), uid))
+    # 含自带模型(BYO)解锁:会员卡/订阅 顺延会员期(member_expire_at>now 即解锁 BYO)。
+    member_days = MEMBERSHIP_DAYS if g["kind"] == "membership" else int(g.get("memberDays", 0))
+    if member_days > 0:
+        cur = _user(c, uid)
         base = max(cur["member_expire_at"], now_ms())
         c.execute("UPDATE users SET member_expire_at = ? WHERE user_id = ?",
-                  (base + MEMBERSHIP_DAYS * 24 * 3600 * 1000, order["user_id"]))
+                  (base + member_days * 24 * 3600 * 1000, uid))
+    if g["kind"] == "subscription":  # 记录当前订阅档,供续费用
+        c.execute("UPDATE users SET sub_goods_id = ? WHERE user_id = ?", (g["id"], uid))
     c.execute("UPDATE orders SET status='PAID' WHERE order_no=?", (order["order_no"],))
-    return granted
+    return granted + gift
 
 
 @app.get("/billing/orders/{order_no}")
@@ -1325,6 +1429,35 @@ def query_order(order_no: str, u: sqlite3.Row = Depends(actor)) -> dict[str, Any
 @app.post("/billing/webhook/{provider}")
 async def payment_webhook(provider: str, request: Request) -> JSONResponse:
     raise HTTPException(status_code=501, detail=f"webhook for '{provider}' not implemented")
+
+
+@app.post("/billing/subscription/renew")
+def subscription_renew(u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    """订阅续费(当前 mock:手动触发=模拟一次自动扣款成功)。真实自动续费由支付渠道的
+    周期扣款 webhook 调同一逻辑:给当前订阅档「滚存永久积分 + 刷新本月赠送(月清) + 顺延 30 天会员/BYO」。"""
+    gid = u["sub_goods_id"]
+    if not gid or gid not in GOODS_BY_ID or GOODS_BY_ID[gid]["kind"] != "subscription":
+        raise HTTPException(status_code=400, detail="无有效订阅")
+    g = GOODS_BY_ID[gid]
+    uid = u["user_id"]
+    paid = int(g["credits"])
+    gift = int(g.get("bonusCredits", 0))
+    ref = f"renew_{now_ms()}"
+    with closing(db()) as c:
+        if PAYMENT_PROVIDER == "mock":
+            _grant_free(c, uid, paid, source="sub_renew", detail=f"订阅续费 {g['title']}", ref_id=ref)
+        else:
+            c.execute("UPDATE users SET credits = credits + ? WHERE user_id = ?", (paid, uid))
+            _record_credit_txn(c, uid, paid, source="sub_renew", detail=f"订阅续费 {g['title']}", ref_id=ref)
+        if gift > 0:
+            c.execute("UPDATE users SET gift_credits = ?, gift_month = ? WHERE user_id = ?",
+                      (gift, _this_month(), uid))
+        cur = _user(c, uid)
+        base = max(cur["member_expire_at"], now_ms())
+        c.execute("UPDATE users SET member_expire_at = ? WHERE user_id = ?",
+                  (base + MEMBERSHIP_DAYS * 24 * 3600 * 1000, uid))
+        c.commit()
+    return {"ok": True, "goodsId": gid, "paidCredits": paid, "giftCredits": gift, "memberDays": MEMBERSHIP_DAYS}
 
 
 # ─────────────────── 第三方辅助工具下载镜像 ───────────────────
@@ -1412,6 +1545,28 @@ def _consume_daily_free(c: sqlite3.Connection, user_id: str, want: int) -> int:
             "daily_free_date = ? WHERE user_id = ?",
             (_today_str(), take, take, _today_str(), user_id),
         )
+    return take
+
+
+def _this_month() -> str:
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m")
+
+
+def _gift_available(c: sqlite3.Connection, user_id: str) -> int:
+    """赠送积分余额(仅当月有效;跨月即视为 0 —— 即"月底清零")。"""
+    row = c.execute("SELECT gift_credits, gift_month FROM users WHERE user_id = ?", (user_id,)).fetchone()
+    if row is None or row["gift_month"] != _this_month():
+        return 0
+    return max(0, int(row["gift_credits"] or 0))
+
+
+def _consume_gift(c: sqlite3.Connection, user_id: str, want: int) -> int:
+    """原子扣减当月赠送积分,返回实际抵扣数(0..want)。赠送优先于永久积分消费。"""
+    avail = _gift_available(c, user_id)
+    take = min(avail, max(0, want))
+    if take:
+        c.execute("UPDATE users SET gift_credits = gift_credits - ?, gift_month = ? WHERE user_id = ?",
+                  (take, _this_month(), user_id))
     return take
 
 
@@ -1507,9 +1662,11 @@ async def chat_completions(body: dict[str, Any], request: Request, u: sqlite3.Ro
     ) // 4
     hold = 0 if unlimited else max(1, math.ceil((prompt_est + max_out) / 1000 * CREDITS_PER_1K_TOKENS * mult))
     free_used = 0
-    if hold and not unlimited and FREE_DAILY_CREDITS > 0:
+    if hold and not unlimited:
         with closing(db()) as c:
-            free_used = _consume_daily_free(c, user_id, hold)
+            free_used += _consume_gift(c, user_id, hold)                       # 赠送优先(月清)
+            if FREE_DAILY_CREDITS > 0:
+                free_used += _consume_daily_free(c, user_id, hold - free_used)  # 再每日免费额度
             c.commit()
     effective_hold = max(0, hold - free_used)
     if effective_hold and not _reserve_credits(user_id, effective_hold, ref_id=request_id):
