@@ -3,6 +3,7 @@ package com.apk.claw.android.server
 import android.os.Handler
 import android.os.Looper
 import com.apk.claw.android.ui.compose.screen.ChatAgentBridge
+import com.apk.claw.android.utils.XLog
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
@@ -29,7 +30,9 @@ object AgentWebBridge {
 
     private fun add(type: String, data: String) {
         events.add(Ev(seq.getAndIncrement(), type, data))
-        while (events.size > MAX_KEEP) runCatching { events.removeAt(0) }
+        while (events.size > MAX_KEEP) {
+            try { events.removeAt(0) } catch (e: Exception) { XLog.w("AgentWebBridge", "trim events failed", e) }
+        }
     }
 
     /** 网页发来一条指令。已在跑→false(busy);未配置模型→记错误并 false。 */
@@ -42,6 +45,7 @@ object AgentWebBridge {
             runCatching {
                 ChatAgentBridge.run(
                     prompt = prompt,
+                    untrusted = true,   // LAN 网页控制台来源：高危工具走来源闸门
                     onTool = { icon, name, _, result ->
                         // "完成任务/Finish" 的结果即最终答案,交给 done 渲染成回复气泡,不再当工具步骤
                         if (!name.contains("Finish", true) && !name.contains("完成"))
