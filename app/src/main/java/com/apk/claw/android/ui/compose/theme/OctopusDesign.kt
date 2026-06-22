@@ -230,7 +230,8 @@ object OctopusBackground {
  * 普通半透明磨砂。页面组件默认读取这里，也可以在单个组件上传入参数微调。
  */
 object OctopusGlass {
-    val defaultBlurRadius: Dp = 18.dp
+    // 复用 octopus-agent 液态玻璃参数(--global-glass-blur: 24px),更液态。
+    val defaultBlurRadius: Dp = 24.dp
 
     private val _blurRadius = mutableStateOf(defaultBlurRadius)
     private val _quality = mutableStateOf(OctopusGlassQuality.High)

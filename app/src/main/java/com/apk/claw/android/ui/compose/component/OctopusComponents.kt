@@ -195,7 +195,8 @@ fun LiquidGlassLayer(
                     translationY = -px * 0.55f
                     scaleX = surfaceScale
                     scaleY = surfaceScale
-                    alpha = if (light) 0.92f else 0.82f
+                    // 复用 octopus-agent 液态玻璃透明度(surface≈0.54):更透。
+                    alpha = if (light) 0.60f else 0.52f
                 }
                 .blur(blurRadius, edgeTreatment = BlurredEdgeTreatment(shape))
                 .background(tint.copy(alpha = tint.alpha * tintAlpha), shape)
