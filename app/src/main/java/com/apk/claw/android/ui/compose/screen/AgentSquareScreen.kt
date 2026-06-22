@@ -25,6 +25,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
@@ -32,6 +33,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -56,118 +58,6 @@ import com.apk.claw.android.ui.compose.theme.OctopusType
 /**
  * 灵感广场 —— 双列灵感瀑布流，展示自动化技能、用法、作品卡片。
  */
-private data class AgentPost(
-    val id: String,
-    val title: String,
-    val author: String,
-    val authorInitial: String,
-    val authorColor: Color,
-    val likes: String,
-    val tag: String,
-    val tagColor: Color,
-    val coverHeightDp: Int,
-    val coverGradient: List<Color>,
-)
-
-private val samplePosts = listOf(
-    AgentPost(
-        id = "1",
-        title = "让 AI 每天自动整理手机相册，生成回忆视频",
-        author = "影像助手",
-        authorInitial = "影",
-        authorColor = OctopusTints.Video,
-        likes = "1.2k",
-        tag = "自动化",
-        tagColor = OctopusTints.Routine,
-        coverHeightDp = 180,
-        coverGradient = listOf(Color(0xFF667EEA), Color(0xFF764BA2)),
-    ),
-    AgentPost(
-        id = "2",
-        title = "3 步搭一个会订外卖的助手",
-        author = "效率玩家",
-        authorInitial = "效",
-        authorColor = OctopusTints.Skill,
-        likes = "856",
-        tag = "教程",
-        tagColor = OctopusTints.Browser,
-        coverHeightDp = 140,
-        coverGradient = listOf(Color(0xFF11998E), Color(0xFF38EF7D)),
-    ),
-    AgentPost(
-        id = "3",
-        title = "自动写一周周报，老板直呼专业",
-        author = "打工侠",
-        authorInitial = "打",
-        authorColor = OctopusTints.Window,
-        likes = "2.3k",
-        tag = "职场",
-        tagColor = OctopusTints.Memory,
-        coverHeightDp = 200,
-        coverGradient = listOf(Color(0xFFFC466B), Color(0xFF3F5EFB)),
-    ),
-    AgentPost(
-        id = "4",
-        title = "用语音唤醒助手，开车时也能回消息",
-        author = "车载达人",
-        authorInitial = "车",
-        authorColor = OctopusTints.Plugin,
-        likes = "634",
-        tag = "语音",
-        tagColor = OctopusTints.Trust,
-        coverHeightDp = 160,
-        coverGradient = listOf(Color(0xFFF2994A), Color(0xFFF2C94C)),
-    ),
-    AgentPost(
-        id = "5",
-        title = "自动比价，618 我省了 2000+",
-        author = "省钱 Bot",
-        authorInitial = "省",
-        authorColor = OctopusTints.Cloud,
-        likes = "3.1k",
-        tag = "购物",
-        tagColor = OctopusTints.Hot,
-        coverHeightDp = 170,
-        coverGradient = listOf(Color(0xFF00C6FF), Color(0xFF0072FF)),
-    ),
-    AgentPost(
-        id = "6",
-        title = "接入智能家居，一句话控制全屋",
-        author = "极客居",
-        authorInitial = "极",
-        authorColor = OctopusTints.Evolve,
-        likes = "1.5k",
-        tag = "IoT",
-        tagColor = OctopusTints.Plugin,
-        coverHeightDp = 150,
-        coverGradient = listOf(Color(0xFF8E2DE2), Color(0xFF4A00E0)),
-    ),
-    AgentPost(
-        id = "7",
-        title = "生成旅行攻略，细到每天照着走",
-        author = "旅行灵感",
-        authorInitial = "旅",
-        authorColor = OctopusTints.Browser,
-        likes = "987",
-        tag = "生活",
-        tagColor = OctopusTints.Routine,
-        coverHeightDp = 190,
-        coverGradient = listOf(Color(0xFFee9ca7), Color(0xFFFFDDE1)),
-    ),
-    AgentPost(
-        id = "8",
-        title = "让助手帮你读论文，10 分钟抓重点",
-        author = "学术喵",
-        authorInitial = "学",
-        authorColor = OctopusTints.Memory,
-        likes = "742",
-        tag = "学习",
-        tagColor = OctopusTints.Skill,
-        coverHeightDp = 145,
-        coverGradient = listOf(Color(0xFF134E5E), Color(0xFF71B280)),
-    ),
-)
-
 private val tabs = listOf(
     R.string.agent_square_tab_recommend,
     R.string.agent_square_tab_following,
@@ -180,6 +70,11 @@ fun AgentSquareScreen(
     onOpenSearch: () -> Unit = {},
     onCreatePost: () -> Unit = {},
 ) {
+    // 广场目录来自服务端 API（可后台随意改），null=加载中；本地技能走本地注册表。
+    val remote by produceState<List<AgentPost>?>(initialValue = null) {
+        value = SquareRepository.remoteFeed()
+    }
+    val local = remember { SquareRepository.localFeed() }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -189,7 +84,7 @@ fun AgentSquareScreen(
     ) {
         AgentSquareTopBar(onBack, onOpenSearch, onCreatePost)
         CategoryTabs()
-        AgentFeed()
+        AgentFeed(remote = remote, local = local)
     }
 }
 
@@ -268,7 +163,15 @@ private fun CategoryTabs() {
 }
 
 @Composable
-private fun AgentFeed() {
+private fun AgentFeed(remote: List<AgentPost>?, local: List<AgentPost>) {
+    // 加载中且无本地内容 → 居中转圈；否则本地技能在前 + 服务端目录在后，合成一个瀑布流。
+    if (remote == null && local.isEmpty()) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(color = OctopusColors.Primary)
+        }
+        return
+    }
+    val posts = local + (remote ?: emptyList())
     LazyVerticalStaggeredGrid(
         columns = StaggeredGridCells.Fixed(2),
         modifier = Modifier.fillMaxSize(),
@@ -276,7 +179,7 @@ private fun AgentFeed() {
         horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.md),
         verticalItemSpacing = OctopusSpacing.md,
     ) {
-        items(samplePosts, key = { it.id }) { post ->
+        items(posts, key = { it.id }) { post ->
             AgentPostCard(post)
         }
     }

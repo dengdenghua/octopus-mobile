@@ -52,6 +52,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -138,128 +139,7 @@ private val sampleCircles = listOf(
     CirclePreview(R.string.circle_tv_cast, Icons.Filled.Tv, VideoTint, "421", R.string.circle_tag_new),
 )
 
-private data class AgentDiscoveryPost(
-    val id: String,
-    val titleRes: Int,
-    val descRes: Int,
-    val authorRes: Int,
-    val authorInitialRes: Int,
-    val likes: String,
-    val topicRes: Int,
-    val tagRes: Int,
-    val tagColor: Color,
-    val coverHeight: Int,
-    val cover: List<Color>,
-    val usage: String,
-    val successRate: String,
-    val durationRes: Int,
-    val permissionsRes: List<Int>,
-)
-
-private val agentDiscoveryPosts = listOf(
-    AgentDiscoveryPost(
-        id = "agent-travel",
-        titleRes = R.string.agent_post_travel_title,
-        descRes = R.string.agent_post_travel_desc,
-        authorRes = R.string.agent_post_travel_author,
-        authorInitialRes = R.string.agent_post_travel_initial,
-        likes = "3.2k",
-        topicRes = R.string.agent_topic_life,
-        tagRes = R.string.agent_topic_life,
-        tagColor = RoutineTint,
-        coverHeight = 168,
-        cover = listOf(Color(0xFFFFB199), Color(0xFFFF0844)),
-        usage = "18.6k",
-        successRate = "92%",
-        durationRes = R.string.agent_post_travel_duration,
-        permissionsRes = listOf(R.string.agent_perm_browser, R.string.agent_perm_location, R.string.agent_perm_screenshot),
-    ),
-    AgentDiscoveryPost(
-        id = "agent-weekly",
-        titleRes = R.string.agent_post_weekly_title,
-        descRes = R.string.agent_post_weekly_desc,
-        authorRes = R.string.agent_post_weekly_author,
-        authorInitialRes = R.string.agent_post_weekly_initial,
-        likes = "2.8k",
-        topicRes = R.string.agent_topic_efficiency,
-        tagRes = R.string.agent_topic_efficiency,
-        tagColor = SkillTint,
-        coverHeight = 138,
-        cover = listOf(Color(0xFF667EEA), Color(0xFF764BA2)),
-        usage = "12.4k",
-        successRate = "95%",
-        durationRes = R.string.agent_post_weekly_duration,
-        permissionsRes = listOf(R.string.agent_perm_calendar, R.string.agent_perm_clipboard, R.string.agent_perm_document),
-    ),
-    AgentDiscoveryPost(
-        id = "agent-phone",
-        titleRes = R.string.agent_post_phone_title,
-        descRes = R.string.agent_post_phone_desc,
-        authorRes = R.string.agent_post_phone_author,
-        authorInitialRes = R.string.agent_post_phone_initial,
-        likes = "1.7k",
-        topicRes = R.string.agent_topic_device,
-        tagRes = R.string.agent_topic_device,
-        tagColor = WindowTint,
-        coverHeight = 190,
-        cover = listOf(Color(0xFF134E5E), Color(0xFF71B280)),
-        usage = "8.1k",
-        successRate = "89%",
-        durationRes = R.string.agent_post_phone_duration,
-        permissionsRes = listOf(R.string.agent_perm_accessibility, R.string.agent_perm_notification, R.string.agent_perm_background),
-    ),
-    AgentDiscoveryPost(
-        id = "agent-shopping",
-        titleRes = R.string.agent_post_shopping_title,
-        descRes = R.string.agent_post_shopping_desc,
-        authorRes = R.string.agent_post_shopping_author,
-        authorInitialRes = R.string.agent_post_shopping_initial,
-        likes = "4.6k",
-        topicRes = R.string.agent_topic_automation,
-        tagRes = R.string.agent_topic_automation,
-        tagColor = com.apk.claw.android.ui.compose.theme.OctopusTints.Hot,
-        coverHeight = 156,
-        cover = listOf(Color(0xFFFFD194), Color(0xFFD1913C)),
-        usage = "23.9k",
-        successRate = "91%",
-        durationRes = R.string.agent_post_shopping_duration,
-        permissionsRes = listOf(R.string.agent_perm_browser, R.string.agent_perm_notification, R.string.agent_perm_timer),
-    ),
-    AgentDiscoveryPost(
-        id = "agent-paper",
-        titleRes = R.string.agent_post_paper_title,
-        descRes = R.string.agent_post_paper_desc,
-        authorRes = R.string.agent_post_paper_author,
-        authorInitialRes = R.string.agent_post_paper_initial,
-        likes = "986",
-        topicRes = R.string.agent_topic_learning,
-        tagRes = R.string.agent_topic_learning,
-        tagColor = MemoryTint,
-        coverHeight = 176,
-        cover = listOf(Color(0xFF00C6FF), Color(0xFF0072FF)),
-        usage = "6.5k",
-        successRate = "94%",
-        durationRes = R.string.agent_post_paper_duration,
-        permissionsRes = listOf(R.string.agent_perm_file, R.string.agent_perm_browser, R.string.agent_perm_clipboard),
-    ),
-    AgentDiscoveryPost(
-        id = "agent-voice",
-        titleRes = R.string.agent_post_voice_title,
-        descRes = R.string.agent_post_voice_desc,
-        authorRes = R.string.agent_post_voice_author,
-        authorInitialRes = R.string.agent_post_voice_initial,
-        likes = "742",
-        topicRes = R.string.agent_topic_automation,
-        tagRes = R.string.agent_tag_voice,
-        tagColor = TrustTint,
-        coverHeight = 146,
-        cover = listOf(Color(0xFFF2994A), Color(0xFFF2C94C)),
-        usage = "5.7k",
-        successRate = "88%",
-        durationRes = R.string.agent_post_voice_duration,
-        permissionsRes = listOf(R.string.agent_perm_mic, R.string.agent_perm_notification, R.string.agent_perm_accessibility),
-    ),
-)
+// AgentDiscoveryPost / 灵感发现流数据已迁至 SquareCatalog.kt（服务端 API + 缓存 + 种子回退）。
 
 private fun featureSections(): List<Pair<Int, List<FeatureItem>>> = listOf(
     R.string.feat_section_automation to listOf(
@@ -314,8 +194,8 @@ fun FeatureHubScreen(
 
         selectedPost?.let { post ->
             // Pre-resolve strings outside the non-composable onRun lambda
-            val postTitle = stringResource(post.titleRes)
-            val postDesc = stringResource(post.descRes)
+            val postTitle = post.title
+            val postDesc = post.desc
             val reproducePrefix = stringResource(R.string.agent_reproduce_prefix)
             val reproduceTarget = stringResource(R.string.agent_reproduce_target)
             val reproduceSuffix = stringResource(R.string.agent_reproduce_suffix)
@@ -371,9 +251,13 @@ private fun ExploreTab(
     onOpenPost: (AgentDiscoveryPost) -> Unit,
 ) {
     var selectedTopic by remember { mutableStateOf(R.string.agent_square_tab_recommend) }
-    val filteredPosts = remember(selectedTopic) {
-        if (selectedTopic == R.string.agent_square_tab_recommend) agentDiscoveryPosts else agentDiscoveryPosts.filter { it.topicRes == selectedTopic }
+    // 灵感流来自服务端 /square/discovery（后台可改），失败回退缓存/种子；null=加载中。
+    val posts by produceState<List<AgentDiscoveryPost>?>(initialValue = null) {
+        value = DiscoveryRepository.feed()
     }
+    val all = posts ?: emptyList()
+    val filteredPosts = if (selectedTopic == R.string.agent_square_tab_recommend) all
+        else all.filter { it.topicRes == selectedTopic }
     LazyVerticalStaggeredGrid(
         columns = StaggeredGridCells.Fixed(2),
         modifier = Modifier.fillMaxSize(),
@@ -554,7 +438,7 @@ private fun AgentDiscoveryCard(post: AgentDiscoveryPost, onClick: () -> Unit) {
                 ) {
                     Box(modifier = Modifier.size(6.dp).background(post.tagColor, CircleShape))
                     Spacer(Modifier.width(OctopusSpacing.xs))
-                    Text(stringResource(post.tagRes), color = Color.White, fontSize = OctopusType.tag, fontWeight = FontWeight.SemiBold)
+                    Text(post.tag, color = Color.White, fontSize = OctopusType.tag, fontWeight = FontWeight.SemiBold)
                 }
                 Icon(
                     discoveryIconFor(post.topicRes),
@@ -565,7 +449,7 @@ private fun AgentDiscoveryCard(post: AgentDiscoveryPost, onClick: () -> Unit) {
             }
             Column(modifier = Modifier.padding(OctopusSpacing.md)) {
                 Text(
-                    stringResource(post.titleRes),
+                    post.title,
                     color = OctopusColors.TextPrimary,
                     fontSize = OctopusType.body,
                     fontWeight = FontWeight.SemiBold,
@@ -575,7 +459,7 @@ private fun AgentDiscoveryCard(post: AgentDiscoveryPost, onClick: () -> Unit) {
                 )
                 Spacer(Modifier.height(OctopusSpacing.xs))
                 Text(
-                    stringResource(post.descRes),
+                    post.desc,
                     color = OctopusColors.TextMuted,
                     fontSize = OctopusType.caption,
                     lineHeight = 15.sp,
@@ -590,11 +474,11 @@ private fun AgentDiscoveryCard(post: AgentDiscoveryPost, onClick: () -> Unit) {
                             .background(post.tagColor.copy(alpha = 0.18f), CircleShape),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text(stringResource(post.authorInitialRes), color = post.tagColor, fontSize = OctopusType.tag, fontWeight = FontWeight.Bold)
+                        Text(post.authorInitial, color = post.tagColor, fontSize = OctopusType.tag, fontWeight = FontWeight.Bold)
                     }
                     Spacer(Modifier.width(OctopusSpacing.xs))
                     Text(
-                        stringResource(post.authorRes),
+                        post.author,
                         modifier = Modifier.weight(1f),
                         color = OctopusColors.TextMuted,
                         fontSize = OctopusType.caption,
@@ -661,7 +545,7 @@ private fun AgentDiscoveryDetail(
                     ) {
                         Box(modifier = Modifier.size(6.dp).background(post.tagColor, CircleShape))
                         Spacer(Modifier.width(OctopusSpacing.xs))
-                        Text(stringResource(post.tagRes), color = Color.White, fontSize = OctopusType.tag, fontWeight = FontWeight.SemiBold)
+                        Text(post.tag, color = Color.White, fontSize = OctopusType.tag, fontWeight = FontWeight.SemiBold)
                     }
                     Box(
                         modifier = Modifier
@@ -685,7 +569,7 @@ private fun AgentDiscoveryDetail(
 
                 Spacer(Modifier.height(OctopusSpacing.md))
                 Text(
-                    stringResource(post.titleRes),
+                    post.title,
                     color = OctopusColors.TextPrimary,
                     fontSize = OctopusType.title,
                     fontWeight = FontWeight.Bold,
@@ -693,7 +577,7 @@ private fun AgentDiscoveryDetail(
                 )
                 Spacer(Modifier.height(OctopusSpacing.xs))
                 Text(
-                    stringResource(post.descRes),
+                    post.desc,
                     color = OctopusColors.TextSecondary,
                     fontSize = OctopusType.body,
                     lineHeight = 19.sp,
@@ -707,10 +591,10 @@ private fun AgentDiscoveryDetail(
                             .background(post.tagColor.copy(alpha = 0.18f), CircleShape),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text(stringResource(post.authorInitialRes), color = post.tagColor, fontSize = OctopusType.label, fontWeight = FontWeight.Bold)
+                        Text(post.authorInitial, color = post.tagColor, fontSize = OctopusType.label, fontWeight = FontWeight.Bold)
                     }
                     Spacer(Modifier.width(OctopusSpacing.sm))
-                    Text(stringResource(post.authorRes), color = OctopusColors.TextSecondary, fontSize = OctopusType.body, fontWeight = FontWeight.SemiBold)
+                    Text(post.author, color = OctopusColors.TextSecondary, fontSize = OctopusType.body, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.weight(1f))
                     Icon(Icons.Filled.Favorite, contentDescription = null, tint = OctopusColors.TextMuted.copy(alpha = 0.65f), modifier = Modifier.size(OctopusIconSize.small))
                     Spacer(Modifier.width(OctopusSpacing.xs))
@@ -721,7 +605,7 @@ private fun AgentDiscoveryDetail(
                 Row(horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.sm), modifier = Modifier.fillMaxWidth()) {
                     DetailMetric(stringResource(R.string.agent_metric_usage), post.usage, post.tagColor, Modifier.weight(1f))
                     DetailMetric(stringResource(R.string.agent_metric_success_rate), post.successRate, RoutineTint, Modifier.weight(1f))
-                    DetailMetric(stringResource(R.string.agent_metric_duration), stringResource(post.durationRes), BrowserTint, Modifier.weight(1f))
+                    DetailMetric(stringResource(R.string.agent_metric_duration), post.duration, BrowserTint, Modifier.weight(1f))
                 }
 
                 Spacer(Modifier.height(OctopusSpacing.md))
@@ -731,7 +615,7 @@ private fun AgentDiscoveryDetail(
                 DetailSection(stringResource(R.string.agent_detail_prerequisites), listOf(stringResource(R.string.agent_detail_prereq_1), stringResource(R.string.agent_detail_prereq_2), stringResource(R.string.agent_detail_prereq_3)))
 
                 Spacer(Modifier.height(OctopusSpacing.md))
-                PermissionChips(stringResource(R.string.agent_detail_permissions), post.permissionsRes.map { stringResource(it) }, post.tagColor)
+                PermissionChips(stringResource(R.string.agent_detail_permissions), post.permissions, post.tagColor)
 
                 Spacer(Modifier.height(OctopusSpacing.lg))
                 Row(horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.sm), modifier = Modifier.fillMaxWidth()) {

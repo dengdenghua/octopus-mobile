@@ -12,6 +12,8 @@ import com.apk.claw.android.utils.KVUtils
  */
 object AccountConfig {
     private const val KEY_BASE_URL = "ACCOUNT_BASE_URL"
+    private const val KEY_SQUARE_BASE_URL = "ACCOUNT_SQUARE_BASE_URL"               // 手动覆盖(最高优先)
+    private const val KEY_SQUARE_BASE_URL_REMOTE = "ACCOUNT_SQUARE_BASE_URL_REMOTE" // 服务端 /config 下发并缓存
     private const val KEY_MOCK = "ACCOUNT_MOCK_MODE"
     private const val KEY_MODEL_SOURCE = "ACCOUNT_MODEL_SOURCE"
     private const val KEY_MODEL_TIER = "ACCOUNT_MODEL_TIER"
@@ -27,6 +29,31 @@ object AccountConfig {
         set(v) {
             KVUtils.putString(KEY_BASE_URL, v.trim())
         }
+
+    /** App 首拉 /config 之前的默认技能中心域名（兜底用，服务端下发后即被覆盖）。 */
+    const val DEFAULT_SQUARE_BASE_URL = "https://club.octoapk.com"
+
+    /**
+     * 广场 / 技能中心(skill hub)独立域名。优先级：
+     *   ① 手动覆盖([KEY_SQUARE_BASE_URL]) → ② 服务端 /config 下发缓存 → ③ [DEFAULT_SQUARE_BASE_URL]。
+     * 即域名由**服务端生成/控制**，App 只内置一个首拉前的兜底。
+     */
+    var squareBaseUrl: String
+        get() {
+            val manual = KVUtils.getString(KEY_SQUARE_BASE_URL, "")
+            if (manual.isNotBlank()) return manual
+            val remote = KVUtils.getString(KEY_SQUARE_BASE_URL_REMOTE, "")
+            if (remote.isNotBlank()) return remote
+            return DEFAULT_SQUARE_BASE_URL
+        }
+        set(v) {
+            KVUtils.putString(KEY_SQUARE_BASE_URL, v.trim())
+        }
+
+    /** 由 /config 下发并缓存（服务端集中控制技能中心域名）。 */
+    fun setRemoteSquareBaseUrl(url: String) {
+        if (url.isNotBlank()) KVUtils.putString(KEY_SQUARE_BASE_URL_REMOTE, url.trim())
+    }
 
     /** Mock only when explicitly enabled OR when no base URL is configured. */
     val mockMode: Boolean
