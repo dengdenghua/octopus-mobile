@@ -212,7 +212,16 @@ class BrainModeSelector(
             llmClient = llm,
             toolExecutor = { call -> executeLocalTool(call) }
         )
-        return react.run(task, filteredSkills)
+        // 接通 VLM 目标自校验:用无障碍截屏让 ReAct 在判"完成"前看屏确认目标达成。
+        return react.run(
+            task,
+            filteredSkills,
+            captureScreen = {
+                com.apk.claw.android.service.ClawAccessibilityService
+                    .getInstance()
+                    ?.takeScreenshot(2000L)
+            },
+        )
     }
 
     /**
