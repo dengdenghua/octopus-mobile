@@ -213,7 +213,7 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
             top = OctopusSpacing.sm,
             bottom = OctopusLayout.bottomNavContentPadding,
         ),
-        verticalArrangement = Arrangement.spacedBy(OctopusSpacing.md),
+        verticalArrangement = Arrangement.spacedBy(OctopusSpacing.sm),
     ) {
         item {
             SettingsHeader(
@@ -310,15 +310,8 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
         }
 
         item {
+            // 「远程控制电脑」已统一并入顶栏的设备目标选择器（TargetSelector），此处不再重复入口。
             SettingsCard(stringResource(R.string.settings_device_control_section), Icons.Filled.Monitor, compact = true) {
-                ClickableSettingsRow(
-                    Icons.Filled.Monitor,
-                    stringResource(R.string.settings_remote_pc_title),
-                    stringResource(R.string.settings_remote_pc_desc),
-                ) {
-                    context.startActivity(Intent(context, com.apk.claw.android.ui.featurescreens.PcRemoteWebrtcActivity::class.java))
-                }
-                SettingsDivider()
                 ClickableSettingsRow(
                     Icons.Filled.Hub,
                     stringResource(R.string.remote_console_title),
@@ -793,7 +786,7 @@ private fun ClickableSettingsRow(icon: ImageVector, title: String, subtitle: Str
 @Composable
 private fun IconBubble(icon: ImageVector, tint: Color) {
     Surface(shape = OctopusShape.small, color = tint) {
-        Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.padding(OctopusSpacing.sm).size(OctopusIconSize.medium))
+        Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.padding(6.dp).size(OctopusIconSize.small))
     }
 }
 
@@ -855,7 +848,7 @@ private fun SettingsCard(
             .border(1.dp, OctopusBackground.glassBorder, shape)
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
     ) {
-        Column(modifier = Modifier.padding(OctopusSpacing.md)) {
+        Column(modifier = Modifier.padding(horizontal = OctopusSpacing.md, vertical = OctopusSpacing.sm)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.sm)) {
                 Icon(icon, contentDescription = null, tint = TextMuted, modifier = Modifier.size(OctopusIconSize.small))
                 Text(title, fontSize = OctopusType.label, fontWeight = FontWeight.SemiBold, color = TextSecondary, letterSpacing = 0.sp, lineHeight = 16.sp)

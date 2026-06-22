@@ -225,6 +225,7 @@ Shizuku 是安全、开源的本地辅助工具。</string>
     <string name="agent_task_completed">任务已完成</string>
     <string name="agent_task_cancel">任务取消</string>
     <string name="agent_api_call_failed">智能服务调用失败：%s</string>
+    <string name="agent_empty_response">模型暂时无响应（疑似上游服务波动）</string>
     <string name="agent_max_iterations">已达到最大迭代次数（%d），任务仍未完成</string>
 
     <!-- File Tool -->
@@ -836,6 +837,7 @@ Shizuku 是安全、开源的本地辅助工具。</string>
     <string name="account_code_label">验证码</string>
     <string name="account_code_hint">输入验证码</string>
     <string name="account_send_code">获取验证码</string>
+    <string name="account_sending">发送中…</string>
     <string name="account_resend_in">%1$d 秒后重发</string>
     <string name="account_code_sent">验证码已发送</string>
     <string name="account_mock_code_filled">测试验证码已自动填入：%1$s</string>
