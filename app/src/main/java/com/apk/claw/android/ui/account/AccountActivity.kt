@@ -45,6 +45,7 @@ class AccountActivity : BaseActivity() {
     private lateinit var etInviteCode: EditText
     private lateinit var llRedeem: LinearLayout
     private lateinit var btnTierFast: KButton
+    private lateinit var btnTierFlash: KButton
     private lateinit var btnTierPremium: KButton
     private lateinit var tvTierHint: TextView
 
@@ -70,11 +71,13 @@ class AccountActivity : BaseActivity() {
         etInviteCode = findViewById(R.id.etInviteCode)
         llRedeem = findViewById(R.id.llRedeem)
         btnTierFast = findViewById(R.id.btnTierFast)
+        btnTierFlash = findViewById(R.id.btnTierFlash)
         btnTierPremium = findViewById(R.id.btnTierPremium)
         tvTierHint = findViewById(R.id.tvTierHint)
         tvMobile.text = AccountStore.mobile
 
         btnTierFast.setOnClickListener { setTier(AccountConfig.TIER_FAST) }
+        btnTierFlash.setOnClickListener { setTier(AccountConfig.TIER_FLASH) }
         btnTierPremium.setOnClickListener { setTier(AccountConfig.TIER_PREMIUM) }
         renderTier()
 
@@ -212,17 +215,26 @@ class AccountActivity : BaseActivity() {
 
     /** 高亮当前档位按钮 + 更新说明文案(只显示档位,不暴露底层模型名)。 */
     private fun renderTier() {
-        val premium = AccountConfig.modelTier == AccountConfig.TIER_PREMIUM
+        val tier = AccountConfig.modelTier
         val brand = getColor(R.color.colorBrandPrimary)
         val muted = getColor(R.color.colorContainerBrighten)
         val onBrand = getColor(android.R.color.white)
         val onMuted = getColor(R.color.colorTextPrimary)
-        btnTierFast.setBgColor(if (!premium) brand else muted)
-        btnTierFast.setTextColor(if (!premium) onBrand else onMuted)
-        btnTierPremium.setBgColor(if (premium) brand else muted)
-        btnTierPremium.setTextColor(if (premium) onBrand else onMuted)
+
+        fun apply(button: KButton, selected: Boolean) {
+            button.setBgColor(if (selected) brand else muted)
+            button.setTextColor(if (selected) onBrand else onMuted)
+        }
+
+        apply(btnTierFast, tier == AccountConfig.TIER_FAST)
+        apply(btnTierFlash, tier == AccountConfig.TIER_FLASH)
+        apply(btnTierPremium, tier == AccountConfig.TIER_PREMIUM)
         tvTierHint.text = getString(
-            if (premium) R.string.account_tier_premium_hint else R.string.account_tier_fast_hint
+            when (tier) {
+                AccountConfig.TIER_FLASH -> R.string.account_tier_flash_hint
+                AccountConfig.TIER_PREMIUM -> R.string.account_tier_premium_hint
+                else -> R.string.account_tier_fast_hint
+            }
         )
     }
 

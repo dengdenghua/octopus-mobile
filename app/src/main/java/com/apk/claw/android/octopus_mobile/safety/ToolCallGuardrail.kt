@@ -2,6 +2,7 @@ package com.apk.claw.android.octopus_mobile.safety
 
 import android.util.Log
 import java.security.MessageDigest
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * 工具调用护栏 —— 从母体 runtime/safety/immunity/tool_guardrails.py 移植.
@@ -58,19 +59,20 @@ class ToolCallGuardrailController(
 
     // ── 状态 ──────────────────────────────────────────
 
-    private val exactFailureCounts = mutableMapOf<ToolCallSignature, Int>()
-    private val sameToolFailureCounts = mutableMapOf<String, Int>()
-    private val noProgress = mutableMapOf<ToolCallSignature, Pair<String, Int>>()
-    private var totalCalls = 0
+    private val exactFailureCounts = ConcurrentHashMap<ToolCallSignature, Int>()
+    private val sameToolFailureCounts = ConcurrentHashMap<String, Int>()
+    private val noProgress = ConcurrentHashMap<ToolCallSignature, Pair<String, Int>>()
+    private val totalCalls = java.util.concurrent.atomic.AtomicInteger(0)
 
     /** 当护栏发出 BLOCK/HALT 决策时触发，用于 EventBus 解耦通知 */
+    @Volatile
     var onBlock: ((toolName: String, reason: String) -> Unit)? = null
 
     fun reset() {
         exactFailureCounts.clear()
         sameToolFailureCounts.clear()
         noProgress.clear()
-        totalCalls = 0
+        totalCalls.set(0)
     }
 
     // ── 执行前只读预检 ────────────────────────────────
@@ -117,7 +119,7 @@ class ToolCallGuardrailController(
         result: String? = null,
         failed: Boolean = false,
     ): GuardrailDecision {
-        totalCalls++
+        totalCalls.incrementAndGet()
         val sig = ToolCallSignature.fromCall(toolName, args)
 
         if (failed) {
@@ -255,7 +257,7 @@ class ToolCallGuardrailController(
         return GuardrailDecision(action = GuardrailAction.ALLOW, toolName = toolName, count = newCount)
     }
 
-    fun totalCalls(): Int = totalCalls
+    fun totalCalls(): Int = totalCalls.get()
 }
 
 // ── 数据类 ────────────────────────────────────────────

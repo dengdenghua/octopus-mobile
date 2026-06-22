@@ -11,6 +11,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import okhttp3.OkHttpClient
+import java.util.concurrent.ConcurrentHashMap
 
 enum class Channel(val displayName: String) {
     DINGTALK("DingTalk"),
@@ -28,7 +29,8 @@ object ChannelManager {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val httpClient = OkHttpClient()
 
-    private val handlers = mutableMapOf<Channel, ChannelHandler>()
+    private val handlers = ConcurrentHashMap<Channel, ChannelHandler>()
+    @Volatile
     private var messageListener: OnMessageReceivedListener? = null
 
     /**
@@ -160,7 +162,11 @@ object ChannelManager {
         handlers.forEach { (channel, handler) ->
             if (handler.isConnected()) {
                 XLog.i(TAG, "断开${channel.displayName}通道")
-                handler.disconnect()
+                try {
+                    handler.disconnect()
+                } catch (e: Exception) {
+                    XLog.w(TAG, "断开 ${channel.displayName} 时出错: ${e.message}")
+                }
             }
         }
     }
@@ -173,7 +179,11 @@ object ChannelManager {
             return
         }
         XLog.d(TAG, "sendMessage [${channel.displayName}]: ${trimmedContent.take(120)}")
-        handlers[channel]?.sendMessage(trimmedContent, messageID)
+        try {
+            handlers[channel]?.sendMessage(trimmedContent, messageID)
+        } catch (e: Exception) {
+            XLog.w(TAG, "sendMessage [${channel.displayName}] 失败: ${e.message}")
+        }
     }
 
     @JvmStatic

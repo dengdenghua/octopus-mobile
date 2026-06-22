@@ -2,10 +2,10 @@ package com.apk.claw.android.ui.featurescreens
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -22,8 +22,7 @@ import com.apk.claw.android.octopus_mobile.evolution.LessonStore
 class EvolutionActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { EvolutionScreen(onBack = { finish() }) }
-        runCatching { window.statusBarColor = com.apk.claw.android.ui.compose.theme.OctopusColors.statusBarArgb }
+        setFeatureContent { EvolutionScreen(onBack = { finish() }) }
     }
 }
 
@@ -45,8 +44,7 @@ fun EvolutionScreen(onBack: () -> Unit) {
             if (lessons.isEmpty()) {
                 item { FEmpty(stringResource(R.string.evolution_no_lessons)) }
             } else {
-                items(lessons.size) { i ->
-                    val l = lessons[i]
+                items(lessons, key = { it.id }) { l ->
                     FCard {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             if (!l.tag.isNullOrBlank()) { FPill(l.tag!!, FPrimary); Spacer(Modifier.width(6.dp)) }
@@ -66,8 +64,7 @@ fun EvolutionScreen(onBack: () -> Unit) {
             if (canaries.isEmpty()) {
                 item { FEmpty(stringResource(R.string.evolution_no_canaries)) }
             } else {
-                items(canaries.size) { i ->
-                    val c = canaries[i]
+                items(canaries, key = { it.skillName }) { c ->
                     FCard {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(c.skillName, color = FText, fontSize = 14.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, modifier = Modifier.weight(1f))

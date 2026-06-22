@@ -4,6 +4,7 @@ import com.apk.claw.android.octopus_mobile.browser.BrowserEngine
 import com.apk.claw.android.tool.BaseTool
 import com.apk.claw.android.tool.ToolParameter
 import com.apk.claw.android.tool.ToolResult
+import com.apk.claw.android.utils.XLog
 
 /**
  * WebView.evaluateJavascript 的回调返回 JSON 编码值（字符串带双引号、转义）。
@@ -15,7 +16,8 @@ private fun unwrapJsString(value: String?): String? {
     if (trimmed.length >= 2 && trimmed.startsWith("\"") && trimmed.endsWith("\"")) {
         return try {
             org.json.JSONTokener(trimmed).nextValue() as? String ?: value
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            XLog.w("BrowserTools", "unwrapJsString failed: $value", e)
             value
         }
     }

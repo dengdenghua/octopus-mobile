@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SettingsRemote
 import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Swipe
 import androidx.compose.material.icons.filled.Timer
@@ -83,6 +84,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.core.content.ContextCompat
+import com.apk.claw.android.ui.compose.theme.OctopusBackground
 import com.apk.claw.android.ui.compose.theme.OctopusColors
 import com.apk.claw.android.ui.compose.theme.OctopusIconSize
 import com.apk.claw.android.ui.compose.theme.OctopusShape
@@ -214,7 +216,7 @@ fun ChatScreen() {
     // 初始化:确保至少一个会话,加载当前会话
     LaunchedEffect(Unit) {
         if (currentId.isEmpty()) {
-            val idx = SessionStore.ensureAtLeastOne(System.currentTimeMillis(), demoSeed())
+            val idx = SessionStore.ensureAtLeastOne(System.currentTimeMillis(), emptyList())
             sessions.clear(); sessions.addAll(idx)
             currentId = SessionStore.currentId() ?: idx.first().id
             messages.clear(); messages.addAll(ChatStore.load(currentId) ?: emptyList())
@@ -298,7 +300,7 @@ fun ChatScreen() {
                         if (idx >= 0) messages[idx] = ChatMessage.AgentMessage(final, id)
                     } else if (id != null) {
                         flushStream()
-                    } else if (id == null && final != null) {
+                    } else if (final != null) {
                         messages.add(ChatMessage.AgentMessage(final))
                     }
                     streamId = null; buf = StringBuilder()
@@ -379,7 +381,7 @@ fun ChatScreen() {
             )
         },
     ) {
-    Column(modifier = Modifier.fillMaxSize().background(BackgroundColor)) {
+    Column(modifier = Modifier.fillMaxSize().background(OctopusBackground.pageBrush())) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -397,9 +399,9 @@ fun ChatScreen() {
                 val ready = llmOk && a11yOk
                 Surface(
                     shape = OctopusShape.capsule,
-                    color = SurfaceColor,
-                    border = BorderStroke(1.dp, BorderColor),
-                    shadowElevation = 1.dp,
+                    color = OctopusBackground.glassSurface,
+                    border = BorderStroke(1.dp, OctopusBackground.glassBorder),
+                    shadowElevation = 6.dp,
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = OctopusSpacing.md, vertical = OctopusSpacing.xs),
@@ -485,41 +487,17 @@ fun ChatScreen() {
 
         // 消息列表 / 空状态
         if (messages.none { it !is ChatMessage.Thinking }) {
-            Column(
-                modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = OctopusSpacing.lg),
-                verticalArrangement = Arrangement.Center,
-            ) {
-                Text(
-                    stringResource(R.string.chat_empty_title),
-                    fontSize = OctopusType.display,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary,
-                    letterSpacing = 0.sp,
-                )
-                Spacer(modifier = Modifier.height(OctopusSpacing.sm))
-                Text(
-                    stringResource(R.string.chat_empty_hint),
-                    fontSize = OctopusType.body,
-                    color = TextMuted,
-                    lineHeight = 18.sp,
-                )
-                Spacer(modifier = Modifier.height(OctopusSpacing.lg))
-                AgentHomeStatusCard(
-                    llmOk = llmOk,
-                    a11yOk = a11yOk,
-                    isRunning = isRunning,
-                    target = ControlTarget.label(),
-                    deviceCount = devices.size,
-                )
-                Spacer(modifier = Modifier.height(OctopusSpacing.lg))
-                listOf(
-                    stringResource(R.string.chat_suggestion_notifications),
-                    stringResource(R.string.chat_suggestion_files),
-                    stringResource(R.string.chat_suggestion_app),
-                ).forEach { suggestion ->
-                    PromptSuggestion(suggestion) { inputText = suggestion; send() }
-                }
-            }
+            ChatHomeWorkbench(
+                llmOk = llmOk,
+                a11yOk = a11yOk,
+                isRunning = isRunning,
+                target = ControlTarget.label(),
+                deviceCount = devices.size,
+                onUsePrompt = { suggestion ->
+                    inputText = suggestion
+                    send()
+                },
+            )
         } else {
         val rows by remember { derivedStateOf { buildChatRows(messages) } }
         LazyColumn(
@@ -548,10 +526,13 @@ fun ChatScreen() {
 
         // 输入框
         Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = SurfaceColor,
-            border = BorderStroke(1.dp, BorderColor.copy(alpha = 0.7f)),
-            shadowElevation = 1.dp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = OctopusSpacing.lg, vertical = OctopusSpacing.sm),
+            shape = OctopusShape.xl,
+            color = OctopusBackground.glassSurface,
+            border = BorderStroke(1.dp, OctopusBackground.glassBorder),
+            shadowElevation = 10.dp,
         ) {
             Column(modifier = Modifier.padding(horizontal = OctopusSpacing.lg, vertical = OctopusSpacing.md)) {
             if (voiceMode) {
@@ -744,9 +725,9 @@ private fun AgentHomeStatusCard(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = OctopusShape.xl,
-        color = SurfaceColor,
-        border = BorderStroke(1.dp, BorderColor),
-        shadowElevation = 1.dp,
+        color = OctopusBackground.glassSurface,
+        border = BorderStroke(1.dp, OctopusBackground.glassBorder),
+        shadowElevation = 8.dp,
     ) {
         Column(modifier = Modifier.padding(OctopusSpacing.lg), verticalArrangement = Arrangement.spacedBy(OctopusSpacing.md)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -794,20 +775,167 @@ private fun AgentHomeStatusCard(
 }
 
 @Composable
-private fun PromptSuggestion(text: String, onClick: () -> Unit) {
+private fun ColumnScope.ChatHomeWorkbench(
+    llmOk: Boolean,
+    a11yOk: Boolean,
+    isRunning: Boolean,
+    target: String,
+    deviceCount: Int,
+    onUsePrompt: (String) -> Unit,
+) {
+    val prompts = listOf(
+        HomePrompt(
+            label = stringResource(R.string.chat_prompt_monitor),
+            text = stringResource(R.string.chat_suggestion_notifications),
+            icon = Icons.Filled.Visibility,
+            color = AccentColor,
+        ),
+        HomePrompt(
+            label = stringResource(R.string.chat_prompt_organize),
+            text = stringResource(R.string.chat_suggestion_files),
+            icon = Icons.Filled.Search,
+            color = PrimaryColor,
+        ),
+        HomePrompt(
+            label = stringResource(R.string.chat_prompt_control),
+            text = stringResource(R.string.chat_suggestion_app),
+            icon = Icons.Filled.TouchApp,
+            color = SuccessColor,
+        ),
+    )
+    LazyColumn(
+        modifier = Modifier
+            .weight(1f)
+            .fillMaxWidth()
+            .padding(horizontal = OctopusSpacing.lg),
+        verticalArrangement = Arrangement.spacedBy(OctopusSpacing.md),
+        contentPadding = PaddingValues(top = OctopusSpacing.md, bottom = OctopusSpacing.lg),
+    ) {
+        item {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = OctopusShape.xl,
+                color = OctopusBackground.glassSurface,
+                border = BorderStroke(1.dp, OctopusBackground.glassBorder),
+                shadowElevation = 10.dp,
+            ) {
+                Column(modifier = Modifier.padding(OctopusSpacing.xl)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Surface(
+                            shape = CircleShape,
+                            color = PrimaryColor.copy(alpha = 0.16f),
+                            border = BorderStroke(1.dp, PrimaryColor.copy(alpha = 0.24f)),
+                        ) {
+                            Icon(
+                                Icons.Filled.Psychology,
+                                contentDescription = null,
+                                tint = PrimaryColor,
+                                modifier = Modifier.padding(OctopusSpacing.md).size(OctopusIconSize.large),
+                            )
+                        }
+                        Spacer(Modifier.width(OctopusSpacing.md))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                stringResource(R.string.chat_empty_title),
+                                fontSize = OctopusType.headlineSm,
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary,
+                                letterSpacing = 0.sp,
+                                lineHeight = 28.sp,
+                            )
+                            Spacer(Modifier.height(OctopusSpacing.xs))
+                            Text(
+                                stringResource(R.string.chat_empty_hint),
+                                fontSize = OctopusType.body,
+                                color = TextMuted,
+                                lineHeight = 18.sp,
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(OctopusSpacing.lg))
+                    Row(horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.sm), modifier = Modifier.fillMaxWidth()) {
+                        HomeTinyStat(
+                            label = stringResource(R.string.chat_metric_model),
+                            value = if (llmOk) stringResource(R.string.status_online) else stringResource(R.string.chat_agent_setup_needed),
+                            ok = llmOk,
+                            modifier = Modifier.weight(1f),
+                        )
+                        HomeTinyStat(
+                            label = stringResource(R.string.chat_metric_target),
+                            value = target,
+                            ok = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+            }
+        }
+        item {
+            AgentHomeStatusCard(
+                llmOk = llmOk,
+                a11yOk = a11yOk,
+                isRunning = isRunning,
+                target = target,
+                deviceCount = deviceCount,
+            )
+        }
+        item {
+            Text(
+                stringResource(R.string.chat_home_prompts_title),
+                color = TextSecondary,
+                fontSize = OctopusType.label,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(top = OctopusSpacing.xs),
+            )
+        }
+        items(prompts, key = { it.label }) { prompt ->
+            PromptSuggestion(prompt) { onUsePrompt(prompt.text) }
+        }
+    }
+}
+
+private data class HomePrompt(
+    val label: String,
+    val text: String,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector,
+    val color: Color,
+)
+
+@Composable
+private fun HomeTinyStat(label: String, value: String, ok: Boolean, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier,
+        shape = OctopusShape.large,
+        color = SurfaceDeepColor.copy(alpha = 0.78f),
+        border = BorderStroke(1.dp, if (ok) PrimaryColor.copy(alpha = 0.18f) else BorderColor),
+    ) {
+        Column(modifier = Modifier.padding(horizontal = OctopusSpacing.md, vertical = OctopusSpacing.sm)) {
+            Text(label, color = TextMuted, fontSize = OctopusType.tag, maxLines = 1)
+            Spacer(Modifier.height(OctopusSpacing.xs))
+            Text(value, color = if (ok) TextPrimary else WarningColor, fontSize = OctopusType.label, fontWeight = FontWeight.SemiBold, maxLines = 1)
+        }
+    }
+}
+
+@Composable
+private fun PromptSuggestion(prompt: HomePrompt, onClick: () -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth().padding(vertical = OctopusSpacing.xs).clickable(onClick = onClick),
         shape = OctopusShape.large,
-        color = SurfaceColor,
-        border = BorderStroke(1.dp, BorderColor),
-        shadowElevation = 1.dp,
+        color = OctopusBackground.glassSurface,
+        border = BorderStroke(1.dp, OctopusBackground.glassBorder),
+        shadowElevation = 6.dp,
     ) {
         Row(modifier = Modifier.padding(horizontal = OctopusSpacing.md, vertical = OctopusSpacing.md), verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier.size(7.dp).background(AccentColor, RoundedCornerShape(4.dp)),
-            )
+            Surface(shape = CircleShape, color = prompt.color.copy(alpha = 0.14f)) {
+                Icon(prompt.icon, contentDescription = null, tint = prompt.color, modifier = Modifier.padding(OctopusSpacing.sm).size(OctopusIconSize.small))
+            }
             Spacer(Modifier.width(OctopusSpacing.md))
-            Text(text, modifier = Modifier.weight(1f), color = TextSecondary, fontSize = OctopusType.body, lineHeight = 17.sp)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(prompt.label, color = TextPrimary, fontSize = OctopusType.bodyStrong, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                Spacer(Modifier.height(OctopusSpacing.xs))
+                Text(prompt.text, color = TextSecondary, fontSize = OctopusType.body, lineHeight = 17.sp)
+            }
         }
     }
 }
@@ -817,9 +945,9 @@ private fun DrawerStatusPanel(llmOk: Boolean, a11yOk: Boolean, deviceCount: Int)
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = OctopusShape.large,
-        color = SurfaceColor,
-        border = BorderStroke(1.dp, BorderColor),
-        shadowElevation = 1.dp,
+        color = OctopusBackground.glassSurface,
+        border = BorderStroke(1.dp, OctopusBackground.glassBorder),
+        shadowElevation = 6.dp,
     ) {
         Column(modifier = Modifier.padding(OctopusSpacing.md), verticalArrangement = Arrangement.spacedBy(OctopusSpacing.sm)) {
             DrawerStatusRow(Icons.Filled.PhoneAndroid, stringResource(R.string.setup_a11y), a11yOk)
@@ -973,6 +1101,7 @@ private fun TargetSelector(onPreview: (DeviceInfo?) -> Unit = {}) {
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.chat_target_local_device)) },
+                leadingIcon = { Icon(Icons.Filled.PhoneAndroid, contentDescription = null, modifier = Modifier.size(OctopusIconSize.small)) },
                 onClick = { ControlTarget.setLocal(); label = ControlTarget.label(); menu = false; onPreview(null) },
             )
             devices.forEach { d ->
@@ -1073,23 +1202,6 @@ private fun DevicePreviewPanel(device: DeviceInfo, onEnter: () -> Unit, onClose:
     }
 }
 
-/** 首次启动（无持久化历史）时展示的演示对话。 */
-private fun demoSeed(): List<ChatMessage> = listOf(
-    ChatMessage.UserMessage(ClawApplication.instance.getString(R.string.chat_demo_open_wechat)),
-    ChatMessage.ToolCall("🔍", "get_screen_info", "", ClawApplication.instance.getString(R.string.chat_demo_main_screen)),
-    ChatMessage.ToolCall("📱", "open_app", "com.tencent.mm", "✓"),
-    ChatMessage.ToolCall("👆", "tap", "(540, 380)", ClawApplication.instance.getString(R.string.chat_demo_search)),
-    ChatMessage.ToolCall("⌨️", "input_text", "(\"${ClawApplication.instance.getString(R.string.chat_demo_contact_name)}\")", "✓"),
-    ChatMessage.ToolCall("👆", "tap", "(270, 280)", ClawApplication.instance.getString(R.string.chat_demo_xiaoming)),
-    ChatMessage.ToolCall("⌨️", "input_text", "(\"${ClawApplication.instance.getString(R.string.chat_demo_dinner_msg)}\")", "✓"),
-    ChatMessage.ToolCall("👆", "tap", "(980, 1820)", ClawApplication.instance.getString(R.string.chat_demo_send)),
-    ChatMessage.AgentMessage(ClawApplication.instance.getString(R.string.chat_demo_wechat_sent)),
-    ChatMessage.UserMessage(ClawApplication.instance.getString(R.string.chat_demo_check_weather)),
-    ChatMessage.ToolCall("📱", "open_app", "com.miui.weather", "✓"),
-    ChatMessage.ToolCall("🔍", "get_screen_info", "", ClawApplication.instance.getString(R.string.chat_demo_weather_details)),
-    ChatMessage.AgentMessage(ClawApplication.instance.getString(R.string.chat_demo_weather_forecast)),
-)
-
 @Composable
 @OptIn(ExperimentalFoundationApi::class)
 private fun UserBubble(text: String) {
@@ -1118,6 +1230,7 @@ private fun UserBubble(text: String) {
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.chat_save_as_routine)) },
+                    leadingIcon = { Icon(Icons.Filled.Star, contentDescription = null, modifier = Modifier.size(OctopusIconSize.small)) },
                     onClick = {
                         menu = false
                         val now = System.currentTimeMillis()

@@ -2,6 +2,7 @@ package com.apk.claw.android.ui.compose.screen
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -31,6 +32,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -48,10 +50,15 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.apk.claw.android.BuildConfig
 import com.apk.claw.android.server.ConfigServerManager
+import com.apk.claw.android.server.RemoteConsoleGateway
 import com.apk.claw.android.service.ClawAccessibilityService
 import com.apk.claw.android.shizuku.ShizukuManager
+import com.apk.claw.android.ui.compose.theme.OctopusBackground
 import com.apk.claw.android.ui.compose.theme.OctopusColors
+import com.apk.claw.android.ui.compose.theme.OctopusGlass
+import com.apk.claw.android.ui.compose.theme.OctopusGlassQuality
 import com.apk.claw.android.ui.compose.theme.OctopusIconSize
+import com.apk.claw.android.ui.compose.theme.OctopusLayout
 import com.apk.claw.android.ui.compose.theme.OctopusShape
 import com.apk.claw.android.ui.compose.theme.OctopusSpacing
 import com.apk.claw.android.ui.compose.theme.OctopusType
@@ -65,6 +72,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.apk.claw.android.R
+import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 // ── 真实权限/状态探测 ──────────────────────────────────
 
@@ -126,7 +135,11 @@ private data class PermissionUi(val icon: ImageVector, val name: String, val ok:
 fun SettingsScreen(onMessage: (String) -> Unit = {}) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val scope = rememberCoroutineScope()
     var refreshTick by remember { mutableStateOf(0) }
+    var showRemotePairDialog by remember { mutableStateOf(false) }
+    var pairCode by remember { mutableStateOf("") }
+    var pairBusy by remember { mutableStateOf(false) }
     DisposableEffect(lifecycleOwner) {
         val obs = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_RESUME) refreshTick++ }
         lifecycleOwner.lifecycle.addObserver(obs)
@@ -147,10 +160,59 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
     val loggedIn = remember(refreshTick) { AccountStore.isLoggedIn }
     val credits = remember(refreshTick) { AccountStore.credits }
     val isMember = remember(refreshTick) { AccountStore.byoUnlocked }
+    val remotePaired = remember(refreshTick) { RemoteConsoleGateway.isPaired }
+    val remoteConnected = remember(refreshTick) { RemoteConsoleGateway.isConnected }
+
+    if (showRemotePairDialog) {
+        AlertDialog(
+            onDismissRequest = { if (!pairBusy) showRemotePairDialog = false },
+            title = { Text(stringResource(R.string.remote_console_pair_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(OctopusSpacing.sm)) {
+                    Text(stringResource(R.string.remote_console_pair_desc), color = TextMuted, fontSize = OctopusType.caption, lineHeight = 16.sp)
+                    OutlinedTextField(
+                        value = pairCode,
+                        onValueChange = { pairCode = it.filter(Char::isDigit).take(9) },
+                        singleLine = true,
+                        label = { Text(stringResource(R.string.remote_console_pair_code_label)) },
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(enabled = pairCode.length >= 6 && !pairBusy, onClick = {
+                    scope.launch {
+                        pairBusy = true
+                        val result = runCatching { RemoteConsoleGateway.claimPairCode(pairCode) }
+                        pairBusy = false
+                        result.onSuccess {
+                            onMessage(it)
+                            pairCode = ""
+                            showRemotePairDialog = false
+                            refreshTick++
+                        }.onFailure {
+                            onMessage(it.message ?: context.getString(R.string.remote_console_pair_failed))
+                        }
+                    }
+                }) {
+                    Text(if (pairBusy) stringResource(R.string.status_loading) else stringResource(R.string.remote_console_pair_confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(enabled = !pairBusy, onClick = { showRemotePairDialog = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize().background(BackgroundColor).statusBarsPadding(),
-        contentPadding = PaddingValues(start = OctopusSpacing.lg, end = OctopusSpacing.lg, top = OctopusSpacing.sm, bottom = 112.dp),
+        modifier = Modifier.fillMaxSize().background(OctopusBackground.pageBrush()).statusBarsPadding(),
+        contentPadding = PaddingValues(
+            start = OctopusSpacing.lg,
+            end = OctopusSpacing.lg,
+            top = OctopusSpacing.sm,
+            bottom = OctopusLayout.bottomNavContentPadding,
+        ),
         verticalArrangement = Arrangement.spacedBy(OctopusSpacing.md),
     ) {
         item {
@@ -248,14 +310,30 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
         }
 
         item {
-            SettingsCard(stringResource(R.string.settings_device_control_section), Icons.Filled.Monitor, compact = true, onClick = {
-                context.startActivity(Intent(context, com.apk.claw.android.ui.featurescreens.PcRemoteWebrtcActivity::class.java))
-            }) {
-                SettingsRow(
+            SettingsCard(stringResource(R.string.settings_device_control_section), Icons.Filled.Monitor, compact = true) {
+                ClickableSettingsRow(
                     Icons.Filled.Monitor,
                     stringResource(R.string.settings_remote_pc_title),
                     stringResource(R.string.settings_remote_pc_desc),
-                )
+                ) {
+                    context.startActivity(Intent(context, com.apk.claw.android.ui.featurescreens.PcRemoteWebrtcActivity::class.java))
+                }
+                SettingsDivider()
+                ClickableSettingsRow(
+                    Icons.Filled.Hub,
+                    stringResource(R.string.remote_console_title),
+                    when {
+                        remoteConnected -> stringResource(R.string.remote_console_status_connected)
+                        remotePaired -> stringResource(R.string.remote_console_status_paired)
+                        else -> stringResource(R.string.remote_console_status_unpaired)
+                    },
+                ) {
+                    if (!AccountStore.isLoggedIn) {
+                        onMessage(context.getString(R.string.remote_console_login_required))
+                    } else {
+                        showRemotePairDialog = true
+                    }
+                }
             }
         }
 
@@ -345,7 +423,13 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
         item {
             SettingsCard(stringResource(R.string.settings_appearance), Icons.Filled.LightMode, compact = true) {
                 // 主题模式：跟随系统 / 强制亮色 / 强制暗色（三态，统一 Compose 与 XML）
-                val themeMode = remember { KVUtils.getThemeMode() }
+                var themeMode: Boolean? by remember { mutableStateOf(KVUtils.getThemeMode()) }
+                var glassBlurRadius by remember { mutableFloatStateOf(KVUtils.getGlassBlurRadius()) }
+                var glassQuality by remember { mutableStateOf(OctopusGlassQuality.fromStorage(KVUtils.getGlassQuality())) }
+                var glassRefraction by remember { mutableFloatStateOf(KVUtils.getGlassRefraction()) }
+                var glassHighlight by remember { mutableFloatStateOf(KVUtils.getGlassHighlight()) }
+                var glassNoise by remember { mutableFloatStateOf(KVUtils.getGlassNoise()) }
+                var glassAnimation by remember { mutableStateOf(KVUtils.isGlassAnimationEnabled()) }
                 val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
                 val isLight = themeMode ?: !systemDark
 
@@ -358,6 +442,7 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
                         onCheckedChange = { v ->
                             // 切换时强制亮/暗，写入新的三态 key
                             KVUtils.setThemeMode(v)
+                            themeMode = v
                             OctopusColors.isLight = v
                         },
                     )
@@ -365,7 +450,7 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
                 // 提示当前模式
                 val modeText = if (themeMode == null) {
                     stringResource(R.string.settings_theme_follow_system)
-                } else if (themeMode) {
+                } else if (themeMode == true) {
                     stringResource(R.string.settings_theme_light)
                 } else {
                     stringResource(R.string.settings_theme_dark)
@@ -377,6 +462,131 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
                     color = TextMuted,
                     modifier = Modifier.padding(start = 44.dp),
                 )
+
+                SettingsDivider()
+
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.xs),
+                    ) {
+                        listOf(
+                            OctopusGlassQuality.Low,
+                            OctopusGlassQuality.Medium,
+                            OctopusGlassQuality.High,
+                            OctopusGlassQuality.Ultra,
+                        ).forEach { quality ->
+                            val selected = glassQuality == quality
+                            Surface(
+                                shape = OctopusShape.capsule,
+                                color = if (selected) PrimaryColor.copy(alpha = 0.16f) else OctopusBackground.glassSurface,
+                                border = BorderStroke(1.dp, if (selected) PrimaryColor.copy(alpha = 0.42f) else OctopusBackground.glassBorder),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable {
+                                        glassQuality = quality
+                                        OctopusGlass.quality = quality
+                                        KVUtils.setGlassQuality(quality.name.lowercase())
+                                    },
+                            ) {
+                                Text(
+                                    quality.name,
+                                    color = if (selected) PrimaryColor else TextSecondary,
+                                    fontSize = OctopusType.tag,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.padding(vertical = OctopusSpacing.sm),
+                                )
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(OctopusSpacing.sm))
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        IconBubble(Icons.Filled.GraphicEq, PrimaryColor)
+                        Spacer(Modifier.width(OctopusSpacing.md))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                stringResource(R.string.settings_glass_blur),
+                                color = TextPrimary,
+                                fontSize = OctopusType.body,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Text(
+                                stringResource(R.string.settings_glass_blur_hint),
+                                color = TextMuted,
+                                fontSize = OctopusType.caption,
+                                lineHeight = 15.sp,
+                            )
+                        }
+                        Text(
+                            "${glassBlurRadius.roundToInt()}dp",
+                            color = PrimaryColor,
+                            fontSize = OctopusType.label,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                    Slider(
+                        value = glassBlurRadius,
+                        onValueChange = { value ->
+                            glassBlurRadius = value
+                            OctopusGlass.blurRadius = value.dp
+                        },
+                        onValueChangeFinished = {
+                            KVUtils.setGlassBlurRadius(glassBlurRadius)
+                        },
+                        valueRange = 0f..48f,
+                        steps = 15,
+                        modifier = Modifier.padding(start = 44.dp),
+                    )
+                    GlassTuningSlider(
+                        title = stringResource(R.string.settings_glass_refraction),
+                        value = glassRefraction,
+                        valueText = "${(glassRefraction * 100).roundToInt()}%",
+                        onValueChange = {
+                            glassRefraction = it
+                            OctopusGlass.refraction = it
+                        },
+                        onValueChangeFinished = { KVUtils.setGlassRefraction(glassRefraction) },
+                    )
+                    GlassTuningSlider(
+                        title = stringResource(R.string.settings_glass_highlight),
+                        value = glassHighlight,
+                        valueText = "${(glassHighlight * 100).roundToInt()}%",
+                        onValueChange = {
+                            glassHighlight = it
+                            OctopusGlass.highlight = it
+                        },
+                        onValueChangeFinished = { KVUtils.setGlassHighlight(glassHighlight) },
+                    )
+                    GlassTuningSlider(
+                        title = stringResource(R.string.settings_glass_noise),
+                        value = glassNoise,
+                        valueText = "${(glassNoise * 100).roundToInt()}%",
+                        onValueChange = {
+                            glassNoise = it
+                            OctopusGlass.noise = it
+                        },
+                        onValueChangeFinished = { KVUtils.setGlassNoise(glassNoise) },
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 44.dp).fillMaxWidth()) {
+                        Text(
+                            stringResource(R.string.settings_glass_animation),
+                            color = TextPrimary,
+                            fontSize = OctopusType.label,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Switch(
+                            checked = glassAnimation,
+                            onCheckedChange = {
+                                glassAnimation = it
+                                OctopusGlass.animationEnabled = it
+                                KVUtils.setGlassAnimationEnabled(it)
+                            },
+                        )
+                    }
+                }
             }
         }
 
@@ -513,19 +723,17 @@ private fun PermissionSummaryRow(readyCount: Int, perms: List<PermissionUi>) {
 
 @Composable
 private fun HeroMetric(label: String, value: String, ok: Boolean, modifier: Modifier = Modifier) {
-    Surface(
-        modifier = modifier,
-        shape = OctopusShape.medium,
-        color = OctopusColors.SurfaceDeep,
-        shadowElevation = 1.dp,
-        border = BorderStroke(
-            1.dp,
-            when {
-                ok -> SuccessColor.copy(alpha = 0.16f)
-                value.contains(stringResource(R.string.status_not_configured)) -> WarningColor.copy(alpha = 0.25f)
-                else -> BorderColor.copy(alpha = 0.8f)
-            },
-        ),
+    val shape = OctopusShape.medium
+    val borderColor = when {
+        ok -> SuccessColor.copy(alpha = 0.16f)
+        value.contains(stringResource(R.string.status_not_configured)) -> WarningColor.copy(alpha = 0.25f)
+        else -> OctopusBackground.glassBorder
+    }
+    Box(
+        modifier = modifier
+            .clip(shape)
+            .background(OctopusBackground.glassSurface, shape)
+            .border(1.dp, borderColor, shape),
     ) {
         Column(modifier = Modifier.padding(horizontal = OctopusSpacing.md, vertical = OctopusSpacing.sm)) {
             Text(label, color = TextMuted, fontSize = OctopusType.tag, maxLines = 1)
@@ -597,6 +805,40 @@ private fun SettingsDivider() {
 }
 
 @Composable
+private fun GlassTuningSlider(
+    title: String,
+    value: Float,
+    valueText: String,
+    onValueChange: (Float) -> Unit,
+    onValueChangeFinished: () -> Unit,
+) {
+    Column(modifier = Modifier.padding(start = 44.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Text(
+                title,
+                color = TextPrimary,
+                fontSize = OctopusType.label,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                valueText,
+                color = PrimaryColor,
+                fontSize = OctopusType.tag,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+        Slider(
+            value = value,
+            onValueChange = onValueChange,
+            onValueChangeFinished = onValueChangeFinished,
+            valueRange = 0f..2f,
+            steps = 15,
+        )
+    }
+}
+
+@Composable
 private fun SettingsCard(
     title: String,
     icon: ImageVector,
@@ -604,12 +846,14 @@ private fun SettingsCard(
     compact: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Surface(
-        shape = OctopusShape.large,
-        color = SurfaceColor,
-        border = BorderStroke(1.dp, BorderColor.copy(alpha = 0.85f)),
-        shadowElevation = 1.dp,
-        modifier = if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier,
+    val shape = OctopusShape.large
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(OctopusBackground.glassSurface, shape)
+            .border(1.dp, OctopusBackground.glassBorder, shape)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
     ) {
         Column(modifier = Modifier.padding(OctopusSpacing.md)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.sm)) {

@@ -87,7 +87,10 @@ class PluginManager(private val context: Context) {
         // 安全检查：版本兼容
         val appVersion = try {
             context.packageManager.getPackageInfo(context.packageName, 0).versionCode
-        } catch (_: Exception) { 0 }
+        } catch (e: Exception) {
+            Log.w(TAG, "getPackageInfo failed", e)
+            0
+        }
 
         if (info.manifest.minAppVersion > appVersion) {
             info.error = "App version too old (need >= ${info.manifest.minAppVersion})"

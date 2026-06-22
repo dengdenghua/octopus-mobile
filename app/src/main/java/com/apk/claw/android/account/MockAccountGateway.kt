@@ -159,4 +159,107 @@ class MockAccountGateway : AccountGateway {
         users[inviterId]!!.credits += 200
         return RedeemResult(ok = true, credits = 200, balance = u.credits)
     }
+
+    override suspend fun membership(token: String): MembershipResult {
+        val u = userOf(token)
+        val active = u.memberExpireAt > System.currentTimeMillis()
+        val remaining = maxOf(0L, u.memberExpireAt - System.currentTimeMillis())
+        return MembershipResult(
+            active = active,
+            expireAt = if (active) u.memberExpireAt else 0L,
+            remainingDays = remaining / (24 * 3600 * 1000),
+            benefits = listOf("解锁自有模型(BYO)", "不消耗平台积分", "每日免费额度"),
+            dailyFreeCredits = 2,
+            dailyFreeRemaining = 2,
+        )
+    }
+
+    override suspend fun creditTransactions(token: String, limit: Int, offset: Int): CreditTransactionsResult {
+        val u = userOf(token)
+        return CreditTransactionsResult(
+            total = 1,
+            items = listOf(
+                CreditTransaction(
+                    id = 1,
+                    delta = u.credits,
+                    balanceAfter = u.credits,
+                    source = "mock",
+                    detail = "mock mode",
+                ),
+            ),
+        )
+    }
+
+    override suspend fun usage(token: String, limit: Int, offset: Int): UsageResult {
+        return UsageResult()
+    }
+
+    override suspend fun billingEstimate(
+        token: String,
+        model: String?,
+        messages: List<Map<String, String>>,
+        maxTokens: Int?,
+    ): BillingEstimateResult {
+        userOf(token)
+        return BillingEstimateResult(
+            model = model ?: "agnes-2.0-flash",
+            tier = "fast",
+            multiplier = 0.2,
+            worstCaseCredits = 1,
+            dailyFreeCredits = 2,
+            chargeableCredits = 0,
+            estimatedRmb = 0.0,
+        )
+    }
+
+    override suspend fun registerDevice(
+        token: String,
+        deviceId: String?,
+        deviceName: String?,
+        pushToken: String?,
+        osVersion: String?,
+        appVersion: String?,
+        deviceModel: String?,
+    ): DeviceRegisterResult {
+        userOf(token)
+        return DeviceRegisterResult(
+            deviceId = deviceId ?: "mock-device-${System.currentTimeMillis()}",
+            deviceToken = "mock-device-token",
+            deviceName = deviceName ?: "Mock Device",
+        )
+    }
+
+    override suspend fun sendDeviceHeartbeat(
+        token: String,
+        deviceId: String,
+        battery: Int?,
+        isCharging: Boolean,
+        currentApp: String?,
+        screenHash: String?,
+    ): DeviceHeartbeatResult {
+        userOf(token)
+        return DeviceHeartbeatResult(
+            ok = true,
+            serverTs = System.currentTimeMillis(),
+            battery = battery ?: -1,
+            charging = isCharging,
+            currentApp = currentApp ?: "",
+            screenHash = screenHash ?: "",
+        )
+    }
+
+    override suspend fun reportDeviceEvent(
+        token: String,
+        deviceId: String,
+        type: String,
+        payload: Map<String, Any>,
+    ): DeviceReportResult {
+        userOf(token)
+        return DeviceReportResult(ok = true)
+    }
+
+    override suspend fun deviceStatus(token: String, deviceId: String): DeviceStatusResult {
+        userOf(token)
+        return DeviceStatusResult(deviceId = deviceId, deviceName = "Mock Device")
+    }
 }

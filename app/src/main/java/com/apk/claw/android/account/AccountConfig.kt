@@ -16,8 +16,9 @@ object AccountConfig {
     private const val KEY_MODEL_SOURCE = "ACCOUNT_MODEL_SOURCE"
     private const val KEY_MODEL_TIER = "ACCOUNT_MODEL_TIER"
 
-    /** 用户可见的对话档位(不暴露底层模型名)。fast=极速档(便宜·快)/ premium=高级档(更强·更耗积分)。 */
+    /** 用户可见的对话档位(不暴露底层模型名)。fast=极速/flash=标准/premium=高级。 */
     const val TIER_FAST = "fast"
+    const val TIER_FLASH = "flash"
     const val TIER_PREMIUM = "premium"
 
     /** Account/relay backend. Defaults to the live server; empty → mock. */
@@ -57,11 +58,18 @@ object AccountConfig {
     var modelTier: String
         get() = KVUtils.getString(KEY_MODEL_TIER, TIER_FAST)
         set(v) {
-            KVUtils.putString(KEY_MODEL_TIER, if (v == TIER_PREMIUM) TIER_PREMIUM else TIER_FAST)
+            val normalized = when (v) {
+                TIER_FLASH, TIER_PREMIUM -> v
+                else -> TIER_FAST
+            }
+            KVUtils.putString(KEY_MODEL_TIER, normalized)
         }
 
-    /** 档位 → 实际平台模型 id(仅内部用,UI 永不暴露)。fast=极速(对平台零成本上游)/ premium=高级。
-     *  服务端目录若调整模型,只需改这里映射。 */
+    /** 档位 → 实际平台模型 id(仅内部用,UI 永不暴露)。服务端目录若调整模型,只需改这里映射。 */
     val platformModel: String
-        get() = if (modelTier == TIER_PREMIUM) "mimo-v2.5-pro" else "agnes-2.0-flash"
+        get() = when (modelTier) {
+            TIER_FLASH -> "mimo-v2-flash"
+            TIER_PREMIUM -> "mimo-v2.5-pro"
+            else -> "agnes-2.0-flash"
+        }
 }

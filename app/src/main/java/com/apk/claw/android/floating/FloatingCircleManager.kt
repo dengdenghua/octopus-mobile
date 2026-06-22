@@ -40,6 +40,9 @@ import com.lzf.easyfloat.interfaces.OnFloatCallbacks
 object FloatingCircleManager {
 
     private const val TAG = "octopus_float"
+    private const val IDLE_OFFSET_X_DP = 16
+    private const val IDLE_OFFSET_Y_DP = 300
+    private const val LISTENING_OFFSET_Y_DP = 100
     private val main = Handler(Looper.getMainLooper())
     private var showing = false
     private var listening = false
@@ -72,7 +75,7 @@ object FloatingCircleManager {
                 .setLayout(buildIdleView(application))
                 .setShowPattern(ShowPattern.ALL_TIME)
                 .setSidePattern(SidePattern.DEFAULT)
-                .setGravity(Gravity.END or Gravity.BOTTOM, dp(16), dp(200))
+                .setGravity(Gravity.END or Gravity.BOTTOM, dp(IDLE_OFFSET_X_DP), dp(IDLE_OFFSET_Y_DP))
                 .setDragEnable(true)
                 .hasEditText(false)
                 .setTag(TAG)
@@ -177,7 +180,7 @@ object FloatingCircleManager {
 
         listening = true
         switchView { buildListeningPanel(app) }
-        EasyFloat.updateFloat(TAG, dp(16), dp(100))
+        EasyFloat.updateFloat(TAG, dp(IDLE_OFFSET_X_DP), dp(LISTENING_OFFSET_Y_DP))
 
         voiceInput?.start(
             onPartial = { text ->
@@ -320,6 +323,6 @@ object FloatingCircleManager {
         if (listening) return
         val app = ClawApplication.instance
         switchView { buildIdleView(it) }
-        EasyFloat.updateFloat(TAG, dp(16), dp(200))
+        EasyFloat.updateFloat(TAG, dp(IDLE_OFFSET_X_DP), dp(IDLE_OFFSET_Y_DP))
     }
 }

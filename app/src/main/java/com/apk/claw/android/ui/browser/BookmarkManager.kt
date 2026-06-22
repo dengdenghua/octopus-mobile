@@ -1,6 +1,7 @@
 package com.apk.claw.android.ui.browser
 
 import com.apk.claw.android.utils.KVUtils
+import com.apk.claw.android.utils.XLog
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 
@@ -55,7 +56,8 @@ class BookmarkManager {
         return try {
             val type = object : TypeToken<List<BookmarkItem>>() {}.type
             gson.fromJson(json, type) ?: emptyList()
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            XLog.w("BookmarkManager", "load bookmarks failed", e)
             emptyList()
         }
     }

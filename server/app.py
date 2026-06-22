@@ -16,6 +16,7 @@ Octopus 账号 + 计费 + 会员 + 大模型中转 —— 服务端骨架(FastAP
 from __future__ import annotations
 
 import base64
+import datetime
 import hashlib
 import hmac
 import json
@@ -70,11 +71,10 @@ PROVIDERS = {
 DEFAULT_MODEL = os.environ.get("DEFAULT_MODEL", "agnes-2.0-flash")
 
 # 计费:多少积分/1k tokens(输入+输出合计),再乘模型 multiplier。
-# 校准(不亏成本):CREDITS_PER_1K_TOKENS ≥ MiMo每1k_token的¥成本 ÷ (multiplier × 每积分售价¥)。
-#   例:goods「100积分=¥9.90」→ 每积分≈¥0.099;若某模型 MiMo 报价 ¥0.004/1k、mult=1,
-#   则需 ≥ 0.004/(1×0.099) ≈ 0.04。默认 1 偏保守(远高于成本、不会亏);拿到 MiMo 实际
-#   报价后按上式把它下调到贴近成本即可(越小=用户每积分能用越多 token)。
-CREDITS_PER_1K_TOKENS = float(os.environ.get("CREDITS_PER_1K_TOKENS", "1"))
+# 校准(不亏成本):CREDITS_PER_1K_TOKENS ≥ 模型每1k_token的¥成本 ÷ (multiplier × 每积分售价¥)。
+# 默认值 0.1 已在 DeepSeek-V4 成本下保持 40%–70% 模型层毛利,同时让用户感知价格接近
+# 主流 AI 工具。可通过环境变量微调。
+CREDITS_PER_1K_TOKENS = float(os.environ.get("CREDITS_PER_1K_TOKENS", "0.1"))
 # 单次输出 token 上限(成本 + 防跑飞双保险)。请求里更大的 max_tokens 会被压到此值;未指定也设成它。
 # 思考型模型别设太小(否则正文被 reasoning 吃光),默认 8192。
 MAX_OUTPUT_TOKENS = int(os.environ.get("MAX_OUTPUT_TOKENS", "8192"))
@@ -86,6 +86,8 @@ DAILY_BONUS = int(os.environ.get("DAILY_BONUS", "20"))
 MEMBERSHIP_DAYS = int(os.environ.get("MEMBERSHIP_DAYS", "30"))
 # 内测:每账号累计「免费积分」上限(注册礼+每日领+mock充值+邀请 都算,发满即停;真实付费不受限)
 FREE_CAP = int(os.environ.get("FREE_CAP", "3000"))
+# 每日免费额度:每个自然日赠送的积分,用完才扣余额。0 表示关闭。
+FREE_DAILY_CREDITS = int(os.environ.get("FREE_DAILY_CREDITS", "2"))
 # 邀请码(拉新返利):新人填码→新人得 REDEEMER、邀请人得 INVITER;均走免费上限
 REFERRAL_REDEEMER_BONUS = int(os.environ.get("REFERRAL_REDEEMER_BONUS", "200"))
 REFERRAL_INVITER_BONUS = int(os.environ.get("REFERRAL_INVITER_BONUS", "200"))
@@ -136,14 +138,14 @@ GOODS = [
 GOODS_BY_ID = {g["id"]: g for g in GOODS}
 
 # 模型目录 = 用户可见的「三个档位」(display_name 是档位名,不暴露底层模型名)。
-# 极速档:agnes,0.2×;标准档:mimo flash,0.45×;高级档:mimo pro,0.8×。
+# 极速档:agnes,0.2×;标准档:mimo flash,0.45×;高级档:mimo pro,1.2×。
 # 三档照常按 multiplier 扣用户积分。可用 MODELS_JSON 覆盖。
 _DEFAULT_MODELS = [
     {"id": "agnes-2.0-flash", "display_name": "极速", "tier": "fast", "multiplier": 0.2,
      "provider": "agnes", "recommended": True},
     {"id": "mimo-v2-flash", "display_name": "标准", "tier": "flash", "multiplier": 0.45,
      "provider": "mimo", "recommended": True},
-    {"id": "mimo-v2.5-pro", "display_name": "高级", "tier": "premium", "multiplier": 0.8,
+    {"id": "mimo-v2.5-pro", "display_name": "高级", "tier": "premium", "multiplier": 1.2,
      "provider": "mimo", "recommended": True},
 ]
 # 模型 id -> 完整 spec(provider/multiplier/...);MODELS_JSON 里没写 provider 的默认归到 mimo(向后兼容)。
@@ -215,7 +217,9 @@ def init_db() -> None:
                 free_granted INTEGER NOT NULL DEFAULT 0,
                 member_expire_at INTEGER NOT NULL DEFAULT 0,
                 last_claim_day TEXT DEFAULT '', created_at INTEGER NOT NULL,
-                invite_code TEXT, invited_by TEXT
+                invite_code TEXT, invited_by TEXT,
+                daily_free_used INTEGER NOT NULL DEFAULT 0,
+                daily_free_date TEXT DEFAULT ''
             );
             CREATE TABLE IF NOT EXISTS sms_codes(
                 mobile TEXT PRIMARY KEY, code TEXT NOT NULL, expire_at INTEGER NOT NULL
@@ -240,12 +244,26 @@ def init_db() -> None:
                 device_id TEXT PRIMARY KEY, user_id TEXT NOT NULL,
                 device_name TEXT NOT NULL, token_hash TEXT NOT NULL,
                 created_at INTEGER NOT NULL, last_seen INTEGER NOT NULL,
-                revoked INTEGER NOT NULL DEFAULT 0
+                revoked INTEGER NOT NULL DEFAULT 0,
+                push_token TEXT DEFAULT '', os_version TEXT DEFAULT '',
+                app_version TEXT DEFAULT '', device_model TEXT DEFAULT '',
+                battery_level INTEGER DEFAULT -1, last_heartbeat_at INTEGER DEFAULT 0
             );
             CREATE TABLE IF NOT EXISTS remote_pair_codes(
                 code TEXT PRIMARY KEY, user_id TEXT NOT NULL,
                 device_name TEXT NOT NULL DEFAULT '', expires_at INTEGER NOT NULL,
                 claimed_device_id TEXT DEFAULT '', created_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS credit_transactions(
+                id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL,
+                delta INTEGER NOT NULL, balance_after INTEGER NOT NULL,
+                source TEXT NOT NULL, detail TEXT DEFAULT '', ref_id TEXT DEFAULT '',
+                ts INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS device_reports(
+                id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL,
+                device_id TEXT NOT NULL, report_type TEXT NOT NULL,
+                payload TEXT NOT NULL, ts INTEGER NOT NULL
             );
             """
         )
@@ -259,7 +277,9 @@ def init_db() -> None:
         except sqlite3.OperationalError:
             pass  # 列已存在
         for _col in ("invite_code TEXT", "invited_by TEXT",
-                     "banned INTEGER NOT NULL DEFAULT 0"):
+                     "banned INTEGER NOT NULL DEFAULT 0",
+                     "daily_free_used INTEGER NOT NULL DEFAULT 0",
+                     "daily_free_date TEXT DEFAULT ''"):
             try:
                 c.execute(f"ALTER TABLE users ADD COLUMN {_col}")
             except sqlite3.OperationalError:
@@ -270,6 +290,18 @@ def init_db() -> None:
         )
         c.execute("CREATE INDEX IF NOT EXISTS idx_remote_devices_user ON remote_devices(user_id, revoked)")
         c.execute("CREATE INDEX IF NOT EXISTS idx_remote_pair_codes_user ON remote_pair_codes(user_id, expires_at)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_credit_txn_user ON credit_transactions(user_id, ts)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_device_reports_user ON device_reports(user_id, device_id, ts)")
+        # 迁移:给已存在的 remote_devices 表补新列(幂等)
+        for _col in (
+            "push_token TEXT DEFAULT ''", "os_version TEXT DEFAULT ''",
+            "app_version TEXT DEFAULT ''", "device_model TEXT DEFAULT ''",
+            "battery_level INTEGER DEFAULT -1", "last_heartbeat_at INTEGER DEFAULT 0",
+        ):
+            try:
+                c.execute(f"ALTER TABLE remote_devices ADD COLUMN {_col}")
+            except sqlite3.OperationalError:
+                pass
         c.commit()
 
 
@@ -458,7 +490,25 @@ def _user(c: sqlite3.Connection, user_id: str) -> sqlite3.Row:
     return c.execute("SELECT * FROM users WHERE user_id = ?", (user_id,)).fetchone()
 
 
-def _grant_free(c: sqlite3.Connection, user_id: str, want: int) -> int:
+def _record_credit_txn(
+    c: sqlite3.Connection,
+    user_id: str,
+    delta: int,
+    source: str,
+    detail: str = "",
+    ref_id: str = "",
+) -> int:
+    """Record a credit change in the ledger and return the new balance."""
+    bal = _user(c, user_id)["credits"]
+    c.execute(
+        "INSERT INTO credit_transactions(user_id, delta, balance_after, source, detail, ref_id, ts) "
+        "VALUES(?,?,?,?,?,?,?)",
+        (user_id, delta, bal, source, detail, ref_id, now_ms()),
+    )
+    return bal
+
+
+def _grant_free(c: sqlite3.Connection, user_id: str, want: int, source: str = "", detail: str = "", ref_id: str = "") -> int:
     """发放免费积分,受每账号累计上限 FREE_CAP 约束。返回实际发放数。"""
     row = c.execute("SELECT free_granted FROM users WHERE user_id = ?", (user_id,)).fetchone()
     used = int((row["free_granted"] if row else 0) or 0)
@@ -468,6 +518,7 @@ def _grant_free(c: sqlite3.Connection, user_id: str, want: int) -> int:
             "UPDATE users SET credits = credits + ?, free_granted = free_granted + ? WHERE user_id = ?",
             (grant, grant, user_id),
         )
+        _record_credit_txn(c, user_id, grant, source or "free_grant", detail, ref_id)
     return grant
 
 
@@ -565,7 +616,7 @@ def sms_login(body: dict[str, Any]) -> dict[str, Any]:
                 "VALUES(?,?,?,?,?,?)",
                 (uid, mobile, f"用户{mobile[-4:]}", 0, now_ms(), _gen_invite_code(c)),
             )
-            _grant_free(c, uid, SIGNUP_BONUS)
+            _grant_free(c, uid, SIGNUP_BONUS, source="signup", detail="新用户注册礼")
         else:
             uid = user["user_id"]
         c.execute("DELETE FROM sms_codes WHERE mobile = ?", (mobile,))
@@ -647,7 +698,7 @@ def email_login(body: dict[str, Any], request: Request) -> dict[str, Any]:
                 "VALUES(?,?,?,?,?,?)",
                 (uid, email, nick, 0, now_ms(), _gen_invite_code(c)),
             )
-            _grant_free(c, uid, SIGNUP_BONUS)
+            _grant_free(c, uid, SIGNUP_BONUS, source="signup", detail="新用户注册礼")
         else:
             uid = user["user_id"]
             nick = user["nickname"] or nick
@@ -684,10 +735,102 @@ def daily_claim(u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
             "UPDATE users SET last_claim_day = ? WHERE user_id = ? AND last_claim_day <> ?",
             (today, u["user_id"], today),
         )
-        granted = _grant_free(c, u["user_id"], DAILY_BONUS) if guard.rowcount > 0 else 0
+        granted = _grant_free(c, u["user_id"], DAILY_BONUS, source="daily", detail=f"每日签到 {today}") if guard.rowcount > 0 else 0
         c.commit()
         bal = _user(c, u["user_id"])["credits"]
     return {"claimed": granted > 0, "credits": granted, "balance": bal}
+
+
+@app.get("/account/membership")
+def membership(u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    """返回会员状态、到期时间、累计会员天数估算与权益说明,供 App 渲染会员中心。"""
+    active = u["member_expire_at"] > now_ms()
+    now = now_ms()
+    remaining_ms = max(0, u["member_expire_at"] - now) if active else 0
+    remaining_days = remaining_ms // (24 * 3600 * 1000)
+    with closing(db()) as c:
+        free_avail = _daily_free_available(c, u["user_id"])
+    return {
+        "active": active,
+        "expireAt": u["member_expire_at"] if active else 0,
+        "remainingDays": int(remaining_days),
+        "benefits": (
+            ["解锁自有模型(BYO)", "不消耗平台积分"]
+            + (["每日免费额度"] if FREE_DAILY_CREDITS > 0 else [])
+        ),
+        "dailyFreeCredits": FREE_DAILY_CREDITS,
+        "dailyFreeRemaining": free_avail,
+    }
+
+
+@app.get("/account/credits/transactions")
+def credit_transactions(
+    limit: int = 50,
+    offset: int = 0,
+    u: sqlite3.Row = Depends(actor),
+) -> dict[str, Any]:
+    """用户积分流水,按时间倒序。"""
+    limit = max(1, min(200, limit))
+    offset = max(0, offset)
+    with closing(db()) as c:
+        rows = c.execute(
+            "SELECT id, delta, balance_after, source, detail, ref_id, ts FROM credit_transactions "
+            "WHERE user_id = ? ORDER BY id DESC LIMIT ? OFFSET ?",
+            (u["user_id"], limit, offset),
+        ).fetchall()
+        total = c.execute(
+            "SELECT COUNT(*) n FROM credit_transactions WHERE user_id = ?", (u["user_id"],)
+        ).fetchone()["n"]
+    return {
+        "total": total,
+        "items": [
+            {
+                "id": r["id"],
+                "delta": r["delta"],
+                "balanceAfter": r["balance_after"],
+                "source": r["source"],
+                "detail": r["detail"],
+                "refId": r["ref_id"],
+                "ts": r["ts"],
+            }
+            for r in rows
+        ],
+    }
+
+
+@app.get("/account/usage")
+def account_usage(
+    limit: int = 50,
+    offset: int = 0,
+    u: sqlite3.Row = Depends(actor),
+) -> dict[str, Any]:
+    """用户大模型调用用量明细,按时间倒序。"""
+    limit = max(1, min(200, limit))
+    offset = max(0, offset)
+    with closing(db()) as c:
+        rows = c.execute(
+            "SELECT id, model, tokens_in, tokens_out, credits, ts FROM usage_log "
+            "WHERE user_id = ? ORDER BY id DESC LIMIT ? OFFSET ?",
+            (u["user_id"], limit, offset),
+        ).fetchall()
+        total = c.execute(
+            "SELECT COUNT(*) n FROM usage_log WHERE user_id = ?", (u["user_id"],)
+        ).fetchone()["n"]
+        agg = c.execute(
+            "SELECT COALESCE(SUM(tokens_in),0) tin, COALESCE(SUM(tokens_out),0) tout, "
+            "COALESCE(SUM(credits),0) spent, COUNT(*) calls FROM usage_log WHERE user_id = ?",
+            (u["user_id"],),
+        ).fetchone()
+    return {
+        "total": total,
+        "summary": {
+            "tokensIn": agg["tin"],
+            "tokensOut": agg["tout"],
+            "credits": agg["spent"],
+            "calls": agg["calls"],
+        },
+        "items": [dict(r) for r in rows],
+    }
 
 
 # ─────────────────────────── endpoints: remote console pairing / relay ───────────────────────────
@@ -857,6 +1000,111 @@ async def remote_console_ws(ws: WebSocket, device_id: str = "", token: str = "")
         await remote_hub.detach_console(device_id, ws)
 
 
+# ─────────────────────────── endpoints: App 设备绑定 / 心跳 / 上报 ───────────────────────────
+@app.post("/device/register")
+def device_register(body: dict[str, Any], u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    """App 首次或升级后注册/更新设备信息(推 token、系统版本、App 版本等)。
+    deviceId 为空时服务端生成一个新的。返回 deviceId + deviceToken(用于后续心跳鉴权)。"""
+    device_id = str(body.get("deviceId", "")).strip() or ("d_" + secrets.token_hex(8))
+    device_name = str(body.get("deviceName", "")).strip()[:64] or "Octopus Mobile"
+    push_token = str(body.get("pushToken", "")).strip()[:512]
+    os_version = str(body.get("osVersion", "")).strip()[:32]
+    app_version = str(body.get("appVersion", "")).strip()[:32]
+    device_model = str(body.get("deviceModel", "")).strip()[:64]
+    secret = "dt_" + secrets.token_urlsafe(32)
+    with closing(db()) as c:
+        c.execute(
+            "INSERT INTO remote_devices(device_id, user_id, device_name, token_hash, created_at, last_seen, "
+            "revoked, push_token, os_version, app_version, device_model) "
+            "VALUES(?,?,?,?,?,?,0,?,?,?,?) "
+            "ON CONFLICT(device_id) DO UPDATE SET user_id=excluded.user_id, device_name=excluded.device_name, "
+            "token_hash=excluded.token_hash, last_seen=excluded.last_seen, revoked=0, "
+            "push_token=excluded.push_token, os_version=excluded.os_version, "
+            "app_version=excluded.app_version, device_model=excluded.device_model",
+            (device_id, u["user_id"], device_name, _remote_secret_hash(secret), now_ms(), now_ms(),
+             push_token, os_version, app_version, device_model),
+        )
+        c.commit()
+    return {"deviceId": device_id, "deviceToken": secret, "deviceName": device_name}
+
+
+@app.post("/device/heartbeat")
+def device_heartbeat(body: dict[str, Any], u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    """App 周期性心跳上报:电量、充电状态、当前前台应用、屏幕哈希等。
+    同时更新设备的最后活跃时间,并可用于统计在线时长。"""
+    device_id = str(body.get("deviceId", "")).strip()
+    battery = body.get("battery")
+    battery = int(battery) if isinstance(battery, int) else -1
+    is_charging = bool(body.get("isCharging"))
+    current_app = str(body.get("currentApp", "")).strip()[:128]
+    screen_hash = str(body.get("screenHash", "")).strip()[:64]
+    if not device_id:
+        raise HTTPException(status_code=400, detail="deviceId 必填")
+    with closing(db()) as c:
+        cur = c.execute(
+            "UPDATE remote_devices SET last_seen = ?, last_heartbeat_at = ?, battery_level = ? "
+            "WHERE device_id = ? AND user_id = ? AND revoked = 0",
+            (now_ms(), now_ms(), battery, device_id, u["user_id"]),
+        )
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="设备不存在或已撤销")
+        c.commit()
+    return {"ok": True, "serverTs": now_ms(), "battery": battery, "charging": is_charging,
+            "currentApp": current_app, "screenHash": screen_hash}
+
+
+@app.post("/device/report")
+def device_report(body: dict[str, Any], u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    """App 结构化事件上报(崩溃、性能、用户行为等),服务端留痕供后台排查。"""
+    device_id = str(body.get("deviceId", "")).strip()
+    report_type = str(body.get("type", "")).strip()[:32]
+    payload = body.get("payload", {})
+    if not device_id or not report_type:
+        raise HTTPException(status_code=400, detail="deviceId 和 type 必填")
+    payload_json = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))[:8192]
+    with closing(db()) as c:
+        # 校验设备归属
+        dev = c.execute(
+            "SELECT 1 FROM remote_devices WHERE device_id = ? AND user_id = ? AND revoked = 0",
+            (device_id, u["user_id"]),
+        ).fetchone()
+        if dev is None:
+            raise HTTPException(status_code=404, detail="设备不存在或已撤销")
+        c.execute(
+            "INSERT INTO device_reports(user_id, device_id, report_type, payload, ts) "
+            "VALUES(?,?,?,?,?)",
+            (u["user_id"], device_id, report_type, payload_json, now_ms()),
+        )
+        c.commit()
+    return {"ok": True}
+
+
+@app.get("/device/{device_id}/status")
+def device_status(device_id: str, u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    """查询指定设备状态(电量、版本、最后心跳等)。"""
+    with closing(db()) as c:
+        row = c.execute(
+            "SELECT device_id, device_name, created_at, last_seen, last_heartbeat_at, "
+            "battery_level, os_version, app_version, device_model, revoked FROM remote_devices "
+            "WHERE device_id = ? AND user_id = ?",
+            (device_id, u["user_id"]),
+        ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="设备不存在")
+    return {
+        "deviceId": row["device_id"],
+        "deviceName": row["device_name"],
+        "createdAt": row["created_at"],
+        "lastSeen": row["last_seen"],
+        "lastHeartbeatAt": row["last_heartbeat_at"],
+        "batteryLevel": row["battery_level"],
+        "osVersion": row["os_version"],
+        "appVersion": row["app_version"],
+        "deviceModel": row["device_model"],
+        "revoked": bool(row["revoked"]),
+    }
+
+
 REMOTE_CONSOLE_HTML = r"""<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -963,8 +1211,10 @@ def invite_redeem(body: dict[str, Any], u: sqlite3.Row = Depends(actor)) -> dict
         )
         if upd.rowcount == 0:
             raise HTTPException(status_code=400, detail="你已使用过邀请码")
-        got = _grant_free(c, u["user_id"], REFERRAL_REDEEMER_BONUS)        # 新人
-        _grant_free(c, inviter["user_id"], REFERRAL_INVITER_BONUS)         # 邀请人
+        got = _grant_free(c, u["user_id"], REFERRAL_REDEEMER_BONUS, source="invite_redeemer",
+                          detail=f"填写邀请码 {code}", ref_id=inviter["user_id"])        # 新人
+        _grant_free(c, inviter["user_id"], REFERRAL_INVITER_BONUS, source="invite_inviter",
+                    detail=f"邀请好友 {u['user_id']}", ref_id=u["user_id"])         # 邀请人
         c.commit()
         bal = _user(c, u["user_id"])["credits"]
     return {"ok": True, "credits": got, "balance": bal}
@@ -974,6 +1224,36 @@ def invite_redeem(body: dict[str, Any], u: sqlite3.Row = Depends(actor)) -> dict
 @app.get("/billing/goods")
 def goods(u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
     return {"items": GOODS}
+
+
+@app.post("/billing/estimate")
+def billing_estimate(body: dict[str, Any], u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    """根据 prompt + 预期输出长度预估一次调用会扣多少积分、折合人民币多少。
+    不传 model 时按默认模型;不传 maxTokens 时按 MAX_OUTPUT_TOKENS 估算 worst-case。"""
+    model, spec = _resolve_model(body.get("model"))
+    mult = float(spec.get("multiplier", 1.0))
+    req_max = body.get("maxTokens")
+    max_out = min(req_max, MAX_OUTPUT_TOKENS) if isinstance(req_max, int) and req_max > 0 else MAX_OUTPUT_TOKENS
+    prompt_est = sum(
+        len(str(m.get("content", ""))) for m in (body.get("messages") or []) if isinstance(m, dict)
+    ) // 4
+    worst_credits = max(1, math.ceil((prompt_est + max_out) / 1000 * CREDITS_PER_1K_TOKENS * mult))
+    with closing(db()) as c:
+        free_avail = _daily_free_available(c, u["user_id"])
+    chargeable_credits = max(0, worst_credits - free_avail)
+    # 按最低有效单价(1000 积分包)估算人民币成本
+    rmb_per_credit = 69.90 / 1200
+    return {
+        "model": model,
+        "tier": spec.get("tier", ""),
+        "multiplier": mult,
+        "promptTokensEstimated": prompt_est,
+        "maxTokens": max_out,
+        "worstCaseCredits": worst_credits,
+        "dailyFreeCredits": free_avail,
+        "chargeableCredits": chargeable_credits,
+        "estimatedRmb": round(chargeable_credits * rmb_per_credit, 4),
+    }
 
 
 @app.post("/billing/orders")
@@ -1004,9 +1284,14 @@ def _settle(c: sqlite3.Connection, order: sqlite3.Row) -> int:
     g = GOODS_BY_ID[order["goods_id"]]
     want = g["credits"] + g["bonusCredits"]
     if PAYMENT_PROVIDER == "mock":
-        granted = _grant_free(c, order["user_id"], want)  # 内测免费充值:受每账号上限约束
+        granted = _grant_free(c, order["user_id"], want, source="order",
+                              detail=f"订单 {order['order_no']} 充值 {g['title']}",
+                              ref_id=order["order_no"])  # 内测免费充值:受每账号上限约束
     else:
         c.execute("UPDATE users SET credits = credits + ? WHERE user_id = ?", (want, order["user_id"]))
+        _record_credit_txn(c, order["user_id"], want, source="order",
+                           detail=f"订单 {order['order_no']} 充值 {g['title']}",
+                           ref_id=order["order_no"])
         granted = want  # 真实付费:不受免费上限
     if g["kind"] == "membership":  # 会员到期(解锁 BYO,用自己 key,不耗平台成本)
         cur = _user(c, order["user_id"])
@@ -1098,7 +1383,39 @@ def _resolve_model(requested: str | None) -> tuple[str, dict[str, Any]]:
     return model, spec
 
 
-def _reserve_credits(user_id: str, hold: int) -> bool:
+def _today_str() -> str:
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d")
+
+
+def _daily_free_available(c: sqlite3.Connection, user_id: str) -> int:
+    """返回用户今日剩余免费额度(积分)。"""
+    if FREE_DAILY_CREDITS <= 0:
+        return 0
+    row = c.execute(
+        "SELECT daily_free_used, daily_free_date FROM users WHERE user_id = ?", (user_id,)
+    ).fetchone()
+    if row is None:
+        return FREE_DAILY_CREDITS
+    if row["daily_free_date"] != _today_str():
+        return FREE_DAILY_CREDITS
+    return max(0, FREE_DAILY_CREDITS - int(row["daily_free_used"] or 0))
+
+
+def _consume_daily_free(c: sqlite3.Connection, user_id: str, want: int) -> int:
+    """原子扣减今日免费额度,返回实际抵扣的积分数(0..want)。"""
+    avail = _daily_free_available(c, user_id)
+    take = min(avail, max(0, want))
+    if take:
+        c.execute(
+            "UPDATE users SET daily_free_used = CASE WHEN daily_free_date = ? "
+            "THEN daily_free_used + ? ELSE ? END, "
+            "daily_free_date = ? WHERE user_id = ?",
+            (_today_str(), take, take, _today_str(), user_id),
+        )
+    return take
+
+
+def _reserve_credits(user_id: str, hold: int, source: str = "usage_hold", ref_id: str = "") -> bool:
     """原子预扣 hold 积分(余额够才扣)。并发请求各自预扣 → 一旦余额覆盖不了下一个请求的
     worst-case 预扣就被拒,杜绝「调用前判余额>0、扣费在响应后」导致的并发超额消费。"""
     if hold <= 0:
@@ -1108,26 +1425,35 @@ def _reserve_credits(user_id: str, hold: int) -> bool:
             "UPDATE users SET credits = credits - ? WHERE user_id = ? AND credits >= ?",
             (hold, user_id, hold),
         )
+        if cur.rowcount > 0:
+            _record_credit_txn(c, user_id, -hold, source=source, detail="预扣积分", ref_id=ref_id)
         c.commit()
         return cur.rowcount > 0
 
 
 def _reconcile_usage(user_id: str, model: str, tin: int, tout: int, mult: float, hold: int,
-                     free: bool = False) -> int:
-    """按实际用量结算:退还(预扣 hold − 实际 cost),多退少补(clamp≥0),记 usage_log。返回实际扣费。
-    tin=tout=0(上游报错/异常)时 actual=0 → 全额退还预扣。free=True(无限额度白名单)→ actual 恒 0,仍记 usage。"""
-    actual = 0 if free else (
+                     free: bool = False, ref_id: str = "", free_credits_used: int = 0) -> int:
+    """按实际用量结算:退还(预扣 hold − 实际 cost),多退少补(clamp≥0),记 usage_log 与积分流水。返回实际扣费。
+    tin=tout=0(上游报错/异常)时 actual=0 → 全额退还预扣。free=True(无限额度白名单)→ actual 恒 0,仍记 usage。
+    free_credits_used:本次调用已从每日免费额度中抵扣的积分数,用于抵扣实际账单。"""
+    raw_actual = 0 if free else (
         max(1, math.ceil((tin + tout) / 1000 * CREDITS_PER_1K_TOKENS * mult)) if (tin + tout) else 0
     )
+    actual = max(0, raw_actual - free_credits_used) if not free else 0
     refund = hold - actual
     with closing(db()) as c:
         if refund:
             c.execute("UPDATE users SET credits = MAX(0, credits + ?) WHERE user_id = ?", (refund, user_id))
+            _record_credit_txn(c, user_id, refund, source="usage_refund",
+                               detail=f"模型 {model} 预扣退还", ref_id=ref_id)
+        if actual and not free:
+            _record_credit_txn(c, user_id, -actual, source="usage",
+                               detail=f"模型 {model} 实际消耗", ref_id=ref_id)
         if (tin + tout) > 0:  # 有真实用量就记一条(便于看调用量/成本)
             c.execute(
                 "INSERT INTO usage_log(user_id, model, tokens_in, tokens_out, credits, ts) "
                 "VALUES(?,?,?,?,?,?)",
-                (user_id, model, tin, tout, actual, now_ms()),
+                (user_id, model, tin, tout, raw_actual, now_ms()),
             )
         c.commit()
     return actual
@@ -1165,6 +1491,7 @@ async def chat_completions(body: dict[str, Any], request: Request, u: sqlite3.Ro
     headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
     user_id = u["user_id"]
     unlimited = (u["email"] or "").strip().lower() in UNLIMITED_EMAILS  # 白名单:不预扣、不扣费、不被余额拦
+    request_id = "req_" + secrets.token_hex(8)
 
     import httpx  # 惰性 import
 
@@ -1174,15 +1501,23 @@ async def chat_completions(body: dict[str, Any], request: Request, u: sqlite3.Ro
 
     # ── 预扣(pre-auth reserve):按 worst-case(prompt 估算 + max_out)原子预留积分,不足→402;
     # 并发各自预扣,余额覆盖不了就被拒 → 杜绝超支;真实 usage 出来后结算多退少补。白名单 hold=0、不扣费。
+    # 每日免费额度优先抵扣本次预扣,剩余部分才从余额扣。
     prompt_est = sum(
         len(str(m.get("content", ""))) for m in (body.get("messages") or []) if isinstance(m, dict)
     ) // 4
     hold = 0 if unlimited else max(1, math.ceil((prompt_est + max_out) / 1000 * CREDITS_PER_1K_TOKENS * mult))
-    if hold and not _reserve_credits(user_id, hold):
+    free_used = 0
+    if hold and not unlimited and FREE_DAILY_CREDITS > 0:
+        with closing(db()) as c:
+            free_used = _consume_daily_free(c, user_id, hold)
+            c.commit()
+    effective_hold = max(0, hold - free_used)
+    if effective_hold and not _reserve_credits(user_id, effective_hold, ref_id=request_id):
         raise HTTPException(status_code=402, detail="积分不足,请充值")
 
     def _settle(tin: int, tout: int) -> None:  # 统一结算入口,白名单(free)恒不扣费
-        _reconcile_usage(user_id, model, tin, tout, mult, hold, free=unlimited)
+        _reconcile_usage(user_id, model, tin, tout, mult, effective_hold, free=unlimited,
+                         ref_id=request_id, free_credits_used=free_used)
 
     # ── 非流式 ──
     if not bool(body.get("stream")):
@@ -1366,8 +1701,12 @@ def admin_adjust_credits(uid: str, body: dict[str, Any], _: bool = Depends(admin
         before = cur["credits"]
         c.execute("UPDATE users SET credits = MAX(0, credits + ?) WHERE user_id = ?", (delta, uid))
         bal = _user(c, uid)["credits"]
+        applied = bal - before
         # 审计记真实生效量(负向调整会被 MAX(0,…) 截断,applied 可能 != 请求 delta)
-        _admin_log(c, "credits", uid, f"req_delta={delta} applied={bal - before} reason={reason} {before}->{bal}")
+        _admin_log(c, "credits", uid, f"req_delta={delta} applied={applied} reason={reason} {before}->{bal}")
+        if applied:
+            _record_credit_txn(c, uid, applied, source="admin_adjust",
+                               detail=f"管理后台调整: {reason}", ref_id="admin")
         c.commit()
     return {"ok": True, "balance": bal}
 

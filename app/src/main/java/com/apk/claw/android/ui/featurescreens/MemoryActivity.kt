@@ -2,7 +2,6 @@ package com.apk.claw.android.ui.featurescreens
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -27,8 +26,7 @@ import com.apk.claw.android.octopus_mobile.memory.MemoryStore.MemoryType
 class MemoryActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { MemoryScreen(onBack = { finish() }) }
-        runCatching { window.statusBarColor = com.apk.claw.android.ui.compose.theme.OctopusColors.statusBarArgb }
+        setFeatureContent { MemoryScreen(onBack = { finish() }) }
     }
 }
 

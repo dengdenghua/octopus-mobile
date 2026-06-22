@@ -11,6 +11,7 @@ import android.view.WindowManager
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import com.apk.claw.android.R
+import com.apk.claw.android.shizuku.ShizukuInstaller
 import com.apk.claw.android.shizuku.ShizukuManager
 
 /**
@@ -84,8 +85,17 @@ class AdvancedPermissionDialog private constructor(context: Context) :
                 tvStatus.setTextColor(ContextCompat.getColor(context, R.color.colorTextSecondary))
                 btnPrimary.setText(R.string.advanced_action_install)
                 btnPrimary.setOnClickListener {
-                    openInBrowser(context.getString(R.string.advanced_url_download))
-                    dismiss()
+                    btnPrimary.isEnabled = false
+                    btnPrimary.setText(R.string.advanced_action_downloading)
+                    ShizukuInstaller.downloadAndInstall(
+                        context = context,
+                        onStatus = { tvStatus.text = it },
+                        onDone = { launched ->
+                            btnPrimary.isEnabled = true
+                            btnPrimary.setText(R.string.advanced_action_install)
+                            if (launched) dismiss()
+                        },
+                    )
                 }
             }
         }

@@ -9,16 +9,18 @@ import com.apk.claw.android.octopus_mobile.safety.ToolCallGuardrailController
 import com.apk.claw.android.octopus_mobile.safety.GuardrailDecision
 import com.apk.claw.android.octopus_mobile.safety.GuardrailAction
 import com.apk.claw.android.octopus_mobile.safety.ToolRiskPolicy
+import com.apk.claw.android.octopus_mobile.safety.CircuitBreaker
 import com.apk.claw.android.octopus_mobile.ToolAuditLog
 import com.apk.claw.android.octopus_mobile.evolution.TurnScorer
 import com.apk.claw.android.octopus_mobile.nerves.EventBus
+import java.util.concurrent.ConcurrentHashMap
 
 object ToolRegistry {
 
     enum class DeviceType { TV, MOBILE }
 
-    private val tools = LinkedHashMap<String, BaseTool>()
-    private val pluginTools = mutableSetOf<String>()  // 插件注册的工具名称
+    private val tools = ConcurrentHashMap<String, BaseTool>()
+    private val pluginTools = ConcurrentHashMap.newKeySet<String>()  // 插件注册的工具名称
     var deviceType: DeviceType = DeviceType.TV
         private set
 
@@ -28,13 +30,20 @@ object ToolRegistry {
     val guardrail = ToolCallGuardrailController()
 
     /** 安全门（PII/Secret 扫描 + LLM 法官） */
+    @Volatile
     var safetyGate: SafetyGate? = null
 
     /** 回合打分器（自进化 L1 层） */
+    @Volatile
     var turnScorer: TurnScorer? = null
 
     /** 事件总线（模块间解耦通知） */
+    @Volatile
     var eventBus: EventBus? = null
+
+    /** 断路器（按工具维度熔断，防止持续失败的工具拖垮系统） */
+    @Volatile
+    var circuitBreaker: CircuitBreaker? = null
 
     // ── 来源信任闸门(R2/R3/R12) ──
     // 标记一段调用来自"不可信来源"：远程母体 WS 的 tool/execute、LAN HTTP debug execute、
@@ -59,6 +68,7 @@ object ToolRegistry {
      * 返回 true=放行。未注册时回退到 [com.apk.claw.android.utils.KVUtils.isRemoteHighRiskAllowed]
      * （默认 false=拦截）。
      */
+    @Volatile
     var highRiskConfirmer: ((toolName: String, params: Map<String, Any>) -> Boolean)? = null
 
     @JvmStatic
@@ -245,6 +255,20 @@ object ToolRegistry {
             return audited(ToolResult.error("工具已停用: $name"), blockedBy = "settings")
         }
 
+        // ── 断路器熔断检查（全工具维度，防止持续失败拖垮系统）──
+        val breaker = circuitBreaker
+        if (breaker != null) {
+            try {
+                breaker.check()
+            } catch (e: CircuitBreaker.CircuitOpenException) {
+                eventBus?.publish(EventBus.ToolBlockedEvent(name, e.reason, "circuit_breaker"))
+                return audited(
+                    ToolResult.error("工具调用被熔断: ${e.reason}（冷却 ${e.cooldownSeconds}s）"),
+                    blockedBy = "circuit_breaker",
+                )
+            }
+        }
+
         // ── 高危工具来源闸门(R2/R12)：远程/自动来源调用 HIGH_RISK 工具需确认，默认拦截 ──
         // 「高级自动化模式」开启时完全放行（专用自动化设备满血）。
         if (!com.apk.claw.android.utils.KVUtils.isAdvancedAutomationMode()
@@ -280,6 +304,7 @@ object ToolRegistry {
         val result = try {
             tool.executeWithWaitAfter(params)
         } catch (e: Exception) {
+            breaker?.record(success = false)
             ToolResult.error("Tool execution failed: ${e.message}")
         }
 
@@ -296,6 +321,9 @@ object ToolRegistry {
             guardrail.observe(name, params, result.data, failed = false)
             result
         }
+
+        // ── 断路器记录结果 ──
+        breaker?.record(success = finalResult.isSuccess)
 
         // ── 自进化打分（无论是否 WARN 都记录）──
         turnScorer?.record(name, success = finalResult.isSuccess, reason = finalResult.data ?: finalResult.error ?: "")

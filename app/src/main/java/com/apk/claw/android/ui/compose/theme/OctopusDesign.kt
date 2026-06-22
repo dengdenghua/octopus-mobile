@@ -4,8 +4,32 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+
+enum class OctopusGlassQuality {
+    Low,
+    Medium,
+    High,
+    Ultra;
+
+    companion object {
+        fun fromStorage(value: String): OctopusGlassQuality = when (value.lowercase()) {
+            "low" -> Low
+            "medium" -> Medium
+            "ultra" -> Ultra
+            else -> High
+        }
+    }
+}
+
+enum class OctopusGlassMaterial {
+    Thin,
+    Card,
+    Dock,
+    Sheet;
+}
 
 /**
  * 全局配色 —— 与 XML colors.xml 保持视觉一致的单一调色板。
@@ -197,6 +221,66 @@ object OctopusBackground {
 
     val glassBorder: Color
         get() = if (OctopusColors.isLight) Color.White.copy(alpha = 0.82f) else Color.White.copy(alpha = 0.14f)
+}
+
+/**
+ * 全局玻璃效果 token。
+ *
+ * [blurRadius] 是玻璃层的高斯模糊半径：数值越大越接近液态玻璃，数值越小越接近
+ * 普通半透明磨砂。页面组件默认读取这里，也可以在单个组件上传入参数微调。
+ */
+object OctopusGlass {
+    val defaultBlurRadius: Dp = 18.dp
+
+    private val _blurRadius = mutableStateOf(defaultBlurRadius)
+    private val _quality = mutableStateOf(OctopusGlassQuality.High)
+    private val _refraction = mutableStateOf(1f)
+    private val _highlight = mutableStateOf(1f)
+    private val _noise = mutableStateOf(1f)
+    private val _animationEnabled = mutableStateOf(true)
+
+    var blurRadius: Dp
+        get() = _blurRadius.value
+        set(value) { _blurRadius.value = if (value < 0.dp) 0.dp else value }
+
+    var quality: OctopusGlassQuality
+        get() = _quality.value
+        set(value) { _quality.value = value }
+
+    var refraction: Float
+        get() = _refraction.value
+        set(value) { _refraction.value = value.coerceIn(0f, 2f) }
+
+    var highlight: Float
+        get() = _highlight.value
+        set(value) { _highlight.value = value.coerceIn(0f, 2f) }
+
+    var noise: Float
+        get() = _noise.value
+        set(value) { _noise.value = value.coerceIn(0f, 2f) }
+
+    var animationEnabled: Boolean
+        get() = _animationEnabled.value
+        set(value) { _animationEnabled.value = value }
+
+    val qualityMultiplier: Float
+        get() = when (quality) {
+            OctopusGlassQuality.Low -> 0.35f
+            OctopusGlassQuality.Medium -> 0.68f
+            OctopusGlassQuality.High -> 1f
+            OctopusGlassQuality.Ultra -> 1.25f
+        }
+
+    val refractionOffset: Dp get() = blurRadius * 0.18f * refraction * qualityMultiplier
+    val highlightIntensity: Float get() = (if (OctopusColors.isLight) 0.88f else 0.58f) * highlight * qualityMultiplier
+    val edgeGlowAlpha: Float get() = (if (OctopusColors.isLight) 0.70f else 0.30f) * highlight * qualityMultiplier
+    val innerShadowAlpha: Float get() = if (OctopusColors.isLight) 0.14f else 0.34f
+    val noiseAlpha: Float get() = (if (OctopusColors.isLight) 0.055f else 0.035f) * noise * qualityMultiplier
+    val subtleBlurRadius: Dp get() = blurRadius * (0.38f + qualityMultiplier * 0.17f)
+    val liquidBlurRadius: Dp get() = blurRadius * (0.95f + qualityMultiplier * 0.40f)
+    val useRefraction: Boolean get() = quality != OctopusGlassQuality.Low && refraction > 0.02f
+    val useNoise: Boolean get() = quality != OctopusGlassQuality.Low && noise > 0.02f
+    val useDynamicHighlight: Boolean get() = animationEnabled && quality != OctopusGlassQuality.Low
 }
 
 /**

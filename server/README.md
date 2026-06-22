@@ -17,10 +17,14 @@ App 侧(`com.apk.claw.android.account`)按这套契约调用。默认全 mock,�
 ```
 POST /auth/sms/send            {mobile}            -> {ok, ttlSeconds, devCode?}
 POST /auth/sms/login           {mobile, code}      -> {token, userId, mobile, isNewUser, nickname}
-GET  /account/profile          (Bearer)            -> {userId, mobile, nickname, avatar}
-GET  /account/balance          (Bearer)            -> {credits, membershipActive, membershipExpireAt}
-POST /account/daily-claim      (Bearer)            -> {claimed, credits, balance}
-GET  /billing/goods            (Bearer)            -> {items:[{id,title,credits,bonusCredits,priceFen,tag,kind}]}
+GET  /account/profile              (Bearer)            -> {userId, mobile, nickname, avatar}
+GET  /account/balance              (Bearer)            -> {credits, membershipActive, membershipExpireAt}
+GET  /account/membership           (Bearer)            -> {active, expireAt, remainingDays, benefits, dailyFreeCredits, dailyFreeRemaining}
+GET  /account/credits/transactions (Bearer)            -> {total, items:[{id,delta,balanceAfter,source,detail,refId,ts}]}
+GET  /account/usage                (Bearer)            -> {total, summary, items:[{id,model,tokens_in,tokens_out,credits,ts}]}
+POST /account/daily-claim          (Bearer)            -> {claimed, credits, balance}
+GET  /billing/goods                (Bearer)            -> {items:[{id,title,credits,bonusCredits,priceFen,tag,kind}]}
+POST /billing/estimate             (Bearer){model?,messages,maxTokens?} -> {model,tier,multiplier,promptTokensEstimated,maxTokens,worstCaseCredits,dailyFreeCredits,chargeableCredits,estimatedRmb}
 POST /billing/orders           (Bearer){goodsId}   -> {orderNo, payUrl?, amountFen, credits}
 GET  /billing/orders/{orderNo} (Bearer)            -> {orderNo, status, credits}
 GET  /v1/models                                     -> 公开模型目录(带每模型积分倍率)
@@ -29,6 +33,19 @@ POST /billing/webhook/{prov}                        -> 生产支付回调(骨架
 GET  /healthz
 GET  /admin                                         -> 管理后台单页(未启用时 404)
 GET  /admin/api/*              (X-Admin-Token)       -> 后台 JSON 接口(见下)
+GET  /remote/console                                -> 官网远程控制台单页
+POST /remote/pair/start        (Bearer){deviceName} -> {code, ttlSeconds}
+POST /remote/pair/claim        (Bearer){code,...}   -> {deviceId, deviceToken, deviceName}
+GET  /remote/devices           (Bearer)             -> 已配对设备列表(含 online/revoked)
+POST /remote/devices/{id}/revoke (Bearer)           -> 撤销设备授权
+WS   /remote/device/ws?device_id=...&device_token=... -> 手机主动连接官网
+WS   /remote/console/ws?device_id=...&token=JWT       -> 官网控制台连接设备
+POST /device/register              (Bearer){deviceId?,deviceName?,pushToken?,osVersion?,appVersion?,deviceModel?} -> {deviceId, deviceToken, deviceName}
+POST /device/heartbeat             (Bearer){deviceId,battery?,isCharging?,currentApp?,screenHash?} -> {ok, serverTs, ...}
+POST /device/report                (Bearer){deviceId,type,payload} -> {ok}
+GET  /device/{device_id}/status    (Bearer)            -> {deviceId, deviceName, createdAt, lastSeen, lastHeartbeatAt, batteryLevel, osVersion, appVersion, deviceModel, revoked}
+GET  /downloads/shizuku/latest                      -> Shizuku 安装包元信息(公开)
+GET  /downloads/shizuku.apk                         -> Shizuku APK 下载(公开,需服务器放置文件)
 ```
 
 ## 管理后台 /admin
@@ -48,8 +65,62 @@ GET  /admin/api/*              (X-Admin-Token)       -> 后台 JSON 接口(见�
   ```
 
 鉴权用 **JWT(HS256)**:登录返回的 token 即 JWT,后续请求带 `Authorization: Bearer <token>`。
-计费 = `ceil((输入+输出 tokens)/1000 × CREDITS_PER_1K_TOKENS × 模型 multiplier)`。
-中转 `/v1/chat/completions` 同时支持**非流式**和**流式 SSE 透传**(流式自动注入 `stream_options.include_usage`,在末尾抓 usage 后扣费)。
+
+## 计费策略
+
+- 公式:`ceil((输入+输出 tokens)/1000 × CREDITS_PER_1K_TOKENS × 模型 multiplier)`。
+- 默认 `CREDITS_PER_1K_TOKENS=0.1`,在 DeepSeek-V4 成本下保持 40%–70% 模型层毛利,同时让用户感知价格接近主流 AI 工具。
+- 默认 `FREE_DAILY_CREDITS=2`:每个自然日赠送 2 积分,调用 `/v1/chat/completions` 时优先抵扣,余额为 0 也能轻度体验。
+- 模型倍率:极速 0.2× / 标准 0.45× / 高级 1.2×。
+- `/billing/estimate` 可在调用前预估本次 worst-case 扣费。
+- 中转 `/v1/chat/completions` 同时支持**非流式**和**流式 SSE 透传**(流式自动注入 `stream_options.include_usage`,在末尾抓 usage 后扣费)。
+
+## 官网远程控制台 /remote/console
+
+远程控制走“官网统一入口 + 手机主动连接官网”的模式,不再依赖手机公网 IP:
+
+1. 用户登录官网后打开 `/remote/console`,粘贴/保存登录 JWT。
+2. 点击“生成配对码”,服务端创建 5 分钟有效的一次性配对码。
+3. 手机 App 在设置 → 设备控制 → 官网控制台里输入配对码,调用 `/remote/pair/claim` 认领。
+4. App 保存 `deviceId/deviceToken`,并主动连接 `wss://你的域名/remote/device/ws`。
+5. 官网控制台连接 `/remote/console/ws`,控制指令由服务端转发到手机在线 WebSocket。
+
+首版 relay 使用 JSON 指令,例如:
+
+```json
+{"type":"control","action":"home"}
+{"type":"control","action":"tap","x":300,"y":800}
+{"type":"control","action":"text","text":"你好"}
+```
+
+生产部署 nginx 时记得开启 WebSocket Upgrade 透传,例如在反代 location 中加:
+
+```nginx
+proxy_set_header Upgrade $http_upgrade;
+proxy_set_header Connection "upgrade";
+proxy_read_timeout 3600s;
+```
+
+## Shizuku 一键下载安装
+
+App 内的 Shizuku 引导会请求 `GET /downloads/shizuku/latest`,再下载 `downloadUrl` 并拉起
+Android 系统安装器。服务端不会自动从第三方下载 APK,需要部署时手动放置官方安装包:
+
+```bash
+mkdir -p /home/ubuntu/octopus-server/downloads
+cp Shizuku.apk /home/ubuntu/octopus-server/downloads/shizuku.apk
+```
+
+可选 `.env`:
+
+```bash
+SHIZUKU_APK_PATH=/home/ubuntu/octopus-server/downloads/shizuku.apk
+SHIZUKU_VERSION=13.6.0
+SHIZUKU_SOURCE_URL=https://shizuku.rikka.app/download/
+SHIZUKU_LICENSE_URL=https://github.com/RikkaApps/Shizuku
+```
+
+注意:分发第三方 APK 前应保留来源和开源许可信息,并定期用官方版本更新该文件。
 
 ## 在你的服务器上跑(已实测该机:2 vCPU / 1GB / Python 3.12)
 

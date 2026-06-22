@@ -19,6 +19,7 @@ import com.apk.claw.android.octopus_mobile.nerves.EventBus
 import com.apk.claw.android.octopus_mobile.proactive.NotificationRelayService
 import com.apk.claw.android.octopus_mobile.proactive.ProactiveRuleEngine
 import com.apk.claw.android.octopus_mobile.safety.SafetyGate
+import com.apk.claw.android.octopus_mobile.safety.CircuitBreaker
 import com.apk.claw.android.server.ConfigServerManager
 import com.apk.claw.android.service.KeepAliveJobService
 import com.apk.claw.android.tool.ToolRegistry
@@ -192,6 +193,14 @@ class AppViewModel : ViewModel() {
 
             val turnScorer = TurnScorer(ClawApplication.instance.filesDir)
             ToolRegistry.turnScorer = turnScorer
+
+            // 断路器：60s 窗口内失败 10 次或调用 60 次则熔断 30s，防止 LLM/工具异常拖垮系统
+            ToolRegistry.circuitBreaker = CircuitBreaker(
+                windowSeconds = 60.0,
+                maxErrorsPerWindow = 10,
+                maxCallsPerWindow = 60,
+                cooldownSeconds = 30.0,
+            )
 
             // EventBus 接入：护栏拦截 → 发布事件
             val eventBus = ClawApplication.instance.eventBus

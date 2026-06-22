@@ -33,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -47,8 +48,12 @@ import com.apk.claw.android.ui.compose.screen.ChatScreen
 import com.apk.claw.android.ui.compose.screen.DiscoverScreen
 import com.apk.claw.android.ui.compose.screen.FeatureHubScreen
 import com.apk.claw.android.ui.compose.screen.SettingsScreen
+import com.apk.claw.android.ui.compose.component.LiquidGlassLayer
+import com.apk.claw.android.ui.compose.component.rememberGlassPressState
 import com.apk.claw.android.ui.compose.theme.OctopusBackground
 import com.apk.claw.android.ui.compose.theme.OctopusColors
+import com.apk.claw.android.ui.compose.theme.OctopusGlass
+import com.apk.claw.android.ui.compose.theme.OctopusGlassMaterial
 import com.apk.claw.android.ui.compose.theme.OctopusIconSize
 import com.apk.claw.android.ui.compose.theme.OctopusShape
 import com.apk.claw.android.ui.compose.theme.OctopusLayout
@@ -139,19 +144,20 @@ private fun CompactBottomBar(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(OctopusLayout.bottomNavHeight)
-                    .clip(OctopusShape.capsule)
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(
-                                Color.White.copy(alpha = if (OctopusColors.isLight) 0.32f else 0.10f),
-                                Color.Transparent,
-                            )
-                        )
-                    )
-                    .padding(horizontal = OctopusSpacing.sm, vertical = OctopusSpacing.sm),
+                    .clip(OctopusShape.capsule),
             ) {
-                Row(
+                LiquidGlassLayer(
+                    shape = OctopusShape.capsule,
+                    blurRadius = OctopusGlass.liquidBlurRadius,
+                    tint = NavGlassSurfaceColor.copy(alpha = if (OctopusColors.isLight) 0.76f else 0.68f),
+                    highlightIntensity = OctopusGlass.highlightIntensity * 1.14f,
+                    material = OctopusGlassMaterial.Dock,
                     modifier = Modifier.fillMaxSize(),
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = OctopusSpacing.sm, vertical = OctopusSpacing.sm),
                     horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.sm),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -179,14 +185,15 @@ private fun BottomTabItem(
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
+    val press = rememberGlassPressState()
     val label = stringResource(screen.labelRes)
     val contentColor = if (selected) NavPrimaryColor else NavTextMutedColor
     val bgBrush = if (selected) {
         Brush.horizontalGradient(
             listOf(
-                NavPrimaryColor.copy(alpha = 0.18f),
-                Color.White.copy(alpha = if (OctopusColors.isLight) 0.30f else 0.08f),
-                NavPrimaryColor.copy(alpha = 0.10f),
+                NavPrimaryColor.copy(alpha = 0.18f * press.boost),
+                Color.White.copy(alpha = (if (OctopusColors.isLight) 0.30f else 0.08f) * press.boost),
+                NavPrimaryColor.copy(alpha = 0.10f * press.boost),
             )
         )
     } else {
@@ -195,9 +202,18 @@ private fun BottomTabItem(
     val borderColor = if (selected) Color.White.copy(alpha = if (OctopusColors.isLight) 0.78f else 0.18f) else Color.Transparent
     Row(
         modifier = modifier
+            .graphicsLayer {
+                scaleX = press.scale
+                scaleY = press.scale
+            }
+            .then(press.touchModifier)
             .clip(OctopusShape.capsule)
             .background(bgBrush, OctopusShape.capsule)
-            .clickable(onClick = onClick)
+            .clickable(
+                interactionSource = press.interactionSource,
+                indication = null,
+                onClick = onClick,
+            )
             .padding(horizontal = OctopusSpacing.xs),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,

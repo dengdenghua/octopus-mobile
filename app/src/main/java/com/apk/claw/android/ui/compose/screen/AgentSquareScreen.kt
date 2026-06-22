@@ -21,8 +21,8 @@ import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
@@ -39,10 +39,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.apk.claw.android.R
+import com.apk.claw.android.ui.compose.theme.OctopusBackground
 import com.apk.claw.android.ui.compose.theme.OctopusColors
 import com.apk.claw.android.ui.compose.theme.OctopusIconSize
 import com.apk.claw.android.ui.compose.theme.OctopusShape
@@ -51,7 +54,7 @@ import com.apk.claw.android.ui.compose.theme.OctopusTints
 import com.apk.claw.android.ui.compose.theme.OctopusType
 
 /**
- * Agent 广场 —— 小红书风格的双列瀑布流，展示 Agent 技能、用法、作品卡片。
+ * 灵感广场 —— 双列灵感瀑布流，展示自动化技能、用法、作品卡片。
  */
 private data class AgentPost(
     val id: String,
@@ -81,7 +84,7 @@ private val samplePosts = listOf(
     ),
     AgentPost(
         id = "2",
-        title = "3 步搭一个会订外卖的 Agent",
+        title = "3 步搭一个会订外卖的助手",
         author = "效率玩家",
         authorInitial = "效",
         authorColor = OctopusTints.Skill,
@@ -93,7 +96,7 @@ private val samplePosts = listOf(
     ),
     AgentPost(
         id = "3",
-        title = "我的 Agent 帮我写了一周周报，老板直呼专业",
+        title = "自动写一周周报，老板直呼专业",
         author = "打工侠",
         authorInitial = "打",
         authorColor = OctopusTints.Window,
@@ -105,7 +108,7 @@ private val samplePosts = listOf(
     ),
     AgentPost(
         id = "4",
-        title = "用语音唤醒 Agent，开车时也能回消息",
+        title = "用语音唤醒助手，开车时也能回消息",
         author = "车载达人",
         authorInitial = "车",
         authorColor = OctopusTints.Plugin,
@@ -117,7 +120,7 @@ private val samplePosts = listOf(
     ),
     AgentPost(
         id = "5",
-        title = "Agent 自动比价，618 我省了 2000+",
+        title = "自动比价，618 我省了 2000+",
         author = "省钱 Bot",
         authorInitial = "省",
         authorColor = OctopusTints.Cloud,
@@ -129,7 +132,7 @@ private val samplePosts = listOf(
     ),
     AgentPost(
         id = "6",
-        title = "把 Agent 接入智能家居，一句话控制全屋",
+        title = "接入智能家居，一句话控制全屋",
         author = "极客居",
         authorInitial = "极",
         authorColor = OctopusTints.Evolve,
@@ -141,8 +144,8 @@ private val samplePosts = listOf(
     ),
     AgentPost(
         id = "7",
-        title = "Agent 生成的旅行攻略，比小红书还细",
-        author = "旅行 AI",
+        title = "生成旅行攻略，细到每天照着走",
+        author = "旅行灵感",
         authorInitial = "旅",
         authorColor = OctopusTints.Browser,
         likes = "987",
@@ -153,7 +156,7 @@ private val samplePosts = listOf(
     ),
     AgentPost(
         id = "8",
-        title = "让 Agent 帮你读论文，10 分钟抓重点",
+        title = "让助手帮你读论文，10 分钟抓重点",
         author = "学术喵",
         authorInitial = "学",
         authorColor = OctopusTints.Memory,
@@ -165,7 +168,11 @@ private val samplePosts = listOf(
     ),
 )
 
-private val tabs = listOf("推荐", "关注", "热门")
+private val tabs = listOf(
+    R.string.agent_square_tab_recommend,
+    R.string.agent_square_tab_following,
+    R.string.agent_square_tab_hot,
+)
 
 @Composable
 fun AgentSquareScreen(
@@ -176,7 +183,7 @@ fun AgentSquareScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(OctopusColors.Background)
+            .background(OctopusBackground.pageBrush())
             .statusBarsPadding()
             .navigationBarsPadding(),
     ) {
@@ -200,14 +207,14 @@ private fun AgentSquareTopBar(
     ) {
         IconButton(onClick = onBack) {
             Icon(
-                Icons.Filled.ArrowBack,
-                contentDescription = "Back",
+                Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = stringResource(R.string.cd_back),
                 tint = OctopusColors.TextPrimary,
                 modifier = Modifier.size(OctopusIconSize.large),
             )
         }
         Text(
-            "Agent 广场",
+            stringResource(R.string.agent_square_title),
             modifier = Modifier.weight(1f),
             color = OctopusColors.TextPrimary,
             fontSize = OctopusType.titleLg,
@@ -216,7 +223,7 @@ private fun AgentSquareTopBar(
         IconButton(onClick = onOpenSearch) {
             Icon(
                 Icons.Filled.Search,
-                contentDescription = "Search",
+                contentDescription = stringResource(R.string.cd_search),
                 tint = OctopusColors.TextPrimary,
                 modifier = Modifier.size(OctopusIconSize.large),
             )
@@ -224,7 +231,7 @@ private fun AgentSquareTopBar(
         IconButton(onClick = onCreatePost) {
             Icon(
                 Icons.Filled.Add,
-                contentDescription = "Create",
+                contentDescription = stringResource(R.string.cd_create),
                 tint = OctopusColors.Primary,
                 modifier = Modifier.size(OctopusIconSize.large),
             )
@@ -241,7 +248,7 @@ private fun CategoryTabs() {
             .padding(horizontal = OctopusSpacing.lg, vertical = OctopusSpacing.sm),
         horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.md),
     ) {
-        tabs.forEachIndexed { index, label ->
+        tabs.forEachIndexed { index, tabRes ->
             val isSelected = index == selected
             Surface(
                 shape = OctopusShape.capsule,
@@ -249,7 +256,7 @@ private fun CategoryTabs() {
                 modifier = Modifier.clickable { selected = index },
             ) {
                 Text(
-                    label,
+                    stringResource(tabRes),
                     modifier = Modifier.padding(horizontal = OctopusSpacing.lg, vertical = OctopusSpacing.sm),
                     color = if (isSelected) OctopusColors.OnPrimary else OctopusColors.TextSecondary,
                     fontSize = OctopusType.body,
@@ -279,8 +286,9 @@ private fun AgentFeed() {
 private fun AgentPostCard(post: AgentPost) {
     Surface(
         shape = OctopusShape.large,
-        color = OctopusColors.Surface,
-        shadowElevation = 1.dp,
+        color = OctopusBackground.glassSurface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, OctopusBackground.glassBorder),
+        shadowElevation = 8.dp,
         modifier = Modifier
             .fillMaxWidth()
             .clip(OctopusShape.large)

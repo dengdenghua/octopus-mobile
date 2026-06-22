@@ -48,6 +48,14 @@
     <string name="advanced_dialog_status_not_installed">Shizuku は未インストールです。</string>
     <string name="advanced_action_open_shizuku">Shizuku を開く</string>
     <string name="advanced_action_install">Shizuku をインストール</string>
+    <string name="advanced_action_downloading">ダウンロード中…</string>
+    <string name="advanced_install_fetching">Octopus 公式サーバーに接続しています…</string>
+    <string name="advanced_install_downloading">Shizuku インストーラーをダウンロードしています…</string>
+    <string name="advanced_install_opening">ダウンロード完了。システムインストーラーを開きます。</string>
+    <string name="advanced_install_not_configured">公式サーバーに Shizuku インストーラーがまだ設定されていません。後でもう一度お試しください。</string>
+    <string name="advanced_install_verify_failed">インストーラーの検証に失敗しました。後でもう一度お試しください。</string>
+    <string name="advanced_install_failed">ダウンロードに失敗しました。ネットワークを確認してもう一度お試しください。</string>
+    <string name="advanced_install_unknown_sources_required">Octopus に不明なアプリのインストールを許可してから、戻って再試行してください。</string>
     <string name="advanced_action_learn_more">詳細</string>
     <string name="advanced_action_close">閉じる</string>
     <string name="advanced_url_download">https://shizuku.rikka.app/download/</string>
@@ -119,8 +127,8 @@
     <string name="wechat_media_voice">音声</string>
     <string name="wechat_media_unknown">メディア</string>
     <string name="channel_config_saved">設定を保存しました</string>
-    <string name="channel_config_lan_hint">💡 設定ページで「LAN設定」を有効にすると、ブラウザから設定できます</string>
-    <string name="channel_config_lan_hint_running">💡 ブラウザで %s を開いて設定してください</string>
+    <string name="channel_config_lan_hint">設定ページで「LAN設定」を有効にすると、ブラウザから設定できます</string>
+    <string name="channel_config_lan_hint_running">ブラウザで %s を開いて設定してください</string>
     <string name="channel_config_lan_copied">アドレスをコピーしました</string>
 
     <!-- LLM設定 -->
@@ -255,23 +263,23 @@
     <string name="discover_shortcut_multiwindow">マルチウィンドウ</string>
     <string name="discover_shortcut_memory">メモリ</string>
     <string name="discover_shortcut_evolution">自己進化</string>
-    <string name="discover_suggest_weather">🌤 天気</string>
-    <string name="discover_suggest_organize">📦 ドライブ整理</string>
-    <string name="discover_suggest_resume">▶️ 視聴を再開</string>
-    <string name="discover_status_memory">💾 記憶 5 件</string>
-    <string name="discover_status_rules">🔔 ルール 2 件</string>
-    <string name="discover_stat_sessions">💬 %1$d チャット</string>
-    <string name="discover_stat_a11y_on">♿ アクセシビリティ ON</string>
-    <string name="discover_stat_a11y_off">♿ アクセシビリティ OFF</string>
-    <string name="discover_stat_llm_on">🤖 モデル設定済</string>
-    <string name="discover_stat_llm_off">🤖 モデル未設定</string>
+    <string name="discover_suggest_weather">天気</string>
+    <string name="discover_suggest_organize">ドライブ整理</string>
+    <string name="discover_suggest_resume">視聴を再開</string>
+    <string name="discover_status_memory">記憶 5 件</string>
+    <string name="discover_status_rules">ルール 2 件</string>
+    <string name="discover_stat_sessions">%1$d チャット</string>
+    <string name="discover_stat_a11y_on">アクセシビリティ ON</string>
+    <string name="discover_stat_a11y_off">アクセシビリティ OFF</string>
+    <string name="discover_stat_llm_on">モデル設定済</string>
+    <string name="discover_stat_llm_off">モデル未設定</string>
 
     <!-- Bottom navigation -->
     <string name="nav_discover">発見</string>
     <string name="nav_chat">チャット</string>
     <string name="nav_device">デバイス</string>
     <string name="nav_settings">設定</string>
-    <string name="nav_agent_square">Agent 広場</string>
+    <string name="nav_agent_square">インスピレーション広場</string>
 
     <!-- SettingsScreen (Compose) -->
     <string name="settings_section_permissions">権限の状態</string>
@@ -300,8 +308,8 @@
     <string name="status_offline">オフライン</string>
 
     <!-- ChatScreen (Compose) -->
-    <string name="chat_remote">🌐 リモート</string>
-    <string name="chat_local">🏠 ローカル</string>
+    <string name="chat_remote">リモート</string>
+    <string name="chat_local">ローカル</string>
     <string name="chat_input_hint">コマンドを入力…</string>
     <string name="chat_ack">受け付けました。デバイスで実行中…</string>
     <string name="chat_thinking">考え中</string>
@@ -314,11 +322,11 @@
     <string name="setup_go">設定する ›</string>
 
     <!-- DeviceScreen (Compose) -->
-    <string name="device_title">🖥 デバイス</string>
+    <string name="device_title">デバイス</string>
     <string name="device_online_count">%1$d/%2$d オンライン</string>
-    <string name="device_cast">🖥 画面投影</string>
-    <string name="device_cast_disconnected">📺 未接続</string>
-    <string name="device_vision">👁️ ビジョン</string>
+    <string name="device_cast">画面投影</string>
+    <string name="device_cast_disconnected">未接続</string>
+    <string name="device_vision">ビジョン</string>
     <string name="device_vision_desc">VLM マルチモーダル解析\nシステムダイアログ時に自動フォールバック</string>
     <string name="device_this_device">本機</string>
     <string name="ctrl_screenshot">スクショ</string>
@@ -343,7 +351,7 @@
     <string name="device_cmd_failed">失敗（オフライン？）</string>
     <string name="device_allow_control">LAN リモート操作を許可</string>
     <string name="device_allow_control_desc">同じ Wi-Fi の他端末からこの端末を操作できるようにします。既定はオフ。信頼できるネットワークでのみ有効化してください。</string>
-    <string name="device_browser">🌐 ブラウザ</string>
+    <string name="device_browser">ブラウザ</string>
     <string name="device_tabs">タブ</string>
     <string name="device_extensions">拡張機能</string>
     <string name="badge_active">アクティブ</string>
@@ -366,7 +374,7 @@
     <string name="tool_name_search_files">ファイル検索</string>
     <string name="tool_name_send_intent">インテント送信</string>
     <string name="tool_name_send_sms">SMS 送信</string>
-    <string name="floating_circle_running_state">💭 実行中…</string>
+    <string name="floating_circle_running_state">実行中…</string>
     <string name="floating_circle_success_state">完了</string>
     <string name="floating_circle_error_state">終了</string>
     <string name="routine_alarm_running_title">ルーチンを実行中</string>
@@ -376,21 +384,21 @@
     <string name="browser_loading_text">読み込み中…</string>
     <string name="browser_engine_chip_description">検索エンジンを切り替える</string>
     <string name="browser_url_hint">検索またはURLを入力</string>
-    <string name="browser_ai_operate_toast">🤖 AIにこのページを操作させる…</string>
+    <string name="browser_ai_operate_toast">AIにこのページを操作させる…</string>
     <string name="browser_refresh_button">更新</string>
     <string name="browser_ask_ai_button">AIに質問</string>
     <string name="browser_back_button">戻る</string>
     <string name="browser_forward_button">進む</string>
     <string name="browser_home_button">ホーム</string>
     <string name="browser_bookmarks_button">ブックマーク</string>
-    <string name="browser_ai_sheet_title">✨ AIに質問 · このページについて</string>
+    <string name="browser_ai_sheet_title">AIに質問 · このページについて</string>
     <string name="browser_accessibility_warning">ページコンテンツを読むにはアクセシビリティサービスを有効にしてください</string>
     <string name="browser_ask_page_hint">このページについて質問…</string>
     <string name="browser_chip_summarize">ページをまとめる</string>
     <string name="browser_chip_key_points">要点を抽出</string>
     <string name="browser_chip_translate">翻訳</string>
-    <string name="browser_chip_reader">📖 リーダーモード</string>
-    <string name="browser_chip_speak">🔊 読み上げ</string>
+    <string name="browser_chip_reader">リーダーモード</string>
+    <string name="browser_chip_speak">読み上げ</string>
     <string name="browser_input_ask_or_operate">このページについて質問するか、AIに操作させる…</string>
     <string name="browser_ask_button">質問</string>
     <string name="browser_execute_button">実行</string>
@@ -402,7 +410,7 @@
     <string name="browser_error_message">エラー：%1$s</string>
     <string name="browser_load_error">読み込みエラー: %1$s</string>
     <string name="browser_download_notification">ダウンロード: %1$s</string>
-    <string name="browser_remove_bookmark">⭐ ブックマークを削除</string>
+    <string name="browser_remove_bookmark">ブックマークを削除</string>
     <string name="browser_bookmark_current">☆ 現在のページをブックマーク</string>
     <string name="browser_saved_bookmarks_header">── 保存済みブックマーク ──</string>
     <string name="browser_bookmark_removed">ブックマークを削除しました</string>
@@ -438,8 +446,8 @@
     <string name="screen_cast_enter_package_name">パッケージ名を入力</string>
     <string name="screen_cast_launch_button">起動</string>
     <string name="chat_agent_bridge_busy_error">別のタスクが実行中です。お待ちください</string>
-    <string name="chat_agent_bridge_preparing">💭 準備中…</string>
-    <string name="chat_agent_bridge_thinking">💭 考え中…</string>
+    <string name="chat_agent_bridge_preparing">準備中…</string>
+    <string name="chat_agent_bridge_thinking">考え中…</string>
     <string name="chat_agent_bridge_error">エラー</string>
     <string name="chat_agent_bridge_call_failed">呼び出し失敗</string>
     <string name="chat_agent_bridge_manual_required">手動での対応が必要です</string>
@@ -450,8 +458,8 @@
     <string name="chat_mic_permission_denied">録音が認可されていません。音声入力は利用できません</string>
     <string name="chat_voice_stop_agent">■  Agentを停止</string>
     <string name="chat_voice_listening_release">聞いています...リリースして送信</string>
-    <string name="chat_voice_hold_to_speak">🎤  マイクを押して話す</string>
-    <string name="chat_target_local_device">📱 このデバイス</string>
+    <string name="chat_voice_hold_to_speak">マイクを押して話す</string>
+    <string name="chat_target_local_device">このデバイス</string>
     <string name="chat_demo_open_wechat">WeChatを開いて小明にメッセージを送信する</string>
     <string name="chat_demo_main_screen">✓ メイン画面</string>
     <string name="chat_demo_search">✓ 検索</string>
@@ -461,20 +469,20 @@
     <string name="chat_demo_check_weather">明日の天気を見てください</string>
     <string name="chat_demo_weather_details">✓ 天気の詳細</string>
     <string name="chat_demo_weather_forecast">明日の北京の天気：晴れから曇り、最高28℃、最低16℃、空気品質は良好。</string>
-    <string name="chat_save_as_routine">⭐ ルーチンとして保存</string>
-    <string name="chat_routine_saved_toast">ルーチンとして保存されました（📋 表示）</string>
-    <string name="fast_replay_activity_log_message">⚡ ファストパス再生 %1$d ステップ</string>
+    <string name="chat_save_as_routine">ルーチンとして保存</string>
+    <string name="chat_routine_saved_toast">ルーチンとして保存されました（表示）</string>
+    <string name="fast_replay_activity_log_message">ファストパス再生 %1$d ステップ</string>
     <string name="routine_runner_target_offline">（ターゲット「%1$s」がオフラインなため、ローカルデバイスを使用）</string>
     <string name="routine_runner_model_not_configured">モデルが構成されていません。設定 → モデル構成に進んでください</string>
-    <string name="routine_runner_fast_path">⚡ 高速パス</string>
+    <string name="routine_runner_fast_path">高速パス</string>
     <string name="routine_runner_starting_execution">実行開始</string>
     <string name="settings_llm_api_key_configured">設定済み</string>
     <string name="settings_rpc_url_default">未構成（デフォルト: ws://10.0.2.2:8765）</string>
     <string name="settings_octopus_runtime_title">ホスト接続 · Octopus Runtime</string>
     <string name="settings_rpc_remote_brain_description">RPC リモート実行（ホストが tool/execute を送信）</string>
-    <string name="settings_pc_remote_desktop_title">🖥 ホストリモートデスクトップ</string>
+    <string name="settings_pc_remote_desktop_title">ホストリモートデスクトップ</string>
     <string name="settings_pc_remote_h264_description">PC画面を表示 + タッチ/キーボード操作（H.264/WS、同一LAN）</string>
-    <string name="settings_webrtc_remote_desktop_title">🖥 リモートデスクトップ（WebRTC）</string>
+    <string name="settings_webrtc_remote_desktop_title">リモートデスクトップ（WebRTC）</string>
     <string name="settings_webrtc_p2p_description">P2P 直接接続（WebView/STUN ホールパンチング、クロスネットワーク、ホストの pc_remote_webrtc.py が必要）</string>
     <string name="device_detail_toolbar_title">デバイスの詳細</string>
     <string name="device_detail_status_online">● オンライン</string>
@@ -523,7 +531,7 @@
     <string name="evolution_canary_stats">サンプル %1$d · 成功 %2$d · 失敗 %3$d</string>
     <string name="evolution_effectiveness">有効度 %1$d%%</string>
     <string name="extensions_title">ブラウザ拡張機能</string>
-    <string name="extensions_install_from_amo">🦊 Firefox ストア(AMO)からインストール</string>
+    <string name="extensions_install_from_amo">Firefox ストア(AMO)からインストール</string>
     <string name="extensions_install_instructions">addons.mozilla.org を開いてページ内の「Firefox に追加」をクリック</string>
     <string name="extensions_go_install_button">インストール</string>
     <string name="extensions_installed_section">インストール済み</string>
@@ -566,9 +574,9 @@
     <string name="routines_empty_state">ルーチンはまだありません。\n\nチャットで送信したコマンドを長押し → 「ルーチンとして保存」でワンタップ再生またはスケジュール設定できます。再生により、エージェントが画面に基づいて実行を再度計画します。</string>
     <string name="routines_count_summary">合計 %1$d 条 · ⚡=学習済み高速パス(より高速に再生)、それ以外はエージェントが再計画</string>
     <string name="routines_item_target_and_count">ターゲット %1$s · 実行 %2$d 回</string>
-    <string name="routines_item_schedule_daily"> · ⏰ 毎日 %1$s</string>
-    <string name="routines_item_schedule_once"> · ⏰ 一度 %1$s</string>
-    <string name="routines_item_lightning_steps">⚡%1$d</string>
+    <string name="routines_item_schedule_daily"> · 毎日 %1$s</string>
+    <string name="routines_item_schedule_once"> · 一度 %1$s</string>
+    <string name="routines_item_lightning_steps">%1$d</string>
     <string name="routines_item_run_button">▶ 実行</string>
     <string name="routines_forget_fastpath_title">高速パスを忘れる</string>
     <string name="routines_forget_fastpath_message">「%1$s」は%2$d ステップの高速パスを学習しました。これを忘れると、次回の実行時にエージェントが画面に基づいて再度計画し、再度記録します。</string>
@@ -668,9 +676,9 @@
     <string name="feat_multiwindow">マルチウィンドウ</string>
     <string name="feat_evolution">自己進化</string>
     <string name="feat_trust">トラストセンター</string>
-    <string name="feat_toolbox_title">ツールボックス</string>
+    <string name="feat_toolbox_title">能力</string>
     <string name="feat_explore">探索</string>
-    <string name="feat_explore_title">探索・発見</string>
+    <string name="feat_explore_title">インスピレーション</string>
     <string name="feat_explore_hot">人気</string>
     <string name="feat_explore_recent">最近</string>
     <string name="feat_explore_office">仕事・学習</string>
@@ -752,8 +760,10 @@
     <string name="account_invite_redeem_failed">交換に失敗</string>
     <string name="account_tier_title">対話モード</string>
     <string name="account_tier_fast">高速</string>
+    <string name="account_tier_flash">標準</string>
     <string name="account_tier_premium">高品質</string>
     <string name="account_tier_fast_hint">高速 · 消費が少ない</string>
+    <string name="account_tier_flash_hint">バランス型 · 日常の複雑なタスク向け</string>
     <string name="account_tier_premium_hint">高性能 · 消費が多い</string>
     <string name="account_byo_locked_title">会員限定</string>
     <string name="account_byo_locked_msg">会員登録後に自分のモデルを接続できます。無料ユーザーはクレジット課金のプラットフォームモデルを使用します。</string>
@@ -771,8 +781,15 @@
     <string name="settings_theme_follow_system">システムに従う</string>
     <string name="settings_theme_light">ライト</string>
     <string name="settings_theme_dark">ダーク</string>
+    <string name="settings_glass_blur">ガラスぼかし強度</string>
+    <string name="settings_glass_blur_hint">低めはすりガラス、高めはリキッドガラス風</string>
+    <string name="settings_glass_refraction">屈折強度</string>
+    <string name="settings_glass_highlight">ハイライト強度</string>
+    <string name="settings_glass_noise">ノイズ質感</string>
+    <string name="settings_glass_animation">動的ハイライト</string>
 
     <!-- ブラウザホームカテゴリ -->
+    <string name="browser_app_tongyi_qianwen">Tongyi Qianwen</string>
     <string name="browser_home_categories">カテゴリ</string>
     <string name="browser_cat_ai">AIツール</string>
     <string name="browser_cat_ai_sub">モデル、執筆、リサーチ</string>
@@ -856,4 +873,225 @@
 
     <!-- フローティングサークル -->
     <string name="floating_accessibility_hint">設定でアクセシビリティを切り替え</string>
+
+    <!-- インスピレーション広場 -->
+    <string name="agent_square_title">インスピレーション広場</string>
+    <string name="agent_square_tab_recommend">おすすめ</string>
+    <string name="agent_square_tab_following">フォロー中</string>
+    <string name="agent_square_tab_hot">人気</string>
+    <string name="agent_square_entry_title">自動化アイデアを発見</string>
+    <string name="agent_square_entry_desc">再利用できるスキル、チュートリアル、作品をブラウズ</string>
+    <string name="cd_back">戻る</string>
+    <string name="cd_search">検索</string>
+    <string name="cd_create">作成</string>
+    <string name="agent_trending_now">流行中</string>
+    <string name="agent_inspiration_plaza">インスピレーション広場</string>
+    <string name="agent_inspiration_desc">アイデアを閲覧、テンプレをコピー、実行可能なインスピレーションを保存</string>
+    <string name="agent_action_search">検索</string>
+    <string name="agent_action_publish">共有</string>
+    <string name="agent_action_favorite">お気に入り</string>
+    <string name="agent_action_reproduce">リミックス</string>
+    <string name="agent_topic_inspiration">%1$s インスピレーション</string>
+    <string name="agent_reproduce_prefix">インスピレーションをリミックス：</string>
+
+    <!-- AI ブラウザ -->
+    <string name="ai_browser_title">AIブラウザ</string>
+    <string name="ai_browser_subtitle">検索、閲覧、要約、Web操作も代行</string>
+    <string name="ai_browser_omnibox_hint">検索またはURLを入力</string>
+    <string name="ai_browser_clean_home">クリーンホーム</string>
+    <string name="ai_browser_mode_web">Webページ</string>
+    <string name="ai_browser_mode_ai">AI検索</string>
+    <string name="ai_browser_mode_all">全文検索</string>
+    <string name="ai_browser_voice">音声</string>
+    <string name="ai_browser_camera">カメラ</string>
+    <string name="ai_browser_clean">クリア</string>
+    <string name="ai_browser_action_ask">ページに質問</string>
+    <string name="ai_browser_action_ask_desc">ブラウザを開き、ページの要約や翻訳を行う</string>
+    <string name="ai_browser_action_operate">ページを操作</string>
+    <string name="ai_browser_action_operate_desc">代わりにクリック、フォーム入力、Webタスクを完了</string>
+    <string name="ai_browser_extensions_desc">GeckoView拡張機能でモバイルブラウザを強化</string>
+    <string name="ai_browser_files_desc">ブラウザタスクからクラウドとローカルファイルにアクセス</string>
+    <string name="ai_browser_section_quick_search">クイック検索</string>
+    <string name="ai_browser_quick_news">今日のAIスマホニュースをまとめる</string>
+    <string name="ai_browser_quick_research">Android自動化の信頼できる情報源を3つ探す</string>
+    <string name="ai_browser_quick_shopping">常駐タスク向け中古Androidを比較</string>
+    <string name="ai_browser_section_agent">ページアシスタント</string>
+    <string name="ai_browser_agent_desc">ブラウザはアクセシビリティで現在のページを読み取り、代わりにクリック、入力、要約、翻訳、Webタスクを実行できます。</string>
+    <string name="ai_browser_section_automation">自動化</string>
+    <string name="ai_browser_routines_desc">%1$d 件のブラウザ/デバイス自動化</string>
+
+    <!-- ブラウザホーム -->
+    <string name="browser_home_title">AIブラウザホーム</string>
+    <string name="browser_home_subtitle">検索またはURLを入力</string>
+
+    <!-- チャット -->
+    <string name="chat_empty_title">今日はスマホに何を手伝ってもらう？</string>
+    <string name="chat_suggestion_notifications">通知をチェック、重要な内容があればまとめる</string>
+    <string name="chat_suggestion_files">今日のスクリーンショットを見つけてフォルダに整理</string>
+    <string name="chat_suggestion_app">WeChatを開いて未読メッセージを確認</string>
+    <string name="chat_sessions">セッション</string>
+    <string name="chat_agent_ready">準備完了</string>
+    <string name="chat_agent_setup_needed">未設定</string>
+    <string name="chat_status_running">実行中</string>
+    <string name="chat_drawer_subtitle">セッション・ターゲットデバイス・タスク状態</string>
+    <string name="chat_home_status_title">タスクコントロール</string>
+    <string name="chat_metric_model">モデル</string>
+    <string name="chat_metric_target">ターゲット</string>
+    <string name="chat_metric_devices">デバイス</string>
+    <string name="chat_sessions_today">今日</string>
+    <string name="chat_sessions_recent">過去7日間</string>
+    <string name="chat_sessions_earlier">以前</string>
+    <string name="chat_clear_current">現在の会話をクリア</string>
+
+    <!-- 共通 -->
+    <string name="common_more">もっと見る</string>
+    <string name="cancel">キャンセル</string>
+    <string name="status_loading">処理中…</string>
+
+    <!-- ナビゲーション -->
+    <string name="nav_workbench">ワークベンチ</string>
+    <string name="nav_browser">ブラウザ</string>
+
+    <!-- ワークベンチ -->
+    <string name="workbench_title">スマホタスクワークベンチ</string>
+    <string name="workbench_subtitle">デバイスを常駐させ、操作可能にし、タスクを自動実行</string>
+    <string name="workbench_agent_ready">準備完了</string>
+    <string name="workbench_agent_incomplete">未設定</string>
+    <string name="workbench_device_card_title">このスマホは常駐してタスクをこなせます</string>
+    <string name="workbench_device_card_target">ターゲット：%1$s</string>
+    <string name="workbench_lan_off">LAN未起動</string>
+    <string name="workbench_action_chat">アシスタントに任せる</string>
+    <string name="workbench_metric_sessions">セッション</string>
+    <string name="workbench_metric_routines">タスク</string>
+    <string name="workbench_metric_target">ターゲット</string>
+    <string name="workbench_section_tasks">タスクワークスペース</string>
+    <string name="workbench_routines_desc">%1$d 件の保存済み自動化。スケジュールまたは随時実行可能</string>
+    <string name="workbench_skills_desc">このスマホで呼び出し可能なスキルとツールを管理</string>
+    <string name="workbench_devices_desc">旧デバイスを発見し、オンラインデバイスを一括操作</string>
+    <string name="workbench_activity_desc">最近完了したタスクと監査ログを確認</string>
+    <string name="workbench_section_templates">タスクテンプレート</string>
+    <string name="workbench_section_tools">デバイスツール</string>
+
+    <!-- 設定 -->
+    <string name="settings_center_badge">デバイスコントロールセンター</string>
+    <string name="settings_subtitle">権限、モデル、接続、旧デバイスの実行環境を管理</string>
+    <string name="settings_metric_permissions">権限</string>
+    <string name="settings_metric_model">モデル</string>
+    <string name="settings_metric_lan">LAN</string>
+    <string name="settings_device_control_section">画面とリモート操作</string>
+    <string name="settings_device_mgmt_desc">接続済み・操作可能なデバイスを管理</string>
+    <string name="settings_plugin_desc">スキルと拡張機能を管理</string>
+
+    <!-- デバイス一括操作 -->
+    <string name="device_batch_group_title">一括操作</string>
+    <string name="device_batch_home">全てホーム</string>
+    <string name="device_batch_back">全て戻る</string>
+    <string name="device_batch_recent">全て履歴を開く</string>
+    <string name="device_batch_open_app">全デバイスでアプリを開く</string>
+    <string name="device_batch_input_text">全デバイスにテキスト入力</string>
+    <string name="device_batch_no_online">オンラインデバイスなし</string>
+    <string name="device_batch_result">%1$d/%2$d 完了</string>
+
+    <!-- リモートコンソール -->
+    <string name="remote_console_title">公式コンソール</string>
+    <string name="remote_console_pair_title">公式コンソールとペアリング</string>
+    <string name="remote_console_pair_desc">公式サイトのリモートコンソールでペアリングコードを生成し、ここに入力してください。ペアリング成功後、本機は公式サイトに自動接続します。パブリックIPは不要です。</string>
+    <string name="remote_console_pair_code_label">ペアリングコード</string>
+    <string name="remote_console_pair_confirm">ペアリング開始</string>
+    <string name="remote_console_pair_failed">ペアリング失敗</string>
+    <string name="remote_console_login_required">先にログインしてからコンソールとペアリングしてください</string>
+    <string name="remote_console_status_unpaired">公式サイトのペアリングコードを入力すると、ネットワーク越しからリモート操作可能</string>
+    <string name="remote_console_status_paired">ペアリング済み · 接続待ち</string>
+    <string name="remote_console_status_connected">ペアリング済み · オンライン</string>
+
+    <!-- ルーチン通知 -->
+    <string name="routine_alarm_retry_title">ルーチンがキューに入りました</string>
+    <string name="routine_alarm_retry_text">「%1$s」の時間ですが、現在ビジーです。後で第 %2$d/%3$d 回目のリトライを行います。</string>
+    <string name="routine_alarm_busy_give_up_text">「%1$s」の時間ですが、複数回リトライ後もビジー状態です</string>
+
+    <!-- Agent discovery posts -->
+    <string name="agent_post_travel_title">旅行プランナー：フライトから旅程までワンタップ</string>
+    <string name="agent_post_travel_desc">目的地と予算を入力すると、自動で観光地を検索、ルートを計画、共有可能なチェックリストを生成。</string>
+    <string name="agent_post_travel_author">トラベルインスピ</string>
+    <string name="agent_post_travel_initial">旅</string>
+    <string name="agent_post_travel_duration">約4分</string>
+    <string name="agent_post_weekly_title">週報自動化テンプレート</string>
+    <string name="agent_post_weekly_desc">チャット履歴、タスクリスト、スケジュールを取得し、自動で週報を作成。</string>
+    <string name="agent_post_weekly_author">効率プレイヤー</string>
+    <string name="agent_post_weekly_initial">効</string>
+    <string name="agent_post_weekly_duration">約2分</string>
+    <string name="agent_post_phone_title">旧スマホを24時間実行マシンに</string>
+    <string name="agent_post_phone_desc">予備機がメッセージ、スクショ、転送、定期タスクを担当。メイン機は静かに。</string>
+    <string name="agent_post_phone_author">ギークハブ</string>
+    <string name="agent_post_phone_initial">ギ</string>
+    <string name="agent_post_phone_duration">約6分</string>
+    <string name="agent_post_shopping_title">価格比較アシスタントで2000+節約</string>
+    <string name="agent_post_shopping_desc">履歴価格、クーポン、セールを監視し、安くなったら通知。</string>
+    <string name="agent_post_shopping_author">節約Bot</string>
+    <string name="agent_post_shopping_initial">節</string>
+    <string name="agent_post_shopping_duration">約3分</string>
+    <string name="agent_post_paper_title">論文リーダー：10分で要点をつかむ</string>
+    <string name="agent_post_paper_desc">PDF、Web、スクリーンショットを読み取り、結論と引用ポイントを自動抽出。</string>
+    <string name="agent_post_paper_author">学術アシスタント</string>
+    <string name="agent_post_paper_initial">学</string>
+    <string name="agent_post_paper_duration">約5分</string>
+    <string name="agent_post_voice_title">音声アシスタント：運転中もメッセージ処理</string>
+    <string name="agent_post_voice_desc">押して話すだけで、送信先を自動判定、トーンを調整して送信。</string>
+    <string name="agent_post_voice_author">ドライバー</string>
+    <string name="agent_post_voice_initial">ド</string>
+    <string name="agent_post_voice_duration">約2分</string>
+
+    <!-- Agent topics & tags -->
+    <string name="agent_topic_automation">自動化</string>
+    <string name="agent_topic_efficiency">効率</string>
+    <string name="agent_topic_life">ライフスタイル</string>
+    <string name="agent_topic_learning">学習</string>
+    <string name="agent_topic_device">デバイス</string>
+    <string name="agent_tag_voice">音声</string>
+
+    <!-- Agent permissions -->
+    <string name="agent_perm_browser">ブラウザ</string>
+    <string name="agent_perm_location">位置情報</string>
+    <string name="agent_perm_screenshot">スクリーンショット</string>
+    <string name="agent_perm_calendar">カレンダー</string>
+    <string name="agent_perm_clipboard">クリップボード</string>
+    <string name="agent_perm_document">ドキュメント</string>
+    <string name="agent_perm_accessibility">アクセシビリティ</string>
+    <string name="agent_perm_notification">通知</string>
+    <string name="agent_perm_background">バックグラウンド</string>
+    <string name="agent_perm_timer">タイマー</string>
+    <string name="agent_perm_file">ファイル</string>
+    <string name="agent_perm_mic">マイク</string>
+
+    <!-- Agent metrics & detail -->
+    <string name="agent_metric_usage">使用回数</string>
+    <string name="agent_metric_success_rate">成功率</string>
+    <string name="agent_metric_duration">所要時間</string>
+    <string name="agent_detail_how_to_use">使い方</string>
+    <string name="agent_detail_prerequisites">実行前に必要</string>
+    <string name="agent_detail_permissions">必要な権限</string>
+    <string name="agent_detail_use_1">自分の自動化テンプレートとして複製</string>
+    <string name="agent_detail_use_2">シナリオに応じて権限とターゲットアプリを追加</string>
+    <string name="agent_detail_use_3">お気に入りに保存してすぐに実行</string>
+    <string name="agent_detail_prereq_1">アクセシビリティサービスが有効であることを確認</string>
+    <string name="agent_detail_prereq_2">ローカルまたはLANデバイスを選択</string>
+    <string name="agent_detail_prereq_3">初回実行時にプロンプトに従って認可</string>
+    <string name="agent_reproduce_target">。目標：</string>
+    <string name="agent_reproduce_suffix"> アクセシビリティ、通知、ターゲットアプリの状態を先に確認し、ステップごとに計画・実行してください。ログイン、支払い、機密確認の際は一時停止してユーザーの確認を待ってください。</string>
+    <string name="agent_reproduce_toast">ルーチンとして複製：%s</string>
+
+    <!-- ブラウザハードコード修正（第2弾） -->
+    <string name="browser_app_doubao">Doubao</string>
+    <string name="browser_app_tongyi">Tongyi</string>
+    <string name="browser_app_zhihu">Zhihu</string>
+    <string name="browser_windows">ウィンドウ</string>
+    <string name="browser_refresh_page">更新</string>
+    <string name="browser_engine_settings">ブラウザとエンジン設定</string>
+    <string name="browser_change_wallpaper">壁紙を変更</string>
+    <string name="browser_extensions">拡張</string>
+    <string name="browser_copy_link">リンクをコピー</string>
+    <string name="browser_link_copied">リンクをコピーしました</string>
+    <string name="browser_open_in_system">システムブラウザで開く</string>
+    <string name="browser_new_tab">新しいタブ</string>
+    <string name="browser_windows_count">ウィンドウ (%1$d)</string>
 </resources>

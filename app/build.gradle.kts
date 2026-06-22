@@ -152,6 +152,7 @@ dependencies {
     implementation(libs.lifecycle.runtime)
     implementation(libs.lifecycle.viewmodel)
     implementation(libs.mmkv)
+    implementation(libs.security.crypto)
     implementation(libs.adapter)
     implementation(libs.glide)
     implementation(libs.glide.transformations)

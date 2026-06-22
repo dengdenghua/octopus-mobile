@@ -2,8 +2,6 @@ package com.apk.claw.android.ui.home
 
 import android.content.Intent
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
 import android.os.Build
@@ -46,14 +44,6 @@ class HomeActivity : BaseActivity() {
     private lateinit var cardAdvanced: PermissionCardView
     private lateinit var btnCancelTask: KButton
 
-    private val handler = Handler(Looper.getMainLooper())
-    private val checkRunnable = object : Runnable {
-        override fun run() {
-            updateAllPermissionStatus()
-            handler.postDelayed(this, 1000)
-        }
-    }
-
     // Activity Result API - 存储权限请求 (Android 6~10)
     private val storagePermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -94,12 +84,6 @@ class HomeActivity : BaseActivity() {
     override fun onResume() {
         super.onResume()
         updateAllPermissionStatus()
-        startStatusCheck()
-    }
-
-    override fun onPause() {
-        super.onPause()
-        stopStatusCheck()
     }
 
     private fun showGuideIfNeeded() {
@@ -306,15 +290,6 @@ class HomeActivity : BaseActivity() {
         } else {
             Toast.makeText(this, R.string.home_battery_ignored, Toast.LENGTH_SHORT).show()
         }
-    }
-
-    private fun startStatusCheck() {
-        stopStatusCheck();
-        handler.postDelayed(checkRunnable, 1000)
-    }
-
-    private fun stopStatusCheck() {
-        handler.removeCallbacks(checkRunnable)
     }
 
 }

@@ -31,7 +31,7 @@ class PcRemoteWebrtcActivity : ComponentActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        runCatching { window.statusBarColor = com.apk.claw.android.ui.compose.theme.OctopusColors.statusBarArgb }
+        applyFeatureChrome()
         // 部分设备的系统 WebView 组件缺失/正在更新时,WebView(this) 会抛异常。
         // 捕获后优雅退出(提示用户),而不是让 Activity 崩溃。
         webView = try {

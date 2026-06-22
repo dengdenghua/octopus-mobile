@@ -76,4 +76,26 @@ class MockAccountGatewayTest {
         val second = g.dailyClaim(token)
         assertFalse("second claim same day must be a no-op", second.claimed)
     }
+
+    @Test
+    fun `membership is inactive for new user`() = runBlocking {
+        val g = MockAccountGateway()
+        val token = g.login("13800000004", MockAccountGateway.MOCK_CODE).token
+        val m = g.membership(token)
+        assertFalse(m.active)
+        assertEquals(0L, m.expireAt)
+    }
+
+    @Test
+    fun `device register and heartbeat roundtrip`() = runBlocking {
+        val g = MockAccountGateway()
+        val token = g.login("13800000005", MockAccountGateway.MOCK_CODE).token
+        val reg = g.registerDevice(token, deviceName = "Test Device")
+        assertTrue(reg.deviceId.isNotEmpty())
+        val hb = g.sendDeviceHeartbeat(token, reg.deviceId, battery = 80, isCharging = true)
+        assertTrue(hb.ok)
+        assertEquals(80, hb.battery)
+        val status = g.deviceStatus(token, reg.deviceId)
+        assertEquals(reg.deviceId, status.deviceId)
+    }
 }

@@ -1,14 +1,14 @@
 package com.apk.claw.android.ui.featurescreens
 
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -23,8 +23,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.view.WindowCompat
 import com.apk.claw.android.R
+import com.apk.claw.android.ui.compose.theme.OctopusBackground
 import com.apk.claw.android.ui.compose.theme.OctopusColors
+import com.apk.claw.android.ui.compose.theme.OctopusShape
+import com.apk.claw.android.ui.compose.theme.OctopusTheme
 
 val FBg get() = OctopusColors.Background
 val FSurface get() = OctopusColors.Surface
@@ -37,6 +41,30 @@ val FBorder get() = OctopusColors.Border
 val FSuccess get() = OctopusColors.Success
 val FWarning get() = OctopusColors.Warning
 
+/**
+ * FeatureScreen Activity chrome shared by the secondary Compose pages.
+ */
+@Suppress("DEPRECATION")
+fun ComponentActivity.applyFeatureChrome() {
+    runCatching {
+        window.statusBarColor = OctopusColors.statusBarArgb
+        window.navigationBarColor = OctopusColors.statusBarArgb
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = OctopusColors.isLight
+            isAppearanceLightNavigationBars = OctopusColors.isLight
+        }
+    }
+}
+
+fun ComponentActivity.setFeatureContent(content: @Composable () -> Unit) {
+    applyFeatureChrome()
+    setContent {
+        OctopusTheme {
+            content()
+        }
+    }
+}
+
 /** 通用深色页脚手架：顶栏（返回 + 标题 + 可选右侧动作）+ 内容区 */
 @Composable
 fun FeatureScaffold(
@@ -45,15 +73,15 @@ fun FeatureScaffold(
     action: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Column(modifier = Modifier.fillMaxSize().background(FBg).statusBarsPadding().navigationBarsPadding()) {
+    Column(modifier = Modifier.fillMaxSize().background(OctopusBackground.pageBrush()).statusBarsPadding().navigationBarsPadding()) {
         Row(
-            modifier = Modifier.fillMaxWidth().height(54.dp).padding(start = 2.dp, end = 16.dp),
+            modifier = Modifier.fillMaxWidth().height(62.dp).padding(start = 2.dp, end = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onBack) {
                 Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.feature_close), tint = FText)
             }
-            Text(title, color = FText, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text(title, color = FText, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             if (action != null) action()
         }
         content()
@@ -74,12 +102,13 @@ fun FSectionTitle(text: String) {
 @Composable
 fun FCard(content: @Composable ColumnScope.() -> Unit) {
     Surface(
-        shape = RoundedCornerShape(18.dp),
-        color = FSurface,
-        border = BorderStroke(1.dp, FBorder),
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+        shape = OctopusShape.large,
+        color = OctopusBackground.glassSurface,
+        border = BorderStroke(1.dp, OctopusBackground.glassBorder),
+        shadowElevation = 8.dp,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
     ) {
-        Column(modifier = Modifier.padding(14.dp), content = content)
+        Column(modifier = Modifier.padding(16.dp), content = content)
     }
 }
 
@@ -97,10 +126,10 @@ fun FEmpty(text: String) {
 
 @Composable
 fun FPill(text: String, color: Color) {
-    Surface(shape = RoundedCornerShape(5.dp), color = color.copy(alpha = 0.15f)) {
+    Surface(shape = OctopusShape.capsule, color = color.copy(alpha = 0.15f)) {
         Text(
-            text,
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            text = text,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
             color = color,
             fontSize = 9.sp,
             fontWeight = FontWeight.SemiBold,

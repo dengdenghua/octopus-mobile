@@ -8,35 +8,39 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  background: #f5f5f7;
-  color: #1d1d1f;
+  background: linear-gradient(145deg, #eef4ff 0%, #f7fbff 45%, #eef8f1 100%);
+  color: #172033;
   min-height: 100vh;
   padding: 24px 16px;
 }
-.container { max-width: 520px; margin: 0 auto; }
+.container { max-width: 560px; margin: 0 auto; }
 h1 {
   text-align: center;
-  font-size: 24px;
-  font-weight: 600;
+  font-size: 28px;
+  font-weight: 800;
   margin-bottom: 8px;
-  color: #5856D6;
+  color: #22345a;
+  letter-spacing: 0;
 }
 .subtitle {
   text-align: center;
   font-size: 14px;
-  color: #86868b;
+  color: #62708a;
   margin-bottom: 32px;
+  line-height: 1.6;
 }
 .card {
-  background: #fff;
-  border-radius: 16px;
+  background: rgba(255,255,255,0.68);
+  border: 1px solid rgba(255,255,255,0.76);
+  border-radius: 22px;
   padding: 24px;
-  margin-bottom: 20px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  margin-bottom: 18px;
+  box-shadow: 0 18px 48px rgba(61,83,123,0.13);
+  backdrop-filter: blur(18px);
 }
 .card-title {
   font-size: 17px;
-  font-weight: 600;
+  font-weight: 750;
   margin-bottom: 20px;
   display: flex;
   align-items: center;
@@ -58,26 +62,28 @@ h1 {
 label {
   display: block;
   font-size: 13px;
-  font-weight: 500;
-  color: #86868b;
+  font-weight: 650;
+  color: #63708a;
   margin-bottom: 6px;
 }
 input[type="text"], input[type="password"] {
   width: 100%;
   padding: 12px 14px;
-  border: 1.5px solid #e5e5ea;
-  border-radius: 10px;
+  border: 1px solid rgba(90,107,134,0.18);
+  border-radius: 14px;
   font-size: 15px;
   outline: none;
-  transition: border-color 0.2s;
-  background: #fafafa;
+  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+  background: rgba(255,255,255,0.72);
+  color: #172033;
 }
 .input-wrap input {
   padding-right: 42px;
 }
 input:focus {
-  border-color: #5856D6;
-  background: #fff;
+  border-color: rgba(88,86,214,0.7);
+  background: rgba(255,255,255,0.95);
+  box-shadow: 0 0 0 4px rgba(88,86,214,0.12);
 }
 .input-wrap {
   position: relative;
@@ -102,24 +108,25 @@ input:focus {
   width: 100%;
   padding: 14px;
   border: none;
-  border-radius: 12px;
+  border-radius: 16px;
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 750;
   cursor: pointer;
-  transition: opacity 0.2s, transform 0.1s;
+  transition: opacity 0.2s, transform 0.1s, box-shadow 0.2s;
   color: #fff;
-  background: #5856D6;
+  background: linear-gradient(135deg, #4f6df5, #35b87a);
+  box-shadow: 0 14px 28px rgba(79,109,245,0.24);
 }
 .btn:hover { opacity: 0.9; }
 .btn:active { transform: scale(0.98); }
-.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
 .toast {
   position: fixed;
   top: 24px;
   left: 50%;
   transform: translateX(-50%) translateY(-80px);
   padding: 12px 24px;
-  border-radius: 10px;
+  border-radius: 14px;
   font-size: 14px;
   font-weight: 500;
   color: #fff;
@@ -128,13 +135,19 @@ input:focus {
   pointer-events: none;
 }
 .toast.show { transform: translateX(-50%) translateY(0); }
-.toast.success { background: #34C759; }
-.toast.error { background: #FF3B30; }
+.toast.success { background: #24a764; }
+.toast.error { background: #d94855; }
 .loading {
   text-align: center;
   padding: 40px;
-  color: #86868b;
+  color: #63708a;
   font-size: 15px;
+}
+@media (max-width: 560px) {
+  body { padding: 18px 12px; }
+  h1 { font-size: 25px; }
+  .subtitle { margin-bottom: 22px; }
+  .card { border-radius: 18px; padding: 18px; }
 }
 </style>
 </head>

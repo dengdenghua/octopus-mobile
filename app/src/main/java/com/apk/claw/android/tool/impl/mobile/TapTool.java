@@ -46,8 +46,14 @@ public class TapTool extends BaseTool {
 
     @Override
     public ToolResult execute(Map<String, Object> params) {
-        int x = requireInt(params, "x");
-        int y = requireInt(params, "y");
+        final int x;
+        final int y;
+        try {
+            x = requireInt(params, "x");
+            y = requireInt(params, "y");
+        } catch (IllegalArgumentException e) {
+            return ToolResult.error(e.getMessage());
+        }
         DeviceInfo remote = ControlTarget.remoteTarget();
         if (remote != null) {
             boolean ok = RemoteActions.tap(remote, x, y);

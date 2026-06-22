@@ -180,7 +180,9 @@ object ConfigServerManager {
         val callback = object : ConnectivityManager.NetworkCallback() {
             override fun onLost(network: Network) {
                 XLog.i(TAG, "WiFi lost, stopping ConfigServer")
-                try { server?.stop() } catch (_: Exception) {}
+                try { server?.stop() } catch (e: Exception) {
+                    XLog.w(TAG, "stop server failed", e)
+                }
                 server = null
                 // 不清除 enabled 状态，WiFi 恢复后自动重启
                 _configChanged.tryEmit(Unit)

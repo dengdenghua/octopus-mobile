@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">章鱼移动</string>
+    <string name="app_name">八爪鱼</string>
 
     <!-- 通用 -->
     <string name="common_confirm">确定</string>
@@ -31,7 +31,7 @@
     <string name="guide_desc_accessibility">这是 AI 自动操控设备的核心权限。
 
 1. 前往系统设置 → 无障碍 → 已下载的应用
-2. 在列表中找到「章鱼移动」
+2. 在列表中找到「八爪鱼」
 3. 开启开关
 4. 在系统弹窗中确认</string>
     <string name="guide_title_notification">常驻通知</string>
@@ -39,7 +39,7 @@
     <string name="guide_title_overlay">悬浮窗</string>
     <string name="guide_desc_overlay">显示 AI 执行状态的浮动面板。
 
-1. 前往系统设置 → 应用 → 章鱼移动
+1. 前往系统设置 → 应用 → 八爪鱼
 2. 找到「显示在其他应用上方」
 3. 开启开关</string>
     <string name="guide_title_battery">电池白名单</string>
@@ -64,6 +64,14 @@
     <string name="advanced_dialog_status_not_installed">尚未安装 Shizuku。</string>
     <string name="advanced_action_open_shizuku">打开 Shizuku</string>
     <string name="advanced_action_install">安装 Shizuku</string>
+    <string name="advanced_action_downloading">正在下载…</string>
+    <string name="advanced_install_fetching">正在连接 Octopus 官网…</string>
+    <string name="advanced_install_downloading">正在下载 Shizuku 安装包…</string>
+    <string name="advanced_install_opening">安装包已下载，正在打开系统安装器。</string>
+    <string name="advanced_install_not_configured">官网暂未配置 Shizuku 安装包，请稍后再试。</string>
+    <string name="advanced_install_verify_failed">安装包校验失败，请稍后重试。</string>
+    <string name="advanced_install_failed">下载安装失败，请检查网络后重试。</string>
+    <string name="advanced_install_unknown_sources_required">请先允许 Octopus 安装未知来源应用，然后返回重试。</string>
     <string name="advanced_action_learn_more">了解更多</string>
     <string name="advanced_action_close">关闭</string>
     <string name="advanced_url_download">https://shizuku.rikka.app/download/</string>
@@ -71,7 +79,7 @@
 
     <!-- 首页 -->
     <string name="home_need_notification_permission">需要通知权限才能显示常驻通知</string>
-    <string name="home_enable_accessibility">请开启 章鱼移动 无障碍服务</string>
+    <string name="home_enable_accessibility">请开启 八爪鱼 无障碍服务</string>
     <string name="home_accessibility_enabled">已开启无障碍服务</string>
     <string name="home_notification_enabled">已开启常驻通知</string>
     <string name="home_overlay_enabled">已开启悬浮窗权限</string>
@@ -135,8 +143,8 @@
     <string name="wechat_media_voice">语音</string>
     <string name="wechat_media_unknown">媒体</string>
     <string name="channel_config_saved">配置已保存</string>
-    <string name="channel_config_lan_hint">💡 在设置页开启「局域网配置」，即可通过电脑浏览器配置</string>
-    <string name="channel_config_lan_hint_running">💡 电脑浏览器打开 %s 即可配置</string>
+    <string name="channel_config_lan_hint">在设置页开启「局域网配置」，即可通过电脑浏览器配置</string>
+    <string name="channel_config_lan_hint_running">电脑浏览器打开 %s 即可配置</string>
     <string name="channel_config_lan_copied">已复制地址</string>
 
     <!-- LLM 配置 -->
@@ -178,9 +186,9 @@
     <string name="floating_task_received">已收到：\"%s\"</string>
 
     <!-- 前台服务通知 -->
-    <string name="notification_channel_name">章鱼移动 运行状态</string>
-    <string name="notification_channel_description">显示 章鱼移动 运行状态及统计数据</string>
-    <string name="notification_content_title">章鱼移动 运行中</string>
+    <string name="notification_channel_name">八爪鱼 运行状态</string>
+    <string name="notification_channel_description">显示 八爪鱼 运行状态及统计数据</string>
+    <string name="notification_content_title">八爪鱼 运行中</string>
     <string name="notification_content_text">AI Agent 服务正在运行</string>
 
     <!-- 通道消息（发给用户的回复） -->
@@ -291,16 +299,16 @@
     <string name="discover_shortcut_multiwindow">多窗口</string>
     <string name="discover_shortcut_memory">记忆</string>
     <string name="discover_shortcut_evolution">自进化</string>
-    <string name="discover_suggest_weather">🌤 查天气</string>
-    <string name="discover_suggest_organize">📦 整理网盘</string>
-    <string name="discover_suggest_resume">▶️ 继续看剧</string>
-    <string name="discover_status_memory">💾 5 条记忆</string>
-    <string name="discover_status_rules">🔔 2 条规则</string>
-    <string name="discover_stat_sessions">💬 %1$d 会话</string>
-    <string name="discover_stat_a11y_on">♿ 无障碍已开</string>
-    <string name="discover_stat_a11y_off">♿ 无障碍未开</string>
-    <string name="discover_stat_llm_on">🤖 模型已配置</string>
-    <string name="discover_stat_llm_off">🤖 模型未配置</string>
+    <string name="discover_suggest_weather">查天气</string>
+    <string name="discover_suggest_organize">整理网盘</string>
+    <string name="discover_suggest_resume">继续看剧</string>
+    <string name="discover_status_memory">5 条记忆</string>
+    <string name="discover_status_rules">2 条规则</string>
+    <string name="discover_stat_sessions">%1$d 会话</string>
+    <string name="discover_stat_a11y_on">无障碍已开</string>
+    <string name="discover_stat_a11y_off">无障碍未开</string>
+    <string name="discover_stat_llm_on">模型已配置</string>
+    <string name="discover_stat_llm_off">模型未配置</string>
     <string name="workbench_title">旧手机 AI 工作台</string>
     <string name="workbench_subtitle">让这台设备常驻、能操作、能养 Agent</string>
     <string name="workbench_agent_ready">Agent 就绪</string>
@@ -355,7 +363,7 @@
     <string name="nav_chat">对话</string>
     <string name="nav_device">设备</string>
     <string name="nav_settings">设置</string>
-    <string name="nav_agent_square">Agent 广场</string>
+    <string name="nav_agent_square">灵感广场</string>
 
     <!-- SettingsScreen (Compose) -->
     <string name="settings_center_badge">设备控制中心</string>
@@ -392,24 +400,28 @@
     <string name="status_offline">离线</string>
 
     <!-- ChatScreen (Compose) -->
-    <string name="chat_remote">🌐 远程</string>
-    <string name="chat_local">🏠 本地</string>
-    <string name="chat_input_hint">输入指令...</string>
+    <string name="chat_remote">远程</string>
+    <string name="chat_local">本机</string>
+    <string name="chat_input_hint">输入你想交给手机完成的事...</string>
     <string name="chat_ack">收到，正在设备上执行…</string>
     <string name="chat_thinking">思考中</string>
-    <string name="chat_empty_hint">让旧手机常驻执行、观察通知、控制应用，或者把任务交给 Agent。</string>
-    <string name="chat_empty_title">这台手机待命中</string>
+    <string name="chat_empty_hint">一句话安排通知巡检、应用操作、文件整理和跨设备任务。</string>
+    <string name="chat_empty_title">今天让手机帮你做什么？</string>
     <string name="chat_suggestion_notifications">盯一下通知，有重要内容就总结给我</string>
     <string name="chat_suggestion_files">找到今天的截图，整理到一个文件夹里</string>
     <string name="chat_suggestion_app">打开微信，看看有没有未读消息</string>
+    <string name="chat_prompt_monitor">通知巡检</string>
+    <string name="chat_prompt_organize">文件整理</string>
+    <string name="chat_prompt_control">应用代办</string>
+    <string name="chat_home_prompts_title">常用任务</string>
     <string name="chat_tool_steps">%1$d 个工具步骤</string>
     <string name="chat_new">新对话</string>
     <string name="chat_sessions">会话</string>
-    <string name="chat_agent_ready">Agent 就绪</string>
+    <string name="chat_agent_ready">已就绪</string>
     <string name="chat_agent_setup_needed">待配置</string>
     <string name="chat_status_running">执行中</string>
-    <string name="chat_drawer_subtitle">会话、目标设备与 Agent 状态</string>
-    <string name="chat_home_status_title">Agent 控制台</string>
+    <string name="chat_drawer_subtitle">会话、目标设备与任务状态</string>
+    <string name="chat_home_status_title">任务控制台</string>
     <string name="chat_metric_model">模型</string>
     <string name="chat_metric_target">目标</string>
     <string name="chat_metric_devices">设备</string>
@@ -423,11 +435,11 @@
     <string name="setup_go">去设置 ›</string>
 
     <!-- DeviceScreen (Compose) -->
-    <string name="device_title">🖥 设备</string>
+    <string name="device_title">设备</string>
     <string name="device_online_count">%1$d/%2$d 在线</string>
-    <string name="device_cast">🖥 投屏</string>
-    <string name="device_cast_disconnected">📺 未连接</string>
-    <string name="device_vision">👁️ 视觉</string>
+    <string name="device_cast">投屏</string>
+    <string name="device_cast_disconnected">未连接</string>
+    <string name="device_vision">视觉</string>
     <string name="device_vision_desc">VLM 多模态分析\n系统弹窗自动降级</string>
     <string name="device_this_device">本机</string>
     <string name="ctrl_screenshot">截图</string>
@@ -452,7 +464,7 @@
     <string name="device_cmd_failed">失败（设备离线？）</string>
     <string name="device_allow_control">允许局域网远程控制</string>
     <string name="device_allow_control_desc">允许同一 Wi-Fi 下的其他设备控制本机。默认关闭，仅在可信网络下开启。</string>
-    <string name="device_browser">🌐 浏览器</string>
+    <string name="device_browser">浏览器</string>
     <string name="device_tabs">标签页</string>
     <string name="device_extensions">扩展</string>
     <string name="badge_active">活跃</string>
@@ -461,7 +473,7 @@
     <string name="tool_name_current_time">当前时间</string>
     <string name="tool_name_device_info">设备信息</string>
     <string name="tool_name_hello_world">你好世界</string>
-    <string name="floating_circle_running_state">💭 执行中…</string>
+    <string name="floating_circle_running_state">执行中…</string>
     <string name="floating_circle_success_state">完成</string>
     <string name="floating_circle_error_state">已结束</string>
     <string name="routine_alarm_running_title">正在运行例程</string>
@@ -474,21 +486,21 @@
     <string name="browser_loading_text">加载中…</string>
     <string name="browser_engine_chip_description">切换搜索引擎</string>
     <string name="browser_url_hint">搜索或输入网址</string>
-    <string name="browser_ai_operate_toast">🤖 让 AI 操作此页…</string>
+    <string name="browser_ai_operate_toast">让 AI 操作此页…</string>
     <string name="browser_refresh_button">刷新</string>
     <string name="browser_ask_ai_button">问 AI</string>
     <string name="browser_back_button">后退</string>
     <string name="browser_forward_button">前进</string>
     <string name="browser_home_button">首页</string>
     <string name="browser_bookmarks_button">书签</string>
-    <string name="browser_ai_sheet_title">✨ 问 AI · 关于此页</string>
+    <string name="browser_ai_sheet_title">问 AI · 关于此页</string>
     <string name="browser_accessibility_warning">需开启无障碍服务才能读取页面内容</string>
     <string name="browser_ask_page_hint">问这个页面…</string>
     <string name="browser_chip_summarize">总结此页</string>
     <string name="browser_chip_key_points">提取要点</string>
     <string name="browser_chip_translate">翻译</string>
-    <string name="browser_chip_reader">📖 阅读模式</string>
-    <string name="browser_chip_speak">🔊 朗读</string>
+    <string name="browser_chip_reader">阅读模式</string>
+    <string name="browser_chip_speak">朗读</string>
     <string name="browser_input_ask_or_operate">问此页，或让 AI 操作此页…</string>
     <string name="browser_ask_button">问</string>
     <string name="browser_execute_button">执行</string>
@@ -500,7 +512,7 @@
     <string name="browser_error_message">出错：%1$s</string>
     <string name="browser_load_error">加载错误: %1$s</string>
     <string name="browser_download_notification">下载: %1$s</string>
-    <string name="browser_remove_bookmark">⭐ 取消收藏当前页</string>
+    <string name="browser_remove_bookmark">取消收藏当前页</string>
     <string name="browser_bookmark_current">☆ 收藏当前页</string>
     <string name="browser_saved_bookmarks_header">── 已保存书签 ──</string>
     <string name="browser_bookmark_removed">已取消收藏</string>
@@ -536,8 +548,8 @@
     <string name="screen_cast_enter_package_name">输入包名</string>
     <string name="screen_cast_launch_button">启动</string>
     <string name="chat_agent_bridge_busy_error">正在执行另一个任务，请稍候</string>
-    <string name="chat_agent_bridge_preparing">💭 准备中…</string>
-    <string name="chat_agent_bridge_thinking">💭 思考中…</string>
+    <string name="chat_agent_bridge_preparing">准备中…</string>
+    <string name="chat_agent_bridge_thinking">思考中…</string>
     <string name="chat_agent_bridge_error">出错</string>
     <string name="chat_agent_bridge_call_failed">调用失败</string>
     <string name="chat_agent_bridge_manual_required">需手动处理</string>
@@ -548,8 +560,8 @@
     <string name="chat_mic_permission_denied">未授权录音，无法语音输入</string>
     <string name="chat_voice_stop_agent">■  停止 Agent</string>
     <string name="chat_voice_listening_release">正在聆听… 松手发送</string>
-    <string name="chat_voice_hold_to_speak">🎤  按住说话</string>
-    <string name="chat_target_local_device">📱 本机</string>
+    <string name="chat_voice_hold_to_speak">按住说话</string>
+    <string name="chat_target_local_device">本机</string>
     <string name="chat_demo_open_wechat">打开微信发消息给小明</string>
     <string name="chat_demo_main_screen">✓ 主屏幕</string>
     <string name="chat_demo_search">✓ 搜索</string>
@@ -559,20 +571,20 @@
     <string name="chat_demo_check_weather">帮我看看明天的天气</string>
     <string name="chat_demo_weather_details">✓ 天气详情</string>
     <string name="chat_demo_weather_forecast">明天北京天气：晴转多云，最高 28°C，最低 16°C，空气质量良好。</string>
-    <string name="chat_save_as_routine">⭐ 存为例程</string>
-    <string name="chat_routine_saved_toast">已存为例程（📋 查看）</string>
-    <string name="fast_replay_activity_log_message">⚡ 快路径重放 %1$d 步</string>
+    <string name="chat_save_as_routine">存为例程</string>
+    <string name="chat_routine_saved_toast">已存为例程（查看）</string>
+    <string name="fast_replay_activity_log_message">快路径重放 %1$d 步</string>
     <string name="routine_runner_target_offline">（目标「%1$s」不在线，改用本机）</string>
     <string name="routine_runner_model_not_configured">未配置模型，请到 设置 → 模型配置</string>
-    <string name="routine_runner_fast_path">⚡ 快路径</string>
+    <string name="routine_runner_fast_path">快路径</string>
     <string name="routine_runner_starting_execution">开始运行</string>
     <string name="settings_llm_api_key_configured">已设置</string>
     <string name="settings_rpc_url_default">未配置（默认 ws://10.0.2.2:8765）</string>
     <string name="settings_octopus_runtime_title">主机连接 · Octopus Runtime</string>
     <string name="settings_rpc_remote_brain_description">RPC 远程调度（主机下发 tool/execute）</string>
-    <string name="settings_pc_remote_desktop_title">🖥 主机远程桌面</string>
+    <string name="settings_pc_remote_desktop_title">主机远程桌面</string>
     <string name="settings_pc_remote_h264_description">看 PC 屏幕 + 触控/键盘控制（H.264/WS,同局域网）</string>
-    <string name="settings_webrtc_remote_desktop_title">🖥 远程桌面 (WebRTC)</string>
+    <string name="settings_webrtc_remote_desktop_title">远程桌面 (WebRTC)</string>
     <string name="settings_webrtc_p2p_description">P2P 直连(WebView/STUN 打洞,跨网,需主机运行 pc_remote_webrtc.py)</string>
     <string name="device_detail_toolbar_title">设备详情</string>
     <string name="device_detail_status_online">● 在线</string>
@@ -629,7 +641,7 @@
     <string name="evolution_canary_stats">样本 %1$d · 成功 %2$d · 失败 %3$d</string>
     <string name="evolution_effectiveness">有效度 %1$d%%</string>
     <string name="extensions_title">浏览器扩展</string>
-    <string name="extensions_install_from_amo">🦊 从 Firefox 商店(AMO)安装</string>
+    <string name="extensions_install_from_amo">从 Firefox 商店(AMO)安装</string>
     <string name="extensions_install_instructions">打开 addons.mozilla.org,在页面里点「添加到 Firefox」</string>
     <string name="extensions_go_install_button">去安装</string>
     <string name="extensions_installed_section">已安装</string>
@@ -669,13 +681,13 @@
     <string name="pcremote_enter_button">回车</string>
     <string name="pc_remote_webrtc_webview_unavailable">系统 WebView 不可用，无法启动远程桌面</string>
     <string name="routines_title">例程</string>
-    <string name="routines_empty_state">还没有例程。\n\n在对话里长按你发过的一条指令 →「存为例程」，这里就能一键重放或设定时。重放会让 Agent 按指令重新看屏规划执行。</string>
-    <string name="routines_count_summary">共 %1$d 条 · ⚡=已学快路径(直接重放更快)，否则 Agent 重新规划</string>
+    <string name="routines_empty_state">还没有例程。\n\n在对话里长按指令保存，或从灵感广场一键复刻玩法，就能在这里重放、定时或继续打磨。</string>
+    <string name="routines_count_summary">共 %1$d 条 · 已学快路径会更快，否则执行时重新看屏规划</string>
     <string name="routines_item_target_and_count">目标 %1$s · 运行 %2$d 次</string>
-    <string name="routines_item_schedule_daily"> · ⏰ 每天 %1$s</string>
-    <string name="routines_item_schedule_once"> · ⏰ 一次 %1$s</string>
-    <string name="routines_item_lightning_steps">⚡%1$d</string>
-    <string name="routines_item_run_button">▶ 运行</string>
+    <string name="routines_item_schedule_daily"> · 每天 %1$s</string>
+    <string name="routines_item_schedule_once"> · 一次 %1$s</string>
+    <string name="routines_item_lightning_steps">%1$d</string>
+    <string name="routines_item_run_button">运行</string>
     <string name="routines_forget_fastpath_title">忘记快路径</string>
     <string name="routines_forget_fastpath_message">「%1$s」已学会 %2$d 步快路径。忘记后下次运行会让 Agent 重新看屏规划，并重新录制。</string>
     <string name="routines_forget_button">忘记</string>
@@ -774,9 +786,9 @@
     <string name="feat_multiwindow">多窗口</string>
     <string name="feat_evolution">自进化</string>
     <string name="feat_trust">信任中心</string>
-    <string name="feat_toolbox_title">工具箱</string>
+    <string name="feat_toolbox_title">能力</string>
     <string name="feat_explore">探索</string>
-    <string name="feat_explore_title">探索发现</string>
+    <string name="feat_explore_title">灵感</string>
     <string name="feat_explore_hot">热门</string>
     <string name="feat_explore_recent">最近</string>
     <string name="feat_explore_office">办公学习</string>
@@ -858,8 +870,10 @@
     <string name="account_invite_redeem_failed">兑换失败</string>
     <string name="account_tier_title">对话档位</string>
     <string name="account_tier_fast">极速</string>
+    <string name="account_tier_flash">标准</string>
     <string name="account_tier_premium">高级</string>
     <string name="account_tier_fast_hint">更快 · 更省积分</string>
+    <string name="account_tier_flash_hint">均衡 · 适合日常复杂任务</string>
     <string name="account_tier_premium_hint">更强 · 更耗积分</string>
     <string name="account_byo_locked_title">会员专享</string>
     <string name="account_byo_locked_msg">充值会员后即可接入自己的大模型；免费用户默认使用平台模型（按积分计费）。</string>
@@ -877,8 +891,15 @@
     <string name="settings_theme_follow_system">跟随系统</string>
     <string name="settings_theme_light">明亮</string>
     <string name="settings_theme_dark">深色</string>
+    <string name="settings_glass_blur">玻璃模糊强度</string>
+    <string name="settings_glass_blur_hint">调低是毛玻璃，调高更接近液态玻璃</string>
+    <string name="settings_glass_refraction">折射强度</string>
+    <string name="settings_glass_highlight">高光强度</string>
+    <string name="settings_glass_noise">噪声纹理</string>
+    <string name="settings_glass_animation">动态光效</string>
 
     <!-- 浏览器首页分类 -->
+    <string name="browser_app_tongyi_qianwen">通义千问</string>
     <string name="browser_home_categories">常用分类</string>
     <string name="browser_cat_ai">AI 工具</string>
     <string name="browser_cat_ai_sub">模型、写作、研究</string>
@@ -960,4 +981,122 @@
 
     <!-- 悬浮球 -->
     <string name="floating_accessibility_hint">前往设置开关无障碍服务</string>
+
+    <!-- 灵感广场 -->
+    <string name="agent_square_title">灵感广场</string>
+    <string name="agent_square_tab_recommend">推荐</string>
+    <string name="agent_square_tab_following">关注</string>
+    <string name="agent_square_tab_hot">热门</string>
+    <string name="agent_square_entry_title">发现自动化玩法</string>
+    <string name="agent_square_entry_desc">浏览可复刻的技能、教程与作品</string>
+    <string name="cd_back">返回</string>
+    <string name="cd_search">搜索</string>
+    <string name="cd_create">创建</string>
+    <string name="agent_trending_now">正在流行</string>
+    <string name="agent_inspiration_plaza">灵感广场</string>
+    <string name="agent_inspiration_desc">刷玩法、抄模板、收藏能直接跑的灵感</string>
+    <string name="agent_action_search">搜灵感</string>
+    <string name="agent_action_publish">发布玩法</string>
+    <string name="agent_action_favorite">收藏</string>
+    <string name="agent_action_reproduce">一键复刻</string>
+    <string name="agent_topic_inspiration">%1$s 灵感</string>
+    <string name="agent_reproduce_prefix">复刻灵感玩法：</string>
+    <string name="cancel">取消</string>
+    <string name="status_loading">处理中…</string>
+    <string name="remote_console_title">官网控制台</string>
+    <string name="remote_console_status_connected">已配对 · 官网在线</string>
+    <string name="remote_console_status_paired">已配对 · 等待连接</string>
+    <string name="remote_console_status_unpaired">输入官网配对码后，可跨网络远程控制本机</string>
+    <string name="remote_console_login_required">请先登录账号后再配对官网控制台</string>
+    <string name="remote_console_pair_title">配对官网控制台</string>
+    <string name="remote_console_pair_desc">在官网远程控制台生成配对码，然后在这里输入。配对成功后，本机会主动连接官网，不需要公网 IP。</string>
+    <string name="remote_console_pair_code_label">配对码</string>
+    <string name="remote_console_pair_confirm">开始配对</string>
+    <string name="remote_console_pair_failed">配对失败</string>
+
+    <!-- Agent discovery posts -->
+    <string name="agent_post_travel_title">旅行攻略助手：从机票到路线一键排好</string>
+    <string name="agent_post_travel_desc">输入目的地和预算，自动搜景点、排路线、生成可分享清单。</string>
+    <string name="agent_post_travel_author">旅行灵感</string>
+    <string name="agent_post_travel_initial">旅</string>
+    <string name="agent_post_travel_duration">约 4 分钟</string>
+    <string name="agent_post_weekly_title">周报自动化救命模板</string>
+    <string name="agent_post_weekly_desc">抓聊天记录、任务列表和日程，自动写成老板爱看的周报。</string>
+    <string name="agent_post_weekly_author">效率玩家</string>
+    <string name="agent_post_weekly_initial">效</string>
+    <string name="agent_post_weekly_duration">约 2 分钟</string>
+    <string name="agent_post_phone_title">旧手机变 24 小时执行器</string>
+    <string name="agent_post_phone_desc">让备用机负责消息、截图、转发和定时任务，主力机安静很多。</string>
+    <string name="agent_post_phone_author">极客居</string>
+    <string name="agent_post_phone_initial">极</string>
+    <string name="agent_post_phone_duration">约 6 分钟</string>
+    <string name="agent_post_shopping_title">比价助手帮我省了 2000+</string>
+    <string name="agent_post_shopping_desc">监控历史价、优惠券和平台活动，到点自动提醒。</string>
+    <string name="agent_post_shopping_author">省钱 Bot</string>
+    <string name="agent_post_shopping_initial">省</string>
+    <string name="agent_post_shopping_duration">约 3 分钟</string>
+    <string name="agent_post_paper_title">论文阅读助手：10 分钟抓重点</string>
+    <string name="agent_post_paper_desc">PDF、网页、截图都能读，自动提炼结论和可引用观点。</string>
+    <string name="agent_post_paper_author">学术助手</string>
+    <string name="agent_post_paper_initial">学</string>
+    <string name="agent_post_paper_duration">约 5 分钟</string>
+    <string name="agent_post_voice_title">语音助手：开车也能处理消息</string>
+    <string name="agent_post_voice_desc">按住说话，自动判断回复对象、整理语气并发送。</string>
+    <string name="agent_post_voice_author">车载达人</string>
+    <string name="agent_post_voice_initial">车</string>
+    <string name="agent_post_voice_duration">约 2 分钟</string>
+
+    <!-- Agent topics & tags -->
+    <string name="agent_topic_automation">自动化</string>
+    <string name="agent_topic_efficiency">效率</string>
+    <string name="agent_topic_life">生活</string>
+    <string name="agent_topic_learning">学习</string>
+    <string name="agent_topic_device">设备</string>
+    <string name="agent_tag_voice">语音</string>
+
+    <!-- Agent permissions -->
+    <string name="agent_perm_browser">浏览器</string>
+    <string name="agent_perm_location">位置</string>
+    <string name="agent_perm_screenshot">截图</string>
+    <string name="agent_perm_calendar">日程</string>
+    <string name="agent_perm_clipboard">剪贴板</string>
+    <string name="agent_perm_document">文档</string>
+    <string name="agent_perm_accessibility">无障碍</string>
+    <string name="agent_perm_notification">通知</string>
+    <string name="agent_perm_background">后台运行</string>
+    <string name="agent_perm_timer">定时</string>
+    <string name="agent_perm_file">文件</string>
+    <string name="agent_perm_mic">麦克风</string>
+
+    <!-- Agent metrics & detail -->
+    <string name="agent_metric_usage">使用</string>
+    <string name="agent_metric_success_rate">成功率</string>
+    <string name="agent_metric_duration">耗时</string>
+    <string name="agent_detail_how_to_use">可以怎么用</string>
+    <string name="agent_detail_prerequisites">运行前需要</string>
+    <string name="agent_detail_permissions">需要权限</string>
+    <string name="agent_detail_use_1">复刻成自己的自动化模板</string>
+    <string name="agent_detail_use_2">按场景补充权限和目标 App</string>
+    <string name="agent_detail_use_3">保存到常用玩法，后续直接运行</string>
+    <string name="agent_detail_prereq_1">确认无障碍服务已开启</string>
+    <string name="agent_detail_prereq_2">选择本机或局域网设备</string>
+    <string name="agent_detail_prereq_3">第一次运行时按提示授权</string>
+    <string name="agent_reproduce_target">。目标：</string>
+    <string name="agent_reproduce_suffix"> 请先确认无障碍、通知和目标应用状态，按步骤规划并执行；遇到登录、支付或敏感确认时先暂停等待用户确认。</string>
+    <string name="agent_reproduce_toast">已复刻到例程：%s</string>
+
+    <!-- 浏览器硬编码修复（第二轮） -->
+    <string name="browser_app_doubao">豆包</string>
+    <string name="browser_app_tongyi">通义</string>
+    <string name="browser_app_zhihu">知乎</string>
+    <string name="browser_windows">窗口</string>
+    <string name="browser_refresh_page">刷新页面</string>
+    <string name="browser_engine_settings">浏览器与引擎设置</string>
+    <string name="browser_change_wallpaper">更换壁纸</string>
+    <string name="browser_extensions">扩展</string>
+    <string name="browser_copy_link">复制链接</string>
+    <string name="browser_link_copied">已复制链接</string>
+    <string name="browser_open_in_system">用系统浏览器打开</string>
+    <string name="browser_new_tab">新标签页</string>
+    <string name="browser_windows_count">窗口 (%1$d)</string>
 </resources>
