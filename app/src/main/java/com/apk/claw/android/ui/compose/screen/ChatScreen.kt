@@ -35,7 +35,10 @@ import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Devices
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Monitor
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardVoice
@@ -58,6 +61,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -69,6 +73,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.apk.claw.android.BuildConfig
 import com.apk.claw.android.ClawApplication
 import com.apk.claw.android.R
+import com.apk.claw.android.account.AccountConfig
 import com.apk.claw.android.octopus_mobile.ControlTarget
 import com.apk.claw.android.octopus_mobile.DeviceInfo
 import com.apk.claw.android.octopus_mobile.RoutineStore
@@ -534,13 +539,13 @@ fun ChatScreen() {
             border = BorderStroke(1.dp, OctopusBackground.glassBorder),
             shadowElevation = 10.dp,
         ) {
-            Column(modifier = Modifier.padding(horizontal = OctopusSpacing.lg, vertical = OctopusSpacing.md)) {
+            Column(modifier = Modifier.padding(horizontal = OctopusSpacing.lg, vertical = OctopusSpacing.sm)) {
             if (voiceMode) {
                 // ── 语音优先：左侧键盘切换（次选）+ 大麦克风「按住说话」 ──
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
-                            .size(42.dp)
+                            .size(38.dp)
                             .background(SurfaceDeepColor, CircleShape)
                             .clickable { voiceMode = false },
                         contentAlignment = Alignment.Center,
@@ -575,7 +580,7 @@ fun ChatScreen() {
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .height(46.dp)
+                            .height(42.dp)
                             .background(pillColor, OctopusShape.large)
                             .then(pillGesture),
                         contentAlignment = Alignment.Center,
@@ -598,7 +603,7 @@ fun ChatScreen() {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
-                            .size(42.dp)
+                            .size(38.dp)
                             .background(SurfaceDeepColor, CircleShape)
                             .clickable { voiceMode = true },
                         contentAlignment = Alignment.Center,
@@ -631,7 +636,7 @@ fun ChatScreen() {
                     val btnActive = isRunning || inputText.isNotBlank()
                     Box(
                         modifier = Modifier
-                            .size(42.dp)
+                            .size(38.dp)
                             .background(
                                 (if (isRunning) ErrorColor else PrimaryColor)
                                     .copy(alpha = if (btnActive) 1f else 0.35f),
@@ -854,12 +859,38 @@ private fun ColumnScope.ChatHomeWorkbench(
                     }
                     Spacer(Modifier.height(OctopusSpacing.lg))
                     Row(horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.sm), modifier = Modifier.fillMaxWidth()) {
-                        HomeTinyStat(
-                            label = stringResource(R.string.chat_metric_model),
-                            value = if (llmOk) stringResource(R.string.status_online) else stringResource(R.string.chat_agent_setup_needed),
-                            ok = llmOk,
-                            modifier = Modifier.weight(1f),
-                        )
+                        // 模型档位：点开直接切「快速 / 标准 / 高级」(写入 AccountConfig.modelTier，下次任务即生效)
+                        var tierMenu by remember { mutableStateOf(false) }
+                        var tier by remember { mutableStateOf(AccountConfig.modelTier) }
+                        val tierLabel = when (tier) {
+                            AccountConfig.TIER_FLASH -> stringResource(R.string.account_tier_flash)
+                            AccountConfig.TIER_PREMIUM -> stringResource(R.string.account_tier_premium)
+                            else -> stringResource(R.string.account_tier_fast)
+                        }
+                        Box(modifier = Modifier.weight(1f)) {
+                            HomeTinyStat(
+                                label = stringResource(R.string.chat_metric_model),
+                                value = if (llmOk) tierLabel else stringResource(R.string.chat_agent_setup_needed),
+                                ok = llmOk,
+                                modifier = Modifier.fillMaxWidth(),
+                                onClick = { tierMenu = true },
+                            )
+                            DropdownMenu(expanded = tierMenu, onDismissRequest = { tierMenu = false }) {
+                                listOf(
+                                    AccountConfig.TIER_FAST to R.string.account_tier_fast,
+                                    AccountConfig.TIER_FLASH to R.string.account_tier_flash,
+                                    AccountConfig.TIER_PREMIUM to R.string.account_tier_premium,
+                                ).forEach { (t, nameRes) ->
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(nameRes)) },
+                                        trailingIcon = {
+                                            if (t == tier) Icon(Icons.Filled.Check, contentDescription = null, tint = PrimaryColor, modifier = Modifier.size(OctopusIconSize.small))
+                                        },
+                                        onClick = { AccountConfig.modelTier = t; tier = t; tierMenu = false },
+                                    )
+                                }
+                            }
+                        }
                         HomeTinyStat(
                             label = stringResource(R.string.chat_metric_target),
                             value = target,
@@ -902,9 +933,9 @@ private data class HomePrompt(
 )
 
 @Composable
-private fun HomeTinyStat(label: String, value: String, ok: Boolean, modifier: Modifier = Modifier) {
+private fun HomeTinyStat(label: String, value: String, ok: Boolean, modifier: Modifier = Modifier, onClick: (() -> Unit)? = null) {
     Surface(
-        modifier = modifier,
+        modifier = if (onClick != null) modifier.clickable(onClick = onClick) else modifier,
         shape = OctopusShape.large,
         color = SurfaceDeepColor.copy(alpha = 0.78f),
         border = BorderStroke(1.dp, if (ok) PrimaryColor.copy(alpha = 0.18f) else BorderColor),
@@ -912,7 +943,13 @@ private fun HomeTinyStat(label: String, value: String, ok: Boolean, modifier: Mo
         Column(modifier = Modifier.padding(horizontal = OctopusSpacing.md, vertical = OctopusSpacing.sm)) {
             Text(label, color = TextMuted, fontSize = OctopusType.tag, maxLines = 1)
             Spacer(Modifier.height(OctopusSpacing.xs))
-            Text(value, color = if (ok) TextPrimary else WarningColor, fontSize = OctopusType.label, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(value, color = if (ok) TextPrimary else WarningColor, fontSize = OctopusType.label, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                if (onClick != null) {
+                    Spacer(Modifier.width(OctopusSpacing.xs))
+                    Icon(Icons.Filled.ExpandMore, contentDescription = null, tint = TextMuted, modifier = Modifier.size(OctopusIconSize.small))
+                }
+            }
         }
     }
 }
@@ -1080,6 +1117,7 @@ private fun SessionBucket.label(): String = stringResource(
 
 @Composable
 private fun TargetSelector(onPreview: (DeviceInfo?) -> Unit = {}) {
+    val context = LocalContext.current
     val devices by ClawApplication.instance.deviceRegistry.deviceList.collectAsState()
     var menu by remember { mutableStateOf(false) }
     var label by remember { mutableStateOf(ControlTarget.label()) }
@@ -1106,10 +1144,21 @@ private fun TargetSelector(onPreview: (DeviceInfo?) -> Unit = {}) {
             )
             devices.forEach { d ->
                 DropdownMenuItem(
-                    text = { Text("🖥 ${d.deviceName}") },
+                    text = { Text(d.deviceName) },
+                    leadingIcon = { Icon(Icons.Filled.PhoneAndroid, contentDescription = null, modifier = Modifier.size(OctopusIconSize.small)) },
                     onClick = { ControlTarget.setRemote(d); label = ControlTarget.label(); menu = false; onPreview(d) },
                 )
             }
+            // 电脑远程桌面：与"选手机目标"统一到同一个设备入口（WebRTC 远程桌面，电脑端跑 pc_remote_webrtc.py）
+            HorizontalDivider()
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.settings_remote_pc_title)) },
+                leadingIcon = { Icon(Icons.Filled.Monitor, contentDescription = null, modifier = Modifier.size(OctopusIconSize.small)) },
+                onClick = {
+                    menu = false
+                    runCatching { context.startActivity(android.content.Intent(context, com.apk.claw.android.ui.featurescreens.PcRemoteWebrtcActivity::class.java)) }
+                },
+            )
             // 调试：回环目标（远程控制自己，用于单机验证远程路由）
             if (BuildConfig.DEBUG) {
                 DropdownMenuItem(
@@ -1421,13 +1470,17 @@ private fun ToolGroupItem(tools: List<ChatMessage.ToolCall>, expanded: Boolean, 
                         Spacer(modifier = Modifier.width(OctopusSpacing.sm))
                         Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(OctopusIconSize.small))
                         Spacer(modifier = Modifier.width(OctopusSpacing.sm))
-                        Text(t.toolName, fontSize = OctopusType.caption, color = PrimaryColor, fontFamily = FontFamily.Monospace)
+                        Text(t.toolName, fontSize = OctopusType.caption, color = PrimaryColor, fontFamily = FontFamily.Monospace, maxLines = 1)
                         if (t.args.isNotEmpty()) {
                             Spacer(modifier = Modifier.width(OctopusSpacing.xs))
-                            Text(t.args, fontSize = OctopusType.tag, color = TextMuted, fontFamily = FontFamily.Monospace, maxLines = 1)
+                            Text(t.args, modifier = Modifier.weight(1f), fontSize = OctopusType.tag, color = TextMuted, fontFamily = FontFamily.Monospace, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        } else {
+                            Spacer(modifier = Modifier.weight(1f))
                         }
-                        Spacer(modifier = Modifier.weight(1f))
-                        if (t.result != null) Text(t.result, fontSize = OctopusType.tag, color = SuccessColor, maxLines = 1)
+                        if (t.result != null) {
+                            Spacer(modifier = Modifier.width(OctopusSpacing.sm))
+                            Text(t.result, modifier = Modifier.widthIn(max = 120.dp), fontSize = OctopusType.tag, color = SuccessColor, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
                     }
                 }
             }
@@ -1468,15 +1521,36 @@ private fun ToolCallItem(msg: ChatMessage.ToolCall) {
                 fontSize = OctopusType.caption,
                 color = PrimaryColor,
                 fontWeight = FontWeight.Medium,
-                fontFamily = FontFamily.Monospace
+                fontFamily = FontFamily.Monospace,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
             if (msg.args.isNotEmpty()) {
                 Spacer(modifier = Modifier.width(OctopusSpacing.xs))
-                Text(msg.args, fontSize = OctopusType.caption, color = TextMuted, fontFamily = FontFamily.Monospace)
+                // 单行省略：长无空格串（如 package_name=…deskclock）此前会被挤成每行一个字、竖排。
+                Text(
+                    msg.args,
+                    modifier = Modifier.weight(1f),
+                    fontSize = OctopusType.caption,
+                    color = TextMuted,
+                    fontFamily = FontFamily.Monospace,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            } else {
+                Spacer(modifier = Modifier.weight(1f))
             }
-            Spacer(modifier = Modifier.weight(1f))
             if (msg.result != null) {
-                Text(msg.result, fontSize = OctopusType.caption, color = SuccessColor)
+                Spacer(modifier = Modifier.width(OctopusSpacing.sm))
+                // 结果限宽 + 单行省略，避免与 args 抢宽度后被压成竖排字符。
+                Text(
+                    msg.result,
+                    modifier = Modifier.widthIn(max = 120.dp),
+                    fontSize = OctopusType.caption,
+                    color = SuccessColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
     }

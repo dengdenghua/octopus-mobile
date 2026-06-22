@@ -317,11 +317,9 @@ class DefaultAgentService : AgentService {
         for (attempt in 0 until MAX_API_RETRIES) {
             if (cancelled.get()) throw RuntimeException(ClawApplication.instance.getString(R.string.agent_task_cancelled))
             try {
-                return if (config.streaming) {
-                    val textBuilder = StringBuilder()
+                val response = if (config.streaming) {
                     llmClient.chatStreaming(messages, toolSpecs, object : StreamingListener {
                         override fun onPartialText(token: String) {
-                            textBuilder.append(token)
                             callback.onContent(iteration, token)
                         }
                         override fun onComplete(response: LlmResponse) {}
@@ -330,6 +328,12 @@ class DefaultAgentService : AgentService {
                 } else {
                     llmClient.chat(messages, toolSpecs)
                 }
+                // 网关上游 5xx 常表现为 HTTP 200、但流式 body 是 {"error":...}，被解析层吞成"空回复"
+                // （无正文、无工具调用）。把它当作可重试的瞬时错误，复用下方指数退避，而不是误判为"任务已完成"。
+                if (response.text.isNullOrEmpty() && !response.hasToolExecutionRequests()) {
+                    throw RuntimeException(ClawApplication.instance.getString(R.string.agent_empty_response))
+                }
+                return response
             } catch (e: Exception) {
                 lastException = e
                 // 认证失败 / 额度不足 / 权限拒绝：不重试，立即抛出
@@ -766,14 +770,18 @@ class DefaultAgentService : AgentService {
     }
 
     private fun finishLoop(state: AgentLoopState, callback: AgentCallback) {
-        if (cancelled.get()) {
-            callback.onComplete(state.iterations, ClawApplication.instance.getString(R.string.agent_task_cancel), state.totalTokens)
-        } else {
-            callback.onError(
-                state.iterations,
-                RuntimeException(ClawApplication.instance.getString(R.string.agent_max_iterations, state.maxIterations)),
-                state.totalTokens
-            )
+        when {
+            cancelled.get() ->
+                callback.onComplete(state.iterations, ClawApplication.instance.getString(R.string.agent_task_cancel), state.totalTokens)
+            // 仅在真正耗尽迭代次数时才报"已达最大迭代次数"。
+            // 正常结束（onComplete）或调用失败（onError）已在循环内发出对应消息，
+            // 这里不能再无条件追加，否则每次都叠加一条自相矛盾的"任务已完成 + 已达最大迭代次数"。
+            state.iterations >= state.maxIterations ->
+                callback.onError(
+                    state.iterations,
+                    RuntimeException(ClawApplication.instance.getString(R.string.agent_max_iterations, state.maxIterations)),
+                    state.totalTokens
+                )
         }
     }
 
