@@ -850,9 +850,11 @@ Shizuku 是安全、开源的本地辅助工具。</string>
     <string name="account_credits_label">点数余额</string>
     <string name="account_credits_breakdown">永久 %1$d · 本月赠送 %2$d</string>
     <string name="account_daily_claim">每日签到</string>
-    <string name="account_recharge_title">充值</string>
+    <string name="account_recharge_title">会员订阅</string>
     <string name="account_goods_credits">%1$d 点数</string>
     <string name="account_goods_bonus">（赠送 %1$d）</string>
+    <string name="account_goods_sub_subscription">永久 %1$d · 每月赠送 %2$d（月底清零）· 含自带模型</string>
+    <string name="account_per_month_suffix">/月</string>
     <string name="account_logout">退出登录</string>
     <string name="account_order_failed">创建订单失败</string>
     <string name="account_pay_opened">收银台已打开，请完成支付</string>

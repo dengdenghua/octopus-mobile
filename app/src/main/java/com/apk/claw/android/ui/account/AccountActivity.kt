@@ -127,16 +127,22 @@ class AccountActivity : BaseActivity() {
 
     private fun renderGoods(goods: List<Goods>) {
         llGoods.removeAllViews()
+        val usd = selectedCurrency() == "USD"
         goods.forEach { g ->
             val row = layoutInflater.inflate(R.layout.item_goods, llGoods, false)
             row.findViewById<TextView>(R.id.tvGoodsTitle).text = g.title
-            val displayCredits = if (selectedCurrency() == "USD" && g.usdCredits > 0) g.usdCredits else g.credits
-            val displayBonus = if (selectedCurrency() == "USD" && g.usdBonusCredits > 0) g.usdBonusCredits else g.bonusCredits
-            val bonus = if (displayBonus > 0) getString(R.string.account_goods_bonus, displayBonus) else ""
-            row.findViewById<TextView>(R.id.tvGoodsSub).text =
-                getString(R.string.account_goods_credits, displayCredits) + bonus
+            val credits = if (usd && g.usdCredits > 0) g.usdCredits else g.credits
+            val bonus = if (usd && g.usdBonusCredits > 0) g.usdBonusCredits else g.bonusCredits
+            val isSub = g.kind == "subscription"
+            row.findViewById<TextView>(R.id.tvGoodsSub).text = if (isSub) {
+                // 订阅:区分两桶 + 月清 + BYO 权益
+                getString(R.string.account_goods_sub_subscription, credits, bonus)
+            } else {
+                getString(R.string.account_goods_credits, credits) +
+                    (if (bonus > 0) getString(R.string.account_goods_bonus, bonus) else "")
+            }
             row.findViewById<KButton>(R.id.btnBuy).apply {
-                text = formatPrice(g)
+                text = formatPrice(g) + (if (isSub) getString(R.string.account_per_month_suffix) else "")
                 setOnClickListener { buy(g) }
             }
             llGoods.addView(row)
