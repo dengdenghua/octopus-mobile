@@ -55,6 +55,13 @@ SMTP_FROM = os.environ.get("SMTP_FROM", "")
 
 # 支付:mock=下单后查单即视为已支付(本地跑通);生产接微信/支付宝,用 webhook 改单状态
 PAYMENT_PROVIDER = os.environ.get("PAYMENT_PROVIDER", "mock")  # mock | wechat | alipay
+if os.environ.get("ENV", "dev") == "production" and PAYMENT_PROVIDER == "mock":
+    raise RuntimeError("PAYMENT_PROVIDER=mock is not allowed in production. Configure wechat/alipay webhooks first.")
+if PAYMENT_PROVIDER not in {"mock", "wechat", "alipay"}:
+    raise RuntimeError("PAYMENT_PROVIDER must be one of: mock, wechat, alipay")
+ORDER_RATE_PER_MINUTE = int(os.environ.get("ORDER_RATE_PER_MINUTE", "10"))
+PENDING_ORDER_LIMIT = int(os.environ.get("PENDING_ORDER_LIMIT", "5"))
+PENDING_ORDER_WINDOW_MS = int(os.environ.get("PENDING_ORDER_WINDOW_MS", str(30 * 60 * 1000)))
 
 # 平台大模型上游(key 只在服务端)。支持多上游:每个模型按 provider 路由到不同 base/key。
 MIMO_API_KEY = os.environ.get("MIMO_API_KEY", "")
@@ -132,7 +139,8 @@ GOODS = [
     {"id": "sub_29", "title": "划算月卡", "credits": 1500, "bonusCredits": 1500,
      "priceFen": 14900, "priceUsdCents": 2990, "tag": "划算 · 含BYO", "memberDays": 30, "kind": "subscription"},
     {"id": "sub_99", "title": "旗舰月卡", "credits": 5000, "bonusCredits": 7500,
-     "priceFen": 49900, "priceUsdCents": 9990, "tag": "超值 · 含BYO", "memberDays": 30, "kind": "subscription"},
+     "priceFen": 49900, "priceUsdCents": 6900, "usdCredits": 3500, "usdBonusCredits": 5000,
+     "tag": "超值 · 含BYO", "memberDays": 30, "kind": "subscription"},
 ]
 GOODS_BY_ID = {g["id"]: g for g in GOODS}
 
@@ -345,6 +353,12 @@ def init_db() -> None:
                      "sub_goods_id TEXT DEFAULT ''"):            # 当前订阅档(续费用)
             try:
                 c.execute(f"ALTER TABLE users ADD COLUMN {_col}")
+            except sqlite3.OperationalError:
+                pass  # 列已存在
+        for _col in ("currency TEXT DEFAULT 'CNY'",
+                     "amount_minor INTEGER NOT NULL DEFAULT 0"):
+            try:
+                c.execute(f"ALTER TABLE orders ADD COLUMN {_col}")
             except sqlite3.OperationalError:
                 pass  # 列已存在
         c.execute(
@@ -1290,7 +1304,7 @@ def invite_redeem(body: dict[str, Any], u: sqlite3.Row = Depends(actor)) -> dict
 # ─────────────────────────── endpoints: billing ───────────────────────────
 @app.get("/billing/goods")
 def goods(u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
-    return {"items": GOODS}
+    return {"items": [_present_goods(g) for g in GOODS]}
 
 
 @app.get("/square/feed")
@@ -1351,22 +1365,80 @@ def billing_estimate(body: dict[str, Any], u: sqlite3.Row = Depends(actor)) -> d
 
 
 @app.post("/billing/orders")
-def create_order(body: dict[str, Any], u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+def create_order(body: dict[str, Any], request: Request, u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    rate_limit(f"order:{u['user_id']}", ORDER_RATE_PER_MINUTE, 60)
+    rate_limit(f"order_ip:{client_ip(request)}", ORDER_RATE_PER_MINUTE * 3, 60)
     g = GOODS_BY_ID.get(str(body.get("goodsId", "")))
     if g is None:
         raise HTTPException(status_code=400, detail="套餐不存在")
+    currency = _normalize_currency(body.get("currency"))
+    amount_minor = _goods_amount_minor(g, currency)
+    paid_credits, bonus_credits = _goods_credits(g, currency)
+    if PAYMENT_PROVIDER != "mock" and not _payment_configured():
+        raise HTTPException(status_code=503, detail=f"payment '{PAYMENT_PROVIDER}' not configured")
     order_no = "O" + secrets.token_hex(10)
     with closing(db()) as c:
+        cutoff = now_ms() - PENDING_ORDER_WINDOW_MS
+        pending = c.execute(
+            "SELECT COUNT(*) n FROM orders WHERE user_id = ? AND status = 'PENDING' AND created_at >= ?",
+            (u["user_id"], cutoff),
+        ).fetchone()["n"]
+        if pending >= PENDING_ORDER_LIMIT:
+            raise HTTPException(status_code=429, detail="未支付订单过多,请先完成或稍后再试")
         c.execute(
-            "INSERT INTO orders(order_no, user_id, goods_id, amount_fen, status, created_at) "
-            "VALUES(?,?,?,?,?,?)",
-            (order_no, u["user_id"], g["id"], g["priceFen"], "PENDING", now_ms()),
+            "INSERT INTO orders(order_no, user_id, goods_id, amount_fen, currency, amount_minor, status, created_at) "
+            "VALUES(?,?,?,?,?,?,?,?)",
+            (order_no, u["user_id"], g["id"], amount_minor if currency == "CNY" else g["priceFen"],
+             currency, amount_minor, "PENDING", now_ms()),
         )
         c.commit()
     # mock: 无收银台,客户端直接查单即支付成功;生产返回微信/支付宝 H5 收银台 url。
     pay_url = None if PAYMENT_PROVIDER == "mock" else _create_cashier(order_no, g)
     return {"orderNo": order_no, "payUrl": pay_url, "amountFen": g["priceFen"],
-            "credits": g["credits"] + g["bonusCredits"]}
+            "currency": currency, "amountMinor": amount_minor,
+            "credits": paid_credits + bonus_credits}
+
+
+def _normalize_currency(value: Any) -> str:
+    currency = str(value or "CNY").strip().upper()
+    if currency not in {"CNY", "USD"}:
+        raise HTTPException(status_code=400, detail="不支持的币种")
+    return currency
+
+
+def _goods_credits(goods: dict[str, Any], currency: str) -> tuple[int, int]:
+    """按币种返回该商品的永久积分与赠送积分。未配置美元专属权益时回退默认值。"""
+    if currency == "USD":
+        paid = int(goods.get("usdCredits", goods["credits"]))
+        bonus = int(goods.get("usdBonusCredits", goods.get("bonusCredits", 0)))
+        return paid, bonus
+    return int(goods["credits"]), int(goods.get("bonusCredits", 0))
+
+
+def _present_goods(goods: dict[str, Any]) -> dict[str, Any]:
+    """对外商品目录保留现有字段,并显式下发美元区权益,让客户端有能力做双币种展示。"""
+    return {
+        **goods,
+        "usdCredits": int(goods.get("usdCredits", goods["credits"])),
+        "usdBonusCredits": int(goods.get("usdBonusCredits", goods.get("bonusCredits", 0))),
+    }
+
+
+def _goods_amount_minor(goods: dict[str, Any], currency: str) -> int:
+    if currency == "USD":
+        cents = int(goods.get("priceUsdCents", 0) or 0)
+        if cents <= 0:
+            raise HTTPException(status_code=400, detail="该套餐暂不支持美元计价")
+        return cents
+    return int(goods["priceFen"])
+
+
+def _payment_configured() -> bool:
+    """生产支付配置就绪检查。真支付未接好时不创建 PENDING 订单,避免账务脏数据。"""
+    if PAYMENT_PROVIDER == "mock":
+        return True
+    prefix = "WECHAT" if PAYMENT_PROVIDER == "wechat" else "ALIPAY"
+    return bool(os.environ.get(f"{prefix}_APP_ID") and os.environ.get(f"{prefix}_PRIVATE_KEY"))
 
 
 def _create_cashier(order_no: str, goods: dict[str, Any]) -> str:
@@ -1377,8 +1449,8 @@ def _settle(c: sqlite3.Connection, order: sqlite3.Row) -> int:
     """Mark order PAID and grant credits / membership. Returns granted credits."""
     g = GOODS_BY_ID[order["goods_id"]]
     uid = order["user_id"]
-    paid = int(g["credits"])               # 永久积分(滚存,不过期)
-    gift = int(g.get("bonusCredits", 0))   # 月度赠送(月底清零)
+    currency = _normalize_currency(order["currency"] or "CNY")
+    paid, gift = _goods_credits(g, currency)
     if PAYMENT_PROVIDER == "mock":
         granted = _grant_free(c, uid, paid, source="order",
                               detail=f"订单 {order['order_no']} {g['title']}",
@@ -1421,7 +1493,8 @@ def query_order(order_no: str, u: sqlite3.Row = Depends(actor)) -> dict[str, Any
             c.commit()
         elif status == "PAID":
             g = GOODS_BY_ID[o["goods_id"]]
-            granted = g["credits"] + g["bonusCredits"]
+            paid, gift = _goods_credits(g, _normalize_currency(o["currency"] or "CNY"))
+            granted = paid + gift
     return {"orderNo": order_no, "status": status, "credits": granted}
 
 
@@ -1435,6 +1508,8 @@ async def payment_webhook(provider: str, request: Request) -> JSONResponse:
 def subscription_renew(u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
     """订阅续费(当前 mock:手动触发=模拟一次自动扣款成功)。真实自动续费由支付渠道的
     周期扣款 webhook 调同一逻辑:给当前订阅档「滚存永久积分 + 刷新本月赠送(月清) + 顺延 30 天会员/BYO」。"""
+    if PAYMENT_PROVIDER != "mock":
+        raise HTTPException(status_code=403, detail="订阅续费只能由支付回调触发")
     gid = u["sub_goods_id"]
     if not gid or gid not in GOODS_BY_ID or GOODS_BY_ID[gid]["kind"] != "subscription":
         raise HTTPException(status_code=400, detail="无有效订阅")
@@ -1548,6 +1623,22 @@ def _consume_daily_free(c: sqlite3.Connection, user_id: str, want: int) -> int:
     return take
 
 
+def _refund_daily_free(c: sqlite3.Connection, user_id: str, amount: int) -> int:
+    """退回本日免费额度(最多退到 FREE_DAILY_CREDITS),用于预留后实际用量较低或请求失败。"""
+    if amount <= 0 or FREE_DAILY_CREDITS <= 0:
+        return 0
+    row = c.execute(
+        "SELECT daily_free_used, daily_free_date FROM users WHERE user_id = ?", (user_id,)
+    ).fetchone()
+    if row is None or row["daily_free_date"] != _today_str():
+        return 0
+    used = max(0, int(row["daily_free_used"] or 0))
+    refund = min(used, amount)
+    if refund:
+        c.execute("UPDATE users SET daily_free_used = daily_free_used - ? WHERE user_id = ?", (refund, user_id))
+    return refund
+
+
 def _this_month() -> str:
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m")
 
@@ -1570,6 +1661,40 @@ def _consume_gift(c: sqlite3.Connection, user_id: str, want: int) -> int:
     return take
 
 
+def _refund_gift(c: sqlite3.Connection, user_id: str, amount: int) -> int:
+    """退回当月赠送积分。跨月不退,避免把已过期权益复活。"""
+    if amount <= 0:
+        return 0
+    row = c.execute("SELECT gift_month FROM users WHERE user_id = ?", (user_id,)).fetchone()
+    if row is None or row["gift_month"] != _this_month():
+        return 0
+    c.execute("UPDATE users SET gift_credits = gift_credits + ?, gift_month = ? WHERE user_id = ?",
+              (amount, _this_month(), user_id))
+    return amount
+
+
+def _reserve_usage_credits(user_id: str, hold: int, ref_id: str = "") -> dict[str, int] | None:
+    """按优先级预留一次调用的额度:月度赠送 → 每日免费 → 永久积分。余额不足时原样回滚。"""
+    if hold <= 0:
+        return {"gift": 0, "daily": 0, "paid": 0}
+    with closing(db()) as c:
+        c.execute("BEGIN IMMEDIATE")
+        gift = _consume_gift(c, user_id, hold)
+        daily = _consume_daily_free(c, user_id, hold - gift) if FREE_DAILY_CREDITS > 0 else 0
+        paid = max(0, hold - gift - daily)
+        if paid:
+            cur = c.execute(
+                "UPDATE users SET credits = credits - ? WHERE user_id = ? AND credits >= ?",
+                (paid, user_id, paid),
+            )
+            if cur.rowcount == 0:
+                c.rollback()
+                return None
+            _record_credit_txn(c, user_id, -paid, source="usage_hold", detail="预扣积分", ref_id=ref_id)
+        c.commit()
+        return {"gift": gift, "daily": daily, "paid": paid}
+
+
 def _reserve_credits(user_id: str, hold: int, source: str = "usage_hold", ref_id: str = "") -> bool:
     """原子预扣 hold 积分(余额够才扣)。并发请求各自预扣 → 一旦余额覆盖不了下一个请求的
     worst-case 预扣就被拒,杜绝「调用前判余额>0、扣费在响应后」导致的并发超额消费。"""
@@ -1587,23 +1712,49 @@ def _reserve_credits(user_id: str, hold: int, source: str = "usage_hold", ref_id
 
 
 def _reconcile_usage(user_id: str, model: str, tin: int, tout: int, mult: float, hold: int,
-                     free: bool = False, ref_id: str = "", free_credits_used: int = 0) -> int:
-    """按实际用量结算:退还(预扣 hold − 实际 cost),多退少补(clamp≥0),记 usage_log 与积分流水。返回实际扣费。
+                     free: bool = False, ref_id: str = "", free_credits_used: int = 0,
+                     reserved: dict[str, int] | None = None) -> int:
+    """按实际用量结算:退还(预扣 hold − 实际 cost),记 usage_log 与积分流水。返回实际消耗。
     tin=tout=0(上游报错/异常)时 actual=0 → 全额退还预扣。free=True(无限额度白名单)→ actual 恒 0,仍记 usage。
-    free_credits_used:本次调用已从每日免费额度中抵扣的积分数,用于抵扣实际账单。"""
+    reserved:新链路的分桶预留;free_credits_used 仅保留给旧测试/兼容调用。"""
     raw_actual = 0 if free else (
         max(1, math.ceil((tin + tout) / 1000 * CREDITS_PER_1K_TOKENS * mult)) if (tin + tout) else 0
     )
-    actual = max(0, raw_actual - free_credits_used) if not free else 0
-    refund = hold - actual
+    if reserved is None:
+        actual = max(0, raw_actual - free_credits_used) if not free else 0
+        refund = hold - actual
+        with closing(db()) as c:
+            if refund:
+                c.execute("UPDATE users SET credits = MAX(0, credits + ?) WHERE user_id = ?", (refund, user_id))
+                _record_credit_txn(c, user_id, refund, source="usage_refund",
+                                   detail=f"模型 {model} 预扣退还", ref_id=ref_id)
+            if (tin + tout) > 0:
+                c.execute(
+                    "INSERT INTO usage_log(user_id, model, tokens_in, tokens_out, credits, ts) "
+                    "VALUES(?,?,?,?,?,?)",
+                    (user_id, model, tin, tout, raw_actual, now_ms()),
+                )
+            c.commit()
+        return actual
+
+    total_reserved = int(reserved.get("gift", 0)) + int(reserved.get("daily", 0)) + int(reserved.get("paid", 0))
+    actual = 0 if free else min(raw_actual, total_reserved)
+    remaining = actual
+    gift_used = min(int(reserved.get("gift", 0)), remaining)
+    remaining -= gift_used
+    daily_used = min(int(reserved.get("daily", 0)), remaining)
+    remaining -= daily_used
+    paid_used = min(int(reserved.get("paid", 0)), remaining)
     with closing(db()) as c:
-        if refund:
-            c.execute("UPDATE users SET credits = MAX(0, credits + ?) WHERE user_id = ?", (refund, user_id))
-            _record_credit_txn(c, user_id, refund, source="usage_refund",
+        gift_refund = int(reserved.get("gift", 0)) - gift_used
+        daily_refund = int(reserved.get("daily", 0)) - daily_used
+        paid_refund = int(reserved.get("paid", 0)) - paid_used
+        _refund_gift(c, user_id, gift_refund)
+        _refund_daily_free(c, user_id, daily_refund)
+        if paid_refund:
+            c.execute("UPDATE users SET credits = credits + ? WHERE user_id = ?", (paid_refund, user_id))
+            _record_credit_txn(c, user_id, paid_refund, source="usage_refund",
                                detail=f"模型 {model} 预扣退还", ref_id=ref_id)
-        if actual and not free:
-            _record_credit_txn(c, user_id, -actual, source="usage",
-                               detail=f"模型 {model} 实际消耗", ref_id=ref_id)
         if (tin + tout) > 0:  # 有真实用量就记一条(便于看调用量/成本)
             c.execute(
                 "INSERT INTO usage_log(user_id, model, tokens_in, tokens_out, credits, ts) "
@@ -1661,20 +1812,13 @@ async def chat_completions(body: dict[str, Any], request: Request, u: sqlite3.Ro
         len(str(m.get("content", ""))) for m in (body.get("messages") or []) if isinstance(m, dict)
     ) // 4
     hold = 0 if unlimited else max(1, math.ceil((prompt_est + max_out) / 1000 * CREDITS_PER_1K_TOKENS * mult))
-    free_used = 0
-    if hold and not unlimited:
-        with closing(db()) as c:
-            free_used += _consume_gift(c, user_id, hold)                       # 赠送优先(月清)
-            if FREE_DAILY_CREDITS > 0:
-                free_used += _consume_daily_free(c, user_id, hold - free_used)  # 再每日免费额度
-            c.commit()
-    effective_hold = max(0, hold - free_used)
-    if effective_hold and not _reserve_credits(user_id, effective_hold, ref_id=request_id):
+    reserved = {"gift": 0, "daily": 0, "paid": 0} if unlimited else _reserve_usage_credits(user_id, hold, ref_id=request_id)
+    if reserved is None:
         raise HTTPException(status_code=402, detail="积分不足,请充值")
 
     def _settle(tin: int, tout: int) -> None:  # 统一结算入口,白名单(free)恒不扣费
-        _reconcile_usage(user_id, model, tin, tout, mult, effective_hold, free=unlimited,
-                         ref_id=request_id, free_credits_used=free_used)
+        _reconcile_usage(user_id, model, tin, tout, mult, hold, free=unlimited,
+                         ref_id=request_id, reserved=reserved)
 
     # ── 非流式 ──
     if not bool(body.get("stream")):
