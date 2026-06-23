@@ -846,6 +846,7 @@
     <string name="account_invalid_mobile">请输入正确的手机号</string>
     <string name="account_invalid_code">请输入验证码</string>
     <string name="account_credits_label">积分余额</string>
+    <string name="account_credits_breakdown">永久 %1$d · 本月赠送 %2$d</string>
     <string name="account_daily_claim">每日签到</string>
     <string name="account_recharge_title">充值套餐</string>
     <string name="account_goods_credits">%1$d 积分</string>

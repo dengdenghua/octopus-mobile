@@ -36,10 +36,11 @@ class MockAccountGateway : AccountGateway {
     private val pendingOrders = HashMap<String, Goods>() // orderNo -> goods
 
     private val catalog = listOf(
-        Goods("m_month", "Monthly Pass", 500, 0, 1900, "Unlock built-in models", "membership"),
-        Goods("g_100", "100 Credits", 100, 0, 990, null),
-        Goods("g_500", "500 Credits", 500, 50, 3990, "Best value"),
-        Goods("g_1000", "1000 Credits", 1000, 200, 6900, "Super value"),
+        Goods(id = "m_month", title = "Monthly Pass", credits = 500, bonusCredits = 0,
+              priceFen = 1900, tag = "Unlock built-in models", kind = "membership"),
+        Goods(id = "g_100", title = "100 Credits", credits = 100, bonusCredits = 0, priceFen = 990),
+        Goods(id = "g_500", title = "500 Credits", credits = 500, bonusCredits = 50, priceFen = 3990, tag = "Best value"),
+        Goods(id = "g_1000", title = "1000 Credits", credits = 1000, bonusCredits = 200, priceFen = 6900, tag = "Super value"),
     )
 
     override suspend fun sendSmsCode(mobile: String): SmsSendResult {
@@ -97,17 +98,21 @@ class MockAccountGateway : AccountGateway {
 
     override suspend fun goods(token: String): GoodsList = GoodsList(catalog)
 
-    override suspend fun createOrder(token: String, goodsId: String): CreateOrderResult {
+    override suspend fun createOrder(token: String, goodsId: String, currency: String): CreateOrderResult {
         userOf(token)
         val g = catalog.firstOrNull { it.id == goodsId }
             ?: throw IllegalArgumentException("Package not found: $goodsId")
         val orderNo = "MOCK" + System.currentTimeMillis()
         pendingOrders[orderNo] = g
+        val normalized = currency.uppercase()
+        val amountMinor = if (normalized == "USD" && g.priceUsdCents > 0) g.priceUsdCents else g.priceFen
         // payUrl null => no external cashier; client polls queryOrder directly.
         return CreateOrderResult(
             orderNo = orderNo,
             payUrl = null,
             amountFen = g.priceFen,
+            currency = if (normalized == "USD" && g.priceUsdCents > 0) "USD" else "CNY",
+            amountMinor = amountMinor,
             credits = g.credits + g.bonusCredits,
         )
     }

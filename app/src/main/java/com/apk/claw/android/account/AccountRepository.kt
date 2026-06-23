@@ -8,6 +8,8 @@ data class AccountState(
     val loggedIn: Boolean = false,
     val mobile: String = "",
     val credits: Long = 0,
+    val paidCredits: Long = 0,
+    val giftCredits: Long = 0,
     /** Active monthly membership → BYO own-model unlocked. */
     val byoUnlocked: Boolean = false,
     /** Membership expiry, epoch millis; 0 = none. */
@@ -37,6 +39,8 @@ object AccountRepository {
             loggedIn = AccountStore.isLoggedIn,
             mobile = AccountStore.mobile.ifEmpty { AccountStore.email },
             credits = AccountStore.credits,
+            paidCredits = AccountStore.paidCredits,
+            giftCredits = AccountStore.giftCredits,
             byoUnlocked = AccountStore.byoUnlocked,
             memberExpireAt = AccountStore.memberExpireAt,
         )
@@ -76,6 +80,8 @@ object AccountRepository {
         val r = runCatching { gateway().balance(AccountStore.token) }
         r.getOrNull()?.let {
             AccountStore.credits = it.credits
+            AccountStore.paidCredits = it.paidCredits
+            AccountStore.giftCredits = it.giftCredits
             AccountStore.memberExpireAt = if (it.membershipActive) it.membershipExpireAt else 0L
             publish()
         }
@@ -85,8 +91,8 @@ object AccountRepository {
     suspend fun loadGoods(): Result<List<Goods>> =
         runCatching { gateway().goods(AccountStore.token).items }
 
-    suspend fun createOrder(goodsId: String): Result<CreateOrderResult> =
-        runCatching { gateway().createOrder(AccountStore.token, goodsId) }
+    suspend fun createOrder(goodsId: String, currency: String = "CNY"): Result<CreateOrderResult> =
+        runCatching { gateway().createOrder(AccountStore.token, goodsId, currency) }
 
     suspend fun queryOrder(orderNo: String): Result<OrderStatusResult> {
         val r = runCatching { gateway().queryOrder(AccountStore.token, orderNo) }

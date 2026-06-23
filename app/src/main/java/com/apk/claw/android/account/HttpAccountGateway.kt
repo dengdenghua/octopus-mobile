@@ -87,8 +87,8 @@ class HttpAccountGateway(baseUrl: String) : AccountGateway {
     override suspend fun goods(token: String): GoodsList =
         get("/billing/goods", token, GoodsList::class.java)
 
-    override suspend fun createOrder(token: String, goodsId: String): CreateOrderResult =
-        post("/billing/orders", mapOf("goodsId" to goodsId), token, CreateOrderResult::class.java)
+    override suspend fun createOrder(token: String, goodsId: String, currency: String): CreateOrderResult =
+        post("/billing/orders", mapOf("goodsId" to goodsId, "currency" to currency), token, CreateOrderResult::class.java)
 
     override suspend fun queryOrder(token: String, orderNo: String): OrderStatusResult =
         get("/billing/orders/$orderNo", token, OrderStatusResult::class.java)

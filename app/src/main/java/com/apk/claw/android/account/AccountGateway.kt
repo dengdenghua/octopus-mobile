@@ -16,7 +16,7 @@ interface AccountGateway {
     suspend fun profile(token: String): AccountProfile
     suspend fun balance(token: String): BalanceResult
     suspend fun goods(token: String): GoodsList
-    suspend fun createOrder(token: String, goodsId: String): CreateOrderResult
+    suspend fun createOrder(token: String, goodsId: String, currency: String = "CNY"): CreateOrderResult
     suspend fun queryOrder(token: String, orderNo: String): OrderStatusResult
     suspend fun dailyClaim(token: String): DailyClaimResult
     suspend fun inviteInfo(token: String): InviteInfo

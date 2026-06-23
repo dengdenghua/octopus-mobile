@@ -736,6 +736,7 @@
     <string name="account_invalid_mobile">正しい電話番号を入力してください</string>
     <string name="account_invalid_code">認証コードを入力してください</string>
     <string name="account_credits_label">クレジット残高</string>
+    <string name="account_credits_breakdown">通常 %1$d · 今月ボーナス %2$d</string>
     <string name="account_daily_claim">デイリーチェックイン</string>
     <string name="account_recharge_title">チャージ</string>
     <string name="account_goods_credits">%1$d クレジット</string>

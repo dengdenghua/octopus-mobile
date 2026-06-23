@@ -521,6 +521,53 @@ class TestBilling:
             bal = c.execute("SELECT credits FROM users WHERE user_id = ?", (uid,)).fetchone()["credits"]
         assert bal == 0
 
+    def test_usage_reserve_rolls_back_free_buckets_on_insufficient_paid(self, client, monkeypatch):
+        """赠送/每日额度已参与预留,但永久积分不足时应整体回滚。"""
+        monkeypatch.setattr(app_module, "FREE_DAILY_CREDITS", 5)
+        token, uid = _email_register(client, "bill11@example.com")
+        with closing(db()) as c:
+            c.execute(
+                "UPDATE users SET credits = 0, gift_credits = 3, gift_month = ?, daily_free_used = 0, daily_free_date = ? "
+                "WHERE user_id = ?",
+                (app_module._this_month(), app_module._today_str(), uid),
+            )
+            c.commit()
+
+        reserved = app_module._reserve_usage_credits(uid, 10, ref_id="test_hold")
+        assert reserved is None
+        with closing(db()) as c:
+            row = c.execute(
+                "SELECT credits, gift_credits, daily_free_used FROM users WHERE user_id = ?", (uid,)
+            ).fetchone()
+        assert row["credits"] == 0
+        assert row["gift_credits"] == 3
+        assert row["daily_free_used"] == 0
+
+    def test_usage_reconcile_refunds_unused_gift_daily_and_paid(self, client, monkeypatch):
+        """实际账单低于 worst-case 时,赠送/每日免费/永久积分都按未用量退回。"""
+        monkeypatch.setattr(app_module, "FREE_DAILY_CREDITS", 5)
+        monkeypatch.setattr(app_module, "CREDITS_PER_1K_TOKENS", 1.0)
+        token, uid = _email_register(client, "bill12@example.com")
+        with closing(db()) as c:
+            c.execute(
+                "UPDATE users SET credits = 10, gift_credits = 3, gift_month = ?, daily_free_used = 0, daily_free_date = ? "
+                "WHERE user_id = ?",
+                (app_module._this_month(), app_module._today_str(), uid),
+            )
+            c.commit()
+
+        reserved = app_module._reserve_usage_credits(uid, 10, ref_id="test_hold")
+        assert reserved == {"gift": 3, "daily": 5, "paid": 2}
+        actual = _reconcile_usage(uid, "agnes-2.0-flash", 1000, 0, 1.0, 10, ref_id="test_hold", reserved=reserved)
+        assert actual == 1
+        with closing(db()) as c:
+            row = c.execute(
+                "SELECT credits, gift_credits, daily_free_used FROM users WHERE user_id = ?", (uid,)
+            ).fetchone()
+        assert row["credits"] == 10
+        assert row["gift_credits"] == 2
+        assert row["daily_free_used"] == 0
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # 5. 限流
@@ -887,13 +934,25 @@ class TestOrders:
 
     def test_create_order(self, client):
         token, uid = _email_register(client, "ord1@example.com")
-        r = client.post("/billing/orders", json={"goodsId": "g_100"},
+        r = client.post("/billing/orders", json={"goodsId": "sub_19"},
                         headers={"Authorization": f"Bearer {token}"})
         assert r.status_code == 200
         d = r.json()
         assert d["orderNo"]
-        assert d["amountFen"] == 990
-        assert d["credits"] == 100
+        assert d["amountFen"] == 9900
+        assert d["credits"] == 1500
+        assert d["currency"] == "CNY"
+        assert d["amountMinor"] == 9900
+
+    def test_create_order_usd_uses_usd_pricing_and_credits(self, client):
+        token, uid = _email_register(client, "ord1b@example.com")
+        r = client.post("/billing/orders", json={"goodsId": "sub_99", "currency": "USD"},
+                        headers={"Authorization": f"Bearer {token}"})
+        assert r.status_code == 200
+        d = r.json()
+        assert d["currency"] == "USD"
+        assert d["amountMinor"] == 6900
+        assert d["credits"] == 8500
 
     def test_create_order_invalid_goods(self, client):
         token, uid = _email_register(client, "ord2@example.com")
@@ -904,7 +963,7 @@ class TestOrders:
     def test_query_order_mock_settle(self, client):
         """mock 支付:查单即结算 → PAID + 积分到账。"""
         token, uid = _email_register(client, "ord3@example.com")
-        r = client.post("/billing/orders", json={"goodsId": "g_100"},
+        r = client.post("/billing/orders", json={"goodsId": "sub_19"},
                         headers={"Authorization": f"Bearer {token}"})
         order_no = r.json()["orderNo"]
         r = client.get(f"/billing/orders/{order_no}",
@@ -912,10 +971,24 @@ class TestOrders:
         assert r.status_code == 200
         d = r.json()
         assert d["status"] == "PAID"
-        assert d["credits"] == 100
-        # 查余额:100(注册) + 100(充值) = 200
+        assert d["credits"] == 1500
+        # 查余额:100(注册) + 1000(永久积分) + 500(月度赠送) = 1600
         r = client.get("/account/balance", headers={"Authorization": f"Bearer {token}"})
-        assert r.json()["credits"] == 200
+        assert r.json()["credits"] == 1600
+
+    def test_query_order_mock_settle_usd_uses_usd_credit_benefits(self, client):
+        token, uid = _email_register(client, "ord3b@example.com")
+        r = client.post("/billing/orders", json={"goodsId": "sub_99", "currency": "USD"},
+                        headers={"Authorization": f"Bearer {token}"})
+        order_no = r.json()["orderNo"]
+        r = client.get(f"/billing/orders/{order_no}",
+                       headers={"Authorization": f"Bearer {token}"})
+        assert r.status_code == 200
+        d = r.json()
+        assert d["status"] == "PAID"
+        assert d["credits"] == 8500
+        r = client.get("/account/balance", headers={"Authorization": f"Bearer {token}"})
+        assert r.json()["credits"] == 8600
 
     def test_query_order_not_found(self, client):
         token, uid = _email_register(client, "ord4@example.com")
@@ -926,7 +999,7 @@ class TestOrders:
     def test_membership_order_extends_expire(self, client):
         """购买会员商品 → member_expire_at 延长。"""
         token, uid = _email_register(client, "ord5@example.com")
-        r = client.post("/billing/orders", json={"goodsId": "m_month"},
+        r = client.post("/billing/orders", json={"goodsId": "sub_19"},
                         headers={"Authorization": f"Bearer {token}"})
         order_no = r.json()["orderNo"]
         client.get(f"/billing/orders/{order_no}",
@@ -943,7 +1016,44 @@ class TestOrders:
         assert r.status_code == 200
         items = r.json()["items"]
         assert len(items) == len(GOODS_BY_ID)
-        assert any(g["id"] == "m_month" for g in items)
+        assert any(g["id"] == "sub_19" for g in items)
+        assert next(g for g in items if g["id"] == "sub_99")["priceUsdCents"] == 6900
+        assert next(g for g in items if g["id"] == "sub_99")["usdCredits"] == 3500
+        assert next(g for g in items if g["id"] == "sub_99")["usdBonusCredits"] == 5000
+
+    def test_subscription_renew_rejects_non_mock_provider(self, client, monkeypatch):
+        """真支付模式下,公开续费接口不能直接给用户加积分/顺延会员。"""
+        token, uid = _email_register(client, "ord7@example.com")
+        with closing(db()) as c:
+            c.execute("UPDATE users SET sub_goods_id = ? WHERE user_id = ?", ("sub_19", uid))
+            c.commit()
+        monkeypatch.setattr(app_module, "PAYMENT_PROVIDER", "wechat")
+        r = client.post("/billing/subscription/renew", headers={"Authorization": f"Bearer {token}"})
+        assert r.status_code == 403
+
+    def test_create_order_pending_limit(self, client, monkeypatch):
+        """未支付订单过多时拒绝继续创建,避免刷 PENDING 脏单。"""
+        monkeypatch.setattr(app_module, "PENDING_ORDER_LIMIT", 1)
+        token, uid = _email_register(client, "ord8@example.com")
+        r = client.post("/billing/orders", json={"goodsId": "sub_19"},
+                        headers={"Authorization": f"Bearer {token}"})
+        assert r.status_code == 200
+        r = client.post("/billing/orders", json={"goodsId": "sub_19"},
+                        headers={"Authorization": f"Bearer {token}"})
+        assert r.status_code == 429
+
+    def test_create_order_rejects_unconfigured_real_payment_without_order(self, client, monkeypatch):
+        """真支付配置缺失时不创建订单。"""
+        token, uid = _email_register(client, "ord9@example.com")
+        monkeypatch.setattr(app_module, "PAYMENT_PROVIDER", "wechat")
+        monkeypatch.delenv("WECHAT_APP_ID", raising=False)
+        monkeypatch.delenv("WECHAT_PRIVATE_KEY", raising=False)
+        r = client.post("/billing/orders", json={"goodsId": "sub_19"},
+                        headers={"Authorization": f"Bearer {token}"})
+        assert r.status_code == 503
+        with closing(db()) as c:
+            n = c.execute("SELECT COUNT(*) n FROM orders WHERE user_id = ?", (uid,)).fetchone()["n"]
+        assert n == 0
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -1076,7 +1186,7 @@ class TestMembership:
 
     def test_membership_active_after_order(self, client):
         token, uid = _email_register(client, "mem2@example.com")
-        r = client.post("/billing/orders", json={"goodsId": "m_month"},
+        r = client.post("/billing/orders", json={"goodsId": "sub_19"},
                         headers={"Authorization": f"Bearer {token}"})
         order_no = r.json()["orderNo"]
         client.get(f"/billing/orders/{order_no}", headers={"Authorization": f"Bearer {token}"})
@@ -1106,13 +1216,13 @@ class TestCreditLedger:
 
     def test_order_settle_recorded_in_ledger(self, client):
         token, uid = _email_register(client, "ledger3@example.com")
-        r = client.post("/billing/orders", json={"goodsId": "g_100"},
+        r = client.post("/billing/orders", json={"goodsId": "sub_19"},
                         headers={"Authorization": f"Bearer {token}"})
         order_no = r.json()["orderNo"]
         client.get(f"/billing/orders/{order_no}", headers={"Authorization": f"Bearer {token}"})
         r = client.get("/account/credits/transactions", headers={"Authorization": f"Bearer {token}"})
         assert r.status_code == 200
-        assert any(tx["source"] == "order" and tx["delta"] == 100 for tx in r.json()["items"])
+        assert any(tx["source"] == "order" and tx["delta"] == 1000 for tx in r.json()["items"])
 
     def test_admin_adjust_recorded_in_ledger(self, client):
         token, uid = _email_register(client, "ledger4@example.com")

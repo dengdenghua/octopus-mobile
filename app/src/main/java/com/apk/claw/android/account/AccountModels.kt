@@ -39,6 +39,8 @@ data class AccountProfile(
 
 data class BalanceResult(
     val credits: Long = 0,
+    @SerializedName("paidCredits") val paidCredits: Long = 0,
+    @SerializedName("giftCredits") val giftCredits: Long = 0,
     /** Whether the user has an active monthly membership (unlocks BYO own-model). */
     @SerializedName("membershipActive") val membershipActive: Boolean = false,
     /** Membership expiry, epoch millis; 0 = not a member. */
@@ -51,6 +53,8 @@ data class Goods(
     val title: String = "",
     val credits: Long = 0,
     @SerializedName("bonusCredits") val bonusCredits: Long = 0,
+    @SerializedName("usdCredits") val usdCredits: Long = 0,
+    @SerializedName("usdBonusCredits") val usdBonusCredits: Long = 0,
     /** price in fen (1/100 元). */
     @SerializedName("priceFen") val priceFen: Long = 0,
     val tag: String? = null,
@@ -75,6 +79,8 @@ data class CreateOrderResult(
      */
     @SerializedName("payUrl") val payUrl: String? = null,
     @SerializedName("amountFen") val amountFen: Long = 0,
+    val currency: String = "CNY",
+    @SerializedName("amountMinor") val amountMinor: Long = 0,
     val credits: Long = 0,
 )
 

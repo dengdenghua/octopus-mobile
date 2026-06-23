@@ -37,6 +37,7 @@ import java.util.Locale
 class AccountActivity : BaseActivity() {
 
     private lateinit var tvCredits: TextView
+    private lateinit var tvCreditsBreakdown: TextView
     private lateinit var tvMobile: TextView
     private lateinit var tvMember: TextView
     private lateinit var llGoods: LinearLayout
@@ -63,6 +64,7 @@ class AccountActivity : BaseActivity() {
             showBackButton(true) { finish() }
         }
         tvCredits = findViewById(R.id.tvCredits)
+        tvCreditsBreakdown = findViewById(R.id.tvCreditsBreakdown)
         tvMobile = findViewById(R.id.tvMobile)
         tvMember = findViewById(R.id.tvMember)
         llGoods = findViewById(R.id.llGoods)
@@ -101,6 +103,11 @@ class AccountActivity : BaseActivity() {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 AccountRepository.state.collect { s ->
                     tvCredits.text = s.credits.toString()
+                    tvCreditsBreakdown.text = getString(
+                        R.string.account_credits_breakdown,
+                        s.paidCredits,
+                        s.giftCredits,
+                    )
                     if (s.mobile.isNotEmpty()) tvMobile.text = s.mobile
                     tvMember.text = if (s.byoUnlocked) {
                         getString(R.string.account_member_active, formatDate(s.memberExpireAt))
@@ -123,9 +130,11 @@ class AccountActivity : BaseActivity() {
         goods.forEach { g ->
             val row = layoutInflater.inflate(R.layout.item_goods, llGoods, false)
             row.findViewById<TextView>(R.id.tvGoodsTitle).text = g.title
-            val bonus = if (g.bonusCredits > 0) getString(R.string.account_goods_bonus, g.bonusCredits) else ""
+            val displayCredits = if (selectedCurrency() == "USD" && g.usdCredits > 0) g.usdCredits else g.credits
+            val displayBonus = if (selectedCurrency() == "USD" && g.usdBonusCredits > 0) g.usdBonusCredits else g.bonusCredits
+            val bonus = if (displayBonus > 0) getString(R.string.account_goods_bonus, displayBonus) else ""
             row.findViewById<TextView>(R.id.tvGoodsSub).text =
-                getString(R.string.account_goods_credits, g.credits) + bonus
+                getString(R.string.account_goods_credits, displayCredits) + bonus
             row.findViewById<KButton>(R.id.btnBuy).apply {
                 text = formatPrice(g)
                 setOnClickListener { buy(g) }
@@ -136,7 +145,7 @@ class AccountActivity : BaseActivity() {
 
     private fun buy(g: Goods) {
         lifecycleScope.launch {
-            val r = AccountRepository.createOrder(g.id)
+            val r = AccountRepository.createOrder(g.id, selectedCurrency())
             val order = r.getOrNull()
             if (order == null) {
                 toast(r.exceptionOrNull()?.message ?: getString(R.string.account_order_failed))
@@ -253,9 +262,10 @@ class AccountActivity : BaseActivity() {
         SimpleDateFormat("yyyy-MM-dd", Locale.US).format(epochMillis)
 
     /** 英文区显示美元价(priceUsdCents),其余显示人民币(priceFen)。 */
+    private fun selectedCurrency(): String = if (Locale.getDefault().language == "en") "USD" else "CNY"
+
     private fun formatPrice(g: Goods): String {
-        val english = Locale.getDefault().language == "en"
-        val (sym, cents) = if (english && g.priceUsdCents > 0) "$" to g.priceUsdCents else "¥" to g.priceFen
+        val (sym, cents) = if (selectedCurrency() == "USD" && g.priceUsdCents > 0) "$" to g.priceUsdCents else "¥" to g.priceFen
         return if (cents % 100 == 0L) sym + (cents / 100) else sym + String.format(Locale.US, "%.2f", cents / 100.0)
     }
 

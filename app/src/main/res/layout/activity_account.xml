@@ -69,6 +69,14 @@
                         android:textSize="32pt"
                         android:textStyle="bold" />
 
+                    <TextView
+                        android:id="@+id/tvCreditsBreakdown"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4pt"
+                        android:textColor="@color/colorTextSecondary"
+                        android:textSize="12pt" />
+
                     <com.apk.claw.android.widget.KButton
                         android:id="@+id/btnDailyClaim"
                         android:layout_width="wrap_content"
