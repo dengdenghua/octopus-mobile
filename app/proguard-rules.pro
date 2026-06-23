@@ -40,6 +40,15 @@
 # release 下 R8 会改名导致 token/credits 等解析成 null → 登录/积分/邀请全坏。整包保留字段名。
 -keep class com.apk.claw.android.account.** { *; }
 
+# 广场/技能中心 wire DTO：同样经 Gson 反射、字段名 == JSON 键、无 @SerializedName。
+# 不保留则 release 下字段被改名,/square/feed、/square/discovery、/config 解析为空,
+# 广场只剩本地种子数据、club 域名派生失效。整类保留字段名。
+-keep class com.apk.claw.android.ui.compose.screen.SquarePostDto { *; }
+-keep class com.apk.claw.android.ui.compose.screen.SquareFeedDto { *; }
+-keep class com.apk.claw.android.ui.compose.screen.DiscoveryPostDto { *; }
+-keep class com.apk.claw.android.ui.compose.screen.DiscoveryFeedDto { *; }
+-keep class com.apk.claw.android.ui.compose.screen.RemoteConfig$AppConfigDto { *; }
+
 # ============================================================
 # Gson
 # ============================================================
