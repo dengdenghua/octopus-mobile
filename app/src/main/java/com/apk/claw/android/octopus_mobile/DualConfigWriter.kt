@@ -43,6 +43,52 @@ class DualConfigWriter(
     /** 协程作用域 */
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    /**
+     * 禁止通过 config/sync 跨端同步的 key 集合。
+     *
+     * 安全背景：服务端可在 sync_pull_response 中下发任意 key/value，若与 runtime URL、
+     * auth token、LLM 端点/密钥、渠道密钥等共用同一 MMKV，则攻击者服务端可持续改写这些
+     * 关键凭据，把设备钉死到恶意端点。此处明确黑名单：精确匹配 + 敏感子串。
+     */
+    private val SYNC_BLOCKED_EXACT = setOf(
+        // Runtime / 母体连接
+        "DEFAULT_OCTOPUS_RPC_URL",
+        "DEFAULT_OCTOPUS_AUTH_TOKEN",
+        "KEY_OCTOPUS_RPC_URL",
+        "KEY_OCTOPUS_AUTH_TOKEN",
+        // 控制服务器 token
+        "config_server_auth_token",
+        "KEY_CONFIG_SERVER_AUTH_TOKEN",
+        // LLM / Vision
+        "KEY_LLM_API_KEY",
+        "KEY_LLM_BASE_URL",
+        "KEY_LLM_MODEL_NAME",
+        "KEY_VISION_API_KEY",
+        "KEY_VISION_BASE_URL",
+        "KEY_VISION_MODEL_NAME",
+        // 渠道密钥
+        "DEFAULT_DINGTALK_APP_KEY",
+        "DEFAULT_DINGTALK_APP_SECRET",
+        "DEFAULT_FEISHU_APP_ID",
+        "DEFAULT_FEISHU_APP_SECRET",
+        "DEFAULT_QQ_APP_ID",
+        "DEFAULT_QQ_APP_SECRET",
+        "DEFAULT_DISCORD_BOT_TOKEN",
+        "DEFAULT_TELEGRAM_BOT_TOKEN",
+        "DEFAULT_WECHAT_BOT_TOKEN",
+        "DEFAULT_WECHAT_API_BASE_URL",
+        // 安全策略开关（不能被远程改写）
+        "KEY_CHANNEL_ACL_ENABLED",
+        "KEY_REMOTE_HIGH_RISK_ALLOWED",
+        "KEY_ADVANCED_AUTOMATION_MODE",
+        "KEY_DISABLED_TOOLS",
+    )
+
+    private val SYNC_BLOCKED_SUBSTRINGS = listOf(
+        "TOKEN", "SECRET", "API_KEY", "APIKEY", "PASSWORD", "PASSWD", "PWD",
+        "CREDENTIAL", "PRIVATE_KEY", "AUTH", "_URL", "BASE_URL",
+    )
+
     init {
         // 接收远程推来的配置变更
         client.onConfigChange = { rawJson ->
@@ -58,10 +104,14 @@ class DualConfigWriter(
     fun get(key: String): String? = kv.decodeString(key, null)
 
     /**
-     * 写入配置（本地 + 异步推送远程）.
+     * 写入配置（本地 + 异步推送远程）。敏感 key 仅本地保存，不会跨端同步。
      */
     fun set(key: String, value: String) {
         kv.encode(key, value)
+        if (isSyncBlocked(key)) {
+            Log.i(tag, "sensitive key '$key' written locally but not synced")
+            return
+        }
         val newVersion = incrementVersion()
         val change = ConfigChange(key, value, newVersion, System.currentTimeMillis())
         scope.launch {
@@ -129,14 +179,16 @@ class DualConfigWriter(
      */
     suspend fun syncPush() {
         if (client.currentState() != ConnectionState.ONLINE) return
-        val changes = allKeys().map { key ->
-            ConfigChange(
-                key = key,
-                value = get(key) ?: "",
-                version = getVersion(),
-                ts = System.currentTimeMillis(),
-            )
-        }
+        val changes = allKeys()
+            .filter { !isSyncBlocked(it) }
+            .map { key ->
+                ConfigChange(
+                    key = key,
+                    value = get(key) ?: "",
+                    version = getVersion(),
+                    ts = System.currentTimeMillis(),
+                )
+            }
         if (changes.isEmpty()) return
         pushAll(changes)
     }
@@ -216,6 +268,10 @@ class DualConfigWriter(
             var appliedCount = 0
 
             for (change in changes) {
+                if (isSyncBlocked(change.key)) {
+                    Log.w(tag, "blocked remote config change for sensitive key '${change.key}'")
+                    continue
+                }
                 // 冲突解决：remote_version > local_version → 以远程为准
                 if (change.version > localVersion) {
                     kv.encode(change.key, change.value)
@@ -241,6 +297,13 @@ class DualConfigWriter(
         val newVersion = getVersion() + 1
         kv.encode(configVersionKey, newVersion)
         return newVersion
+    }
+
+    /** 判断 key 是否应被阻止跨端同步。 */
+    private fun isSyncBlocked(key: String): Boolean {
+        if (key in SYNC_BLOCKED_EXACT) return true
+        val upper = key.uppercase()
+        return SYNC_BLOCKED_SUBSTRINGS.any { upper.contains(it) }
     }
 }
 

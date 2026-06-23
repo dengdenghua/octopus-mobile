@@ -39,19 +39,38 @@ public class SystemKeyTool extends BaseTool {
 
     @Override
     public List<ToolParameter> getParameters() {
-        return Collections.singletonList(
+        return Arrays.asList(
                 new ToolParameter(
                         "key",
                         "string",
                         "The system key to press. Must be one of: back, home, recent_apps, notifications, collapse_notifications, lock_screen, unlock_screen.",
-                        true
+                        false
+                ),
+                new ToolParameter(
+                        "key_code",
+                        "integer",
+                        "Optional raw Android KeyEvent keycode (e.g. 4 for BACK, 3 for HOME). Used when 'key' is not provided.",
+                        false
                 )
         );
     }
 
     @Override
     public ToolResult execute(Map<String, Object> params) {
-        String key = requireString(params, "key");
+        String key = optionalString(params, "key", "");
+        int keyCode = optionalInt(params, "key_code", -1);
+
+        // 若提供原始 key_code，映射到命名按键（远程目标暂不支持原始 keycode）
+        if (key.isEmpty() && keyCode >= 0) {
+            key = mapKeyCodeToName(keyCode);
+            if (key.isEmpty()) {
+                return ToolResult.error("Unsupported key_code: " + keyCode);
+            }
+        }
+
+        if (key.isEmpty()) {
+            return ToolResult.error("Missing 'key' or 'key_code' parameter");
+        }
 
         // 远程目标：转发支持的导航键（back/home/recent_apps）
         DeviceInfo remote = ControlTarget.remoteTarget();
@@ -111,5 +130,23 @@ public class SystemKeyTool extends BaseTool {
 
         return success ? ToolResult.success(successMsg)
                 : ToolResult.error("Failed to execute " + key);
+    }
+
+    /**
+     * 将 Android KeyEvent keycode 映射到本工具支持的命名按键。
+     */
+    private String mapKeyCodeToName(int keyCode) {
+        switch (keyCode) {
+            case android.view.KeyEvent.KEYCODE_BACK:
+                return "back";
+            case android.view.KeyEvent.KEYCODE_HOME:
+                return "home";
+            case android.view.KeyEvent.KEYCODE_APP_SWITCH:
+                return "recent_apps";
+            case android.view.KeyEvent.KEYCODE_NOTIFICATION:
+                return "notifications";
+            default:
+                return "";
+        }
     }
 }

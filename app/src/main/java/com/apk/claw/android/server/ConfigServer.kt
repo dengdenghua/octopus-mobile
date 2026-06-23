@@ -23,8 +23,9 @@ import java.security.SecureRandom
  */
 class ConfigServer(
     private val context: Context,
-    port: Int = PORT
-) : NanoHTTPD(port) {
+    port: Int = PORT,
+    hostname: String? = null
+) : NanoHTTPD(hostname, port) {
 
     companion object {
         private const val TAG = "ConfigServer"
@@ -618,6 +619,14 @@ class ConfigServer(
      * { "action": "home" }
      * ```
      */
+
+    /** 在不可信来源上下文中执行工具，供 LAN HTTP 控制输入统一调用。 */
+    private fun runTool(toolName: String, params: Map<String, Any>): ToolResult {
+        return ToolRegistry.withUntrustedSource {
+            ToolRegistry.executeTool(toolName, params)
+        }
+    }
+
     private fun handleControlInput(session: IHTTPSession): Response {
         val startMs = System.currentTimeMillis()
         val params = routeContext.readJsonBody(session)   // 修正中文乱码(text 输入)
@@ -631,59 +640,58 @@ class ConfigServer(
                 ))
             }
 
-        val service = com.apk.claw.android.service.ClawAccessibilityService.getInstance()
-            ?: run {
-                routeContext.recordRemoteAccess(session, "control_input", false, "action=$action,service=unavailable", startMs)
-                return routeContext.corsResponse(newFixedLengthResponse(
-                    Response.Status.SERVICE_UNAVAILABLE, MIME_JSON,
-                    """{"code":-1,"message":"无障碍服务未运行"}"""
-                ))
-            }
-
-        val success = when (action) {
-            "tap" -> {
-                val x = params.get("x")?.asInt ?: 0
-                val y = params.get("y")?.asInt ?: 0
-                service.performTap(x, y)
-            }
-            "swipe" -> {
-                val x1 = params.get("x1")?.asInt ?: 0
-                val y1 = params.get("y1")?.asInt ?: 0
-                val x2 = params.get("x2")?.asInt ?: 0
-                val y2 = params.get("y2")?.asInt ?: 0
-                val duration = params.get("duration")?.asLong ?: 300L
-                service.performSwipe(x1, y1, x2, y2, duration)
-            }
-            "key" -> {
-                val keyCode = params.get("keyCode")?.asInt ?: 0
-                service.sendKeyEvent(keyCode)
-            }
-            "text" -> {
-                // 通过 ToolRegistry 的 input_text 工具实现
-                val text = params.get("text")?.asString ?: ""
-                val result = ToolRegistry.executeTool("input_text", mapOf("text" to text))
-                result.isSuccess
-            }
-            "long_press" -> {
-                val x = params.get("x")?.asInt ?: 0
-                val y = params.get("y")?.asInt ?: 0
-                val duration = params.get("duration")?.asLong ?: 600L
-                service.performLongPress(x, y, duration)
-            }
-            "open_app" -> {
-                val pkg = params.get("package")?.asString ?: ""
-                service.openApp(pkg)
-            }
-            "back" -> service.pressBack()
-            "home" -> service.pressHome()
-            "recent" -> service.openRecentApps()
-            "notifications" -> service.expandNotifications()
-            else -> false
+        // LAN HTTP 控制输入统一走 ToolRegistry，标记为不可信来源，使高危/中危工具受来源闸门、
+        // 断路器、审计日志约束，避免直接调用 AccessibilityService 绕过所有安全层。
+        val toolResult: ToolResult = when (action) {
+            "tap" -> runTool(
+                "tap",
+                mapOf(
+                    "x" to (params.get("x")?.asInt ?: 0),
+                    "y" to (params.get("y")?.asInt ?: 0),
+                )
+            )
+            "swipe" -> runTool(
+                "swipe",
+                mapOf(
+                    "start_x" to (params.get("x1")?.asInt ?: 0),
+                    "start_y" to (params.get("y1")?.asInt ?: 0),
+                    "end_x" to (params.get("x2")?.asInt ?: 0),
+                    "end_y" to (params.get("y2")?.asInt ?: 0),
+                    "duration_ms" to (params.get("duration")?.asLong ?: 300L),
+                )
+            )
+            "key" -> runTool(
+                "system_key",
+                mapOf("key_code" to (params.get("keyCode")?.asInt ?: 0))
+            )
+            "text" -> runTool(
+                "input_text",
+                mapOf("text" to (params.get("text")?.asString ?: ""))
+            )
+            "long_press" -> runTool(
+                "long_press",
+                mapOf(
+                    "x" to (params.get("x")?.asInt ?: 0),
+                    "y" to (params.get("y")?.asInt ?: 0),
+                    "duration_ms" to (params.get("duration")?.asLong ?: 600L),
+                )
+            )
+            "open_app" -> runTool(
+                "open_app",
+                mapOf("package_name" to (params.get("package")?.asString ?: ""))
+            )
+            "back" -> runTool("system_key", mapOf("key" to "back"))
+            "home" -> runTool("system_key", mapOf("key" to "home"))
+            "recent" -> runTool("system_key", mapOf("key" to "recent_apps"))
+            "notifications" -> runTool("system_key", mapOf("key" to "notifications"))
+            else -> ToolResult.error("Unknown action: $action")
         }
 
+        val success = toolResult.isSuccess
+        val message = if (success) "操作已执行" else "操作失败: $action (${toolResult.error})"
         val json = gson.toJson(mapOf(
             "code" to if (success) 0 else -1,
-            "message" to if (success) "操作已执行" else "操作失败: $action"
+            "message" to message
         ))
         val safeParams = ToolRiskPolicy.summarizeParams(routeContext.jsonToSafeMap(params, setOf("text")))
         routeContext.recordRemoteAccess(session, "control_input", success, "action=$action,params=$safeParams", startMs)
