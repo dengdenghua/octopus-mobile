@@ -225,6 +225,7 @@
     <string name="agent_task_completed">任务完成</string>
     <string name="agent_task_cancel">任务取消</string>
     <string name="agent_api_call_failed">AI 服务调用失败: %s</string>
+    <string name="agent_empty_response">模型暂时无响应（疑似上游服务波动）</string>
     <string name="agent_max_iterations">在未完成任务的情况下达到了最大迭代次数 (%d)</string>
 
     <!-- 文件工具 -->
@@ -837,6 +838,7 @@
     <string name="account_code_label">验证码</string>
     <string name="account_code_hint">请输入验证码</string>
     <string name="account_send_code">获取验证码</string>
+    <string name="account_sending">发送中…</string>
     <string name="account_resend_in">%1$d 秒后重发</string>
     <string name="account_code_sent">验证码已发送</string>
     <string name="account_mock_code_filled">Mock 验证码已自动填入：%1$s</string>
@@ -852,6 +854,8 @@
     <string name="account_recharge_title">充值套餐</string>
     <string name="account_goods_credits">%1$d 积分</string>
     <string name="account_goods_bonus">（赠 %1$d）</string>
+    <string name="account_goods_sub_subscription">永久 %1$d · 每月赠送 %2$d（月底清零）· 含自带模型</string>
+    <string name="account_per_month_suffix">/月</string>
     <string name="account_logout">退出登录</string>
     <string name="account_order_failed">下单失败</string>
     <string name="account_pay_opened">已打开收银台，请完成支付</string>
