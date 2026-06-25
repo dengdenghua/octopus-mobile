@@ -3,6 +3,7 @@ package com.apk.claw.android.octopus_mobile.browser
 import android.content.Context
 import android.graphics.Bitmap
 import android.os.Build
+import com.apk.claw.android.BuildConfig
 import android.util.Base64
 import android.util.Log
 import android.view.View
@@ -188,7 +189,8 @@ class GeckoViewEngine : BrowserEngine {
     private fun configureRuntime(runtime: GeckoRuntime) {
         val settings = runtime.settings
         // GeckoView 125 GeckoRuntimeSettings 确认存在的属性
-        settings.remoteDebuggingEnabled = true
+        // remoteDebuggingEnabled 仅在 DEBUG 构建开启，避免 release 设备被远程调试 WebView
+        settings.remoteDebuggingEnabled = BuildConfig.DEBUG
         // 开启扩展 Web API：AMO 页面的「Add to Firefox」才会路由到下面的安装委托。默认关闭。
         runCatching { settings.extensionsWebAPIEnabled = true }
 

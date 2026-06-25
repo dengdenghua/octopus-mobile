@@ -10,6 +10,9 @@ import com.apk.claw.android.octopus_mobile.safety.GuardrailDecision
 import com.apk.claw.android.octopus_mobile.safety.GuardrailAction
 import com.apk.claw.android.octopus_mobile.safety.ToolRiskPolicy
 import com.apk.claw.android.octopus_mobile.safety.CircuitBreaker
+import com.apk.claw.android.octopus_mobile.safety.PermissionModeManager
+import com.apk.claw.android.octopus_mobile.safety.PermissionPolicy
+import com.apk.claw.android.octopus_mobile.safety.ApprovalFlow
 import com.apk.claw.android.octopus_mobile.ToolAuditLog
 import com.apk.claw.android.octopus_mobile.evolution.TurnScorer
 import com.apk.claw.android.octopus_mobile.nerves.EventBus
@@ -44,6 +47,10 @@ object ToolRegistry {
     /** 断路器（按工具维度熔断，防止持续失败的工具拖垮系统） */
     @Volatile
     var circuitBreaker: CircuitBreaker? = null
+
+    /** Android Context（用于审批弹窗，由 Application 或 Activity 注入） */
+    @Volatile
+    var appContext: android.content.Context? = null
 
     // ── 来源信任闸门(R2/R3/R12) ──
     // 标记一段调用来自"不可信来源"：远程母体 WS 的 tool/execute、LAN HTTP debug execute、
@@ -104,6 +111,7 @@ object ToolRegistry {
     private fun registerCommonTools() {
         register(GetScreenInfoTool())
         register(LookAtScreenTool())
+        register(VisionMarkersTool())
         register(FindNodeInfoTool())
         register(InputTextTool())
         register(SystemKeyTool())
@@ -169,6 +177,9 @@ object ToolRegistry {
 
         // 100 行扩展示例工具（EXTENDING.md）
         HelloWorldTools.registerAll()
+
+        // Echo Universe 工具：让 agent 感知并影响 Echo 虚拟世界
+        EchoUniverseTools.registerAll()
     }
 
     private fun registerBrowserTools() {
@@ -269,27 +280,52 @@ object ToolRegistry {
             }
         }
 
-        // ── 高危工具来源闸门(R2/R12)：远程/自动来源调用 HIGH_RISK 工具需确认，默认拦截 ──
-        // 「高级自动化模式」开启时完全放行（专用自动化设备满血）。
-        if (!com.apk.claw.android.utils.KVUtils.isAdvancedAutomationMode()
-            && isUntrustedSource() && ToolRiskPolicy.riskOf(name) == ToolRiskPolicy.RISK_HIGH) {
-            val approved = highRiskConfirmer?.invoke(name, params)
-                ?: com.apk.claw.android.utils.KVUtils.isRemoteHighRiskAllowed()
-            if (!approved) {
-                eventBus?.publish(EventBus.ToolBlockedEvent(name, "high_risk_untrusted", "policy"))
-                return audited(
-                    ToolResult.error("高危工具「$name」来自远程或自动触发来源，已被安全策略拦截（需用户确认，或在设置中显式允许远程高危调用）。"),
-                    blockedBy = "policy",
-                )
+        // ── 权限策略（统一读取 PermissionModeManager）──
+        val policy = PermissionModeManager.getCurrentPolicy()
+
+        // ── 高危工具来源闸门 + 审批流程 ──
+        // APPROVAL 模式：不可信来源调高危工具 → 弹窗审批
+        // FULL_POWER 模式：trustAllSources=true，跳过来源闸门，高危工具自动放行
+        val riskLevel = ToolRiskPolicy.riskOf(name)
+        val isHighRisk = riskLevel == ToolRiskPolicy.RISK_HIGH
+        val needsSourceGate = !policy.trustAllSources && isUntrustedSource() && isHighRisk
+
+        if (needsSourceGate) {
+            when (policy.highRiskAction) {
+                PermissionPolicy.RiskAction.BLOCK -> {
+                    eventBus?.publish(EventBus.ToolBlockedEvent(name, "high_risk_blocked", "policy"))
+                    return audited(
+                        ToolResult.error("高危工具「$name」被安全策略拦截（当前为审批模式）。"),
+                        blockedBy = "policy",
+                    )
+                }
+                PermissionPolicy.RiskAction.CONFIRM -> {
+                    // 弹窗审批（阻塞当前线程，等待用户确认）
+                    val riskDesc = "高危工具 · 不可信来源(${if (isUntrustedSource()) "远程/自动" else "本地"})"
+                    val approved = ApprovalFlow.requestApproval(appContext, name, params, riskDesc)
+                    if (!approved) {
+                        eventBus?.publish(EventBus.ToolBlockedEvent(name, "approval_denied", "policy"))
+                        return audited(
+                            ToolResult.error("高危工具「$name」被用户拒绝或审批超时。"),
+                            blockedBy = "approval",
+                        )
+                    }
+                }
+                PermissionPolicy.RiskAction.ALLOW -> {
+                    // 放行（不弹窗）
+                }
             }
         }
 
         // ── 安全门检查（PII/Secret 扫描）──
-        safetyGate?.let { gate ->
-            val verdict = gate.checkToolCall(name, params)
-            if (verdict.isBlocked) {
-                eventBus?.publish(EventBus.ToolBlockedEvent(name, verdict.reason, "safety"))
-                return audited(ToolResult.error("安全拦截: ${verdict.reason}"), blockedBy = "safety")
+        // FULL_POWER 模式下 safetyGateEnabled=false，跳过宪法法官
+        if (policy.safetyGateEnabled) {
+            safetyGate?.let { gate ->
+                val verdict = gate.checkToolCall(name, params)
+                if (verdict.isBlocked) {
+                    eventBus?.publish(EventBus.ToolBlockedEvent(name, verdict.reason, "safety"))
+                    return audited(ToolResult.error("安全拦截: ${verdict.reason}"), blockedBy = "safety")
+                }
             }
         }
 

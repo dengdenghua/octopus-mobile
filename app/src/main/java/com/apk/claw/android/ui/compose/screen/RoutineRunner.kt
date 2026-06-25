@@ -21,7 +21,16 @@ object RoutineRunner {
     /** 是否具备执行条件（已配置模型）。无障碍由 Agent 自身预检兜底。 */
     fun canRun(): Boolean = ChatAgentBridge.isConfigured()
 
-    fun run(ctx: Context, r: RoutineStore.Routine): String {
+    fun run(ctx: Context, r: RoutineStore.Routine, actualPrompt: String? = null): String {
+        // 参数化：带 {变量} 的例程，用本次实际指令从模板抽出变量值；普通例程 vars 为空。
+        val vars = if (r.isParameterized && !actualPrompt.isNullOrBlank()) {
+            com.apk.claw.android.octopus_mobile.RoutineVariables.extract(r.prompt, actualPrompt)
+        } else emptyMap()
+        val runPrompt = when {
+            vars.isNotEmpty() -> com.apk.claw.android.octopus_mobile.RoutineVariables.substitute(r.prompt, vars)
+            !actualPrompt.isNullOrBlank() -> actualPrompt
+            else -> r.prompt
+        }
         // 1. 恢复目标设备
         var note = ""
         if (r.targetId.isBlank() || r.targetId == "local") {
@@ -49,7 +58,7 @@ object RoutineRunner {
         // FastReplay 含 sleep，且 ChatAgentBridge.run 可能从广播接收器（主线程）调用 —— 一律下到后台线程
         Thread {
             if (hasFastPath && ClawAccessibilityService.isRunning()) {
-                val outcome = runCatching { FastReplay.tryReplay(r.id, r.prompt) }.getOrNull()
+                val outcome = runCatching { FastReplay.tryReplay(r.id, r.prompt, vars) }.getOrNull()
                 if (outcome == FastReplay.Outcome.SUCCESS) {
                     XLog.i("RoutineRunner", "fast-path success for ${r.id}")
                     return@Thread
@@ -58,7 +67,7 @@ object RoutineRunner {
             }
             // 回退 / 首次：完整 Agent（本机目标顺带录制，供下次快路径）
             ChatAgentBridge.run(
-                prompt = r.prompt,
+                prompt = runPrompt,
                 onTool = { _, _, _, _ -> },
                 onText = { },
                 onDone = { },

@@ -31,8 +31,12 @@ object RoutineStore {
         val scheduleHour: Int? = null,
         val scheduleMinute: Int? = null,
         val scheduleDaily: Boolean = false,
+        // 参数化：prompt 里用 {变量} 占位时，这里记变量名（见 [RoutineVariables]）。
+        // 运行时按实际指令抽值，FastReplay 替换后重放 → 一条示范复用到不同输入。
+        val variables: List<String> = emptyList(),
     ) {
         val isScheduled: Boolean get() = scheduleHour != null && scheduleMinute != null
+        val isParameterized: Boolean get() = variables.isNotEmpty()
     }
 
     fun all(): List<Routine> {

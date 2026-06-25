@@ -668,7 +668,30 @@ class DefaultAgentService : AgentService {
             return ToolHandleResult.CONTINUE
         }
 
-        val result = execTool(toolName, params)
+        // ③ 任务执行中清掉噪声插屏（广告/"跳过"/"以后再说"类），让后续动作落在真页面上。
+        //    只关明确的噪声按钮、不碰权限/确认框，不影响用户正常用机。
+        runCatching { com.apk.claw.android.octopus_mobile.PopupDetector.tryDismiss() }
+
+        // ② UI 动作前后看屏：动作若没改变屏幕，多半是空操作（点错/被弹窗遮挡/目标不存在）。
+        //    给观察追加一句提示，逼 Agent 换招而不是重复同一无效动作。廉价（纯无障碍指纹，无 VLM）。
+        val uiAction = toolName in setOf("tap", "long_press", "swipe", "input_text")
+        val beforeState = if (uiAction) {
+            runCatching { com.apk.claw.android.navigation.StateDetector.detectCurrentState() }.getOrNull()
+        } else null
+
+        val rawResult = execTool(toolName, params)
+        val result = if (uiAction && rawResult.isSuccess && beforeState != null) {
+            val after = runCatching { com.apk.claw.android.navigation.StateDetector.detectCurrentState() }.getOrNull()
+            val unchanged = after != null &&
+                com.apk.claw.android.navigation.StateDetector.similarity(beforeState, after) >= 0.97
+            if (unchanged) {
+                ToolResult.success(
+                    (rawResult.data ?: "") +
+                        "\n[校验] 屏幕未发生变化——此操作可能没生效（目标不存在 / 被弹窗遮挡 / 点到空白）。" +
+                        "请先 get_screen_info 或 look_at_screen 确认目标，再换一种方式（如 tap_by_vision / scroll_to_find）重试，不要重复同一动作。",
+                )
+            } else rawResult
+        } else rawResult
         val paramsString = if (params.isEmpty()) "" else params.toString()
         callback.onToolResult(iterations, toolName, displayName, paramsString, result)
 

@@ -30,7 +30,11 @@ object FastReplay {
 
     enum class Outcome { SUCCESS, FELL_BACK, NO_CACHE, UNSUPPORTED }
 
-    fun tryReplay(routineId: String, prompt: String): Outcome {
+    fun tryReplay(
+        routineId: String,
+        prompt: String,
+        variables: Map<String, String> = emptyMap(),
+    ): Outcome {
         if (ControlTarget.isRemote()) return Outcome.UNSUPPORTED
         val svc = ClawAccessibilityService.getInstance() ?: return Outcome.UNSUPPORTED
         if (!ClawAccessibilityService.isRunning()) return Outcome.UNSUPPORTED
@@ -38,7 +42,12 @@ object FastReplay {
         if (seq.steps.isEmpty() || seq.steps.size > MAX_STEPS) return Outcome.NO_CACHE
 
         val reg = ToolRegistry.getInstance()
-        for ((i, step) in seq.steps.withIndex()) {
+        for ((i, rawStep) in seq.steps.withIndex()) {
+            // 参数化:把缓存步骤里的 {变量} 替换成本次实际值（args + 锚点文字都替）。
+            val step = if (variables.isEmpty()) rawStep else rawStep.copy(
+                argsJson = com.apk.claw.android.octopus_mobile.RoutineVariables.substitute(rawStep.argsJson, variables),
+                anchorText = com.apk.claw.android.octopus_mobile.RoutineVariables.substitute(rawStep.anchorText, variables),
+            )
             val ok = runCatching { replayStep(svc, reg, step) }.getOrDefault(false)
             if (!ok) {
                 XLog.i(TAG, "step $i (${step.tool}) mismatch → fall back to agent")
