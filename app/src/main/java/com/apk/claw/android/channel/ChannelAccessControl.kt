@@ -15,8 +15,8 @@ import com.apk.claw.android.utils.XLog
  *  - 每个通道维护一份授权发送者白名单。
  *  - **TOFU（Trust On First Use）**：白名单为空时，首个发送者被自动绑定为该通道 owner 并放行；
  *    其后非白名单发送者一律拒绝。这样不破坏 owner 的首次使用，又能挡住其后的攻击者。
- *  - 当通道无法提供发送者标识（senderId 为空）时放行但告警——避免误伤不上报发送者的通道，
- *    宁可记录也不静默拒绝合法用户。
+ *  - 当通道无法提供发送者标识（senderId 为空）时**默认拒绝**——所有已实现通道均能提供 senderId，
+ *    null 表示异常状态或未鉴权通道，不应放行。若确有不上报 senderId 的合法通道，可在设置中关闭 ACL。
  *
  * 重新配对：在设置里清空某通道白名单（[KVUtils.clearChannelAllowedSenders]）即可让下一个
  * 发送者重新成为 owner。
@@ -36,9 +36,10 @@ object ChannelAccessControl {
         if (!KVUtils.isChannelAclEnabled()) return Decision.ALLOW
 
         if (senderId.isNullOrBlank()) {
-            // 无法识别发送者：无法鉴权，放行但告警（避免误伤）。
-            XLog.w(TAG, "[${channel.displayName}] 无法识别发送者，放行但无法鉴权")
-            return Decision.ALLOW
+            // 无法识别发送者：默认拒绝（fail-closed）。所有已实现通道均能提供 senderId，
+            // null 表示异常状态或未鉴权通道。若确有不上报 senderId 的合法通道，可在设置中关闭 ACL。
+            XLog.w(TAG, "[${channel.displayName}] 无法识别发送者，拒绝（fail-closed）")
+            return Decision.DENY
         }
 
         val allowed = KVUtils.getChannelAllowedSenders(channel.name)

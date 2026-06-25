@@ -188,22 +188,12 @@ class PluginManager(private val context: Context) {
             return null
         }
 
-        val pluginDir = File(context.filesDir, "$FILES_PLUGIN_DIR/${manifest.id}")
-        if (!pluginDir.exists()) pluginDir.mkdirs()
-
-        // 复制文件
-        dexFile.copyTo(File(pluginDir, manifest.dexFile), overwrite = true)
-        manifestFile.copyTo(File(pluginDir, "manifest.json"), overwrite = true)
-
-        val info = PluginInfo(
-            manifest = manifest,
-            source = "files",
-            dexPath = File(pluginDir, manifest.dexFile).absolutePath
-        )
-
-        discoveredPlugins[manifest.id] = info
-        Log.i(TAG, "Plugin installed: ${manifest.name} v${manifest.version}")
-        return info
+        // 前置检查:外部安装的 dex 会被 loadAndRegister 拒绝加载(source != "assets"),
+        // 提前返回避免残留 dex 文件被未来漏洞利用。
+        // (loadAndRegister 中的 fail-closed 门控:只信任随签名 APK 打包的 assets 插件)
+        Log.w(TAG, "installFromFile: external plugin dex will be rejected by loadAndRegister "
+            + "(source='files' != 'assets'). Skipping copy to avoid residual dex.")
+        return null
     }
 
     /**

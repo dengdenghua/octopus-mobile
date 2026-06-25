@@ -143,7 +143,9 @@ object ShizukuShellService {
             unquoted.contains("||") ||
             unquoted.contains("`") ||
             unquoted.contains("$(") ||
-            unquoted.contains("\n")
+            unquoted.contains("\${") ||  // 花括号变量扩展,不会出现在合法命令中
+            unquoted.contains("\n") ||
+            unquoted.contains("\r")
     }
 
     /**
@@ -818,8 +820,9 @@ object ShizukuShellService {
             return "Error: invalid path"
         }
         if (!INT_REGEX.matches(minSizeMB.toString())) return null
-        // 先找出大于 minSize 的文件，按大小排序找重复
-        val cmd = """find "$basePath" -type f -size +${minSizeMB}M -exec ls -l {} \; 2>/dev/null | awk '{print \$5, \$9}' | sort -n | uniq -d -w 20 | head -n 30"""
+        // 用 sanitizeShellArg 转义 basePath,避免字符串插值(纵深防御)
+        val safeBase = sanitizeShellArg(basePath)
+        val cmd = "find $safeBase -type f -size +${minSizeMB}M -exec ls -l {} \\; 2>/dev/null | awk '{print \$5, \$9}' | sort -n | uniq -d -w 20 | head -n 30"
         val result = exec(cmd) ?: return null
         return result.stdout.trim().ifEmpty { "No duplicate files found." }
     }

@@ -1,8 +1,16 @@
 package com.apk.claw.android.navigation
 
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
+import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
 import android.view.KeyEvent
+import androidx.core.app.NotificationCompat
 import com.apk.claw.android.service.ClawAccessibilityService
 import com.apk.claw.android.utils.XLog
 
@@ -19,13 +27,16 @@ import com.apk.claw.android.utils.XLog
  * - 主动模式（explicit）：用户说"开始录制"后开始，说"停止"后保存
  */
 class NavigationRecorder(
-    private val graph: NavigationGraph
+    private val graph: NavigationGraph,
+    private val context: Context? = null
 ) {
 
     companion object {
         private const val TAG = "NavigationRecorder"
         private const val UI_SETTLE_DELAY_MS = 500L  // 按键后等待 UI 稳定的时间
         private const val MAX_RECORDING_STEPS = 200   // 单次录制最大步数
+        private const val CHANNEL_ID = "nav_recorder"
+        private const val NOTIFICATION_ID = 0x4E41    // "NA"
     }
 
     private var recording = false
@@ -97,8 +108,10 @@ class NavigationRecorder(
         if (enabled) {
             lastStateId = null
             XLog.i(TAG, "Passive learning enabled")
+            showPassiveNotification()
         } else {
             XLog.i(TAG, "Passive learning disabled")
+            cancelPassiveNotification()
         }
     }
 
@@ -111,6 +124,44 @@ class NavigationRecorder(
     fun destroy() {
         handler.removeCallbacksAndMessages(null)
         handlerThread.quitSafely()
+        cancelPassiveNotification()
+    }
+
+    /** 被动录制时显示常驻通知,告知用户导航录制正在后台运行。 */
+    private fun showPassiveNotification() {
+        val ctx = context ?: return
+        try {
+            val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val channel = NotificationChannel(
+                    CHANNEL_ID, "导航录制", NotificationManager.IMPORTANCE_LOW
+                ).apply {
+                    description = "被动导航录制运行状态"
+                    setShowBadge(false)
+                }
+                nm.createNotificationChannel(channel)
+            }
+            val notif = NotificationCompat.Builder(ctx, CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.ic_menu_compass)
+                .setContentTitle("导航录制运行中")
+                .setContentText("正在后台学习你的操作路径")
+                .setOngoing(true)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .build()
+            nm.notify(NOTIFICATION_ID, notif)
+        } catch (e: Exception) {
+            XLog.w(TAG, "Failed to show passive notification: ${e.message}")
+        }
+    }
+
+    private fun cancelPassiveNotification() {
+        val ctx = context ?: return
+        try {
+            val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            nm.cancel(NOTIFICATION_ID)
+        } catch (e: Exception) {
+            // ignore
+        }
     }
 
     /**

@@ -91,6 +91,8 @@ UNLIMITED_EMAILS = {s.strip().lower() for s in os.environ.get("UNLIMITED_EMAILS"
 SIGNUP_BONUS = int(os.environ.get("SIGNUP_BONUS", "100"))
 DAILY_BONUS = int(os.environ.get("DAILY_BONUS", "20"))
 MEMBERSHIP_DAYS = int(os.environ.get("MEMBERSHIP_DAYS", "30"))
+# 会员总天数上限(防 mock 模式或异常重复续费导致会员期无限增长)。默认 365 天。
+MEMBER_MAX_DAYS = int(os.environ.get("MEMBER_MAX_DAYS", "365"))
 # 内测:每账号累计「免费积分」上限(注册礼+每日领+mock充值+邀请 都算,发满即停;真实付费不受限)
 FREE_CAP = int(os.environ.get("FREE_CAP", "3000"))
 # 每日免费额度:每个自然日赠送的积分,用完才扣余额。0 表示关闭。
@@ -111,6 +113,25 @@ if not _jwt_secret_env:
     print("[WARN] JWT_SECRET 未设置,已生成一次性随机密钥(重启后失效)。生产环境请显式配置 JWT_SECRET。", flush=True)
 JWT_SECRET = _jwt_secret_env
 JWT_EXPIRE_SECONDS = int(os.environ.get("JWT_EXPIRE_SECONDS", str(30 * 24 * 3600)))
+
+# 设备 token HMAC 密钥:与 JWT_SECRET 分离,避免 JWT_SECRET 泄漏时攻击者可同时伪造用户 JWT 和设备 token。
+# 未显式配置时回退到 JWT_SECRET 以保持向后兼容(已部署实例升级后旧 deviceToken 仍有效)。
+DEVICE_TOKEN_SECRET = os.environ.get("DEVICE_TOKEN_SECRET", "") or JWT_SECRET
+
+# WebSocket Origin 白名单(防 CSWSH)。逗号分隔,如 "https://app.octoapk.com,https://club.octoapk.com"。
+# 留空则允许所有 Origin(仅适合开发环境;生产环境务必配置)。
+WS_ALLOWED_ORIGINS = {
+    o.strip().rstrip("/").lower()
+    for o in os.environ.get("WS_ALLOWED_ORIGINS", "").split(",")
+    if o.strip()
+}
+
+
+def _is_allowed_origin(origin: str) -> bool:
+    """检查 WebSocket Origin 是否在白名单中。空白名单时允许所有(开发模式)。"""
+    if not WS_ALLOWED_ORIGINS:
+        return True
+    return origin.strip().rstrip("/").lower() in WS_ALLOWED_ORIGINS
 
 # 第三方辅助工具下载镜像。生产把 Shizuku 官方 APK 放到 SHIZUKU_APK_PATH 指向的位置;
 # 没有配置文件时接口会返回 available=false, App 可提示稍后重试或打开官方文档。
@@ -461,7 +482,7 @@ def user_from_bearer_token(token: str) -> sqlite3.Row | None:
 
 
 def _remote_secret_hash(secret: str) -> str:
-    return hmac.new(JWT_SECRET.encode("utf-8"), secret.encode("utf-8"), hashlib.sha256).hexdigest()
+    return hmac.new(DEVICE_TOKEN_SECRET.encode("utf-8"), secret.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
 def _new_pair_code(c: sqlite3.Connection) -> str:
@@ -946,10 +967,14 @@ def remote_pair_claim(body: dict[str, Any], u: sqlite3.Row = Depends(actor)) -> 
             raise HTTPException(status_code=400, detail="配对码无效或已过期")
         if rec["user_id"] != u["user_id"]:
             raise HTTPException(status_code=403, detail="配对码不属于当前账号")
+        # IDOR 防护:若 deviceId 已存在且属于其他用户,禁止夺取所有权
+        existing = c.execute("SELECT user_id FROM remote_devices WHERE device_id = ?", (device_id,)).fetchone()
+        if existing and existing["user_id"] != u["user_id"]:
+            raise HTTPException(status_code=409, detail="该设备已绑定到其他账号,无法夺取所有权")
         c.execute(
             "INSERT INTO remote_devices(device_id, user_id, device_name, token_hash, created_at, last_seen, revoked) "
             "VALUES(?,?,?,?,?,?,0) "
-            "ON CONFLICT(device_id) DO UPDATE SET user_id=excluded.user_id, device_name=excluded.device_name, "
+            "ON CONFLICT(device_id) DO UPDATE SET device_name=excluded.device_name, "
             "token_hash=excluded.token_hash, last_seen=excluded.last_seen, revoked=0",
             (device_id, u["user_id"], device_name, _remote_secret_hash(secret), now_ms(), now_ms()),
         )
@@ -1053,6 +1078,13 @@ async def remote_device_ws(ws: WebSocket, device_id: str = "", device_token: str
 
 @app.websocket("/remote/console/ws")
 async def remote_console_ws(ws: WebSocket, device_id: str = "", token: str = "") -> None:
+    # Origin 校验防 CSWSH(跨站 WebSocket 劫持):浏览器会自动携带 Origin 头,
+    # 恶意网站无法伪造。仅允许配置的 CORS 域名或同源请求。
+    origin = ws.headers.get("origin", "")
+    if origin and not _is_allowed_origin(origin):
+        await ws.accept()
+        await ws.close(code=4003, reason="origin not allowed")
+        return
     await ws.accept()
     u = user_from_bearer_token(token)
     row = _load_remote_device(device_id)
@@ -1094,11 +1126,15 @@ def device_register(body: dict[str, Any], u: sqlite3.Row = Depends(actor)) -> di
     device_model = str(body.get("deviceModel", "")).strip()[:64]
     secret = "dt_" + secrets.token_urlsafe(32)
     with closing(db()) as c:
+        # IDOR 防护:若 deviceId 已存在且属于其他用户,禁止夺取所有权
+        existing = c.execute("SELECT user_id FROM remote_devices WHERE device_id = ?", (device_id,)).fetchone()
+        if existing and existing["user_id"] != u["user_id"]:
+            raise HTTPException(status_code=409, detail="该设备已绑定到其他账号,无法夺取所有权")
         c.execute(
             "INSERT INTO remote_devices(device_id, user_id, device_name, token_hash, created_at, last_seen, "
             "revoked, push_token, os_version, app_version, device_model) "
             "VALUES(?,?,?,?,?,?,0,?,?,?,?) "
-            "ON CONFLICT(device_id) DO UPDATE SET user_id=excluded.user_id, device_name=excluded.device_name, "
+            "ON CONFLICT(device_id) DO UPDATE SET device_name=excluded.device_name, "
             "token_hash=excluded.token_hash, last_seen=excluded.last_seen, revoked=0, "
             "push_token=excluded.push_token, os_version=excluded.os_version, "
             "app_version=excluded.app_version, device_model=excluded.device_model",
@@ -1470,8 +1506,11 @@ def _settle(c: sqlite3.Connection, order: sqlite3.Row) -> int:
     if member_days > 0:
         cur = _user(c, uid)
         base = max(cur["member_expire_at"], now_ms())
+        # 会员总天数上限:顺延后不得超过 now + MEMBER_MAX_DAYS,防止 mock 模式无限续费
+        cap = now_ms() + MEMBER_MAX_DAYS * 24 * 3600 * 1000
+        new_exp = min(base + member_days * 24 * 3600 * 1000, cap)
         c.execute("UPDATE users SET member_expire_at = ? WHERE user_id = ?",
-                  (base + member_days * 24 * 3600 * 1000, uid))
+                  (new_exp, uid))
     if g["kind"] == "subscription":  # 记录当前订阅档,供续费用
         c.execute("UPDATE users SET sub_goods_id = ? WHERE user_id = ?", (g["id"], uid))
     c.execute("UPDATE orders SET status='PAID' WHERE order_no=?", (order["order_no"],))
@@ -1529,8 +1568,11 @@ def subscription_renew(u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
                       (gift, _this_month(), uid))
         cur = _user(c, uid)
         base = max(cur["member_expire_at"], now_ms())
+        # 会员总天数上限:顺延后不得超过 now + MEMBER_MAX_DAYS,防止 mock 模式无限续费
+        cap = now_ms() + MEMBER_MAX_DAYS * 24 * 3600 * 1000
+        new_exp = min(base + MEMBERSHIP_DAYS * 24 * 3600 * 1000, cap)
         c.execute("UPDATE users SET member_expire_at = ? WHERE user_id = ?",
-                  (base + MEMBERSHIP_DAYS * 24 * 3600 * 1000, uid))
+                  (new_exp, uid))
         c.commit()
     return {"ok": True, "goodsId": gid, "paidCredits": paid, "giftCredits": gift, "memberDays": MEMBERSHIP_DAYS}
 

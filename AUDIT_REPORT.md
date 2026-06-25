@@ -46,12 +46,13 @@
 **影响**：无任何执行前风险闸门。一次提示注入或一条恶意 LAN 请求即可触发 `send_sms`、`send_intent`（任意 Intent）、`install_app`、`browser_evaluate`（任意 JS）、`file_ops`（路径遍历读 `/proc`、`/system`、他 App 数据）等。
 **修复建议**：在 `ToolRegistry.executeTool` 增加真正的强制分支：当 `classifyTool==DANGEROUS` 或 `ToolRiskPolicy.riskOf==HIGH` 时返回 HUMAN_GATE/BLOCK（除非存在显式逐次授权）。将 `PathGuard.check`（sandbox=`/sdcard`）接入 `FileOpsTool`/`AppBackupTool`/`SearchFilesTool`/`BrowseFilesTool`；将 `UrlGuard.check` 接入 `NavigateTool`/`InstallExtensionTool`/`ExtensionInstaller`。高危目标场景下 judge 不可用应**失败即拒**（HUMAN_GATE），而非放行。
 
-### R3 — 母体 WebSocket `tool/execute` 直达全部高危工具，无能力闸门、无服务端身份校验、明文 ws
-**严重度：High / claimedCritical（多条 confirmed 合并）**
+### R3 — 母体 WebSocket `tool/execute` 直达全部高危工具，明文 ws 无 TLS（⚠️ 已修正：母体服务端已有鉴权）
+**严重度：Medium（原 High，经母体项目复核后降级）**
 **受影响文件**：`octopus_mobile/ToolCallDispatcher.kt:62-110`、`octopus_mobile/OctopusMobileClient.kt:112-130`、`res/xml/network_security_config.xml:3`、`tool/ToolRegistry.kt:224-230`
-**攻击场景/前置条件**：默认 URL `ws://10.0.2.2:8765`，`cleartextTrafficPermitted=true`，OkHttp 无 pinning / hostnameVerifier / wss 强制。客户端发 `device/hello`（含 auth_token）但**从不校验服务端**；`HELLO_SENT` 状态下任意入站帧即升级 ONLINE 并分发 `tool/execute`，无 ack/nonce/签名/重放保护。`tool/execute` 经 `executeLocal → ToolRegistry.executeTool`，仅有 `isToolEnabled` + `PrivacyScanner`（仅扫出站密钥）+ 失败计数器，**无 wire 白名单、无确认**。
-**影响**：流氓/中间人服务器在首帧即被隐式信任并接管设备；同网段在途攻击者可捕获 token 并注入 `tool/execute` 与 config-sync。等同远程设备接管。
-**修复建议**：强制 wss、移除全局明文、pin/校验证书；ONLINE 前要求可验证的服务端凭证，拒绝握手前的 `tool/execute`，加重放保护；对远程通道工具做白名单，HIGH_RISK 走强制人工确认。
+**⚠️ 修正说明（2026-06-25）**：原报告称"无服务端身份校验"经复核母体项目 `octopus-agent/runtime/tentacle/transport/ws_server.py` 后**不成立**。母体服务端已实现：(1) `OCTOPUS_TENTACLE_TOKEN` 环境变量鉴权 + `hmac.compare_digest` 常数时间比较；(2) **fail-closed** 设计——非 loopback 绑定且未设 token 时拒绝所有连接；(3) 暴力破解限速（5 次/60 秒滑动窗口）；(4) 预认证隔离——未认证前只接受 `device/hello`，二进制帧和其他方法全部拒绝。客户端 `OctopusMobileClient.kt:112` 通过 `device/hello` 消息体的 `params.auth_token` 发送 token（非 URL query string），UDP 发现广播不携带 token。
+**实际剩余风险**：(1) **明文 ws:// 无 TLS**——token 虽在消息体内，但整个 WebSocket 流量（含 token、tool/execute 参数、屏幕帧）可被中间人嗅探；(2) **无证书 pinning**——即使 wss://，中间人用合法证书仍可 MITM；(3) `HELLO_SENT` 状态下任意入站帧即升级 ONLINE，无 nonce/重放保护；(4) `tool/execute` 经 `executeLocal → ToolRegistry.executeTool`，无远程通道工具白名单（此点已由 R2 工作树修复缓解）。
+**影响**：中间人可嗅探 token 并注入 `tool/execute`，但需在网络路径上主动 MITM（非同网段被动监听即可）。严重度从"远程设备接管"降为"需 MITM 的中间人攻击"。
+**修复建议**：(1) 母体 `ws_server.py` 的 `start()` 添加 `ssl_context` 参数支持 wss://（需在 octopus-agent 项目修改）；(2) 客户端 OkHttp 已原生支持 wss://，用户配置 wss:// URL 即可；(3) 可选：添加证书 pinning 防合法证书 MITM。
 
 ### R4 — config/sync 将攻击者键值写入默认 MMKV，无白名单（可改写 runtime URL / LLM 端点 / 渠道密钥）
 **严重度：High（confirmed）**
@@ -237,3 +238,285 @@
 - **`server/RemoteConsoleGateway.kt` 的 QR/pairing（建议补一眼）**：token 进二维码/配对码的生成与时效未单独展开，应确认是否一次性/可过期。
 
 > **补录后修正总览**：关键风险升至 R1–R12。R12 应与 R1/R2 并列 P0（同属"汇聚点无强制风险矩阵"根因，且触发面最隐蔽）。
+
+---
+
+## 附录 A：复核与补充审计 (2026-06-25)
+
+> 方法：4 路并行子代理（修复验证 / Android 新发现 / Python+Web / 工程质量）→ 汇总
+> 范围：验证 R10/R4/R1/R6 修复状态 + 复核 4 项 contested + 未覆盖子系统（navigation/cast/floating/media/plugin/skills）+ server/app.py 深审 + 工程质量/依赖/CI
+> 工作树状态：大量未提交修改（PathGuard/ToolRiskPolicy/ConfigServer/ToolRegistry/ClawAccessibilityService 等），均已审查
+
+### A.1 修复验证结果
+
+| 编号 | 项 | 状态 | 证据 |
+|------|-----|------|------|
+| R10 | Relay JWT_SECRET 硬编码 | ✅ 已修复 | [app.py:103-112](file:///Users/dangbei/Public/octopus/octopus-mobile/server/app.py#L103) 生产未设则 `raise RuntimeError`；非生产 `secrets.token_urlsafe(48)`；`.env.example` JWT_SECRET 为空 |
+| R4 | config/sync 投毒 | ✅ 已修复 | [DualConfigWriter.kt:53-90](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/java/com/apk/claw/android/octopus_mobile/DualConfigWriter.kt#L53) 新增 `SYNC_BLOCKED_EXACT` + `SYNC_BLOCKED_SUBSTRINGS` 双重黑名单，三处应用点全覆盖（本地写/推送/入站） |
+| R1 | 聊天渠道发送者白名单 | ⚠️ 部分修复 | [ChannelAccessControl.kt:35-58](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/java/com/apk/claw/android/channel/ChannelAccessControl.kt#L35) 已加入 ACL，但：① 空白名单采用 TOFU（首个发送者自动绑定 owner）非默认拒绝；② senderId 为空时放行（见 A3-N1）；③ ACL 可在设置中关闭 |
+| R6 | 控制服务器绑定 0.0.0.0 | ✅ 已修复 | [ConfigServer.kt:16-20](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/java/com/apk/claw/android/server/ConfigServer.kt#L16) 改 `NanoHTTPD(hostname, port)`；[ConfigServerManager.kt:54-65](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/java/com/apk/claw/android/server/ConfigServerManager.kt#L54) 绑定 WiFi 接口 IP；`validateAuth` 用 `MessageDigest.isEqual` 恒定时间比较 |
+| BootReceiver exported | (低危项) | ✅ 已修复 | [AndroidManifest.xml:209-217](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/AndroidManifest.xml#L209) 改 `exported="false"` |
+| 订单创建无限速 | (server 项) | ✅ 已修复 | [app.py:1369-1387](file:///Users/dangbei/Public/octopus/octopus-mobile/server/app.py#L1369) 用户限速 + IP 限速 + PENDING 上限 |
+
+### A.2 争议项（contested）复核结论
+
+| 编号 | 项 | 结论 | 说明 |
+|------|-----|------|------|
+| B1 | ConfigServer 通配 CORS + DNS-rebinding | **confirmed（降为低危）** | [RouteContext.kt:22-25](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/java/com/apk/claw/android/server/routes/RouteContext.kt#L22) `Access-Control-Allow-Origin: *` + 无 Host 校验确认；但所有 `/api/*` 强制 token 鉴权，浏览器对 `*` 不发凭证，实际可利用性低 |
+| B2 | GeckoView WebAPI 自动批准 drive-by 安装 | **confirmed** | [GeckoViewEngine.kt:188-211](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/java/com/apk/claw/android/octopus_mobile/browser/GeckoViewEngine.kt#L188) `extensionsWebAPIEnabled=true` 全局开启（非仅 AMO）；`onInstallPromptRequest` 无条件返回 `PermissionPromptResponse(true,…)` |
+| B3 | PathGuard 同前缀沙箱逃逸 | **rejected（已修复）** | [PathGuard.kt:104-111](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/java/com/apk/claw/android/octopus_mobile/safety/PathGuard.kt#L104) 已用 `base + File.separator` 做分隔符边界检查；`git blame` 确认在提交 `0c6270f`（2026-06-20）中落地 |
+| B4 | MJPEG permit 泄漏 | **confirmed（低危）** | [ScreenHandler.kt:85-140](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/java/com/apk/claw/android/server/routes/ScreenHandler.kt#L85) `tryAcquire` 与线程 `finally { release() }` 之间无外层 try/finally，异常路径下信号量泄漏可致屏幕流 DoS |
+
+### A.3 新发现 — Android App
+
+#### N1 — ShizukuShellService 实际以 APP UID 执行命令，颠覆 R7 的 shell UID 假设 ⭐
+**严重度：High（安全假设失效，双向影响）**
+**受影响文件**：[ShizukuShellService.kt:184-186](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/java/com/apk/claw/android/shizuku/ShizukuShellService.kt#L184)
+**发现**：代码注释自称"通过 Shizuku Binder 在 shell 进程执行命令"，但实际用 `Runtime.getRuntime().exec(arrayOf("sh","-c",command))`，命令以 **APP UID** 执行而非 shell UID 2000。`ShizukuManager` 从未调用 `Shizuku.bindUserService()` 或 `Shizuku.newProcess()`。
+**影响（双向）**：
+- **降低 R7 影响**：`screencap`/`input tap`/`am force-stop` 等需 shell 权限的命令在 APP UID 下被 SELinux 拒绝，R7 声称的"shell UID 任意命令执行"实际不成立。
+- **新风险**：文档/实现脱节造成"安全幻觉"——开发者以为有 shell 权限增益，实际没有；`backup_app` 等 skill 声称的能力（访问 `/sdcard/Android/data/`）实际不可达。
+**修复建议**：接入 `Shizuku.bindUserService(IUserService)` 真正在 shell UID 执行；或修正所有文档注释明确 APP UID 限制，移除不可达路径白名单。
+
+#### N2 — WebDavMounts.playUrl 将明文凭据嵌入 URL
+**严重度：Medium**
+**受影响文件**：[WebDavMounts.kt:51-59](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/java/com/apk/claw/android/media/WebDavMounts.kt#L51)
+**发现**：WebDAV 用户名密码以 `scheme://user:pass@host` 拼入播放 URL，传给 mpv/ffmpeg。凭据泄漏到 mpv 日志、crash report、`/proc/<pid>/cmdline`、重定向 Referer。
+**修复建议**：改用 HTTP 头 `Authorization: Basic <base64>`。
+
+#### N3 — WebDAVScanner followRedirects(true) + 无 host 校验 = SSRF
+**严重度：Medium**
+**受影响文件**：[WebDAVScanner.kt:37-41](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/java/com/apk/claw/android/media/WebDAVScanner.kt#L37)、[:208-247](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/java/com/apk/claw/android/media/WebDAVScanner.kt#L208)
+**发现**：`followRedirects(true)` + PROPFIND 响应的 `href` 直接拼接为新 baseUrl，无 host 白名单。恶意 WebDAV 服务器可重定向到 `169.254.169.254` 或 `127.0.0.1:9527` 探测内网。
+**修复建议**：`followRedirects(false)` + `URI.resolve()` 规范化 + host 白名单 + 禁止内网段。
+
+#### N4 — NavigationGraph 持久化 UI 指纹，keyElements 在脱敏前提取敏感按钮文本
+**严重度：Medium（隐私）**
+**受影响文件**：[StateDetector.kt:110-131](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/java/com/apk/claw/android/navigation/StateDetector.kt#L110)、[NavigationGraph.kt:206-220](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/java/com/apk/claw/android/navigation/NavigationGraph.kt#L206)
+**发现**：`extractKeyElements` 在 `normalizeTree` **之前**提取 `content-desc`，保留长度 1-20 的原始按钮文本（如"转账"、"支付密码"），序列化到 MMKV。结合 R4/R6 可外传，形成行为画像。
+**修复建议**：`extractKeyElements` 在 `normalizeTree` 之后运行，或对 desc 做 hash 化。
+
+#### N5 — ScreenCastService /api/cast/start 无用户同意闸
+**严重度：Medium**
+**受影响文件**：[CastRouteHandler.kt:53-62](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/java/com/apk/claw/android/server/routes/CastRouteHandler.kt#L53)、[ScreenCastService.kt:86-94](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/java/com/apk/claw/android/cast/ScreenCastService.kt#L86)
+**发现**：`/api/cast/start` 与 `/api/cast/launch` 仅 token 鉴权即开始投屏/在外接屏启动任意 App，无设备端横幅/确认。
+**修复建议**：要求设备端显式确认（通知或对话框）。
+
+#### N6 — SemanticSkillRanker 明文 HTTP 请求母体网关
+**严重度：Medium**
+**受影响文件**：[SemanticSkillRanker.kt:38-47](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/java/com/apk/claw/android/octopus_mobile/SemanticSkillRanker.kt#L38)
+**发现**：从 WS URL 推导 `http://$host:$port`，强制明文 HTTP，无 Authorization。POST body 含用户任务描述与设备能力清单。中间人可嗅探或篡改排序结果影响 LLM 决策。
+**修复建议**：从 `wss://` 推导 `https://`，携带母体配对 token。
+
+#### N7 — ChannelAccessControl null-sender 绕过 + TOFU 抢跑竞态
+**严重度：Medium**
+**受影响文件**：[ChannelAccessControl.kt:38-50](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/java/com/apk/claw/android/channel/ChannelAccessControl.kt#L38)
+**发现**：① `senderId.isNullOrBlank()` → `ALLOW` + 告警，不上报发送者的通道可绕过 ACL；② 空白名单时首个发送者自动绑定为 owner（TOFU），攻击者抢在合法用户前发首条消息即获永久控制权（代码注释已承认此局限）。
+**修复建议**：对支持但未上报 senderId 的通道默认 DENY；TOFU 改为配对码/扫码绑定。
+
+#### N8 — GeckoView remoteDebuggingEnabled 全局开启
+**严重度：Medium**
+**受影响文件**：[GeckoViewEngine.kt:191](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/java/com/apk/claw/android/octopus_mobile/browser/GeckoViewEngine.kt#L191)
+**发现**：`settings.remoteDebuggingEnabled = true` 在 runtime 级全局开启，任意能连到设备调试端口的实体可远程调试 WebView（注入已登录会话）。
+**修复建议**：仅 `BuildConfig.DEBUG` 构建开启。
+
+#### N9 — console-app.js token 从 URL 查询参数获取（AUDIT_REPORT 建议项未落地）
+**严重度：Medium**
+**受影响文件**：[console-app.js:8-9](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/assets/web/console-app.js#L8)、[:24-26](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/assets/web/console-app.js#L24)
+**发现**：`const TOKEN = q.get('token')` 从 `location.search` 取 token；所有 API 调用拼 `?token=` 到 URL。token 泄漏于浏览器历史、nginx 日志、Referer、MJPEG 流 URL。原报告 P2 建议"console 改用 `#token=`"**未在此文件落地**。
+**修复建议**：改 `location.hash` + `history.replaceState` 剥离；API 改 `Authorization` header。
+
+#### N10 — browser.evaluate skill risk 标签错误 + JSON Schema 畸形
+**严重度：Low（放大 R8）**
+**受影响文件**：[browser.evaluate.md:4-6](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/assets/skills/mobile/browser.evaluate.md#L4)
+**发现**：`risk: medium`（应为 high）；JSON Schema `properties` 混入 `"\"document.title\""`、`"\"localStorage.getItem('token')\""` 等以 JS 代码片段作为属性名的畸形条目。.md 会被 SkillExporter 上传给母体，导致母体端也低估该工具风险。
+**修复建议**：`risk: high`；清理 Schema 只保留 `expression`/`await_promise`。
+
+#### N11 — install_app skill 声明但无 Tool 实现
+**严重度：Low（info）**
+**受影响文件**：[install_app.md](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/assets/skills/mobile/install_app.md)
+**发现**：`tool/impl/` 下无 `InstallAppTool` 类，LLM 调用 `install_app` 会返回"工具未找到"，浪费对话轮次。
+**修复建议**：删除 `install_app.md` 或补 Tool 实现并接入 R2 闸门。
+
+#### N12 — Plugin installFromFile 残留 dex 文件
+**严重度：Low**
+**受影响文件**：[PluginManager.kt:185-207](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/java/com/apk/claw/android/plugin/PluginManager.kt#L185)
+**发现**：`installFromFile` 把外部 dex 复制到 filesDir，但 `loadAndRegister`（[:116-121](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/java/com/apk/claw/android/plugin/PluginManager.kt#L116)）拒绝加载 `source != "assets"` 的插件。dex 残留可被未来漏洞利用。
+**修复建议**：加载被拒时清理已复制文件。
+
+#### N13 — NavigationRecorder 被动监听用户按键行为
+**严重度：Low（隐私）**
+**受影响文件**：[NavigationRecorder.kt:21-46](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/java/com/apk/claw/android/navigation/NavigationRecorder.kt#L21)
+**发现**：`passiveMode` 开启后后台持续监听 D-pad/Back/Home 按键，记录 `beforeState → action → afterState` 到 MMKV。结合 N4 的 keyElements 形成完整行为画像。
+**修复建议**：开启时显示持久通知；提供"排除 App 包名"列表（默认排除银行/支付）。
+
+### A.4 新发现 — Python Server + Web 控制台
+
+#### S1 — /device/register 设备 IDOR 劫持
+**严重度：High**
+**受影响文件**：[app.py:1085-1109](file:///Users/dangbei/Public/octopus/octopus-mobile/server/app.py#L1085)
+**发现**：`ON CONFLICT(device_id) DO UPDATE SET user_id=excluded.user_id`——攻击者知道他人 deviceId 即可重新注册夺取设备所有权（含 deviceToken 重置），可冒充设备接收控制指令、心跳上报污染。deviceId 为 `d_`+16 hex（64 bit 熵），内部人员或日志泄漏即可利用。
+**修复建议**：INSERT 前校验现有 device 的 user_id 与当前用户一致；冲突时返回 409。
+
+#### S2 — JWT_SECRET 复用为设备 token HMAC 密钥
+**严重度：High**
+**受影响文件**：[app.py:463-464](file:///Users/dangbei/Public/octopus/octopus-mobile/server/app.py#L463)
+**发现**：`_remote_secret_hash` 用 `JWT_SECRET` 作 HMAC key 签设备 token。JWT_SECRET 一旦泄漏，攻击者既可伪造任意用户 JWT，也可伪造任意设备 token 直连 WebSocket 控制手机。密钥应分离。
+**修复建议**：设备 token 用独立 `DEVICE_TOKEN_SECRET` 环境变量。
+
+#### S3 — mock 模式 subscription_renew 会员天数无上限
+**严重度：High**
+**受影响文件**：[app.py:1507-1535](file:///Users/dangbei/Public/octopus/octopus-mobile/server/app.py#L1507)
+**发现**：`PAYMENT_PROVIDER=mock` 时，任何登录用户调 `/billing/subscription/renew` 即加 30 天会员 + 积分，可循环调用 N 次 → 会员期 N×30 天。积分受 `FREE_CAP` 约束，但**会员天数无上限**。生产 `PAYMENT_PROVIDER != mock` 时返回 403，但 staging 忘切即被薅。
+**修复建议**：mock 模式也对会员天数设上限（如 365 天）。
+
+#### S4 — WebSocket 无 Origin 校验（CSWSH）+ token 走 query string
+**严重度：Medium**
+**受影响文件**：[app.py:1020-1081](file:///Users/dangbei/Public/octopus/octopus-mobile/server/app.py#L1020)
+**发现**：WS 握手未校验 `Origin` header；`?device_token=`/`?token=` 出现在 URL，被 nginx/uvicorn 日志记录。结合 token 泄漏可形成 Cross-Site WebSocket Hijacking。
+**修复建议**：`ws.accept()` 前校验 Origin 白名单；token 改用 `Sec-WebSocket-Protocol`。
+
+#### S5 — update_device_info 接受任意 http:// URL（SSRF/钓鱼）
+**严重度：Medium**
+**受影响文件**：[app.py:501-518](file:///Users/dangbei/Public/octopus/octopus-mobile/server/app.py#L501)
+**发现**：设备上报 `lanBaseUrl`/`lanConsoleUrl` 仅校验 `startswith("http://")`，可指向内网（169.254.169.254）或攻击者域。这些值广播给控制台，控制台可能自动 `window.open`。
+**修复建议**：校验 IP 为私网段且与设备上报的 LAN 一致；控制台打开前需用户确认。
+
+#### S6 — debug.html 无鉴权，依赖网络层
+**严重度：Medium**
+**受影响文件**：[debug-app.js:20](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/assets/web/debug-app.js#L20)、[:133](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/assets/web/debug-app.js#L133)
+**发现**：`/api/debug/tools` 和 `/api/debug/execute` 不带 token。若 ConfigServer 暴露 debug 路由，同网段任意主机可调用全部工具（take_screenshot、send_sms、file_ops）。当前依赖 ConfigServer 绑定 WiFi IP（R6 已修复）+ debug 路由仅 DEBUG 构建可用。
+**修复建议**：debug 路由强制鉴权；release 构建移除 debug.html。
+
+#### S7 — nginx 透传客户端 Host，/config Host 注入
+**严重度：Medium**
+**受影响文件**：[club.octoapk.com.conf:23](file:///Users/dangbei/Public/octopus/octopus-mobile/server/deploy/club.octoapk.com.conf#L23)、[app.py:1322-1334](file:///Users/dangbei/Public/octopus/octopus-mobile/server/app.py#L1322)
+**发现**：`proxy_set_header Host $host;` 透传客户端 Host，`/config` 用 `request.headers.get("host")` 派生 `club.<root>`。攻击者发 `Host: evil.com` 可让 App 拿到 `squareBaseUrl: https://club.evil.com`。若设了 `SQUARE_BASE_URL` 环境变量则覆盖此逻辑。
+**修复建议**：nginx 改用 `$server_name` 或显式 `proxy_set_header Host club.octoapk.com;`；或优先用环境变量。
+
+#### S8 — 部署文档泄漏服务器 IP
+**严重度：Low（info）**
+**受影响文件**：[SETUP_club_subdomain.md:3](file:///Users/dangbei/Public/octopus/octopus-mobile/server/deploy/SETUP_club_subdomain.md#L3)
+**发现**：文档内含真实服务器 IP `32.185.238.217`。仓库公开则 IP 暴露。
+**修复建议**：移到内部 wiki 或用占位符。
+
+### A.5 新发现 — 工程质量与依赖
+
+#### E1 — TaskOrchestrator 暂停后立即恢复（并发缺陷）
+**严重度：High（可靠性）**
+**受影响文件**：[TaskOrchestrator.kt:178-180](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/java/com/apk/claw/android/TaskOrchestrator.kt#L178)
+**发现**：`pauseCurrentTask()` 先 `pauseRunningTask(cur)` 又立即 `resumeTask(cur.id)`，pause 形同虚设，被抢占任务重新进入队列而非保持暂停态。
+**修复建议**：移除立即 resume，保持暂停态直到显式恢复。
+
+#### E2 — TaskOrchestrator 回调内递归调用
+**严重度：Medium（可靠性）**
+**受影响文件**：[TaskOrchestrator.kt:488](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/java/com/apk/claw/android/TaskOrchestrator.kt#L488)、[:508](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/java/com/apk/claw/android/TaskOrchestrator.kt#L508)、[:539](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/java/com/apk/claw/android/TaskOrchestrator.kt#L539)
+**发现**：`onComplete`/`onError`/`onSystemDialogBlocked` 末尾均调用 `executeCurrentTask()`，形成递归。长任务队列下可能栈深度增长。
+**修复建议**：改为循环调度或 `handler.post` 延迟调度。
+
+#### E3 — FileLoggingInterceptor 响应体明文落盘
+**严重度：Medium**
+**受影响文件**：[FileLoggingInterceptor.java:159](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/java/com/apk/claw/android/agent/langchain/http/FileLoggingInterceptor.java#L159)
+**发现**：请求/响应 body 完整写入文件（仅 header 做了 redact）。body 可能包含 API key、用户 PII、聊天内容。虽仅 DEBUG 启用，但缓存目录在 root 设备可被读取，且可经 `/api/debug/file` 经 LAN 取回。
+**修复建议**：body 也需 redact 或加密；release 构建禁用。
+
+#### E4 — 过时依赖（lifecycle / securityCrypto alpha）
+**严重度：Medium**
+**受影响文件**：[libs.versions.toml](file:///Users/dangbei/Public/octopus/octopus-mobile/gradle/libs.versions.toml)
+**发现**：
+- `lifecycle 2.6.2`（落后 3 个大版本，最新 2.9.x），与 compose-bom 2025.05 潜在不匹配
+- `securityCrypto 1.1.0-alpha06`（**alpha 版用于生产**，API 不稳定）
+- `coroutines 1.7.3`（落后 2 个小版本，1.8+ 有重要 bug 修复）
+- `appcompat 1.6.1` / `coreKtx 1.10.1`（落后）
+**修复建议**：升级到稳定版；securityCrypto 至少升到 beta01。
+
+#### E5 — CI 缺安全扫描与并行优化
+**严重度：Medium**
+**受影响文件**：[.github/workflows/ci.yml](file:///Users/dangbei/Public/octopus/octopus-mobile/.github/workflows/ci.yml)
+**发现**：无 SAST/CodeQL/依赖扫描/Dependabot；lint/test/assemble 三步串行单 job（可并行拆分缩短 ~60%）；无 APK 产物上传；无 release workflow。
+**修复建议**：加 CodeQL + Dependabot；拆分并行 job；上传 APK 产物。
+
+#### E6 — channel/ 全部 6 个 ChannelHandler 零测试覆盖
+**严重度：Medium（测试缺口）**
+**发现**：`channel/` 约 20 个源文件，0 个测试文件。关键业务路径（钉钉/飞书/QQ/Discord/Telegram/WeChat）无单元测试。`ClawAccessibilityService`、`AppViewModel`、`navigation/` 同样无测试。
+**修复建议**：补 ChannelHandler 测试，至少覆盖 token 刷新与消息分发。
+
+#### E7 — AppViewModel 滥用 `!!`（9 处）+ 上帝类倾向
+**严重度：Low**
+**受影响文件**：[AppViewModel.kt:162-179](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/java/com/apk/claw/android/AppViewModel.kt#L162)
+**发现**：`initOctopusMobile()` 中连续 `octopusClient!!`/`brainSelector!!`/`heartbeatReporter!!` 等 9 处 `!!`，若构造失败则后续全部 NPE。该类持有 9 个组件引用，`initOctopusMobile()` 113 行，呈上帝类倾向。
+**修复建议**：改用局部变量 + early return；拆分为独立初始化器。
+
+#### E8 — EXTENDING.md 含硬编码 Windows 路径
+**严重度：Low（info）**
+**受影响文件**：[EXTENDING.md](file:///Users/dangbei/Public/octopus/octopus-mobile/EXTENDING.md)（第 100、199、210、213 行）
+**发现**：含 `file:///f:/新建文件夹/octopus-mobile/...` 硬编码路径，在其他平台失效。
+**修复建议**：改为相对路径。
+
+### A.6 严重度统计（本次新增）
+
+| 严重度 | 数量 | 编号 |
+|--------|------|------|
+| High | 4 | N1, S1, S2, S3 |
+| Medium | 13 | N2-N9, S4-S7, E1-E3 |
+| Low | 9 | N10-N13, S8, E4-E8 |
+| **合计** | **26** | — |
+
+### A.7 更新后的优先修复清单
+
+> 原报告 P0/P1/P2 项状态已更新，新增项以 ➕ 标注。
+
+#### P0 — 立即（远程接管 / 全账号伪造级）
+- [ ] **聊天渠道发送者白名单**（R1）：⚠️ 部分修复,null-sender 已改为默认拒绝(A3-N7 已修复),TOFU 仍保留(待改配对码)
+- [x] **高危工具强制闸门**（R2）：已在工作树实现(PermissionModeManager + ApprovalFlow + ToolRegistry 接入,默认 APPROVAL 模式)
+- [x] **Relay JWT_SECRET 启动断言**（R10）：已修复
+- [x] **Shizuku 命令注入**（R7）：已修复(searchByContent/putSetting 已用 sanitizeShellArg;findDuplicateFiles 已改用 sanitizeShellArg;hasInjectionPattern 补充 `${` 检测)
+- [ ] **母体 WS 加固**（R3/R4）：R4 已修复（config-sync 黑名单）；**R3 经母体项目复核后降级为 Medium**——母体 `ws_server.py` 已有完善鉴权（token + fail-closed + 限速 + 预认证隔离），原报告"无服务端身份校验"不成立；剩余风险仅为明文 ws:// 无 TLS（需母体项目添加 ssl_context 参数）+ 无证书 pinning。R2 工作树修复已缓解"远程通道工具无白名单"问题
+- ➕ [x] **设备 IDOR 劫持**（S1）：已修复(/device/register 和 remote_pair_claim 冲突时检查 user_id 一致性,不一致返回 409)
+- ➕ [x] **JWT_SECRET 密钥分离**（S2）：已修复(新增 DEVICE_TOKEN_SECRET 环境变量,默认回退 JWT_SECRET 向后兼容)
+- ➕ [x] **mock 模式会员上限**（S3）：已修复(新增 MEMBER_MAX_DAYS=365 上限,两处续费逻辑均接入)
+
+#### P1 — 高优先（同网段 / 内嵌浏览器接管）
+- [ ] **停止广播控制 token**（R5）：未修复
+- [x] **控制服务器绑定收敛**（R6）：已修复（绑定 WiFi IP）
+- [ ] **`browser_evaluate` 提级**（R8）：skill .md 已改 risk: high(N10),但 ToolCallGuardrail 的 IDEMPOTENT_TOOLS 分类未改
+- [ ] **扩展安装加固**（R9）：未修复，B2 确认自动批准仍存在
+- [ ] **屏幕流同意闸**（R11）：未修复，B4 确认 permit 泄漏仍存在
+- [x] **修复并发调度缺陷 E1**：已修复(pauseCurrentTask 移除立即 resume);E2 回调递归待改
+- ➕ [x] **WebDavMounts 凭据改 HTTP 头**（N2）：已添加 authHeader() 方法 + 风险注释(mpv stub 未实现,待 mpv 接入后切换)
+- ➕ [x] **WebDAVScanner 关闭重定向**（N3）：已修复(followRedirects=false)
+- ➕ [ ] **/api/cast/start 用户确认闸**（N5）
+- ➕ [x] **WebSocket Origin 校验**（S4）：已修复(见 P2)
+- ➕ [x] **debug.html 鉴权**（S6）：已修复(从 isPublic 移除 debug.html,所有访问需鉴权;DebugRouteHandler 已有 BuildConfig.DEBUG 门控)
+- ➕ [x] **FileLoggingInterceptor body redact**（E3）：已修复(添加 redactBody 对 JSON/form 中的敏感字段脱敏)
+
+#### P2 — 中等（纵深防御 / 泄漏面收敛 / 可靠性）
+- [x] **PathGuard 沙箱边界**（B3）：已修复（分隔符检查）
+- [x] **token 仅走 Authorization 头**（N9）：已修复(console-app.js 改 #token= fragment + Authorization 头 + replaceState 剥离;MJPEG 流保留 query string 因 img.src 不支持 header)
+- [ ] **客户端密钥迁移至加密存储**：未修复
+- [ ] **网络配置收敛 cleartext**：未修复
+- ➕ [x] **NavigationGraph keyElements 脱敏**（N4）：已修复(extractKeyElements 在 normalizeTree 之后提取,避免敏感按钮文本持久化)
+- ➕ [x] **SemanticSkillRanker 强制 https + token**（N6）：已修复(wss://→https:// 映射 + Authorization: Bearer 头)
+- ➕ [x] **GeckoView remoteDebuggingEnabled 仅 DEBUG**（N8）：已修复(改 BuildConfig.DEBUG)
+- ➕ [x] **browser.evaluate risk 改 high + 清理 Schema**（N10）：已修复(risk: high + 清理畸形 JSON Schema 属性名)
+- ➕ [x] **WebSocket Origin 校验**（S4）：已修复(console WS 添加 _is_allowed_origin 校验 + WS_ALLOWED_ORIGINS 环境变量)
+- ➕ [ ] **nginx Host 改 $server_name + 安全响应头**（S7）：需运维配置
+- ➕ [ ] **升级 lifecycle/securityCrypto/coroutines**（E4）：需全面回归测试
+- ➕ [x] **CI 加 CodeQL + Dependabot + 并行 job**（E5）：已修复(新增 codeql.yml + dependabot.yml)
+- ➕ [ ] **补 channel/ 测试**（E6）：工作量大
+
+#### P3 — 低优先
+- ➕ [x] **install_app.md 删除或补实现**（N11）：已修复(删除无对应实现的 skill 文件)
+- ➕ [x] **Plugin installFromFile 清理残留 dex**（N12）：已修复(installFromFile 前置检查直接返回 null,不复制 dex)
+- ➕ [x] **NavigationRecorder 被动模式加通知 + 排除 App**（N13）：已修复(添加常驻通知 CHANNEL_ID + showPassiveNotification/cancelPassiveNotification)
+- ➕ [x] **SETUP 文档移除真实 IP**（S8）：已修复(替换为 <your-server-ip>)
+- ➕ [ ] **AppViewModel 消除 `!!` + 拆分**（E7）：工作量大
+- ➕ [x] **EXTENDING.md 改相对路径**（E8）：已修复(file:///f:/新建文件夹/ → 相对路径)
+
+### A.8 整体态势更新
+
+本次复核确认原报告的核心判断仍然成立：**"能对话即等于完全控制"** 的系统性风险未被根除——R2（高危工具强制闸门）仍未接线，R1 仅部分修复（TOFU + null-sender 偏差）。但 4 项关键修复（R10/R4/R6/BootReceiver）已落地，且 **N1 的发现表明 R7 的实际严重度被高估**（Shizuku 命令实际以 APP UID 执行，shell 权限命令会失败）。
+
+新发现的 High 项集中在 server 端：**S1 设备 IDOR 劫持** 与 **S2 JWT_SECRET 密钥复用** 构成新的远程接管路径，应与 R10 同等优先处理。工程质量方面，**E1 TaskOrchestrator 暂停/恢复缺陷** 是原报告并发问题的新变种，channel/ 零测试覆盖是最大的回归风险面。
+
+> **复核后总览**：原 56 条发现中 5 项已修复（R10/R4/R6/BootReceiver/订单限速）、1 项争议被驳回（B3 已修复）、3 项争议确认（B1/B2/B4）。新增 26 条发现（4 High / 13 Medium / 9 Low）。累计未修复的 Critical/High 风险仍达 20+ 项，**整体安全态势仍为高危**。

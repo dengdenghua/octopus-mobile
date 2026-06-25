@@ -3,6 +3,7 @@ package com.apk.claw.android.service
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.accessibilityservice.GestureDescription
+import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Path
@@ -13,6 +14,7 @@ import android.os.PowerManager
 import android.util.DisplayMetrics
 import android.view.Display
 import android.view.accessibility.AccessibilityEvent
+import android.view.accessibility.AccessibilityManager
 import android.view.accessibility.AccessibilityNodeInfo
 import com.apk.claw.android.shizuku.ShizukuShellService
 import com.apk.claw.android.utils.XLog
@@ -54,6 +56,10 @@ class ClawAccessibilityService : AccessibilityService() {
         // Forward to ScreenStreamer (Phase F — 屏幕状态增量上报)
         runCatching {
             com.apk.claw.android.octopus_mobile.ScreenStreamer.dispatchEvent(event)
+        }
+        // 示范录制态：把用户的点按/输入录成例程步骤（非录制态零开销）
+        runCatching {
+            com.apk.claw.android.octopus_mobile.DemoRecorder.ingest(event)
         }
     }
 
@@ -521,7 +527,30 @@ class ClawAccessibilityService : AccessibilityService() {
         fun getInstance(): ClawAccessibilityService? = instance
 
         @JvmStatic
-        fun isRunning(): Boolean = instance != null
+        fun isRunning(): Boolean {
+            // 1. 快速路径：静态 instance 非空表示服务已连接
+            if (instance != null) return true
+            // 2. 回退路径：instance 为 null 时（服务被系统重启的窗口期），
+            //    检查系统是否仍把本服务列为已启用，避免 UI 误报"已关闭"
+            return isServiceEnabledInSystem()
+        }
+
+        /**
+         * 通过 AccessibilityManager 检查本服务是否仍处于系统已启用列表。
+         * 用于覆盖 onServiceConnected/onDestroy 之间的重启窗口期。
+         */
+        private fun isServiceEnabledInSystem(): Boolean = runCatching {
+            val app = com.apk.claw.android.ClawApplication.instance
+            val am = app.getSystemService(Context.ACCESSIBILITY_SERVICE) as? AccessibilityManager
+                ?: return false
+            val targetPkg = app.packageName
+            val targetCls = "com.apk.claw.android.service.ClawAccessibilityService"
+            am.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_GENERIC)
+                .any { info ->
+                    val si = info.resolveInfo?.serviceInfo
+                    si?.packageName == targetPkg && si.name == targetCls
+                }
+        }.getOrDefault(false)
 
         /** Recycles a list of AccessibilityNodeInfo nodes (static convenience). */
         @JvmStatic

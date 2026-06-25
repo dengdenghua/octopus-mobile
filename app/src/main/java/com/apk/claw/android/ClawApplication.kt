@@ -94,6 +94,8 @@ open class ClawApplication : BaseApp() {
             ToolRegistry.DeviceType.MOBILE
         }
         ToolRegistry.getInstance().registerAllTools(deviceType)
+        // 注入 Application Context 供审批弹窗使用
+        ToolRegistry.getInstance().appContext = this
         XLog.e(TAG, "ClawApplication initialized | device=${DeviceUtils.getDeviceDescription(this)} | tools=${ToolRegistry.getInstance().getAllTools().size}")
 
         // Shizuku 增强层初始化（监听 Binder 到达/死亡）

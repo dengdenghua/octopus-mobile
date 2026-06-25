@@ -1,15 +1,11 @@
 package com.apk.claw.android
 
-import android.os.PowerManager
 import androidx.lifecycle.ViewModel
-import com.apk.claw.android.ClawApplication.Companion.appViewModelInstance
 import com.apk.claw.android.agent.AgentConfig
 import com.apk.claw.android.agent.llm.LlmClientFactory
 import com.apk.claw.android.channel.Channel
 import com.apk.claw.android.channel.ChannelManager
 import com.apk.claw.android.channel.ChannelSetup
-import com.apk.claw.android.service.ForegroundService
-import com.apk.claw.android.floating.FloatingCircleManager
 import com.apk.claw.android.octopus_mobile.*
 import com.apk.claw.android.octopus_mobile.evolution.EvolutionEngine
 import com.apk.claw.android.octopus_mobile.evolution.LessonStore
@@ -20,16 +16,12 @@ import com.apk.claw.android.octopus_mobile.proactive.NotificationRelayService
 import com.apk.claw.android.octopus_mobile.proactive.ProactiveRuleEngine
 import com.apk.claw.android.octopus_mobile.safety.SafetyGate
 import com.apk.claw.android.octopus_mobile.safety.CircuitBreaker
-import com.apk.claw.android.server.ConfigServerManager
-import com.apk.claw.android.service.KeepAliveJobService
 import com.apk.claw.android.tool.ToolRegistry
-import com.apk.claw.android.ui.home.HomeActivity
 import com.apk.claw.android.utils.KVUtils
 import com.apk.claw.android.utils.XLog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 class AppViewModel : ViewModel() {
@@ -37,8 +29,6 @@ class AppViewModel : ViewModel() {
     companion object {
         private const val TAG = "AppViewModel"
     }
-
-    private var wakeLock: PowerManager.WakeLock? = null
 
     private var _commonInitialized = false
 
@@ -72,9 +62,16 @@ class AppViewModel : ViewModel() {
 
     private val octopusScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    /** 连接状态（供 UI 观察） */
-    private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
-    val connectionState: StateFlow<ConnectionState> = _connectionState
+    // ── 委托管理器 ──
+
+    private var lifecycleManager: OctopusLifecycleManager? = null
+
+    private var connectionManager: OctopusConnectionManager? = null
+
+    /** 连接状态（供 UI 观察，委托给 ConnectionManager） */
+    val connectionState: StateFlow<ConnectionState>
+        get() = connectionManager?.connectionState
+            ?: kotlinx.coroutines.flow.MutableStateFlow(ConnectionState.DISCONNECTED)
 
     val taskOrchestrator = TaskOrchestrator(
         agentConfigProvider = { getAgentConfig() },
@@ -125,23 +122,17 @@ class AppViewModel : ViewModel() {
     fun updateAgentConfig(): Boolean = taskOrchestrator.updateAgentConfig()
 
     fun afterInit() {
-        acquireScreenWakeLock()
-        ForegroundService.start(ClawApplication.instance)
-        KeepAliveJobService.schedule(ClawApplication.instance)
-        ConfigServerManager.autoStartIfNeeded(ClawApplication.instance)
-        if (android.provider.Settings.canDrawOverlays(ClawApplication.instance)) {
-            android.os.Handler(android.os.Looper.getMainLooper()).post {
-                appViewModelInstance.showFloatingCircle()
+        lifecycleManager?.onAppInitialized(
+            channelSetup = channelSetup,
+            autoConnectAction = {
+                if (connectionManager?.isConfigured() == true) {
+                    connectionManager?.connect()
+                }
             }
-        }
-        channelSetup.setup()
-        // 自动连接 Runtime（如果已配置且启用了自动连接）
-        if (isRuntimeConfigured() && KVUtils.isOctopusAutoConnect()) {
-            connectRuntime()
-        }
+        )
     }
 
-    // ── Octopus Mobile 连接管理 ──
+    // ── Octopus Mobile 连接管理（委托给 ConnectionManager） ──
 
     /** 初始化 Octopus Mobile 组件（由 ClawApplication 调用） */
     fun initOctopusMobile() {
@@ -241,6 +232,17 @@ class AppViewModel : ViewModel() {
             XLog.i(TAG, "EvolutionEngine initialized: B1=active, B2=${if (evoLlmCall != null) "active" else "degraded"}, B3=${if (evoLlmCall != null) "available" else "unavailable"}, LessonStore=active")
             XLog.i(TAG, "MemoryStore initialized: memories=${memoryStore!!.getMemories().size}")
 
+            // ── 创建委托管理器 ──
+            lifecycleManager = OctopusLifecycleManager(ClawApplication.instance)
+            connectionManager = OctopusConnectionManager(
+                octopusClient = octopusClient!!,
+                toolDispatcher = toolDispatcher,
+                heartbeatReporter = heartbeatReporter,
+                screenStreamer = screenStreamer,
+                dualConfigWriter = dualConfigWriter,
+                coroutineScope = octopusScope
+            )
+
             XLog.i(TAG, "Octopus Mobile components initialized (not connected)")
             XLog.i(TAG, "Safety subsystems active: SafetyGate=${ToolRegistry.safetyGate != null}, TurnScorer=${ToolRegistry.turnScorer != null}, EventBus=${ToolRegistry.eventBus != null}")
         } catch (e: Exception) {
@@ -249,7 +251,7 @@ class AppViewModel : ViewModel() {
     }
 
     /** Runtime URL 是否已配置 */
-    fun isRuntimeConfigured(): Boolean = KVUtils.getOctopusRpcUrl().isNotEmpty()
+    fun isRuntimeConfigured(): Boolean = connectionManager?.isConfigured() == true
 
     /** 连接到 Runtime */
     fun connectRuntime() {
@@ -257,111 +259,22 @@ class AppViewModel : ViewModel() {
             XLog.w(TAG, "connectRuntime: client not initialized")
             return
         }
-        if (_connectionState.value == ConnectionState.ONLINE ||
-            _connectionState.value == ConnectionState.CONNECTING) {
-            XLog.d(TAG, "Already connected or connecting")
-            return
-        }
-
-        _connectionState.value = ConnectionState.CONNECTING
-        client.onStateChanged = { state ->
-            _connectionState.value = state
-            if (state == ConnectionState.ONLINE) {
-                startSubComponents()
-            }
-        }
-        client.connect()
-        XLog.i(TAG, "Connecting to Runtime: ${KVUtils.getOctopusRpcUrl()}")
+        connectionManager?.connect()
+            ?: XLog.w(TAG, "connectRuntime: connectionManager not initialized")
     }
 
     /** 断开 Runtime */
     fun disconnectRuntime() {
-        stopSubComponents()
-        octopusClient?.disconnect()
-        _connectionState.value = ConnectionState.OFFLINE
-        XLog.i(TAG, "Disconnected from Runtime")
-    }
-
-    /** 启动子组件（ONLINE 时调用） */
-    private fun startSubComponents() {
-        toolDispatcher?.start()
-        heartbeatReporter?.start(octopusScope)
-        screenStreamer?.start()
-        ScreenStreamer.registerListener(screenStreamer!!)
-        dualConfigWriter?.initialSync()
-
-        // 上传 SKILL.md
-        octopusClient?.let { client ->
-            val skillPairs = SkillExporter.exportAllFromRegistry()
-            SkillExporter.uploadToRuntime(client, skillPairs)
-        }
-        XLog.i(TAG, "Sub-components started (Heartbeat/ToolDispatcher/ScreenStreamer/DualConfig)")
-    }
-
-    /** 停止子组件 */
-    private fun stopSubComponents() {
-        toolDispatcher?.stop()
-        heartbeatReporter?.stop()
-        screenStreamer?.stop()
-        XLog.i(TAG, "Sub-components stopped")
-    }
-
-
-    /**
-     * 获取亮屏锁，防止息屏后无障碍服务无法操作
-     */
-    private fun acquireScreenWakeLock() {
-        if (wakeLock?.isHeld == true) return
-        val pm = ClawApplication.instance.getSystemService(android.content.Context.POWER_SERVICE) as? PowerManager
-            ?: return
-        wakeLock = pm.newWakeLock(
-            PowerManager.SCREEN_DIM_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
-            "OctopusMobile::ScreenWakeLock"
-        ).apply {
-            acquire()
-        }
-        XLog.i(TAG, "亮屏锁已获取")
-    }
-
-    /**
-     * 释放亮屏锁
-     */
-    private fun releaseScreenWakeLock() {
-        wakeLock?.let {
-            if (it.isHeld) {
-                it.release()
-                XLog.i(TAG, "亮屏锁已释放")
-            }
-        }
-        wakeLock = null
+        connectionManager?.disconnect()
+            ?: XLog.w(TAG, "disconnectRuntime: connectionManager not initialized")
     }
 
     /**
      * 显示圆形悬浮窗
      */
     fun showFloatingCircle() {
-        try {
-            FloatingCircleManager.show(ClawApplication.instance)
-            FloatingCircleManager.onFloatClick = {
-                XLog.d(TAG, "Floating circle clicked")
-                bringAppToForeground()
-            }
-        } catch (e: Exception) {
-            XLog.e(TAG, "Failed to show floating circle: ${e.message}")
-        }
-    }
-
-    /**
-     * 将应用带回前台
-     */
-    private fun bringAppToForeground() {
-        val context = ClawApplication.instance
-        val intent = android.content.Intent(context, HomeActivity::class.java).apply {
-            flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
-                    android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                    android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP
-        }
-        context.startActivity(intent)
+        lifecycleManager?.showFloatingCircle()
+            ?: XLog.w(TAG, "showFloatingCircle: lifecycleManager not initialized")
     }
 
     fun isTaskRunning(): Boolean = taskOrchestrator.isTaskRunning()

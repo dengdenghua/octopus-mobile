@@ -97,7 +97,7 @@ public class CurrentTimeTool extends BaseTool {
 
 ## 3. 注册到 ToolRegistry（2 分钟）
 
-打开 [ToolRegistry.kt](file:///f:/新建文件夹/octopus-mobile/app/src/main/java/com/apk/claw/android/tool/ToolRegistry.kt)，找到 `registerCommonTools()` 方法，加一行：
+打开 [ToolRegistry.kt](app/src/main/java/com/apk/claw/android/tool/ToolRegistry.kt)，找到 `registerCommonTools()` 方法，加一行：
 
 ```kotlin
 private fun registerCommonTools() {
@@ -196,7 +196,7 @@ class CurrentTimeToolTest {
 
 ## 7. 在 SKILL.md 中导出（可选，1 分钟）
 
-你的工具会自动出现在 [SkillExporter.kt](file:///f:/新建文件夹/octopus-mobile/app/src/main/java/com/apk/claw/android/octopus_mobile/SkillExporter.kt) 的导出列表里——**无需任何改动**。
+你的工具会自动出现在 [SkillExporter.kt](app/src/main/java/com/apk/claw/android/octopus_mobile/SkillExporter.kt) 的导出列表里——**无需任何改动**。
 
 启动 App 时，会自动推送到母体，LLM 就能看到新工具了。
 
@@ -207,10 +207,10 @@ class CurrentTimeToolTest {
 如果工具要发短信、读联系人等敏感操作：
 
 1. AndroidManifest.xml 加权限
-2. [SafetyGate.kt](file:///f:/新建文件夹/octopus-mobile/app/src/main/java/com/apk/claw/android/octopus_mobile/SafetyGate.kt) 加规则
+2. [SafetyGate.kt](app/src/main/java/com/apk/claw/android/octopus_mobile/SafetyGate.kt) 加规则
 3. 在 `execute()` 里检查
 
-参考 [SendSmsTool.java](file:///f:/新建文件夹/octopus-mobile/app/src/main/java/com/apk/claw/android/tool/impl/SendSmsTool.java)。
+参考 [SendSmsTool.java](app/src/main/java/com/apk/claw/android/tool/impl/SendSmsTool.java)。
 
 ---
 

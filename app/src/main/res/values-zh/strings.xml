@@ -364,6 +364,7 @@
     <string name="nav_device">设备</string>
     <string name="nav_settings">设置</string>
     <string name="nav_agent_square">灵感广场</string>
+    <string name="nav_universe">宇宙</string>
 
     <!-- SettingsScreen (Compose) -->
     <string name="settings_center_badge">设备控制中心</string>
@@ -997,6 +998,7 @@
     <string name="agent_inspiration_plaza">灵感广场</string>
     <string name="agent_inspiration_desc">刷玩法、抄模板、收藏能直接跑的灵感</string>
     <string name="agent_action_search">搜灵感</string>
+    <string name="agent_action_universe">我的 Ghost</string>
     <string name="agent_action_publish">发布玩法</string>
     <string name="agent_action_favorite">收藏</string>
     <string name="agent_action_reproduce">一键复刻</string>

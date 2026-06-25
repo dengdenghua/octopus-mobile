@@ -110,10 +110,16 @@ object StateDetector {
     fun extractKeyElements(uiTree: String): List<String> {
         val elements = mutableListOf<String>()
 
+        // 先对 UI 树做脱敏(将 text/content-desc 的值替换为 *),再提取 keyElements。
+        // 避免敏感按钮文本(如"转账"、"支付密码")被持久化到 NavigationGraph。
+        val sanitizedTree = normalizeTree(uiTree)
+
         // 提取 content-desc（通常是按钮/图标的语义描述）
-        val descMatches = Regex("content-desc=\"([^\"]+)\"").findAll(uiTree)
+        // 注意:normalizeTree 已将 content-desc 的值替换为 *,这里提取的是结构签名而非原文
+        val descMatches = Regex("content-desc=\"([^\"]+)\"").findAll(sanitizedTree)
         for (match in descMatches) {
             val desc = match.groupValues[1]
+            // desc 此时为 "*" 或原始结构标记,不再包含敏感文本
             if (desc.length in 1..20 && !desc.all { it.isDigit() }) {
                 elements.add("desc:$desc")
             }
@@ -121,7 +127,7 @@ object StateDetector {
         }
 
         // 提取关键 class 类型（Button, Tab, EditText）
-        val classMatches = Regex("class=\"[^\"]*\\.(Button|Tab|EditText|SearchView|TabLayout)\"").findAll(uiTree)
+        val classMatches = Regex("class=\"[^\"]*\\.(Button|Tab|EditText|SearchView|TabLayout)\"").findAll(sanitizedTree)
         for (match in classMatches) {
             elements.add("cls:${match.groupValues[1]}")
             if (elements.size >= 10) break

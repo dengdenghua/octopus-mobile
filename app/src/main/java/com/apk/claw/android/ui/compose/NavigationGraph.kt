@@ -47,7 +47,9 @@ import com.apk.claw.android.ui.compose.screen.AgentSquareScreen
 import com.apk.claw.android.ui.compose.screen.ChatScreen
 import com.apk.claw.android.ui.compose.screen.DiscoverScreen
 import com.apk.claw.android.ui.compose.screen.FeatureHubScreen
+import com.apk.claw.android.ui.compose.screen.GhostChatSessionStore
 import com.apk.claw.android.ui.compose.screen.SettingsScreen
+import com.apk.claw.android.ui.compose.screen.UniverseScreen
 import com.apk.claw.android.ui.compose.component.LiquidGlassLayer
 import com.apk.claw.android.ui.compose.component.rememberGlassPressState
 import com.apk.claw.android.ui.compose.theme.OctopusBackground
@@ -74,6 +76,7 @@ fun OctopusApp() {
     val currentDestination = navBackStackEntry?.destination
     val selectedBottomRoute = when (currentDestination?.route) {
         Screen.AgentSquare.route -> Screen.Features.route
+        Screen.Universe.route -> Screen.Features.route
         else -> currentDestination?.route
     }
     val snackbarHostState = remember { SnackbarHostState() }
@@ -268,12 +271,31 @@ fun OctopusNavHost(
             DiscoverScreen()
         }
         composable(Screen.Chat.route) { ChatScreen() }
-        composable(Screen.Features.route) { FeatureHubScreen(onNavigateToAgentSquare = { navController.navigate(Screen.AgentSquare.route) }) }
+        composable(Screen.Features.route) {
+            FeatureHubScreen(
+                onNavigateToAgentSquare = { navController.navigate(Screen.AgentSquare.route) },
+                onNavigateToUniverse = { navController.navigate(Screen.Universe.route) },
+            )
+        }
         composable(Screen.AgentSquare.route) {
             AgentSquareScreen(
                 onBack = { navController.popBackStack() },
                 onOpenSearch = { /* TODO */ },
                 onCreatePost = { /* TODO */ },
+            )
+        }
+        composable(Screen.Universe.route) {
+            UniverseScreen(
+                onBack = { navController.popBackStack() },
+                onOpenGhostChat = { feed ->
+                    GhostChatSessionStore.openSession(feed)
+                    navController.navigate(Screen.Chat.route) {
+                        launchSingleTop = true
+                        popUpTo(navController.graph.findStartDestination().id) {
+                            saveState = true
+                        }
+                    }
+                },
             )
         }
         composable(Screen.Settings.route) { SettingsScreen(onMessage = showMessage) }

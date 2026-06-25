@@ -44,6 +44,24 @@ public class FileLoggingInterceptor implements Interceptor {
         return value;
     }
 
+    /** 敏感 body 模式：匹配 "key":"value" 或 key=value 形式的密钥/令牌/密码字段。 */
+    private static final java.util.regex.Pattern SENSITIVE_BODY_PATTERN =
+        java.util.regex.Pattern.compile(
+            "(?i)(\"(?:api[_-]?key|apikey|secret|token|password|passwd|pwd|authorization|auth[_-]?token|private[_-]?key|access[_-]?token|refresh[_-]?token)\"\\s*:\\s*\")([^\"]*)(\")"
+        );
+    private static final java.util.regex.Pattern SENSITIVE_BODY_PATTERN_FORM =
+        java.util.regex.Pattern.compile(
+            "(?i)((?:api[_-]?key|apikey|secret|token|password|passwd|pwd|authorization|auth[_-]?token|private[_-]?key|access[_-]?token|refresh[_-]?token)=)([^&\\s]*)"
+        );
+
+    /** 对 body 中的敏感字段值做脱敏（保留字段名，替换值为 [REDACTED]）。 */
+    private static String redactBody(String body) {
+        if (body == null || body.isEmpty()) return body;
+        String result = SENSITIVE_BODY_PATTERN.matcher(body).replaceAll("$1[REDACTED]$3");
+        result = SENSITIVE_BODY_PATTERN_FORM.matcher(result).replaceAll("$1[REDACTED]");
+        return result;
+    }
+
     private final File logDir;
 
     public FileLoggingInterceptor(File cacheDir) {
@@ -92,7 +110,7 @@ public class FileLoggingInterceptor implements Interceptor {
                     .build();
         }
 
-        writeToFile(request, requestBodyStr, curl, response, response.code(), responseBodyStr, durationMs);
+        writeToFile(request, redactBody(requestBodyStr), curl, response, response.code(), redactBody(responseBodyStr), durationMs);
 
         return response;
     }

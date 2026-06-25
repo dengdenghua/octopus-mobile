@@ -417,12 +417,6 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
             SettingsCard(stringResource(R.string.settings_appearance), Icons.Filled.LightMode, compact = true) {
                 // 主题模式：跟随系统 / 强制亮色 / 强制暗色（三态，统一 Compose 与 XML）
                 var themeMode: Boolean? by remember { mutableStateOf(KVUtils.getThemeMode()) }
-                var glassBlurRadius by remember { mutableFloatStateOf(KVUtils.getGlassBlurRadius()) }
-                var glassQuality by remember { mutableStateOf(OctopusGlassQuality.fromStorage(KVUtils.getGlassQuality())) }
-                var glassRefraction by remember { mutableFloatStateOf(KVUtils.getGlassRefraction()) }
-                var glassHighlight by remember { mutableFloatStateOf(KVUtils.getGlassHighlight()) }
-                var glassNoise by remember { mutableFloatStateOf(KVUtils.getGlassNoise()) }
-                var glassAnimation by remember { mutableStateOf(KVUtils.isGlassAnimationEnabled()) }
                 val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
                 val isLight = themeMode ?: !systemDark
 
@@ -455,129 +449,152 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
                     color = TextMuted,
                     modifier = Modifier.padding(start = 44.dp),
                 )
+            }
+        }
 
-                SettingsDivider()
+        // ── 玻璃设置：独立折叠大面板，默认折叠 ──
+        item {
+            var glassExpanded by remember { mutableStateOf(false) }
+            SettingsCard(
+                stringResource(R.string.settings_glass_blur),
+                Icons.Filled.GraphicEq,
+                compact = true,
+                onClick = { glassExpanded = !glassExpanded },
+            ) {
+                if (glassExpanded) {
+                    var glassBlurRadius by remember { mutableFloatStateOf(KVUtils.getGlassBlurRadius()) }
+                    var glassQuality by remember { mutableStateOf(OctopusGlassQuality.fromStorage(KVUtils.getGlassQuality())) }
+                    var glassRefraction by remember { mutableFloatStateOf(KVUtils.getGlassRefraction()) }
+                    var glassHighlight by remember { mutableFloatStateOf(KVUtils.getGlassHighlight()) }
+                    var glassNoise by remember { mutableFloatStateOf(KVUtils.getGlassNoise()) }
+                    var glassAnimation by remember { mutableStateOf(KVUtils.isGlassAnimationEnabled()) }
 
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.xs),
-                    ) {
-                        listOf(
-                            OctopusGlassQuality.Low,
-                            OctopusGlassQuality.Medium,
-                            OctopusGlassQuality.High,
-                            OctopusGlassQuality.Ultra,
-                        ).forEach { quality ->
-                            val selected = glassQuality == quality
-                            Surface(
-                                shape = OctopusShape.capsule,
-                                color = if (selected) PrimaryColor.copy(alpha = 0.16f) else OctopusBackground.glassSurface,
-                                border = BorderStroke(1.dp, if (selected) PrimaryColor.copy(alpha = 0.42f) else OctopusBackground.glassBorder),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clickable {
-                                        glassQuality = quality
-                                        OctopusGlass.quality = quality
-                                        KVUtils.setGlassQuality(quality.name.lowercase())
-                                    },
-                            ) {
-                                Text(
-                                    quality.name,
-                                    color = if (selected) PrimaryColor else TextSecondary,
-                                    fontSize = OctopusType.tag,
-                                    fontWeight = FontWeight.SemiBold,
-                                    maxLines = 1,
-                                    textAlign = TextAlign.Center,
-                                    modifier = Modifier.padding(vertical = OctopusSpacing.sm),
-                                )
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.xs),
+                        ) {
+                            listOf(
+                                OctopusGlassQuality.Low,
+                                OctopusGlassQuality.Medium,
+                                OctopusGlassQuality.High,
+                                OctopusGlassQuality.Ultra,
+                            ).forEach { quality ->
+                                val selected = glassQuality == quality
+                                Surface(
+                                    shape = OctopusShape.capsule,
+                                    color = if (selected) PrimaryColor.copy(alpha = 0.16f) else OctopusBackground.glassSurface,
+                                    border = BorderStroke(1.dp, if (selected) PrimaryColor.copy(alpha = 0.42f) else OctopusBackground.glassBorder),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clickable {
+                                            glassQuality = quality
+                                            OctopusGlass.quality = quality
+                                            KVUtils.setGlassQuality(quality.name.lowercase())
+                                        },
+                                ) {
+                                    Text(
+                                        quality.name,
+                                        color = if (selected) PrimaryColor else TextSecondary,
+                                        fontSize = OctopusType.tag,
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 1,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.padding(vertical = OctopusSpacing.sm),
+                                    )
+                                }
                             }
                         }
-                    }
-                    Spacer(Modifier.height(OctopusSpacing.sm))
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                        IconBubble(Icons.Filled.GraphicEq, PrimaryColor)
-                        Spacer(Modifier.width(OctopusSpacing.md))
-                        Column(modifier = Modifier.weight(1f)) {
+                        Spacer(Modifier.height(OctopusSpacing.sm))
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                            IconBubble(Icons.Filled.GraphicEq, PrimaryColor)
+                            Spacer(Modifier.width(OctopusSpacing.md))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    stringResource(R.string.settings_glass_blur),
+                                    color = TextPrimary,
+                                    fontSize = OctopusType.body,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                                Text(
+                                    stringResource(R.string.settings_glass_blur_hint),
+                                    color = TextMuted,
+                                    fontSize = OctopusType.caption,
+                                    lineHeight = 15.sp,
+                                )
+                            }
                             Text(
-                                stringResource(R.string.settings_glass_blur),
-                                color = TextPrimary,
-                                fontSize = OctopusType.body,
+                                "${glassBlurRadius.roundToInt()}dp",
+                                color = PrimaryColor,
+                                fontSize = OctopusType.label,
                                 fontWeight = FontWeight.SemiBold,
                             )
+                        }
+                        Slider(
+                            value = glassBlurRadius,
+                            onValueChange = { value ->
+                                glassBlurRadius = value
+                                OctopusGlass.blurRadius = value.dp
+                            },
+                            onValueChangeFinished = {
+                                KVUtils.setGlassBlurRadius(glassBlurRadius)
+                            },
+                            valueRange = 0f..48f,
+                            steps = 15,
+                            modifier = Modifier.padding(start = 44.dp),
+                        )
+                        GlassTuningSlider(
+                            title = stringResource(R.string.settings_glass_refraction),
+                            value = glassRefraction,
+                            valueText = "${(glassRefraction * 100).roundToInt()}%",
+                            onValueChange = {
+                                glassRefraction = it
+                                OctopusGlass.refraction = it
+                            },
+                            onValueChangeFinished = { KVUtils.setGlassRefraction(glassRefraction) },
+                        )
+                        GlassTuningSlider(
+                            title = stringResource(R.string.settings_glass_highlight),
+                            value = glassHighlight,
+                            valueText = "${(glassHighlight * 100).roundToInt()}%",
+                            onValueChange = {
+                                glassHighlight = it
+                                OctopusGlass.highlight = it
+                            },
+                            onValueChangeFinished = { KVUtils.setGlassHighlight(glassHighlight) },
+                        )
+                        GlassTuningSlider(
+                            title = stringResource(R.string.settings_glass_noise),
+                            value = glassNoise,
+                            valueText = "${(glassNoise * 100).roundToInt()}%",
+                            onValueChange = {
+                                glassNoise = it
+                                OctopusGlass.noise = it
+                            },
+                            onValueChangeFinished = { KVUtils.setGlassNoise(glassNoise) },
+                        )
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 44.dp).fillMaxWidth()) {
                             Text(
-                                stringResource(R.string.settings_glass_blur_hint),
-                                color = TextMuted,
-                                fontSize = OctopusType.caption,
-                                lineHeight = 15.sp,
+                                stringResource(R.string.settings_glass_animation),
+                                color = TextPrimary,
+                                fontSize = OctopusType.label,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Switch(
+                                checked = glassAnimation,
+                                onCheckedChange = {
+                                    glassAnimation = it
+                                    OctopusGlass.animationEnabled = it
+                                    KVUtils.setGlassAnimationEnabled(it)
+                                },
                             )
                         }
-                        Text(
-                            "${glassBlurRadius.roundToInt()}dp",
-                            color = PrimaryColor,
-                            fontSize = OctopusType.label,
-                            fontWeight = FontWeight.SemiBold,
-                        )
                     }
-                    Slider(
-                        value = glassBlurRadius,
-                        onValueChange = { value ->
-                            glassBlurRadius = value
-                            OctopusGlass.blurRadius = value.dp
-                        },
-                        onValueChangeFinished = {
-                            KVUtils.setGlassBlurRadius(glassBlurRadius)
-                        },
-                        valueRange = 0f..48f,
-                        steps = 15,
-                        modifier = Modifier.padding(start = 44.dp),
-                    )
-                    GlassTuningSlider(
-                        title = stringResource(R.string.settings_glass_refraction),
-                        value = glassRefraction,
-                        valueText = "${(glassRefraction * 100).roundToInt()}%",
-                        onValueChange = {
-                            glassRefraction = it
-                            OctopusGlass.refraction = it
-                        },
-                        onValueChangeFinished = { KVUtils.setGlassRefraction(glassRefraction) },
-                    )
-                    GlassTuningSlider(
-                        title = stringResource(R.string.settings_glass_highlight),
-                        value = glassHighlight,
-                        valueText = "${(glassHighlight * 100).roundToInt()}%",
-                        onValueChange = {
-                            glassHighlight = it
-                            OctopusGlass.highlight = it
-                        },
-                        onValueChangeFinished = { KVUtils.setGlassHighlight(glassHighlight) },
-                    )
-                    GlassTuningSlider(
-                        title = stringResource(R.string.settings_glass_noise),
-                        value = glassNoise,
-                        valueText = "${(glassNoise * 100).roundToInt()}%",
-                        onValueChange = {
-                            glassNoise = it
-                            OctopusGlass.noise = it
-                        },
-                        onValueChangeFinished = { KVUtils.setGlassNoise(glassNoise) },
-                    )
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 44.dp).fillMaxWidth()) {
-                        Text(
-                            stringResource(R.string.settings_glass_animation),
-                            color = TextPrimary,
-                            fontSize = OctopusType.label,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.weight(1f),
-                        )
-                        Switch(
-                            checked = glassAnimation,
-                            onCheckedChange = {
-                                glassAnimation = it
-                                OctopusGlass.animationEnabled = it
-                                KVUtils.setGlassAnimationEnabled(it)
-                            },
-                        )
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(stringResource(R.string.settings_glass_blur_hint), color = TextMuted, fontSize = OctopusType.caption, lineHeight = 15.sp, modifier = Modifier.weight(1f))
+                        Icon(Icons.Filled.ExpandMore, contentDescription = null, tint = TextMuted, modifier = Modifier.size(OctopusIconSize.small))
                     }
                 }
             }

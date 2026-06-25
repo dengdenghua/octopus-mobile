@@ -2,143 +2,30 @@
 <html>
 <head>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<style>
-  html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:sans-serif;color:#fff}
-  #bar{position:fixed;top:0;left:0;right:0;height:40px;background:rgba(0,0,0,.82);display:flex;
-       align-items:center;gap:14px;padding:0 12px;z-index:10;font-size:14px}
-  #bar .sp{flex:1}#bar span{cursor:pointer}
-  #wrap{position:absolute;top:50%;left:0;right:0;transform:translateY(-50%);width:100%;aspect-ratio:16/9}
-  video{width:100%;height:100%;object-fit:fill;background:#111;touch-action:none;display:block}
-  #status{position:fixed;top:50%;left:0;right:0;transform:translateY(-50%);text-align:center;font-size:14px;z-index:5;padding:0 20px}
-  #guide{position:fixed;top:46px;left:8px;right:8px;bottom:8px;background:rgba(15,18,28,.97);color:#ddd;
-         border-radius:10px;padding:14px;overflow:auto;z-index:20;display:none;font-size:13px;line-height:1.65}
-  #guide h3{margin:0 0 8px;color:#fff;font-size:15px}
-  #guide code{background:#222;color:#9cf;padding:1px 5px;border-radius:4px;word-break:break-all}
-  #guide .step{margin:10px 0;padding:9px;background:rgba(255,255,255,.05);border-radius:8px}
-  #guide button{margin-top:12px;font-size:15px;padding:9px 18px;border:none;border-radius:8px;background:#2e9e5b;color:#fff}
-  #kb{position:fixed;bottom:10px;left:10px;right:10px;z-index:10;display:none}
-  #kb input{width:70%;font-size:16px;padding:8px;border-radius:6px;border:none}
-  #kb button{font-size:15px;padding:8px 10px}
-</style>
+<link rel="stylesheet" href="pc_remote-style.css">
 </head>
 <body>
   <div id="bar">
-    <span onclick="Android.back()">‹ 返回</span>
-    <span>🖥 远程桌面 (WebRTC)</span>
+    <span onclick="Android.back()">&#8249; &#36820;&#22238;</span>
+    <span>&#128187; &#36828;&#31243;&#26700;&#38754; (WebRTC)</span>
     <span class="sp"></span>
-    <span id="st" style="color:#8AB4F8;font-size:11px">○ 连接中</span>
-    <span onclick="key('backspace')">⌫</span>
+    <span id="conn-badge"></span>
+    <span id="st" style="color:#8AB4F8;font-size:11px">&#9675; &#36830;&#25509;&#20013;</span>
+    <span onclick="key('backspace')">&#9003;</span>
     <span onclick="key('esc')">Esc</span>
-    <span onclick="toggleKb()">⌨</span>
+    <span onclick="toggleKb()">&#9000;</span>
   </div>
   <div id="wrap"><video id="v" autoplay playsinline muted></video></div>
-  <div id="status">正在和母体建立 WebRTC…<br>（确认母体侧 pc_remote_webrtc.py 已运行；跨网需 STUN/TURN 可达）</div>
+  <div id="status">&#27491;&#22312;&#21644;&#27597;&#20307;&#24314;&#31435; WebRTC&hellip;<br>&#65288;&#30830;&#35748;&#27597;&#20307;&#20391; pc_remote_webrtc.py &#24050;&#36816;&#34892;&#65307;&#36328;&#32593;&#38656; STUN/TURN &#21487;&#36798;&#65289;<div id="retry-countdown"></div></div>
   <div id="guide"></div>
-  <div id="kb"><input id="kbi" placeholder="输入文字到 PC"><button onclick="sendType()">发送</button><button onclick="key('enter')">回车</button></div>
-<script>
-  let pc=null, dc=null, attempt=0, connectTimer=null;
-  const MAX_RETRY=3;
-  // 多个 STUN:WebRTC 并行查、谁通用谁(降级切换);死服务器不要放(会拖慢收集)。
-  // 对称 NAT 必通需 TURN:加 {urls:'turn:host:3478',username:'u',credential:'p'} 即可。
-  const ICE=[
-    {urls:'stun:stun.cloudflare.com:3478'},
-    {urls:'stun:stun.chat.bilibili.com:3478'},
-    {urls:'stun:stun.l.google.com:19302'},
-    {urls:'stun:stun.nextcloud.com:3478'},
-  ];
-  const video=document.getElementById('v'), st=document.getElementById('st'), statusEl=document.getElementById('status');
-
-  function start(){
-    attempt++;
-    pc=new RTCPeerConnection({iceServers:ICE});
-    pc.ontrack=e=>{ video.srcObject=e.streams[0]; statusEl.style.display='none'; };
-    pc.ondatachannel=e=>{ dc=e.channel; };
-    pc.onconnectionstatechange=()=>{
-      const s=pc.connectionState;
-      st.textContent = s==='connected' ? '● P2P 已连' : '○ '+s;
-      if(s==='connected'){ if(connectTimer)clearTimeout(connectTimer); attempt=0; statusEl.style.display='none'; }
-      else if(s==='failed'){ retry('连接失败'); }
-    };
-    Android.request();           // 让原生发 webrtc/request
-    if(connectTimer)clearTimeout(connectTimer);
-    connectTimer=setTimeout(()=>{ if(!pc||pc.connectionState!=='connected') retry('超时'); }, 15000);
-  }
-
-  function retry(reason){
-    if(connectTimer){clearTimeout(connectTimer);connectTimer=null;}
-    try{ if(pc) pc.close(); }catch(e){} pc=null; dc=null;
-    if(attempt>=MAX_RETRY){ showGuide(reason); return; }   // 降级:重试用尽 → 设置指引
-    statusEl.style.display='block'; statusEl.textContent='重连中('+reason+')… 第 '+attempt+' 次(切换 STUN 重试)';
-    setTimeout(start, Math.min(1500*attempt, 5000));
-  }
-
-  function retryNow(){
-    document.getElementById('guide').style.display='none';
-    statusEl.style.display='block'; statusEl.textContent='重连中…';
-    attempt=0;
-    try{ Android.reconnect && Android.reconnect(); }catch(e){}   // 先拉起底层 WS
-    setTimeout(start, 1500);                                     // 给 WS 一点连接时间
-  }
-
-  function showGuide(reason){
-    const g=document.getElementById('guide');
-    g.innerHTML =
-      '<h3>连不上母体（'+reason+'，已重试 '+attempt+' 次）— 按下面设置</h3>'+
-      '<div class="step"><b>① 母体在跑吗？</b><br>Mac 上(同机/回环即可)：<br><code>.venv/bin/python scripts/pc_remote_webrtc.py</code></div>'+
-      '<div class="step"><b>② 同一局域网</b>(手机和 Mac 同 WiFi)：<br>母体绑全网卡 + 设密码：<br><code>OCTOPUS_TENTACLE_HOST=0.0.0.0 OCTOPUS_TENTACLE_TOKEN=你的密码 .venv/bin/python scripts/pc_remote_webrtc.py</code><br>手机 设置→母体连接：地址 <code>ws://Mac内网IP:8765</code>，Auth Token 填同一密码</div>'+
-      '<div class="step"><b>③ 跨网（推荐 Tailscale，免费 / 零 TURN）</b>：<br>· 手机装 Tailscale，登和 Mac 同一账号<br>· 母体同 ② 那样 <code>0.0.0.0</code> + token 起<br>· 手机 设置→母体连接：地址 <code>ws://100.106.228.62:8765</code>（Mac 的 Tailscale IP；Mac 上 <code>tailscale ip -4</code> 可查），token 同上</div>'+
-      '<div class="step"><b>④ 仍连不上 = 对称 NAT</b>(STUN 打洞失败)：<br>用 ③ 的 Tailscale(自带免费中继)；或在两端 iceServers 加 <code>turn:</code>(coturn / 托管，按流量计费)</div>'+
-      '<button onclick="retryNow()">重试</button>';
-    g.style.display='block'; statusEl.style.display='none';
-  }
-
-  // 母体 offer 进来（原生 evaluateJavascript 调用）
-  window.onOffer=async function(sdp){
-    if(!pc) return;            // 重试间隙,等下一次 request 的 offer
-    try{
-      await pc.setRemoteDescription({type:'offer',sdp:sdp});
-      const ans=await pc.createAnswer();
-      await pc.setLocalDescription(ans);
-      await new Promise(r=>{
-        if(pc.iceGatheringState==='complete')return r();
-        pc.addEventListener('icegatheringstatechange',()=>{ if(pc.iceGatheringState==='complete')r(); });
-        setTimeout(r,5000);
-      });
-      Android.answer(pc.localDescription.sdp);
-      st.textContent='○ 已应答';
-    }catch(err){ statusEl.textContent='应答失败: '+err; }
-  };
-
-  function send(o){ if(dc&&dc.readyState==='open') dc.send(JSON.stringify(o)); }
-  function key(k){ send({action:'key',text:k}); }
-  function toggleKb(){ const k=document.getElementById('kb'); k.style.display=(k.style.display==='block')?'none':'block'; }
-  function sendType(){ const i=document.getElementById('kbi'); if(i.value)send({action:'type',text:i.value}); i.value=''; }
-
-  // 触摸：单指=点击/长按右键/拖拽；双指纵滑=滚动
-  function norm(t){ const r=video.getBoundingClientRect();
-    return {x:Math.min(1,Math.max(0,(t.clientX-r.left)/r.width)), y:Math.min(1,Math.max(0,(t.clientY-r.top)/r.height))}; }
-  let downN=null,lastN=null,dragging=false,moved=false,twoF=false,lastCy=0,lpTimer=null;
-  video.addEventListener('touchstart',e=>{
-    if(e.touches.length>=2){ twoF=true; lastCy=(e.touches[0].clientY+e.touches[1].clientY)/2; if(lpTimer){clearTimeout(lpTimer);lpTimer=null;} return; }
-    twoF=false; downN=norm(e.touches[0]); lastN=downN; moved=false; dragging=false;
-    lpTimer=setTimeout(()=>{ if(!moved&&downN) send({action:'rightclick',x:downN.x,y:downN.y}); lpTimer=null; },550);
-  },{passive:true});
-  video.addEventListener('touchmove',e=>{
-    if(twoF&&e.touches.length>=2){ const cy=(e.touches[0].clientY+e.touches[1].clientY)/2; const dy=cy-lastCy; lastCy=cy;
-      const r=video.getBoundingClientRect(); send({action:'scroll',x:0,y:dy/r.height}); return; }
-    const n=norm(e.touches[0]); lastN=n;
-    if(!dragging && (Math.abs(n.x-downN.x)>0.02||Math.abs(n.y-downN.y)>0.02)){ dragging=true; moved=true; if(lpTimer){clearTimeout(lpTimer);lpTimer=null;} send({action:'down',x:downN.x,y:downN.y}); }
-    if(dragging) send({action:'move',x:n.x,y:n.y});
-  },{passive:true});
-  video.addEventListener('touchend',e=>{
-    if(lpTimer){clearTimeout(lpTimer);lpTimer=null;}
-    if(twoF){ twoF=false; return; }
-    if(dragging){ send({action:'up',x:(lastN||downN).x,y:(lastN||downN).y}); }
-    else if(downN&&!moved){ send({action:'tap',x:downN.x,y:downN.y}); }
-    downN=null; dragging=false;
-  },{passive:true});
-
-  start();
-</script>
+  <div id="kb">
+    <div id="kb-handle"></div>
+    <div id="kb-row">
+      <input id="kbi" placeholder="&#36755;&#20837;&#25991;&#23383;&#21040; PC">
+      <button onclick="sendType()">&#21457;&#36865;</button>
+      <button onclick="key('enter')">&#22238;&#36710;</button>
+    </div>
+  </div>
+<script src="pc_remote-app.js"></script>
 </body>
 </html>

@@ -280,6 +280,7 @@
     <string name="nav_device">デバイス</string>
     <string name="nav_settings">設定</string>
     <string name="nav_agent_square">インスピレーション広場</string>
+    <string name="nav_universe">宇宙</string>
 
     <!-- SettingsScreen (Compose) -->
     <string name="settings_section_permissions">権限の状態</string>
@@ -889,6 +890,7 @@
     <string name="agent_inspiration_plaza">インスピレーション広場</string>
     <string name="agent_inspiration_desc">アイデアを閲覧、テンプレをコピー、実行可能なインスピレーションを保存</string>
     <string name="agent_action_search">検索</string>
+    <string name="agent_action_universe">My Ghost</string>
     <string name="agent_action_publish">共有</string>
     <string name="agent_action_favorite">お気に入り</string>
     <string name="agent_action_reproduce">リミックス</string>

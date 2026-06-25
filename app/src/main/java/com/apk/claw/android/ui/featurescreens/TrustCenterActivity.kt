@@ -45,6 +45,8 @@ import com.apk.claw.android.server.ConfigServerManager
 import com.apk.claw.android.service.ClawAccessibilityService
 import com.apk.claw.android.shizuku.ShizukuManager
 import com.apk.claw.android.utils.KVUtils
+import com.apk.claw.android.octopus_mobile.safety.PermissionMode
+import com.apk.claw.android.octopus_mobile.safety.PermissionModeManager
 
 class TrustCenterActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -173,22 +175,53 @@ fun TrustCenterScreen(onBack: () -> Unit) {
                 }
             }
 
-            FSectionTitle("高级 · 专用自动化设备")
+            FSectionTitle("权限模式 · 设备用途分层")
+            // 当前模式标签
+            FCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("当前模式", color = FText, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                    val modeLabel = if (advOn) "完全权限模式" else "审批模式"
+                    val modeColor = if (advOn) FWarning else FSuccess
+                    FPill(modeLabel, modeColor)
+                }
+            }
+            // 审批模式说明
             FCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("满血模式 · 解除高危能力限制", color = FText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                        Text("审批模式 · 日常主力机", color = FText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                         Text(
-                            "⚠️ 仅用于你完全掌控的闲置/专用自动化手机。开启后：母体、局域网、主动规则可" +
-                                "无确认执行全部高危工具（发短信 / 发 Intent / 装应用 / 文件读写删 / 浏览器执行 JS），" +
-                                "文件工具不再限制在 /sdcard。会显著降低安全性——日常主力机请勿开启。",
+                            "安全优先。高危工具（发短信/发 Intent/装应用/文件读写删/浏览器执行 JS）" +
+                                "调用时弹窗人工确认。来源闸门、路径沙箱、宪法法官全部开启。" +
+                                "适合日常主力机。",
+                            color = FMuted, fontSize = 10.sp, lineHeight = 14.sp,
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Switch(
+                        checked = !advOn,
+                        onCheckedChange = { if (it) { PermissionModeManager.switchMode(PermissionMode.APPROVAL, "user_switch_trustcenter"); advOn = false } },
+                        colors = SwitchDefaults.colors(checkedTrackColor = FSuccess, checkedThumbColor = Color.White),
+                    )
+                }
+            }
+            // 完全权限模式说明
+            FCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("完全权限模式 · 闲置/群控机", color = FText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "⚠️ 释放最大能力。母体、局域网、主动规则可无确认执行全部高危工具，" +
+                                "文件工具不再限制在 /sdcard。会显著降低安全性——" +
+                                "仅用于你完全掌控的闲置/专用自动化手机，日常主力机请勿开启。" +
+                                "隐私扫描、审计日志、断路器三项不可关闭（防失控）。",
                             color = FWarning, fontSize = 10.sp, lineHeight = 14.sp,
                         )
                     }
                     Spacer(Modifier.width(8.dp))
                     Switch(
                         checked = advOn,
-                        onCheckedChange = { advOn = it; KVUtils.setAdvancedAutomationMode(it) },
+                        onCheckedChange = { if (it) { PermissionModeManager.switchMode(PermissionMode.FULL_POWER, "user_switch_trustcenter"); advOn = true } },
                         colors = SwitchDefaults.colors(checkedTrackColor = FWarning, checkedThumbColor = Color.White),
                     )
                 }
@@ -210,8 +243,8 @@ fun TrustCenterScreen(onBack: () -> Unit) {
                     modifier = Modifier.fillMaxWidth().clickable {
                         KVUtils.setLanControlEnabled(false)
                         lanOn = false
-                        // 一键收回同时关闭"满血模式"，恢复安全默认。
-                        KVUtils.setAdvancedAutomationMode(false)
+                        // 一键收回同时切回审批模式，恢复安全默认。
+                        PermissionModeManager.switchMode(PermissionMode.APPROVAL, "user_revoke_all")
                         advOn = false
                         ControlTarget.setLocal()
                         tick++

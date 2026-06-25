@@ -47,7 +47,11 @@ object WebDavMounts {
         KVUtils.putString(KEY, gson.toJson(all().filterNot { it.id == id }))
     }
 
-    /** 构建带凭据的播放/访问 URL（basic auth 走 URL userinfo，mpv/ffmpeg 可直接用）。 */
+    /** 构建带凭据的播放/访问 URL（basic auth 走 URL userinfo，mpv/ffmpeg 可直接用）。
+     *
+     * ⚠️ 安全提示：URL userinfo 凭据会泄漏到 mpv 日志、/proc/<pid>/cmdline、Referer。
+     * 优先使用 [authHeader] 返回的 Authorization 头传凭据；仅当播放器不支持 HTTP 头时
+     * （如 mpv 命令行模式）才回退到此方法。 */
     fun playUrl(m: Mount, href: String): String {
         val base = m.baseUrl.trimEnd('/')
         if (m.username.isEmpty()) return base + href
@@ -56,5 +60,14 @@ object WebDavMounts {
         val u = java.net.URLEncoder.encode(m.username, "UTF-8")
         val p = java.net.URLEncoder.encode(m.password, "UTF-8")
         return "$scheme://$u:$p@$rest$href"
+    }
+
+    /** 返回 Basic Auth 的 Authorization 头值（"Basic <base64>"）。
+     * 优先用此方法传凭据，避免凭据嵌入 URL 导致泄漏。 */
+    fun authHeader(m: Mount): String? {
+        if (m.username.isEmpty()) return null
+        val raw = "${m.username}:${m.password}"
+        val b64 = android.util.Base64.encodeToString(raw.toByteArray(), android.util.Base64.NO_WRAP)
+        return "Basic $b64"
     }
 }
