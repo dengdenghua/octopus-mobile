@@ -4,6 +4,8 @@ import android.app.AlertDialog
 import android.app.TimePickerDialog
 import android.content.Context
 import android.os.Bundle
+import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
@@ -30,7 +32,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.apk.claw.android.R
 import com.apk.claw.android.octopus_mobile.ActionCache
+import com.apk.claw.android.octopus_mobile.RoutineParameterizer
 import com.apk.claw.android.octopus_mobile.RoutineStore
+import com.apk.claw.android.octopus_mobile.RoutineVariables
 import com.apk.claw.android.service.RoutineScheduler
 import com.apk.claw.android.ui.compose.screen.RoutineRunner
 import com.apk.claw.android.ui.compose.theme.OctopusColors
@@ -73,7 +77,8 @@ private fun RoutinesScreen(onBack: () -> Unit) {
                         routine = r,
                         onForgetFastPath = { forgetFastPath(ctx, r) { refresh() } },
                         onSchedule = { openSchedule(ctx, r) { refresh() } },
-                        onRun = { Toast.makeText(ctx, RoutineRunner.run(ctx, r), Toast.LENGTH_LONG).show(); refresh() },
+                        onParameterize = { openParameterize(ctx, r) { refresh() } },
+                        onRun = { runRoutine(ctx, r) { refresh() } },
                         onDelete = {
                             RoutineScheduler.cancel(ctx, r.id)
                             ActionCache.remove(r.id)
@@ -127,6 +132,7 @@ private fun RoutineCard(
     routine: RoutineStore.Routine,
     onForgetFastPath: () -> Unit,
     onSchedule: () -> Unit,
+    onParameterize: () -> Unit,
     onRun: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -164,6 +170,7 @@ private fun RoutineCard(
                         FPill("%02d:%02d".format(routine.scheduleHour, routine.scheduleMinute), OctopusTints.Hot)
                     }
                     cached?.let { FPill("快路径 ${it.steps.size} 步", FPrimary) }
+                    if (routine.isParameterized) FPill("参数化 ${routine.variables.joinToString("/") { "{$it}" }}", OctopusTints.Skill)
                 }
             }
         }
@@ -175,6 +182,8 @@ private fun RoutineCard(
         Row(horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.sm), modifier = Modifier.fillMaxWidth()) {
             if (cached != null) {
                 RoutineIconAction("忘", FPrimary, onForgetFastPath)
+                // 有快路径才可参数化（templatize 需要缓存步骤把写死值换成占位符）
+                RoutineIconAction(if (routine.isParameterized) "参✓" else "参", OctopusTints.Skill, onParameterize)
             }
             RoutineIconAction(Icons.Filled.Alarm, FWarning, onSchedule)
             RoutineIconAction(Icons.Filled.PlayArrow, FPrimary, onRun, modifier = Modifier.weight(1f), label = stringResource(R.string.routines_item_run_button))
@@ -271,4 +280,79 @@ private fun openSchedule(ctx: Context, r: RoutineStore.Routine, onChanged: () ->
             }
             .show()
     }, h0, m0, true).show()
+}
+
+/** ▶️ 运行例程：普通例程直接跑；参数化例程先弹框收 {变量} 值，拼出本次实际指令再跑。 */
+private fun runRoutine(ctx: Context, r: RoutineStore.Routine, onChanged: () -> Unit) {
+    if (!r.isParameterized) {
+        Toast.makeText(ctx, RoutineRunner.run(ctx, r), Toast.LENGTH_LONG).show()
+        onChanged()
+        return
+    }
+    val pad = (16 * ctx.resources.displayMetrics.density).toInt()
+    val container = LinearLayout(ctx).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(pad, pad / 2, pad, 0)
+    }
+    val inputs = r.variables.map { name ->
+        val field = EditText(ctx).apply { hint = "{$name}" }
+        container.addView(field)
+        name to field
+    }
+    AlertDialog.Builder(ctx)
+        .setTitle(ctx.getString(R.string.routines_item_run_button) + "：${r.name}")
+        .setMessage("模板：「${r.prompt}」\n填入本次实际值：")
+        .setView(container)
+        .setPositiveButton(ctx.getString(R.string.routines_item_run_button)) { _, _ ->
+            val values = inputs.associate { (n, f) -> n to f.text.toString().trim() }
+            val actual = RoutineVariables.substitute(r.prompt, values)
+            Toast.makeText(ctx, RoutineRunner.run(ctx, r, actual), Toast.LENGTH_LONG).show()
+            onChanged()
+        }
+        .setNegativeButton(ctx.getString(R.string.common_cancel), null)
+        .show()
+}
+
+/** 🧩 参数化：把写死值的例程升级成带 {变量} 的模板，之后可用不同输入复用同一条快路径。 */
+private fun openParameterize(ctx: Context, r: RoutineStore.Routine, onChanged: () -> Unit) {
+    if (r.isParameterized) {
+        AlertDialog.Builder(ctx)
+            .setTitle("已参数化")
+            .setMessage("模板：「${r.prompt}」\n运行时会让你填写：${r.variables.joinToString("、") { "{$it}" }}")
+            .setPositiveButton("知道了", null)
+            .show()
+        return
+    }
+    val pad = (16 * ctx.resources.displayMetrics.density).toInt()
+    val field = EditText(ctx).apply {
+        setText(r.prompt)
+        setSelection(r.prompt.length)
+        hint = "用 {名字} 标出可变部分，如 给{联系人}发{内容}"
+    }
+    val container = LinearLayout(ctx).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(pad, pad / 2, pad, 0)
+        addView(field)
+    }
+    AlertDialog.Builder(ctx)
+        .setTitle("参数化例程")
+        .setMessage("把可变部分用 {变量名} 标出来，下次可用不同输入复用同一条快路径。")
+        .setView(container)
+        .setPositiveButton("保存模板") { _, _ ->
+            val template = field.text.toString().trim()
+            if (!RoutineVariables.hasVariables(template)) {
+                Toast.makeText(ctx, "未发现 {变量}，请用花括号标出可变部分", Toast.LENGTH_LONG).show()
+                return@setPositiveButton
+            }
+            val ok = RoutineParameterizer.templatize(r.id, r.prompt, template)
+            Toast.makeText(
+                ctx,
+                if (ok) "已参数化：${RoutineVariables.names(template).joinToString("、") { "{$it}" }}"
+                else "参数化失败：模板与原指令对不上，或无快路径可改写",
+                Toast.LENGTH_LONG,
+            ).show()
+            onChanged()
+        }
+        .setNegativeButton(ctx.getString(R.string.common_cancel), null)
+        .show()
 }
