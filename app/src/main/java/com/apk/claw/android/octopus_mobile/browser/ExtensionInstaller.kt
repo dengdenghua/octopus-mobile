@@ -1,10 +1,10 @@
 package com.apk.claw.android.octopus_mobile.browser
+import com.apk.claw.android.utils.OctoHttp
 
 import android.util.Log
 import com.apk.claw.android.octopus_mobile.safety.UrlGuard
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
 import java.io.FileOutputStream
@@ -25,7 +25,7 @@ class ExtensionInstaller(
     private val engine: GeckoViewEngine,
     private val cacheDir: File,
 ) {
-    private val httpClient = OkHttpClient.Builder()
+    private val httpClient = OctoHttp.shared.newBuilder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
         .build()

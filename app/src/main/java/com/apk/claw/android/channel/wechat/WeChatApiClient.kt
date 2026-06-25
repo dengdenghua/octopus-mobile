@@ -1,4 +1,5 @@
 package com.apk.claw.android.channel.wechat
+import com.apk.claw.android.utils.OctoHttp
 
 import com.apk.claw.android.utils.XLog
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
@@ -60,21 +61,21 @@ class WeChatApiClient(
     // ==================== HTTP 客户端 (api.ts DEFAULT_*_TIMEOUT_MS) ====================
 
     /** 长轮询用（getUpdates/QR poll：SDK 超时 35s，readTimeout 留 5s 余量） */
-    private val longPollClient = OkHttpClient.Builder()
+    private val longPollClient = OctoHttp.shared.newBuilder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(40, TimeUnit.SECONDS)  // 35s server hold + 5s buffer
         .writeTimeout(15, TimeUnit.SECONDS)
         .build()
 
     /** 普通 API 用（sendMessage、getUploadUrl） */
-    private val apiClient = OkHttpClient.Builder()
+    private val apiClient = OctoHttp.shared.newBuilder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
         .writeTimeout(15, TimeUnit.SECONDS)
         .build()
 
     /** 轻量 API 用（getConfig、sendTyping） */
-    private val configClient = OkHttpClient.Builder()
+    private val configClient = OctoHttp.shared.newBuilder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.SECONDS)
         .writeTimeout(10, TimeUnit.SECONDS)

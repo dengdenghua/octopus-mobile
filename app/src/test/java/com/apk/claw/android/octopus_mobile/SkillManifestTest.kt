@@ -17,7 +17,7 @@ import org.robolectric.annotation.Config
  * SkillManifest 解析器测试.
  *
  * 覆盖：
- *  - 43 个真实 SKILL.md 资产（assets/skills/mobile 目录下所有 .md）
+ *  - 42 个真实 SKILL.md 资产（assets/skills/mobile 目录下所有 .md）
  *  - 精简版（JSON Schema 单行）+ 长版（list-of-objects）两种格式
  *  - 错误输入（缺 name / 缺 frontmatter / 空文件）
  *  - 边界（description 块 / continuation / 极小文件）
@@ -32,9 +32,9 @@ class SkillManifestTest {
     // ── 真实资产测试 ────────────────────────────────────────
 
     @Test
-    fun `loadFromAssets returns 43 skills`() {
+    fun `loadFromAssets returns 42 skills`() {
         val skills = SkillManifest.loadFromAssets(context, "skills/mobile")
-        assertEquals("expected 43 SKILL.md, got ${skills.size}", 43, skills.size)
+        assertEquals("expected 42 SKILL.md, got ${skills.size}", 42, skills.size)
     }
 
     @Test
@@ -71,8 +71,8 @@ class SkillManifestTest {
             // 屏幕感知
             "android.get_screen_info", "android.take_screenshot",
             "android.find_node", "android.find_text",
-            // 应用管理
-            "android.open_app", "android.install_app",
+            // 应用管理（install_app 技能已作为孤儿技能删除——无对应 Tool 实现）
+            "android.open_app",
             "android.get_installed_apps", "android.wait",
             // 智能复合
             "android.scroll_to_find", "android.detect_dialog",

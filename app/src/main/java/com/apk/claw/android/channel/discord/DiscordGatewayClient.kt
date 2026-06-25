@@ -1,11 +1,11 @@
 package com.apk.claw.android.channel.discord
+import com.apk.claw.android.utils.OctoHttp
 
 import android.os.Handler
 import android.os.Looper
 import com.apk.claw.android.utils.XLog
 import com.google.gson.Gson
 import com.google.gson.JsonObject
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
@@ -34,7 +34,7 @@ class DiscordGatewayClient private constructor() {
         }
     }
 
-    private val httpClient = OkHttpClient.Builder()
+    private val httpClient = OctoHttp.shared.newBuilder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
         .writeTimeout(10, TimeUnit.SECONDS)

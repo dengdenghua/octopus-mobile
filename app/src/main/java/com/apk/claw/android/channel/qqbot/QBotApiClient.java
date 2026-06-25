@@ -15,6 +15,7 @@ import java.util.concurrent.TimeUnit;
 import okhttp3.Call;
 import okhttp3.Callback;
 import okhttp3.MediaType;
+import com.apk.claw.android.utils.OctoHttp;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
@@ -35,7 +36,7 @@ public class QBotApiClient {
     private boolean isAuthenticating = false;
     
     private QBotApiClient() {
-        httpClient = new OkHttpClient.Builder()
+        httpClient = OctoHttp.shared.newBuilder()
                 .connectTimeout(10, TimeUnit.SECONDS)
                 .readTimeout(10, TimeUnit.SECONDS)
                 .writeTimeout(10, TimeUnit.SECONDS)

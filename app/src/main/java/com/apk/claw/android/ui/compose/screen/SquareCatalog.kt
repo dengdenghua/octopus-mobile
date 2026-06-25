@@ -1,4 +1,5 @@
 package com.apk.claw.android.ui.compose.screen
+import com.apk.claw.android.utils.OctoHttp
 
 import androidx.compose.ui.graphics.Color
 import com.apk.claw.android.R
@@ -8,7 +9,6 @@ import com.apk.claw.android.utils.KVUtils
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.util.concurrent.TimeUnit
 
@@ -112,7 +112,7 @@ internal object LocalSkillRegistry {
 internal object SquareRepository {
     private const val CACHE_KEY = "SQUARE_FEED_CACHE_JSON"
     private val gson = Gson()
-    private val http = OkHttpClient.Builder()
+    private val http = OctoHttp.shared.newBuilder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
         .build()
@@ -244,7 +244,7 @@ private fun DiscoveryPostDto.toPost(): AgentDiscoveryPost {
 internal object DiscoveryRepository {
     private const val CACHE_KEY = "SQUARE_DISCOVERY_CACHE_JSON"
     private val gson = Gson()
-    private val http = OkHttpClient.Builder()
+    private val http = OctoHttp.shared.newBuilder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
         .build()
@@ -298,7 +298,7 @@ internal object DiscoveryRepository {
  */
 internal object RemoteConfig {
     private val gson = Gson()
-    private val http = OkHttpClient.Builder()
+    private val http = OctoHttp.shared.newBuilder()
         .connectTimeout(8, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.SECONDS)
         .build()

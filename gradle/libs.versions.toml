@@ -14,6 +14,7 @@ appcompat = "1.6.1"
 material = "1.10.0"
 langchain4j = "1.12.2"
 okhttp = "4.12.0"
+geckoview = "151.0.20260513195118"
 retrofit = "2.11.0"
 gson = "2.13.2"
 constraintlayout = "2.1.4"
@@ -49,6 +50,7 @@ langchain4j-openai = { group = "dev.langchain4j", name = "langchain4j-open-ai", 
 langchain4j-anthropic = { group = "dev.langchain4j", name = "langchain4j-anthropic", version.ref = "langchain4j" }
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 okhttp-logging = { group = "com.squareup.okhttp3", name = "logging-interceptor", version.ref = "okhttp" }
+geckoview = { module = "org.mozilla.geckoview:geckoview", version.ref = "geckoview" }
 retrofit = { group = "com.squareup.retrofit2", name = "retrofit", version.ref = "retrofit" }
 retrofit-gson = { group = "com.squareup.retrofit2", name = "converter-gson", version.ref = "retrofit" }
 gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }

@@ -1,4 +1,5 @@
 package com.apk.claw.android.server
+import com.apk.claw.android.utils.OctoHttp
 
 import android.os.Build
 import android.os.Handler
@@ -17,7 +18,6 @@ import com.google.gson.JsonObject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
@@ -42,7 +42,7 @@ object RemoteConsoleGateway {
 
     private val gson = Gson()
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val http = OkHttpClient.Builder()
+    private val http = OctoHttp.shared.newBuilder()
         .connectTimeout(12, TimeUnit.SECONDS)
         .readTimeout(0, TimeUnit.MILLISECONDS)
         .writeTimeout(12, TimeUnit.SECONDS)

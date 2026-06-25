@@ -1,9 +1,9 @@
 package com.apk.claw.android.media
+import com.apk.claw.android.utils.OctoHttp
 
 import com.apk.claw.android.utils.XLog
 import okhttp3.Credentials
 import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.concurrent.TimeUnit
@@ -36,7 +36,7 @@ object WebDAVScanner {
     /** HTTP 客户端（WebDAV 需要较长超时）。
      *  followRedirects=false：防止恶意 WebDAV 服务器通过 301/302 重定向到内网地址
      *  （如 169.254.169.254 元数据服务）实施 SSRF。 */
-    private val httpClient = OkHttpClient.Builder()
+    private val httpClient = OctoHttp.shared.newBuilder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .followRedirects(false)

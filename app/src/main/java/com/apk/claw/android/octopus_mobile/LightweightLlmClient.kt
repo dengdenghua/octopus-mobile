@@ -1,4 +1,5 @@
 package com.apk.claw.android.octopus_mobile
+import com.apk.claw.android.utils.OctoHttp
 
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
@@ -31,7 +32,7 @@ class LightweightLlmClient(
      * 可选：自定义 OkHttpClient.
      * 生产环境用默认（15s connect / 60s read），测试用 MockWebServer 时注入.
      */
-    private val httpClient: OkHttpClient = OkHttpClient.Builder()
+    private val httpClient: OkHttpClient = OctoHttp.shared.newBuilder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
         .build()

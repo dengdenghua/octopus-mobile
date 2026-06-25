@@ -1,4 +1,5 @@
 package com.apk.claw.android.tool.impl
+import com.apk.claw.android.utils.OctoHttp
 
 import com.apk.claw.android.tool.BaseTool
 import com.apk.claw.android.tool.ToolParameter
@@ -52,7 +53,7 @@ class CreatePmTaskTool(
     private val baseUrl: () -> String = { PmConfig.url() },
     private val token: () -> String = { PmConfig.token() },
     private val tenant: () -> String = { PmConfig.tenant() },
-    private val client: OkHttpClient = OkHttpClient(),
+    private val client: OkHttpClient = OctoHttp.shared,
 ) : BaseTool() {
 
     override fun getName(): String = "create_pm_task"
@@ -123,7 +124,7 @@ class ListPmProjectsTool(
     private val baseUrl: () -> String = { PmConfig.url() },
     private val token: () -> String = { PmConfig.token() },
     private val tenant: () -> String = { PmConfig.tenant() },
-    private val client: OkHttpClient = OkHttpClient(),
+    private val client: OkHttpClient = OctoHttp.shared,
 ) : BaseTool() {
 
     override fun getName(): String = "list_pm_projects"
