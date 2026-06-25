@@ -56,6 +56,7 @@ object KVUtils {
     private lateinit var securePrefs: EncryptedSharedPreferences
     private val disabledToolsFallback = mutableSetOf<String>()
     private val stringFallback = ConcurrentHashMap<String, String>()
+    private val boolFallback = ConcurrentHashMap<String, Boolean>()
 
     private const val DEFAULT_INT = 0
     private const val DEFAULT_LONG = 0L
@@ -188,10 +189,19 @@ object KVUtils {
 
     // ==================== Boolean ====================
     fun putBoolean(key: String, value: Boolean): Boolean {
+        // MMKV 未初始化（如 init 前的早期读写 / 单元测试）退回内存 map，与 get/putString 同款，
+        // 避免 lateinit mmkv 直接抛 UninitializedPropertyAccessException。
+        if (!::mmkv.isInitialized) {
+            boolFallback[key] = value
+            return true
+        }
         return mmkv.encode(key, value)
     }
 
     fun getBoolean(key: String, defaultValue: Boolean = DEFAULT_BOOL): Boolean {
+        if (!::mmkv.isInitialized) {
+            return boolFallback[key] ?: defaultValue
+        }
         return mmkv.decodeBool(key, defaultValue)
     }
 
@@ -234,7 +244,10 @@ object KVUtils {
         if (key in SECURE_KEYS && ::securePrefs.isInitialized) {
             runCatchingLog("KVUtils") { securePrefs.edit().remove(key).commit() }
         }
-        mmkv.removeValueForKey(key)
+        // 内存兜底也要清（MMKV 未初始化时 string/bool 走 fallback map）。生产环境 map 为空，无副作用。
+        stringFallback.remove(key)
+        boolFallback.remove(key)
+        if (::mmkv.isInitialized) mmkv.removeValueForKey(key)
     }
 
     fun remove(vararg keys: String) {
@@ -417,10 +430,7 @@ object KVUtils {
     // 让母体/LAN/主动规则可无确认执行全部高危工具、访问完整文件系统(仍受 shell UID 与注入校验约束)。
     // 默认 false。仅用于你完全掌控的闲置/专用自动化设备。不影响"防外部攻击"类加固(发送者 ACL、密钥脱敏等)。
     private const val KEY_ADVANCED_AUTOMATION = "KEY_ADVANCED_AUTOMATION_MODE"
-    fun isAdvancedAutomationMode(): Boolean {
-        if (!::mmkv.isInitialized) return false
-        return mmkv.decodeBool(KEY_ADVANCED_AUTOMATION, false)
-    }
+    fun isAdvancedAutomationMode(): Boolean = getBoolean(KEY_ADVANCED_AUTOMATION, false)
     fun setAdvancedAutomationMode(enabled: Boolean) = putBoolean(KEY_ADVANCED_AUTOMATION, enabled)
 
     // ==================== 技能(工具)启停 ====================
