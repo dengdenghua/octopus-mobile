@@ -209,6 +209,7 @@
     <string name="agent_task_completed">タスク完了</string>
     <string name="agent_task_cancel">タスクキャンセル</string>
     <string name="agent_api_call_failed">AIサービスの呼び出しに失敗: %s</string>
+    <string name="agent_empty_response">モデルが一時的に応答しません（上流サービスの不安定の可能性）</string>
     <string name="agent_max_iterations">タスク未完了のまま最大反復回数 (%d) に達しました</string>
 
     <!-- ファイルツール -->
@@ -727,6 +728,7 @@
     <string name="account_code_label">認証コード</string>
     <string name="account_code_hint">コードを入力</string>
     <string name="account_send_code">コード取得</string>
+    <string name="account_sending">送信中…</string>
     <string name="account_resend_in">%1$d 秒後に再送</string>
     <string name="account_code_sent">コードを送信しました</string>
     <string name="account_mock_code_filled">モックコードを自動入力：%1$s</string>
@@ -742,6 +744,8 @@
     <string name="account_recharge_title">チャージ</string>
     <string name="account_goods_credits">%1$d クレジット</string>
     <string name="account_goods_bonus">（+%1$d ボーナス）</string>
+    <string name="account_goods_sub_subscription">永久 %1$d・毎月 %2$d 付与（月末リセット）・自前モデル込み</string>
+    <string name="account_per_month_suffix">/月</string>
     <string name="account_logout">ログアウト</string>
     <string name="account_order_failed">注文の作成に失敗</string>
     <string name="account_pay_opened">レジを開きました。支払いを完了してください</string>
@@ -932,6 +936,10 @@
     <string name="chat_suggestion_notifications">通知をチェック、重要な内容があればまとめる</string>
     <string name="chat_suggestion_files">今日のスクリーンショットを見つけてフォルダに整理</string>
     <string name="chat_suggestion_app">WeChatを開いて未読メッセージを確認</string>
+    <string name="chat_prompt_monitor">通知の巡回</string>
+    <string name="chat_prompt_organize">ファイル整理</string>
+    <string name="chat_prompt_control">アプリ操作代行</string>
+    <string name="chat_home_prompts_title">よく使うタスク</string>
     <string name="chat_sessions">セッション</string>
     <string name="chat_agent_ready">準備完了</string>
     <string name="chat_agent_setup_needed">未設定</string>
