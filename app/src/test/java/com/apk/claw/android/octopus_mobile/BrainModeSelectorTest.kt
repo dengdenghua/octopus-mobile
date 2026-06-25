@@ -22,7 +22,7 @@ import org.robolectric.annotation.Config
  *  - onDomainChanged 回调触发
  *  - decide() 路由到 remote/local（无真实 LLM，测占位返回）
  *  - executeLocalTool 前缀剥离
- *  - skillCount() 返回 43
+ *  - skillCount() 返回 42
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
@@ -58,8 +58,8 @@ class BrainModeSelectorTest {
     }
 
     @Test
-    fun `skillCount returns 43`() {
-        assertEquals(43, selector.skillCount())
+    fun `skillCount returns 42`() {
+        assertEquals(42, selector.skillCount())
     }
 
     // ── 意图分类驱动领域切换 ──────────────────────────────
