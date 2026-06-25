@@ -1,5 +1,6 @@
 package com.apk.claw.android.tool.impl
 
+import com.apk.claw.android.octopus_mobile.safety.PathGuard
 import com.apk.claw.android.shizuku.ShizukuShellService
 import com.apk.claw.android.tool.BaseTool
 import com.apk.claw.android.tool.ToolParameter
@@ -54,9 +55,9 @@ class BrowseFilesTool : BaseTool() {
 
         val path = requireString(params, "path")
 
-        // 路径安全检查 —— 防止访问 /data/data/ 等 root-only 目录
-        if (path.startsWith("/data/data/") || path.startsWith("/data/system/")) {
-            return ToolResult.error("Access denied: $path requires root. Shell can access /sdcard/ and /sdcard/Android/data/.")
+        // 路径安全检查 —— 限制在 /sdcard 沙箱内，拦截 /system /proc 及其他 App 私有目录。
+        PathGuard.underSdcard(path).let {
+            if (!it.allow) return ToolResult.error("Access denied: $path 越界或敏感 (${it.reason})。Shell 仅可访问 /sdcard/ 与 /sdcard/Android/data/。")
         }
 
         return when (action) {

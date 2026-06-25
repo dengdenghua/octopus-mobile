@@ -85,7 +85,18 @@ class DefaultAgentService : AgentService {
         XLog.i(TAG, "Agent config updated, new model: ${config.modelName}")
     }
 
-    override fun executeTask(userPrompt: String, callback: AgentCallback) {
+    /** 本次运行是否来自不可信来源（LAN 网页控制台 / 聊天渠道）。 */
+    @Volatile
+    private var untrustedRun = false
+
+    /** 不可信来源运行时，把工具调用包进来源闸门：高危工具默认拦截，满血/远程放行时通过。 */
+    private fun execTool(toolName: String, params: Map<String, Any>): com.apk.claw.android.tool.ToolResult {
+        val reg = ToolRegistry.getInstance()
+        return if (untrustedRun) ToolRegistry.withUntrustedSource { reg.executeTool(toolName, params) }
+        else reg.executeTool(toolName, params)
+    }
+
+    override fun executeTask(userPrompt: String, callback: AgentCallback, untrusted: Boolean) {
         if (running.get()) {
             callback.onError(0, IllegalStateException("Agent is already running a task"), 0)
             return
@@ -100,6 +111,7 @@ class DefaultAgentService : AgentService {
 
         running.set(true)
         cancelled.set(false)
+        untrustedRun = untrusted
 
         try {
             exec.submit {
@@ -217,7 +229,7 @@ class DefaultAgentService : AgentService {
                         emptyMap()
                     }
 
-                    val toolResult = ToolRegistry.getInstance().executeTool(toolName, params)
+                    val toolResult = execTool(toolName, params)
                     val paramsString = if (params.isEmpty()) "" else params.toString()
                     callback.onToolResult(iterations, toolName, displayName, paramsString, toolResult)
 
@@ -286,7 +298,10 @@ class DefaultAgentService : AgentService {
         val appName = try {
             val appInfo = app.packageManager.getApplicationInfo(app.packageName, 0)
             app.packageManager.getApplicationLabel(appInfo).toString()
-        } catch (_: Exception) { "CoPaw" }
+        } catch (e: Exception) {
+            XLog.w(TAG, "Failed to get application label", e)
+            "CoPaw"
+        }
         sb.append("\n## 本应用信息\n")
         sb.append("- 应用名: ").append(appName).append("\n")
         sb.append("- 包名: ").append(app.packageName).append("\n")
@@ -302,11 +317,9 @@ class DefaultAgentService : AgentService {
         for (attempt in 0 until MAX_API_RETRIES) {
             if (cancelled.get()) throw RuntimeException(ClawApplication.instance.getString(R.string.agent_task_cancelled))
             try {
-                return if (config.streaming) {
-                    val textBuilder = StringBuilder()
+                val response = if (config.streaming) {
                     llmClient.chatStreaming(messages, toolSpecs, object : StreamingListener {
                         override fun onPartialText(token: String) {
-                            textBuilder.append(token)
                             callback.onContent(iteration, token)
                         }
                         override fun onComplete(response: LlmResponse) {}
@@ -315,6 +328,12 @@ class DefaultAgentService : AgentService {
                 } else {
                     llmClient.chat(messages, toolSpecs)
                 }
+                // 网关上游 5xx 常表现为 HTTP 200、但流式 body 是 {"error":...}，被解析层吞成"空回复"
+                // （无正文、无工具调用）。把它当作可重试的瞬时错误，复用下方指数退避，而不是误判为"任务已完成"。
+                if (response.text.isNullOrEmpty() && !response.hasToolExecutionRequests()) {
+                    throw RuntimeException(ClawApplication.instance.getString(R.string.agent_empty_response))
+                }
+                return response
             } catch (e: Exception) {
                 lastException = e
                 // 认证失败 / 额度不足 / 权限拒绝：不重试，立即抛出
@@ -527,205 +546,265 @@ class DefaultAgentService : AgentService {
                 val error = map["error"]?.toString() ?: "failed"
                 "✗ " + if (error.length > 80) error.take(80) + "..." else error
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            XLog.w(TAG, "summarizeToolResult failed", e)
             if (resultJson.length > 80) resultJson.take(80) + "..." else resultJson
         }
     }
 
     // ==================== 主执行循环 ====================
 
+    private class AgentLoopState(
+        val messages: MutableList<ChatMessage>,
+        val maxIterations: Int,
+    ) {
+        var iterations = 0
+        var totalTokens = 0
+        var loopWarningCount = 0
+        val loopHistory = LinkedList<RoundFingerprint>()
+        var lastScreenHash = 0
+    }
+
+    private enum class IterationOutcome { CONTINUE, TERMINATE }
+    private enum class ToolHandleResult { CONTINUE, SKIP_REMAINING, TERMINATE }
+
+    private fun AgentLoopState.shouldContinue(): Boolean =
+        iterations < maxIterations && !cancelled.get()
+
     private fun runAgentLoop(userPrompt: String, callback: AgentCallback) {
-        // 环境预检
         preCheck()?.let {
             callback.onError(0, RuntimeException(it), 0)
             return
         }
 
-        // 构建 System Prompt（原始 + 设备上下文 + 动态教训 + 跨会话记忆）
+        val state = AgentLoopState(buildInitialMessages(userPrompt), config.maxIterations)
+        while (state.shouldContinue()) {
+            state.iterations++
+            callback.onLoopStart(state.iterations)
+            if (state.runSingleIteration(callback) == IterationOutcome.TERMINATE) break
+        }
+        finishLoop(state, callback)
+    }
+
+    private fun buildInitialMessages(userPrompt: String): MutableList<ChatMessage> {
         val fullSystemPrompt = config.systemPrompt + buildDeviceContext() + config.dynamicPromptSuffix + config.memoryPromptSuffix
+        return mutableListOf(
+            SystemMessage.from(fullSystemPrompt),
+            UserMessage.from(userPrompt),
+        )
+    }
 
-        val messages = mutableListOf<ChatMessage>()
-        messages.add(SystemMessage.from(fullSystemPrompt))
-        messages.add(UserMessage.from(userPrompt))
+    private fun AgentLoopState.runSingleIteration(callback: AgentCallback): IterationOutcome {
+        val llmResponse = callLlm(callback) ?: return IterationOutcome.TERMINATE
+        if (handleLlmResponse(llmResponse, callback)) return IterationOutcome.TERMINATE
 
-        var iterations = 0
-        var totalTokens = 0
-        var loopWarningCount = 0  // 死循环检测连续触发计数
-        val maxIterations = config.maxIterations
-        val loopHistory = LinkedList<RoundFingerprint>()
-        var lastScreenHash = 0
-
-        while (iterations < maxIterations && !cancelled.get()) {
-            iterations++
-            callback.onLoopStart(iterations)
-
-            // 发送前分级压缩历史消息，节省 token
-            compressHistoryForSend(messages)
-
-            // LLM 调用（带重试）
-            val llmResponse: LlmResponse
-            try {
-                llmResponse = chatWithRetry(messages, callback, iterations)
-            } catch (e: Exception) {
-                XLog.e(TAG, "LLM API call failed after retries", e)
-                callback.onError(iterations, RuntimeException(ClawApplication.instance.getString(R.string.agent_api_call_failed, e.message)), totalTokens)
-                return
+        var skipRemaining = false
+        for (toolRequest in llmResponse.toolExecutionRequests) {
+            if (cancelled.get()) {
+                callback.onComplete(iterations, ClawApplication.instance.getString(R.string.agent_task_cancel), totalTokens)
+                return IterationOutcome.TERMINATE
             }
-
-            // 累加 token 用量
-            llmResponse.tokenUsage?.totalTokenCount()?.let { totalTokens += it }
-
-            // 将 AI 消息添加到历史（需要构造 AiMessage）
-            val aiMessage = if (llmResponse.hasToolExecutionRequests()) {
-                if (llmResponse.text.isNullOrEmpty()) {
-                    AiMessage.from(llmResponse.toolExecutionRequests)
-                } else {
-                    AiMessage.from(llmResponse.text, llmResponse.toolExecutionRequests)
-                }
-            } else {
-                AiMessage.from(llmResponse.text ?: "")
+            when (executeSingleTool(toolRequest, callback)) {
+                ToolHandleResult.TERMINATE -> return IterationOutcome.TERMINATE
+                ToolHandleResult.SKIP_REMAINING -> { skipRemaining = true; break }
+                ToolHandleResult.CONTINUE -> { }
             }
-            messages.add(aiMessage)
-
-            // 非流式模式下推送思考内容
-            if (!config.streaming && !llmResponse.text.isNullOrEmpty()) {
-                callback.onContent(iterations, llmResponse.text)
-            }
-
-            // 如果没有工具调用，Agent 认为完成了
-            if (!llmResponse.hasToolExecutionRequests()) {
-                callback.onComplete(iterations, llmResponse.text ?: ClawApplication.instance.getString(R.string.agent_task_completed), totalTokens)
-                return
-            }
-
-            // 执行工具调用
-            for (toolRequest in llmResponse.toolExecutionRequests) {
-                if (cancelled.get()) {
-                    callback.onComplete(iterations, ClawApplication.instance.getString(R.string.agent_task_cancel), totalTokens)
-                    return
-                }
-
-                val toolName = toolRequest.name() ?: ""
-                val displayName = ToolRegistry.getInstance().getDisplayName(toolName)
-                val toolArgs = toolRequest.arguments() ?: "{}"
-                callback.onToolCall(iterations, toolName, displayName, toolArgs)
-
-                // 解析参数 —— 解析失败时把错误反馈给 LLM，而不是静默用空 Map
-                val mapType = object : TypeToken<Map<String, Any>>() {}.type
-                val params: Map<String, Any> = try {
-                    GSON.fromJson(toolArgs, mapType) ?: emptyMap()
-                } catch (e: Exception) {
-                    XLog.w(TAG, "Tool args parse failed for $toolName: ${e.message}, args=$toolArgs")
-                    // 把解析错误作为工具结果回填给 LLM，让它知道参数格式有问题
-                    val errorResult = ToolResult.error("参数解析失败: ${e.message}。原始参数: $toolArgs")
-                    val errorJson = GSON.toJson(mapOf(
-                        "isSuccess" to false,
-                        "data" to errorResult.data,
-                        "error" to errorResult.error
-                    ))
-                    messages.add(ToolExecutionResultMessage.from(toolRequest, errorJson))
-                    callback.onToolResult(iterations, toolName, displayName, toolArgs, errorResult)
-                    continue
-                }
-
-                val result = ToolRegistry.getInstance().executeTool(toolName, params)
-                val paramsString = if (params.isEmpty()) "" else params.toString()
-                callback.onToolResult(iterations, toolName, displayName, paramsString, result)
-
-                // 检测到系统弹窗阻塞 → 截图让 VLM 分析弹窗内容，尝试自动处理
-                if (!result.isSuccess && result.error == GetScreenInfoTool.SYSTEM_DIALOG_BLOCKED) {
-                    XLog.w(TAG, "System dialog blocked, attempting VLM analysis")
-
-                    // 如果未启用视觉理解，直接终止任务
-                    if (!config.enableVision) {
-                        XLog.w(TAG, "Vision disabled, notifying user and stopping task")
-                        callback.onSystemDialogBlocked(iterations, totalTokens)
-                        return
-                    }
-
-                    // 截图并让 VLM 分析弹窗内容
-                    val visionHandled = handleSystemDialogWithVision(messages, callback, iterations)
-                    if (!visionHandled) {
-                        // VLM 也无法处理，终止任务
-                        callback.onSystemDialogBlocked(iterations, totalTokens)
-                        return
-                    }
-                    // VLM 分析后继续执行循环
-                    continue
-                }
-
-                // finish 工具 → 任务完成
-                if (toolName == "finish" && result.isSuccess) {
-                    val finishData = result.data
-                    callback.onComplete(iterations, finishData ?: ClawApplication.instance.getString(R.string.agent_task_completed), totalTokens)
-                    return
-                }
-
-                // 记录指纹用于死循环检测
-                // 改进：get_screen_info 成功时也入队，让观察指纹参与死循环检测
-                // （之前只记录动作指纹，连续观察相同屏幕不动作时检测不到）
-                if (toolName == "get_screen_info" && result.isSuccess && result.data != null) {
-                    lastScreenHash = result.data.hashCode()
-                    // 观察指纹入队，screenHash 作为主指纹，toolCall 为 "observe"
-                    loopHistory.addLast(RoundFingerprint(lastScreenHash, "observe:get_screen_info"))
-                    if (loopHistory.size > LOOP_DETECT_WINDOW) {
-                        loopHistory.removeFirst()
-                    }
-                } else if (toolName.isNotEmpty() && toolName != "get_screen_info") {
-                    loopHistory.addLast(RoundFingerprint(lastScreenHash, "$toolName:$toolArgs"))
-                    if (loopHistory.size > LOOP_DETECT_WINDOW) {
-                        loopHistory.removeFirst()
-                    }
-                }
-
-                // 添加工具结果到消息（排除 imageBase64 以节省 token）
-                val resultForJson = mapOf(
-                    "isSuccess" to result.isSuccess,
-                    "data" to result.data,
-                    "error" to result.error
-                )
-                val resultJson = GSON.toJson(resultForJson)
-                messages.add(ToolExecutionResultMessage.from(toolRequest, resultJson))
-                XLog.d(TAG, "displayName:$displayName toolName:$toolName")
-            }
-
-            // 死循环检测
-            if (isStuckInLoop(loopHistory)) {
-                loopWarningCount++
-                XLog.w(TAG, "Dead loop detected at iteration $iterations (warning $loopWarningCount/$MAX_LOOP_WARNINGS)")
-
-                if (loopWarningCount >= MAX_LOOP_WARNINGS) {
-                    // 连续多次死循环 → 强制 finish，避免无限消耗迭代
-                    XLog.w(TAG, "Max loop warnings reached, forcing finish")
-                    callback.onComplete(
-                        iterations,
-                        ClawApplication.instance.getString(R.string.agent_task_completed) +
-                        "（检测到死循环，已自动停止）",
-                        totalTokens
-                    )
-                    return
-                }
-
-                messages.add(
-                    UserMessage.from(
-                        "[系统提示] 检测到你连续多轮执行了相同的操作且屏幕没有变化，你可能陷入了死循环。" +
-                        "请尝试完全不同的方法：按 system_key(key=\"back\") 回退、滑动页面寻找目标、或重新打开 App。" +
-                        "如果确实无法完成任务，请调用 finish 说明原因。" +
-                        "（警告：再检测到 ${MAX_LOOP_WARNINGS - loopWarningCount} 次死循环将强制结束任务）"
-                    )
-                )
-                loopHistory.clear()
-            } else {
-                // 本轮未检测到死循环，重置计数
-                loopWarningCount = 0
-            }
-            XLog.d(TAG, "轮数:$iterations all=$totalTokens 本轮=${llmResponse.tokenUsage?.totalTokenCount()}")
         }
 
-        if (cancelled.get()) {
-            callback.onComplete(iterations, ClawApplication.instance.getString(R.string.agent_task_cancel), totalTokens)
+        if (skipRemaining) return IterationOutcome.CONTINUE
+        return if (handleLoopDetection(callback)) IterationOutcome.TERMINATE else IterationOutcome.CONTINUE
+    }
+
+    private fun AgentLoopState.callLlm(callback: AgentCallback): LlmResponse? {
+        compressHistoryForSend(messages)
+        return try {
+            chatWithRetry(messages, callback, iterations)
+        } catch (e: Exception) {
+            XLog.e(TAG, "LLM API call failed after retries", e)
+            callback.onError(
+                iterations,
+                RuntimeException(ClawApplication.instance.getString(R.string.agent_api_call_failed, e.message)),
+                totalTokens
+            )
+            null
+        }
+    }
+
+    private fun AgentLoopState.handleLlmResponse(llmResponse: LlmResponse, callback: AgentCallback): Boolean {
+        llmResponse.tokenUsage?.totalTokenCount()?.let { totalTokens += it }
+
+        val aiMessage = if (llmResponse.hasToolExecutionRequests()) {
+            if (llmResponse.text.isNullOrEmpty()) {
+                AiMessage.from(llmResponse.toolExecutionRequests)
+            } else {
+                AiMessage.from(llmResponse.text, llmResponse.toolExecutionRequests)
+            }
         } else {
-            callback.onError(iterations, RuntimeException(ClawApplication.instance.getString(R.string.agent_max_iterations, maxIterations)), totalTokens)
+            AiMessage.from(llmResponse.text ?: "")
+        }
+        messages.add(aiMessage)
+
+        if (!config.streaming && !llmResponse.text.isNullOrEmpty()) {
+            callback.onContent(iterations, llmResponse.text)
+        }
+
+        if (!llmResponse.hasToolExecutionRequests()) {
+            callback.onComplete(iterations, llmResponse.text ?: ClawApplication.instance.getString(R.string.agent_task_completed), totalTokens)
+            return true
+        }
+        return false
+    }
+
+    private fun AgentLoopState.executeSingleTool(toolRequest: ToolExecutionRequest, callback: AgentCallback): ToolHandleResult {
+        val toolName = toolRequest.name() ?: ""
+        val displayName = ToolRegistry.getInstance().getDisplayName(toolName)
+        val toolArgs = toolRequest.arguments() ?: "{}"
+        callback.onToolCall(iterations, toolName, displayName, toolArgs)
+
+        val params = parseToolArgs(toolName, toolArgs) ?: run {
+            val errorResult = ToolResult.error("参数解析失败（详见日志）。原始参数: $toolArgs")
+            appendToolResult(toolRequest, errorResult)
+            callback.onToolResult(iterations, toolName, displayName, toolArgs, errorResult)
+            return ToolHandleResult.CONTINUE
+        }
+
+        // ③ 任务执行中清掉噪声插屏（广告/"跳过"/"以后再说"类），让后续动作落在真页面上。
+        //    只关明确的噪声按钮、不碰权限/确认框，不影响用户正常用机。
+        runCatching { com.apk.claw.android.octopus_mobile.PopupDetector.tryDismiss() }
+
+        // ② UI 动作前后看屏：动作若没改变屏幕，多半是空操作（点错/被弹窗遮挡/目标不存在）。
+        //    给观察追加一句提示，逼 Agent 换招而不是重复同一无效动作。廉价（纯无障碍指纹，无 VLM）。
+        val uiAction = toolName in setOf("tap", "long_press", "swipe", "input_text")
+        val beforeState = if (uiAction) {
+            runCatching { com.apk.claw.android.navigation.StateDetector.detectCurrentState() }.getOrNull()
+        } else null
+
+        val rawResult = execTool(toolName, params)
+        val result = if (uiAction && rawResult.isSuccess && beforeState != null) {
+            val after = runCatching { com.apk.claw.android.navigation.StateDetector.detectCurrentState() }.getOrNull()
+            val unchanged = after != null &&
+                com.apk.claw.android.navigation.StateDetector.similarity(beforeState, after) >= 0.97
+            if (unchanged) {
+                ToolResult.success(
+                    (rawResult.data ?: "") +
+                        "\n[校验] 屏幕未发生变化——此操作可能没生效（目标不存在 / 被弹窗遮挡 / 点到空白）。" +
+                        "请先 get_screen_info 或 look_at_screen 确认目标，再换一种方式（如 tap_by_vision / scroll_to_find）重试，不要重复同一动作。",
+                )
+            } else rawResult
+        } else rawResult
+        val paramsString = if (params.isEmpty()) "" else params.toString()
+        callback.onToolResult(iterations, toolName, displayName, paramsString, result)
+
+        when (handleDialogResult(result, callback)) {
+            DialogHandleResult.TERMINATE -> return ToolHandleResult.TERMINATE
+            DialogHandleResult.SKIP_REMAINING -> return ToolHandleResult.SKIP_REMAINING
+            DialogHandleResult.NONE -> { }
+        }
+
+        if (toolName == "finish" && result.isSuccess) {
+            callback.onComplete(iterations, result.data ?: ClawApplication.instance.getString(R.string.agent_task_completed), totalTokens)
+            return ToolHandleResult.TERMINATE
+        }
+
+        recordFingerprint(toolName, toolArgs, result)
+        appendToolResult(toolRequest, result)
+        return ToolHandleResult.CONTINUE
+    }
+
+    private fun AgentLoopState.parseToolArgs(toolName: String, toolArgs: String): Map<String, Any>? {
+        val mapType = object : TypeToken<Map<String, Any>>() {}.type
+        return try {
+            GSON.fromJson(toolArgs, mapType) ?: emptyMap()
+        } catch (e: Exception) {
+            XLog.w(TAG, "Tool args parse failed for $toolName: ${e.message}, args=$toolArgs")
+            null
+        }
+    }
+
+    private fun AgentLoopState.appendToolResult(toolRequest: ToolExecutionRequest, result: ToolResult) {
+        val resultForJson = mapOf(
+            "isSuccess" to result.isSuccess,
+            "data" to result.data,
+            "error" to result.error
+        )
+        messages.add(ToolExecutionResultMessage.from(toolRequest, GSON.toJson(resultForJson)))
+    }
+
+    private enum class DialogHandleResult { NONE, SKIP_REMAINING, TERMINATE }
+
+    private fun AgentLoopState.handleDialogResult(result: ToolResult, callback: AgentCallback): DialogHandleResult {
+        if (result.isSuccess || result.error != GetScreenInfoTool.SYSTEM_DIALOG_BLOCKED) return DialogHandleResult.NONE
+
+        XLog.w(TAG, "System dialog blocked, attempting VLM analysis")
+        if (!config.enableVision) {
+            XLog.w(TAG, "Vision disabled, notifying user and stopping task")
+            callback.onSystemDialogBlocked(iterations, totalTokens)
+            return DialogHandleResult.TERMINATE
+        }
+
+        val visionHandled = handleSystemDialogWithVision(messages, callback, iterations)
+        if (!visionHandled) {
+            callback.onSystemDialogBlocked(iterations, totalTokens)
+            return DialogHandleResult.TERMINATE
+        }
+        return DialogHandleResult.SKIP_REMAINING
+    }
+
+    private fun AgentLoopState.recordFingerprint(toolName: String, toolArgs: String, result: ToolResult) {
+        if (toolName == "get_screen_info" && result.isSuccess && result.data != null) {
+            lastScreenHash = result.data.hashCode()
+            loopHistory.addLast(RoundFingerprint(lastScreenHash, "observe:get_screen_info"))
+            if (loopHistory.size > LOOP_DETECT_WINDOW) loopHistory.removeFirst()
+        } else if (toolName.isNotEmpty() && toolName != "get_screen_info") {
+            loopHistory.addLast(RoundFingerprint(lastScreenHash, "$toolName:$toolArgs"))
+            if (loopHistory.size > LOOP_DETECT_WINDOW) loopHistory.removeFirst()
+        }
+    }
+
+    private fun AgentLoopState.handleLoopDetection(callback: AgentCallback): Boolean {
+        if (!isStuckInLoop(loopHistory)) {
+            loopWarningCount = 0
+            return false
+        }
+
+        loopWarningCount++
+        XLog.w(TAG, "Dead loop detected at iteration $iterations (warning $loopWarningCount/$MAX_LOOP_WARNINGS)")
+
+        if (loopWarningCount >= MAX_LOOP_WARNINGS) {
+            XLog.w(TAG, "Max loop warnings reached, forcing finish")
+            callback.onComplete(
+                iterations,
+                ClawApplication.instance.getString(R.string.agent_task_completed) + "（检测到死循环，已自动停止）",
+                totalTokens
+            )
+            return true
+        }
+
+        messages.add(
+            UserMessage.from(
+                "[系统提示] 检测到你连续多轮执行了相同的操作且屏幕没有变化，你可能陷入了死循环。" +
+                "请尝试完全不同的方法：按 system_key(key=\"back\") 回退、滑动页面寻找目标、或重新打开 App。" +
+                "如果确实无法完成任务，请调用 finish 说明原因。" +
+                "（警告：再检测到 ${MAX_LOOP_WARNINGS - loopWarningCount} 次死循环将强制结束任务）"
+            )
+        )
+        loopHistory.clear()
+        return false
+    }
+
+    private fun finishLoop(state: AgentLoopState, callback: AgentCallback) {
+        when {
+            cancelled.get() ->
+                callback.onComplete(state.iterations, ClawApplication.instance.getString(R.string.agent_task_cancel), state.totalTokens)
+            // 仅在真正耗尽迭代次数时才报"已达最大迭代次数"。
+            // 正常结束（onComplete）或调用失败（onError）已在循环内发出对应消息，
+            // 这里不能再无条件追加，否则每次都叠加一条自相矛盾的"任务已完成 + 已达最大迭代次数"。
+            state.iterations >= state.maxIterations ->
+                callback.onError(
+                    state.iterations,
+                    RuntimeException(ClawApplication.instance.getString(R.string.agent_max_iterations, state.maxIterations)),
+                    state.totalTokens
+                )
         }
     }
 

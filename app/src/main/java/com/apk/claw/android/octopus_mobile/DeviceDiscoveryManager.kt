@@ -132,8 +132,8 @@ class DeviceDiscoveryManager(
             "configServerPort" to ConfigServer.PORT,
             "androidVersion" to android.os.Build.VERSION.RELEASE,
             "appVersion" to getAppVersion(),
-            // 仅当用户显式允许「被局域网控制」时才广播控制 token；默认关闭，避免明文泄露
-            "authToken" to (if (KVUtils.isLanControlEnabled()) ConfigServerManager.getAuthToken() ?: "" else "")
+            // 安全：UDP 广播为明文，不再携带 authToken。控制端需通过带外安全方式获取 token。
+            "authToken" to ""
         )
         val json = gson.toJson(beacon)
         val bytes = json.toByteArray(Charsets.UTF_8)
@@ -175,14 +175,27 @@ class DeviceDiscoveryManager(
             // 忽略自己的 beacon
             if (deviceId == localDeviceId) return
 
+            // 安全：以 UDP 实际源地址为准，忽略 beacon 内自报的 ip，防止注册表投毒
+            // （攻击者广播"他人 ip + 自己的 token"诱导控制端把指令发到错误设备）。
+            val advertisedIp = map["ip"] as? String
+            if (advertisedIp != null && advertisedIp != sourceIp) {
+                XLog.w(TAG, "Beacon ip($advertisedIp) 与 UDP 源($sourceIp)不一致，以源地址为准")
+            }
+
+            val rawAuthToken = map["authToken"] as? String
+            if (!rawAuthToken.isNullOrBlank()) {
+                // 安全：拒绝使用明文 UDP 广播中携带的 token。旧版本 beacon 中的 token 已被视为不可信。
+                XLog.w(TAG, "Beacon from $sourceIp carried authToken in plaintext UDP; ignoring it")
+            }
+
             val device = DeviceInfo(
                 deviceId = deviceId,
                 deviceName = map["deviceName"] as? String ?: deviceId,
-                ip = map["ip"] as? String ?: sourceIp,
+                ip = sourceIp,
                 configServerPort = (map["configServerPort"] as? Double)?.toInt() ?: ConfigServer.PORT,
                 androidVersion = map["androidVersion"] as? String ?: "",
                 appVersion = map["appVersion"] as? String ?: "",
-                authToken = map["authToken"] as? String ?: ""
+                authToken = ""
             )
 
             registry.upsertDevice(device)

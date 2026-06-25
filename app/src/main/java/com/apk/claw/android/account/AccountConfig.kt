@@ -12,12 +12,15 @@ import com.apk.claw.android.utils.KVUtils
  */
 object AccountConfig {
     private const val KEY_BASE_URL = "ACCOUNT_BASE_URL"
+    private const val KEY_SQUARE_BASE_URL = "ACCOUNT_SQUARE_BASE_URL"               // 手动覆盖(最高优先)
+    private const val KEY_SQUARE_BASE_URL_REMOTE = "ACCOUNT_SQUARE_BASE_URL_REMOTE" // 服务端 /config 下发并缓存
     private const val KEY_MOCK = "ACCOUNT_MOCK_MODE"
     private const val KEY_MODEL_SOURCE = "ACCOUNT_MODEL_SOURCE"
     private const val KEY_MODEL_TIER = "ACCOUNT_MODEL_TIER"
 
-    /** 用户可见的对话档位(不暴露底层模型名)。fast=极速档(便宜·快)/ premium=高级档(更强·更耗积分)。 */
+    /** 用户可见的对话档位(不暴露底层模型名)。fast=极速/flash=标准/premium=高级。 */
     const val TIER_FAST = "fast"
+    const val TIER_FLASH = "flash"
     const val TIER_PREMIUM = "premium"
 
     /** Account/relay backend. Defaults to the live server; empty → mock. */
@@ -26,6 +29,31 @@ object AccountConfig {
         set(v) {
             KVUtils.putString(KEY_BASE_URL, v.trim())
         }
+
+    /** App 首拉 /config 之前的默认技能中心域名（兜底用，服务端下发后即被覆盖）。 */
+    const val DEFAULT_SQUARE_BASE_URL = "https://club.octoapk.com"
+
+    /**
+     * 广场 / 技能中心(skill hub)独立域名。优先级：
+     *   ① 手动覆盖([KEY_SQUARE_BASE_URL]) → ② 服务端 /config 下发缓存 → ③ [DEFAULT_SQUARE_BASE_URL]。
+     * 即域名由**服务端生成/控制**，App 只内置一个首拉前的兜底。
+     */
+    var squareBaseUrl: String
+        get() {
+            val manual = KVUtils.getString(KEY_SQUARE_BASE_URL, "")
+            if (manual.isNotBlank()) return manual
+            val remote = KVUtils.getString(KEY_SQUARE_BASE_URL_REMOTE, "")
+            if (remote.isNotBlank()) return remote
+            return DEFAULT_SQUARE_BASE_URL
+        }
+        set(v) {
+            KVUtils.putString(KEY_SQUARE_BASE_URL, v.trim())
+        }
+
+    /** 由 /config 下发并缓存（服务端集中控制技能中心域名）。 */
+    fun setRemoteSquareBaseUrl(url: String) {
+        if (url.isNotBlank()) KVUtils.putString(KEY_SQUARE_BASE_URL_REMOTE, url.trim())
+    }
 
     /** Mock only when explicitly enabled OR when no base URL is configured. */
     val mockMode: Boolean
@@ -57,11 +85,18 @@ object AccountConfig {
     var modelTier: String
         get() = KVUtils.getString(KEY_MODEL_TIER, TIER_FAST)
         set(v) {
-            KVUtils.putString(KEY_MODEL_TIER, if (v == TIER_PREMIUM) TIER_PREMIUM else TIER_FAST)
+            val normalized = when (v) {
+                TIER_FLASH, TIER_PREMIUM -> v
+                else -> TIER_FAST
+            }
+            KVUtils.putString(KEY_MODEL_TIER, normalized)
         }
 
-    /** 档位 → 实际平台模型 id(仅内部用,UI 永不暴露)。fast=极速(对平台零成本上游)/ premium=高级。
-     *  服务端目录若调整模型,只需改这里映射。 */
+    /** 档位 → 实际平台模型 id(仅内部用,UI 永不暴露)。服务端目录若调整模型,只需改这里映射。 */
     val platformModel: String
-        get() = if (modelTier == TIER_PREMIUM) "mimo-v2.5-pro" else "agnes-2.0-flash"
+        get() = when (modelTier) {
+            TIER_FLASH -> "mimo-v2-flash"
+            TIER_PREMIUM -> "mimo-v2.5-pro"
+            else -> "agnes-2.0-flash"
+        }
 }

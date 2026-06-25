@@ -61,10 +61,10 @@ object ShizukuShellService {
 
     /**
      * shell 元字符。任何用户可控字符串参数中出现以下字符即视为注入攻击，直接拒收。
-     * 覆盖：分号、逻辑操作符、管道、重定向、命令替换、反引号、换行、子 shell。
+     * 覆盖：分号、逻辑操作符、管道、重定向、命令替换、反引号、换行、子 shell、花括号扩展。
      */
     private val SHELL_METACHARS = charArrayOf(
-        ';', '&', '|', '>', '<', '$', '`', '\n', '\r', '(', ')'
+        ';', '&', '|', '>', '<', '$', '`', '\n', '\r', '(', ')', '{', '}'
     )
 
     /** 包名合法字符：[a-zA-Z0-9_]，段间用 . 分隔 */
@@ -73,8 +73,24 @@ object ShizukuShellService {
     /** 路径合法字符：字母数字 + _ / . - */
     private val PATH_SAFE_REGEX = Regex("""^/[a-zA-Z0-9_./\- ]+$""")
 
+    /** 允许访问的路径前缀白名单（防止越权读取 /data/data、/system 等敏感目录） */
+    private val ALLOWED_PATH_PREFIXES = listOf(
+        "/sdcard",
+        "/storage/emulated/0",
+        "/data/local/tmp",
+    )
+
+    /** 命令参数中禁止出现的敏感路径模式 */
+    private val FORBIDDEN_PATH_PATTERNS = listOf(
+        "/data/data/",
+        "/data/misc/",
+        "/data/system/",
+        "/system/",
+        "/proc/",
+    )
+
     /** 整数（坐标/时间/动画 scale） */
-    private val INT_REGEX = Regex("""^-?\d+$""")
+    private val INT_REGEX = Regex("""^-?\d+${'$'}""")
 
     /**
      * 检查字符串是否包含 shell 元字符。命中即视为潜在注入。
@@ -96,16 +112,23 @@ object ShizukuShellService {
     /** 包名校验。返回 true=合法 */
     fun isValidPackageName(name: String): Boolean = PACKAGE_NAME_REGEX.matches(name)
 
-    /** 路径校验：必须是绝对路径且只含安全字符（允许空格，因为部分目录名含空格） */
-    fun isValidPath(path: String): Boolean = PATH_SAFE_REGEX.matches(path) && !path.contains("..")
+    /**
+     * 路径校验：必须是绝对路径、只含安全字符，且位于允许访问的前缀白名单内。
+     * 允许空格（部分目录名含空格），禁止路径遍历。
+     */
+    fun isValidPath(path: String): Boolean {
+        if (!PATH_SAFE_REGEX.matches(path) || path.contains("..")) return false
+        return ALLOWED_PATH_PREFIXES.any { path == it || path.startsWith("$it/") }
+    }
 
     /**
-     * 校验整条命令的"命令前缀"是否在白名单内。
-     * 提取逻辑：去掉行首空白后，取第一个空格之前的 token；用该 token + 1 个空格作前缀匹配。
+     * 校验整条命令的"命令前缀"是否在白名单内，且不含敏感路径参数。
+     * 提取逻辑：去掉行首空白后，用白名单前缀匹配；再检查参数中是否出现禁止访问的目录。
      */
     private fun isCommandAllowed(command: String): Boolean {
         val trimmed = command.trimStart()
-        return ALLOWED_COMMAND_PREFIXES.any { trimmed.startsWith(it) }
+        if (!ALLOWED_COMMAND_PREFIXES.any { trimmed.startsWith(it) }) return false
+        return FORBIDDEN_PATH_PATTERNS.none { trimmed.contains(it) }
     }
 
     /**
@@ -274,7 +297,8 @@ object ShizukuShellService {
      * @return 截图 Bitmap，Shizuku 不可用或截屏失败时返回 null
      */
     fun screenshot(): Bitmap? {
-        val tempPath = "/sdcard/octopus_screenshot_${System.currentTimeMillis()}.png"
+        val tempName = "octopus_screenshot_${System.currentTimeMillis()}.png"
+        val tempPath = "/sdcard/$tempName"
         try {
             // 1. screencap 到临时文件
             val capResult = exec("screencap -p $tempPath") ?: return null
@@ -285,8 +309,9 @@ object ShizukuShellService {
 
             // 2. 读取文件内容到内存
             //    因 App 可能没有 /sdcard 读权限，尝试通过 shell 中转
+            val safeTempPath = sanitizeShellArg(tempPath)
             val process = Runtime.getRuntime().exec(
-                arrayOf("sh", "-c", "cat $tempPath && rm -f $tempPath")
+                arrayOf("sh", "-c", "cat $safeTempPath && rm -f $safeTempPath")
             )
             val bytes = process.inputStream.readBytes()
             process.waitFor(SHELL_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
@@ -323,7 +348,16 @@ object ShizukuShellService {
             "system", "secure", "global" -> namespace.lowercase()
             else -> return false
         }
-        val result = exec("settings put $ns $key $value") ?: return null
+        // 命令注入防护：key 限白名单字符，value（可含任意内容）单引号转义。
+        if (!key.matches(Regex("""^[a-zA-Z0-9_.:]+$"""))) {
+            Log.w(TAG, "Invalid setting key: $key")
+            return false
+        }
+        if (value.contains('\n') || value.contains('\r')) {
+            Log.w(TAG, "Invalid setting value")
+            return false
+        }
+        val result = exec("settings put $ns $key ${sanitizeShellArg(value)}") ?: return null
         return result.exitCode == 0
     }
 
@@ -350,7 +384,8 @@ object ShizukuShellService {
             Log.w(TAG, "Invalid package name: $packageName")
             return false
         }
-        val result = exec("am force-stop $packageName") ?: return null
+        val safePkg = sanitizeShellArg(packageName)
+        val result = exec("am force-stop $safePkg") ?: return null
         return result.exitCode == 0
     }
 
@@ -363,7 +398,8 @@ object ShizukuShellService {
             Log.w(TAG, "Invalid package name: $packageName")
             return false
         }
-        val result = exec("pm clear $packageName") ?: return null
+        val safePkg = sanitizeShellArg(packageName)
+        val result = exec("pm clear $safePkg") ?: return null
         return result.exitCode == 0 && result.stdout.contains("Success")
     }
 
@@ -390,13 +426,15 @@ object ShizukuShellService {
      * @return UI 层级 XML 字符串，失败返回 null
      */
     fun uiAutomatorDump(): String? {
-        val tempPath = "/sdcard/octopus_ui_dump.xml"
+        val tempName = "octopus_ui_dump_${System.currentTimeMillis()}.xml"
+        val tempPath = "/sdcard/$tempName"
         try {
             val dumpResult = exec("uiautomator dump $tempPath") ?: return null
             if (dumpResult.exitCode != 0) return null
 
+            val safeTempPath = sanitizeShellArg(tempPath)
             val process = Runtime.getRuntime().exec(
-                arrayOf("sh", "-c", "cat $tempPath && rm -f $tempPath")
+                arrayOf("sh", "-c", "cat $safeTempPath && rm -f $safeTempPath")
             )
             val xml = process.inputStream.bufferedReader().readText()
             process.waitFor(SHELL_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
@@ -449,8 +487,9 @@ object ShizukuShellService {
             Log.w(TAG, "Invalid package name: $packageName")
             return false
         }
+        val safePkg = sanitizeShellArg(packageName)
         // 先获取 launch intent
-        val intentResult = exec("cmd package resolve-activity --brief $packageName") ?: return null
+        val intentResult = exec("cmd package resolve-activity --brief $safePkg") ?: return null
 
         // 构造 am start 命令，使用 --windowingMode 5 (freeform)
         // --launchDisplayId 0 = 主屏幕
@@ -466,7 +505,8 @@ object ShizukuShellService {
                 append(activityLine)
             } else {
                 // fallback: 使用 monkey 启动
-                exec("monkey -p $packageName -c android.intent.category.LAUNCHER 1")
+                val safePkg = sanitizeShellArg(packageName)
+                exec("monkey -p $safePkg -c android.intent.category.LAUNCHER 1")
                 return@buildString
             }
             append(" --windowingMode 5")
@@ -508,7 +548,8 @@ object ShizukuShellService {
             Log.w(TAG, "Invalid package name: $packageName")
             return false
         }
-        val intentResult = exec("cmd package resolve-activity --brief $packageName") ?: return null
+        val safePkg = sanitizeShellArg(packageName)
+        val intentResult = exec("cmd package resolve-activity --brief $safePkg") ?: return null
 
         val cmd = buildString {
             append("am start -n ")
@@ -519,7 +560,8 @@ object ShizukuShellService {
             if (activityLine != null) {
                 append(activityLine)
             } else {
-                exec("monkey -p $packageName -c android.intent.category.LAUNCHER 1")
+                val safePkg = sanitizeShellArg(packageName)
+                exec("monkey -p $safePkg -c android.intent.category.LAUNCHER 1")
                 return@buildString
             }
             append(" --windowingMode 5")
@@ -659,7 +701,8 @@ object ShizukuShellService {
             return "Error: invalid path"
         }
         val flags = if (showHidden) "-lah" else "-lh"
-        val result = exec("ls $flags \"$path\"") ?: return null
+        val safePath = sanitizeShellArg(path)
+        val result = exec("ls $flags $safePath") ?: return null
         if (result.exitCode != 0) {
             return "Error: ${result.stderr.trim()}"
         }
@@ -677,7 +720,8 @@ object ShizukuShellService {
             Log.w(TAG, "Invalid path: $path")
             return "Error: invalid path"
         }
-        val result = exec("stat \"$path\"") ?: return null
+        val safePath = sanitizeShellArg(path)
+        val result = exec("stat $safePath") ?: return null
         if (result.exitCode != 0) {
             return "Error: ${result.stderr.trim()}"
         }
@@ -695,7 +739,8 @@ object ShizukuShellService {
             Log.w(TAG, "Invalid path: $path")
             return null
         }
-        val result = exec("du -sh \"$path\"") ?: return null
+        val safePath = sanitizeShellArg(path)
+        val result = exec("du -sh $safePath") ?: return null
         if (result.exitCode != 0) return null
         return result.stdout.trim()
     }
@@ -719,7 +764,9 @@ object ShizukuShellService {
             Log.w(TAG, "Invalid pattern: $pattern")
             return "Error: invalid pattern"
         }
-        val result = exec("find \"$basePath\" -name \"$pattern\" -type f 2>/dev/null | head -n $maxResults")
+        val safeBase = sanitizeShellArg(basePath)
+        val safePattern = sanitizeShellArg(pattern)
+        val result = exec("find $safeBase -name $safePattern -type f 2>/dev/null | head -n $maxResults")
             ?: return null
         if (result.exitCode != 0 && result.stderr.isNotEmpty()) {
             return "Error: ${result.stderr.trim()}"
@@ -736,7 +783,24 @@ object ShizukuShellService {
      * @param maxResults 最大返回数量
      */
     fun searchByContent(basePath: String, text: String, filePattern: String = "*", maxResults: Int = 20): String? {
-        val result = exec("grep -rl \"$text\" \"$basePath\" --include=\"$filePattern\" 2>/dev/null | head -n $maxResults")
+        // 命令注入防护：basePath/filePattern 走白名单校验，text（完全用户可控）走单引号转义。
+        if (!isValidPath(basePath)) {
+            Log.w(TAG, "Invalid basePath: $basePath")
+            return "Error: invalid path"
+        }
+        if (!filePattern.matches(Regex("""[a-zA-Z0-9_.?*\[\]-]+"""))) {
+            Log.w(TAG, "Invalid filePattern: $filePattern")
+            return "Error: invalid pattern"
+        }
+        if (text.isEmpty() || text.contains('\n') || text.contains('\r')) {
+            Log.w(TAG, "Invalid search text")
+            return "Error: invalid search text"
+        }
+        if (!INT_REGEX.matches(maxResults.toString())) return null
+        val safeText = sanitizeShellArg(text)
+        val safeBase = sanitizeShellArg(basePath)
+        val safePattern = sanitizeShellArg(filePattern)
+        val result = exec("grep -rl $safeText $safeBase --include=$safePattern 2>/dev/null | head -n $maxResults")
             ?: return null
         return result.stdout.trim()
     }
@@ -749,6 +813,11 @@ object ShizukuShellService {
      * @return 重复文件列表
      */
     fun findDuplicateFiles(basePath: String, minSizeMB: Int = 1): String? {
+        if (!isValidPath(basePath)) {
+            Log.w(TAG, "Invalid basePath: $basePath")
+            return "Error: invalid path"
+        }
+        if (!INT_REGEX.matches(minSizeMB.toString())) return null
         // 先找出大于 minSize 的文件，按大小排序找重复
         val cmd = """find "$basePath" -type f -size +${minSizeMB}M -exec ls -l {} \; 2>/dev/null | awk '{print \$5, \$9}' | sort -n | uniq -d -w 20 | head -n 30"""
         val result = exec(cmd) ?: return null
@@ -763,7 +832,9 @@ object ShizukuShellService {
             Log.w(TAG, "Invalid path: src=$src, dst=$dst")
             return false
         }
-        val result = exec("cp -r \"$src\" \"$dst\"") ?: return null
+        val safeSrc = sanitizeShellArg(src)
+        val safeDst = sanitizeShellArg(dst)
+        val result = exec("cp -r $safeSrc $safeDst") ?: return null
         return result.exitCode == 0
     }
 
@@ -775,7 +846,9 @@ object ShizukuShellService {
             Log.w(TAG, "Invalid path: src=$src, dst=$dst")
             return false
         }
-        val result = exec("mv \"$src\" \"$dst\"") ?: return null
+        val safeSrc = sanitizeShellArg(src)
+        val safeDst = sanitizeShellArg(dst)
+        val result = exec("mv $safeSrc $safeDst") ?: return null
         return result.exitCode == 0
     }
 
@@ -787,7 +860,8 @@ object ShizukuShellService {
             Log.w(TAG, "Invalid path: $path")
             return false
         }
-        val result = exec("rm -rf \"$path\"") ?: return null
+        val safePath = sanitizeShellArg(path)
+        val result = exec("rm -rf $safePath") ?: return null
         return result.exitCode == 0
     }
 
@@ -799,7 +873,8 @@ object ShizukuShellService {
             Log.w(TAG, "Invalid path: $path")
             return false
         }
-        val result = exec("mkdir -p \"$path\"") ?: return null
+        val safePath = sanitizeShellArg(path)
+        val result = exec("mkdir -p $safePath") ?: return null
         return result.exitCode == 0
     }
 
@@ -815,7 +890,8 @@ object ShizukuShellService {
             return "Error: invalid path"
         }
         if (!INT_REGEX.matches(maxLines.toString())) return null
-        val result = exec("head -n $maxLines \"$path\"") ?: return null
+        val safePath = sanitizeShellArg(path)
+        val result = exec("head -n $maxLines $safePath") ?: return null
         if (result.exitCode != 0) {
             return "Error: ${result.stderr.trim()}"
         }
@@ -840,14 +916,16 @@ object ShizukuShellService {
             Log.w(TAG, "Invalid backupDir: $backupDir")
             return "Error: invalid path"
         }
+        val safePkg = sanitizeShellArg(packageName)
+        val safeBackupDir = sanitizeShellArg(backupDir)
         val srcDir = "/sdcard/Android/data/$packageName"
         val dstDir = "$backupDir/$packageName"
 
         // 创建备份目录
-        exec("mkdir -p \"$dstDir\"")
+        exec("mkdir -p $safeBackupDir/$safePkg")
 
         // 复制数据
-        val result = exec("cp -r \"$srcDir/\" \"$dstDir/\"") ?: return null
+        val result = exec("cp -r /sdcard/Android/data/$safePkg/ $safeBackupDir/$safePkg/") ?: return null
         if (result.exitCode != 0) {
             return "Backup failed: ${result.stderr.trim()}"
         }

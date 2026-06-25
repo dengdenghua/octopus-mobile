@@ -1,5 +1,7 @@
 package com.apk.claw.android.navigation
 
+import android.os.Handler
+import android.os.HandlerThread
 import android.view.KeyEvent
 import com.apk.claw.android.service.ClawAccessibilityService
 import com.apk.claw.android.utils.XLog
@@ -37,6 +39,10 @@ class NavigationRecorder(
 
     /** 回调：录制状态变化 */
     var onStateChanged: ((isRecording: Boolean, stepCount: Int) -> Unit)? = null
+
+    /** 单线程后台 Handler，避免每次按键都创建新 Thread */
+    private val handlerThread = HandlerThread("nav-recorder").apply { start() }
+    private val handler = Handler(handlerThread.looper)
 
     /**
      * 开始主动录制。
@@ -100,6 +106,14 @@ class NavigationRecorder(
     fun isRecording(): Boolean = recording
 
     /**
+     * 释放后台线程。应在 NavigationRecorder 生命周期结束时调用。
+     */
+    fun destroy() {
+        handler.removeCallbacksAndMessages(null)
+        handlerThread.quitSafely()
+    }
+
+    /**
      * 处理按键事件 —— 核心方法。
      *
      * 由 ClawAccessibilityService 的 onKeyEvent 调用。
@@ -112,10 +126,8 @@ class NavigationRecorder(
 
         val action = keyCodeToRemoteAction(keyCode) ?: return false
 
-        // 在当前线程执行录制（避免阻塞 UI）
-        Thread({
-            recordStep(action)
-        }, "nav-recorder").start()
+        // 丢到单线程后台 Handler 执行，避免每次按键都创建新 Thread
+        handler.post { recordStep(action) }
 
         return false  // 不消费按键，让系统继续处理
     }

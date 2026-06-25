@@ -1,8 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
+    <!--
+      默认允许明文：母体控制走 ws://（明文），LAN 多设备控制走 http://<对端IP>，
+      且 LAN IP 是动态的、无法用 <domain> 列举（network-security-config 不支持 CIDR 网段）。
+      之前 <domain>192.168.0.0</domain> 这类写法无效（被当成精确主机名，不是网段），
+      会让 release 版把母体 WS 与 LAN 投屏/远控/MJPEG 全部静默拒绝。
+      注：把 LAN/母体迁到 wss/https 是后续 R3 的硬化项。
+    -->
     <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>
     </base-config>
+
+    <!-- 已知后端强制 HTTPS（能锁的就锁：账号/计费/中转始终走 TLS）。 -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">api.octoapk.com</domain>
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </domain-config>
 </network-security-config>

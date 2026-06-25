@@ -11,8 +11,9 @@ import java.io.ByteArrayOutputStream
  *
  * 特性：
  *  - 100ms 节流（防止高频截图导致 OOM）
- *  - ByteArrayOutputStream 缓冲区复用（减少 GC）
  *  - 支持缩放以减小传输体积
+ *
+ * 注：每个调用使用独立的 ByteArrayOutputStream，避免多线程并发时数据错乱。
  */
 class ScreenCaptureManager {
 
@@ -23,9 +24,6 @@ class ScreenCaptureManager {
 
     @Volatile
     private var lastCaptureTs: Long = 0L
-
-    /** 复用缓冲区 */
-    private val buffer = ByteArrayOutputStream(256 * 1024)
 
     /**
      * 截取屏幕并返回 JPEG 字节数组。
@@ -52,7 +50,7 @@ class ScreenCaptureManager {
         lastCaptureTs = System.currentTimeMillis()
 
         return try {
-            buffer.reset()
+            val buffer = ByteArrayOutputStream(256 * 1024)
             bmp.compress(Bitmap.CompressFormat.JPEG, quality, buffer)
             buffer.toByteArray()
         } catch (e: Exception) {
@@ -97,7 +95,7 @@ class ScreenCaptureManager {
                 bmp
             }
 
-            buffer.reset()
+            val buffer = ByteArrayOutputStream(256 * 1024)
             scaled.compress(Bitmap.CompressFormat.JPEG, quality, buffer)
             val bytes = buffer.toByteArray()
 

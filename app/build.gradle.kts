@@ -42,8 +42,8 @@ android {
         applicationId = "com.octopus.mobile"
         minSdk = 28
         targetSdk = 36
-        versionCode = 6
-        versionName = "0.0.6"
+        versionCode = 7
+        versionName = "0.0.7"
         buildConfigField("String", "VERSION_INFO", getVersionGit())
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -152,6 +152,7 @@ dependencies {
     implementation(libs.lifecycle.runtime)
     implementation(libs.lifecycle.viewmodel)
     implementation(libs.mmkv)
+    implementation(libs.security.crypto)
     implementation(libs.adapter)
     implementation(libs.glide)
     implementation(libs.glide.transformations)

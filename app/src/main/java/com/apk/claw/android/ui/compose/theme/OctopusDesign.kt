@@ -1,9 +1,35 @@
 package com.apk.claw.android.ui.compose.theme
 
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+
+enum class OctopusGlassQuality {
+    Low,
+    Medium,
+    High,
+    Ultra;
+
+    companion object {
+        fun fromStorage(value: String): OctopusGlassQuality = when (value.lowercase()) {
+            "low" -> Low
+            "medium" -> Medium
+            "ultra" -> Ultra
+            else -> High
+        }
+    }
+}
+
+enum class OctopusGlassMaterial {
+    Thin,
+    Card,
+    Dock,
+    Sheet;
+}
 
 /**
  * 全局配色 —— 与 XML colors.xml 保持视觉一致的单一调色板。
@@ -56,7 +82,8 @@ object OctopusColors {
     // ── Text（与 XML colorText* 对齐）──
     val TextPrimary: Color get() = if (isLight) Color(0xF5000000) else Color(0xEBFFFFFF)
     val TextSecondary: Color get() = if (isLight) Color(0xAD000000) else Color(0xA3FFFFFF)
-    val TextTertiary: Color get() = if (isLight) Color(0x61000000) else Color(0x52FFFFFF)
+    // 提到 WCAG AA(≈4.5:1)：原 0x61/0x52 在白/暗底仅 ~2.7:1，正文级副文本不达标。
+    val TextTertiary: Color get() = if (isLight) Color(0x8A000000) else Color(0x8AFFFFFF)
     val TextDisabled: Color get() = if (isLight) Color(0x33000000) else Color(0x33FFFFFF)
     val TextInverse: Color get() = if (isLight) Color(0xFFFFFFFF) else Color(0xFF000000)
 
@@ -92,6 +119,12 @@ object OctopusTints {
 
     /** 热门标签红色（FeatureHubScreen 重复使用 3 次） */
     val Hot = Color(0xFFFF6B6B)
+
+    /** 浏览器分类色（DiscoverScreen 分类图标 + 快捷方式） */
+    val CatAI = Color(0xFF7C6BFF)
+    val CatVideo = Color(0xFFFF6B7A)
+    val CatDev = Color(0xFF5B9BFF)
+    val CatKnowledge = Color(0xFF30B889)
 }
 
 /**
@@ -117,4 +150,169 @@ object OctopusShape {
     val Card = 16.dp
     val Panel = 20.dp
     val Control = 12.dp
+
+    /** 对话气泡专用：大半圆 + 小尾角 */
+    val agentBubble = androidx.compose.foundation.shape.RoundedCornerShape(16.dp, 16.dp, 16.dp, 4.dp)
+    val userBubble = androidx.compose.foundation.shape.RoundedCornerShape(16.dp, 16.dp, 4.dp, 16.dp)
+}
+
+/**
+ * 统一的间距网格（4dp 基准）。
+ */
+object OctopusSpacing {
+    val xs = 4.dp
+    val sm = 8.dp
+    val md = 12.dp
+    val lg = 16.dp
+    val xl = 20.dp
+    val xxl = 24.dp
+}
+
+/**
+ * 统一的图标尺寸。
+ */
+object OctopusIconSize {
+    val small = 16.dp
+    val medium = 20.dp
+    val large = 24.dp
+}
+
+/**
+ * 顶级 Compose 页面通用布局尺寸。
+ *
+ * Scaffold 已经把底部导航高度注入 innerPadding，页面只需要再留出少量
+ * 视觉呼吸空间；集中在这里，避免各 Tab 各写一套 magic number。
+ */
+object OctopusLayout {
+    val bottomNavContentPadding = 24.dp
+    val bottomNavHeight = 64.dp
+    val bottomNavItemHeight = 48.dp
+    val bottomNavElevation = 14.dp
+    val bottomNavBorder = 1.dp
+}
+
+/**
+ * 全局玻璃背景 token。
+ *
+ * 浏览器首页先完成了暖色液态玻璃方向，这里把同一套背景/玻璃面板语义提升为
+ * App 级别 token，避免一级页面各自散落一套颜色。
+ */
+object OctopusBackground {
+    fun pageBrush(): Brush = if (OctopusColors.isLight) {
+        Brush.linearGradient(
+            listOf(
+                Color(0xFF91A3B7),
+                Color(0xFFADA9B8),
+                Color(0xFFC0A197),
+            )
+        )
+    } else {
+        Brush.linearGradient(
+            listOf(
+                Color(0xFF17151D),
+                Color(0xFF211C24),
+                Color(0xFF2B2421),
+            )
+        )
+    }
+
+    val glassSurface: Color
+        get() = if (OctopusColors.isLight) Color.White.copy(alpha = 0.82f) else Color(0xFF222225).copy(alpha = 0.72f)
+
+    val glassBorder: Color
+        get() = if (OctopusColors.isLight) Color.White.copy(alpha = 0.82f) else Color.White.copy(alpha = 0.14f)
+}
+
+/**
+ * 全局玻璃效果 token。
+ *
+ * [blurRadius] 是玻璃层的高斯模糊半径：数值越大越接近液态玻璃，数值越小越接近
+ * 普通半透明磨砂。页面组件默认读取这里，也可以在单个组件上传入参数微调。
+ */
+object OctopusGlass {
+    // 复用 octopus-agent 液态玻璃参数(--global-glass-blur: 24px),更液态。
+    val defaultBlurRadius: Dp = 24.dp
+
+    private val _blurRadius = mutableStateOf(defaultBlurRadius)
+    private val _quality = mutableStateOf(OctopusGlassQuality.High)
+    private val _refraction = mutableStateOf(1f)
+    private val _highlight = mutableStateOf(1f)
+    private val _noise = mutableStateOf(1f)
+    private val _animationEnabled = mutableStateOf(true)
+
+    var blurRadius: Dp
+        get() = _blurRadius.value
+        set(value) { _blurRadius.value = if (value < 0.dp) 0.dp else value }
+
+    var quality: OctopusGlassQuality
+        get() = _quality.value
+        set(value) { _quality.value = value }
+
+    var refraction: Float
+        get() = _refraction.value
+        set(value) { _refraction.value = value.coerceIn(0f, 2f) }
+
+    var highlight: Float
+        get() = _highlight.value
+        set(value) { _highlight.value = value.coerceIn(0f, 2f) }
+
+    var noise: Float
+        get() = _noise.value
+        set(value) { _noise.value = value.coerceIn(0f, 2f) }
+
+    var animationEnabled: Boolean
+        get() = _animationEnabled.value
+        set(value) { _animationEnabled.value = value }
+
+    val qualityMultiplier: Float
+        get() = when (quality) {
+            OctopusGlassQuality.Low -> 0.35f
+            OctopusGlassQuality.Medium -> 0.68f
+            OctopusGlassQuality.High -> 1f
+            OctopusGlassQuality.Ultra -> 1.25f
+        }
+
+    val refractionOffset: Dp get() = blurRadius * 0.18f * refraction * qualityMultiplier
+    val highlightIntensity: Float get() = (if (OctopusColors.isLight) 0.88f else 0.58f) * highlight * qualityMultiplier
+    val edgeGlowAlpha: Float get() = (if (OctopusColors.isLight) 0.70f else 0.30f) * highlight * qualityMultiplier
+    val innerShadowAlpha: Float get() = if (OctopusColors.isLight) 0.14f else 0.34f
+    val noiseAlpha: Float get() = (if (OctopusColors.isLight) 0.055f else 0.035f) * noise * qualityMultiplier
+    val subtleBlurRadius: Dp get() = blurRadius * (0.38f + qualityMultiplier * 0.17f)
+    val liquidBlurRadius: Dp get() = blurRadius * (0.95f + qualityMultiplier * 0.40f)
+    val useRefraction: Boolean get() = quality != OctopusGlassQuality.Low && refraction > 0.02f
+    val useNoise: Boolean get() = quality != OctopusGlassQuality.Low && noise > 0.02f
+    val useDynamicHighlight: Boolean get() = animationEnabled && quality != OctopusGlassQuality.Low
+}
+
+/**
+ * 统一的字号阶梯（sp）。token 取值与现有 UI 实际字号一一对齐，迁移为纯别名、零视觉变化。
+ *
+ * - micro      = 9sp （极小徽章，如「已就绪」状态点）
+ * - tag        = 10sp（标签、计数）
+ * - caption    = 11sp（辅助说明、副标题）
+ * - label      = 12sp（次要正文、分区标签）
+ * - body       = 13sp（正文）
+ * - bodyStrong = 14sp（强调正文）
+ * - bodyLg     = 15sp（大正文 / 搜索提示）
+ * - title      = 16sp（卡片 / 分区标题）
+ * - titleSm    = 17sp（次级标题，如未选中 Tab）
+ * - titleLg    = 18sp（页面标题）
+ * - headlineSm = 20sp（小号大标题：顶栏品牌名 / 首页标题）
+ * - headline   = 22sp（大标题 / Tab 选中态）
+ * - display    = 24sp（空状态 Hero 标题）
+ */
+object OctopusType {
+    val micro = 9.sp
+    val tag = 10.sp
+    val caption = 11.sp
+    val label = 12.sp
+    val body = 13.sp
+    val bodyStrong = 14.sp
+    val bodyLg = 15.sp
+    val title = 16.sp
+    val titleSm = 17.sp
+    val titleLg = 18.sp
+    val headlineSm = 20.sp
+    val headline = 22.sp
+    val display = 24.sp
 }

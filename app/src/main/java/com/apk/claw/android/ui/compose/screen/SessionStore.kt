@@ -8,7 +8,7 @@ import java.util.concurrent.atomic.AtomicLong
 /**
  * 多会话管理:维护会话索引(id/标题/更新时间)与「当前会话」,消息本身交给 [ChatStore]。
  *
- * 索引与当前 id 存 MMKV;首次使用自动建一个默认会话(并把演示对话灌进去)。
+ * 索引与当前 id 存 MMKV;首次使用自动建一个默认空会话。
  */
 object SessionStore {
 
@@ -42,15 +42,23 @@ object SessionStore {
     fun currentId(): String? = KVUtils.getString(KEY_CURRENT, "").takeIf { it.isNotBlank() }
     fun setCurrent(id: String) { KVUtils.putString(KEY_CURRENT, id) }
 
-    /** 保证至少有一个会话存在,返回完整索引。首个会话灌入演示对话。 */
+    /** 保证至少有一个会话存在,返回完整索引。 */
     fun ensureAtLeastOne(now: Long, demo: List<ChatMessage>): MutableList<SessionMeta> {
         val list = index()
         if (list.isEmpty()) {
-            val meta = SessionMeta(newId(), "Demo", now)
+            val meta = SessionMeta(newId(), "新对话", now)
             list.add(meta)
             saveIndex(list)
             setCurrent(meta.id)
             ChatStore.save(meta.id, demo)
+        } else {
+            val demoSession = list.firstOrNull { it.title == "Demo" }
+            if (demoSession != null) {
+                demoSession.title = "新对话"
+                demoSession.updatedAt = now
+                saveIndex(list)
+                ChatStore.clear(demoSession.id)
+            }
         }
         return list
     }
@@ -58,7 +66,7 @@ object SessionStore {
     /** 新建空会话并设为当前,返回其 meta。 */
     fun create(now: Long): SessionMeta {
         val list = index()
-        val meta = SessionMeta(newId(), "New chat", now)
+        val meta = SessionMeta(newId(), "新对话", now)
         list.add(0, meta)
         saveIndex(list)
         setCurrent(meta.id)

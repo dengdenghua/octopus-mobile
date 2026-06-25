@@ -144,7 +144,8 @@ public class QBotApiClient {
                 try {
                     if (response.isSuccessful()) {
                         String responseBody = response.body().string();
-                        XLog.d(TAG, "access_token 响应: " + responseBody);
+                        // 响应体含 access_token，不落 logcat 明文（避免 token 泄露）。
+                        XLog.d(TAG, "access_token 响应已收到 (<redacted> " + responseBody.length() + " bytes)");
                         AccessTokenResponse tokenResponse = gson.fromJson(responseBody, AccessTokenResponse.class);
                         String token = tokenResponse != null ? tokenResponse.getAccess_token() : null;
                         if (token == null || token.isEmpty()) {

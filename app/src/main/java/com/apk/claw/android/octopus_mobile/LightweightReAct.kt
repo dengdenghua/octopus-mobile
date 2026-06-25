@@ -40,11 +40,21 @@ class LightweightReAct(
         task: String,
         skills: List<SkillSpec>,
         systemPrompt: String = DEFAULT_SYSTEM_PROMPT,
-        onStep: ((ReActStep) -> Unit)? = null
+        onStep: ((ReActStep) -> Unit)? = null,
+        // 可选:返回当前屏幕,供 VLM 目标自校验。null → 不校验(向后兼容)。
+        captureScreen: (suspend () -> android.graphics.Bitmap?)? = null,
     ): TaskResult {
         val history = mutableListOf<ChatMessage>()
         history += ChatMessage.System(content = systemPrompt)
         history += ChatMessage.User(content = task)
+
+        // 语义检索:按当前任务把技能重排(相关的靠前);命中不了/离线/未配对则原顺序。
+        // 不丢技能(topK = 全部),只重排 —— 永不弱于现状。
+        val activeSkills = SemanticSkillRanker
+            .rank(task, skills.map { "${it.id} ${it.description}" }, topK = skills.size)
+            ?.map { skills[it] } ?: skills
+        // VLM 目标自校验的修复预算:仅当调用方提供了截图能力时启用一轮修复。
+        var verifyRepairsLeft = if (captureScreen != null) 1 else 0
 
         val totalUsage = AccumulatedUsage()
         val recentActions = ArrayDeque<String>(config.stuckWindowSize)  // 死循环检测
@@ -58,7 +68,7 @@ class LightweightReAct(
                 val compressed = compressForSend(history)
 
                 val response = try {
-                    llmClient.chat(compressed, skills)
+                    llmClient.chat(compressed, activeSkills)
                 } catch (e: Exception) {
                     Log.e(tag, "LLM call failed at step $step: ${e.message}", e)
                     return TaskResult.MaxStepsReached(
@@ -78,8 +88,21 @@ class LightweightReAct(
                     toolCalls = response.toolCalls
                 )
 
-                // 没有工具调用 → 任务完成
+                // 没有工具调用 → LLM 认为完成。先做 VLM 目标自校验再收尾:
+                // 看屏确认目标真达成,没达成就带原因再来一轮(修复)。
+                // fail-open:无截图/VLM未配置/含糊 → 直接放行,绝不卡正常完成。
                 if (!response.hasToolCalls) {
+                    if (verifyRepairsLeft > 0) {
+                        val verdict = GoalVerifier.verify(task, captureScreen?.invoke())
+                        if (!verdict.achieved) {
+                            verifyRepairsLeft--
+                            Log.i(tag, "goal not met at step $step: ${verdict.reason}")
+                            history += ChatMessage.System(
+                                content = "目标尚未达成:${verdict.reason}。请继续操作直到完成。"
+                            )
+                            continue
+                        }
+                    }
                     onStep?.invoke(ReActStep.Done(step))
                     return TaskResult.Done(
                         summary = response.content ?: "(no summary)",

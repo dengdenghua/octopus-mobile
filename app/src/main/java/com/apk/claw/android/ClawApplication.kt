@@ -10,6 +10,7 @@ import com.apk.claw.android.octopus_mobile.DeviceRegistry
 import com.apk.claw.android.octopus_mobile.SkillManifest
 import com.apk.claw.android.octopus_mobile.nerves.EventBus
 import com.apk.claw.android.plugin.PluginManager
+import com.apk.claw.android.server.RemoteConsoleGateway
 import com.apk.claw.android.service.ForegroundService
 import com.apk.claw.android.shizuku.ShizukuManager
 import com.apk.claw.android.tool.ToolRegistry
@@ -114,6 +115,7 @@ open class ClawApplication : BaseApp() {
 
         // ── 方案 F · 启动 Octopus Mobile 决策层 ──
         initOctopusMobile()
+        RemoteConsoleGateway.connect()
 
         Thread({
             if (KVUtils.hasLlmConfig()) {
@@ -164,6 +166,7 @@ open class ClawApplication : BaseApp() {
                     if (KVUtils.hasLlmConfig()) {
                         XLog.i(TAG, "网络恢复(${networkType?.name})，检查并重连断开的通道")
                         ChannelManager.reconnectIfNeeded()
+                        RemoteConsoleGateway.connect()
                     }
                 }, 2000)
             }

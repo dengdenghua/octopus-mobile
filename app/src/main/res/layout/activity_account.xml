@@ -69,6 +69,14 @@
                         android:textSize="32pt"
                         android:textStyle="bold" />
 
+                    <TextView
+                        android:id="@+id/tvCreditsBreakdown"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4pt"
+                        android:textColor="@color/colorTextSecondary"
+                        android:textSize="12pt" />
+
                     <com.apk.claw.android.widget.KButton
                         android:id="@+id/btnDailyClaim"
                         android:layout_width="wrap_content"
@@ -119,17 +127,27 @@
                             android:layout_weight="1"
                             android:gravity="center"
                             android:text="@string/account_tier_fast"
-                            android:textSize="15pt" />
+                            android:textSize="14pt" />
+
+                        <com.apk.claw.android.widget.KButton
+                            android:id="@+id/btnTierFlash"
+                            android:layout_width="0dp"
+                            android:layout_height="44pt"
+                            android:layout_marginStart="8pt"
+                            android:layout_weight="1"
+                            android:gravity="center"
+                            android:text="@string/account_tier_flash"
+                            android:textSize="14pt" />
 
                         <com.apk.claw.android.widget.KButton
                             android:id="@+id/btnTierPremium"
                             android:layout_width="0dp"
                             android:layout_height="44pt"
-                            android:layout_marginStart="10pt"
+                            android:layout_marginStart="8pt"
                             android:layout_weight="1"
                             android:gravity="center"
                             android:text="@string/account_tier_premium"
-                            android:textSize="15pt" />
+                            android:textSize="14pt" />
                     </LinearLayout>
 
                     <TextView

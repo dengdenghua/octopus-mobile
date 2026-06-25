@@ -1,5 +1,6 @@
 package com.apk.claw.android.tool.impl
 
+import com.apk.claw.android.octopus_mobile.safety.PathGuard
 import com.apk.claw.android.shizuku.ShizukuShellService
 import com.apk.claw.android.tool.BaseTool
 import com.apk.claw.android.tool.ToolParameter
@@ -65,9 +66,9 @@ class SearchFilesTool : BaseTool() {
         val basePath = requireString(params, "path")
         val maxResults = optionalInt(params, "max_results", 30)
 
-        // 路径安全检查
-        if (basePath.startsWith("/data/data/") || basePath.startsWith("/data/system/")) {
-            return ToolResult.error("Access denied: $basePath requires root.")
+        // 路径安全检查 —— 限制在 /sdcard 沙箱内，拦截越界 grep 读取其他 App 数据。
+        PathGuard.underSdcard(basePath).let {
+            if (!it.allow) return ToolResult.error("Access denied: $basePath 越界或敏感 (${it.reason})。仅允许 /sdcard 下的路径。")
         }
 
         return when (action) {

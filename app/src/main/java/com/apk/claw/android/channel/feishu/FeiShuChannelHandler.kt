@@ -32,6 +32,8 @@ class FeiShuChannelHandler(
 
     @Volatile
     private var lastMessageId: String? = null
+    // ACL 用稳定发送者标识(open_id)；lastMessageId 每条消息唯一，不能用于鉴权。
+    private var lastSenderOpenId: String? = null
 
     private val eventHandler: EventDispatcher by lazy {
         EventDispatcher.newBuilder("", "")
@@ -59,6 +61,7 @@ class FeiShuChannelHandler(
                                 rawContent
                             }
                             lastMessageId = messageId
+                            lastSenderOpenId = runCatching { event.event.sender?.senderId?.openId }.getOrNull()
                             ChannelManager.dispatchMessage(channel, text, messageId)
                         }
                     } catch (e: Exception) {
@@ -70,6 +73,9 @@ class FeiShuChannelHandler(
     }
 
     override fun isConnected(): Boolean = wsClient != null
+
+    /** ACL 鉴权用：返回稳定的发送者 open_id（非每条消息唯一的 messageId）。 */
+    override fun getLastSenderId(): String? = lastSenderOpenId
 
     override fun init() {
         if (appId.isEmpty() || appSecret.isEmpty()) {

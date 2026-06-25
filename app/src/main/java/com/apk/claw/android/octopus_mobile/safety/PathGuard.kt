@@ -101,7 +101,9 @@ object PathGuard {
             } catch (e: Exception) {
                 sandboxDir
             }
-            if (!resolved.startsWith(base)) {
+            // 边界匹配：必须等于沙箱根或位于其下（带分隔符），避免同前缀兄弟目录
+            // （如 /sdcard 与 /sdcard_evil）绕过沙箱。
+            if (resolved != base && !resolved.startsWith(base + File.separator)) {
                 return PathVerdict(
                     false, path, resolved = resolved,
                     reason = "escapes_sandbox: not under $base",
@@ -137,6 +139,23 @@ object PathGuard {
         allowSensitive: Boolean = false,
     ): Boolean {
         return check(path, sandboxDir = sandboxDir, allowSensitive = allowSensitive).allow
+    }
+
+    /** 共享外部存储根 —— agent 文件工具的沙箱边界。 */
+    const val SDCARD_SANDBOX = "/sdcard"
+
+    /**
+     * 便捷方法：校验 agent 提供的路径是否安全地位于 /sdcard 沙箱内。
+     * 用于 file_ops / browse_files / search_files / backup_app 等工具，
+     * 防止越界访问 /system、/proc、其他 App 的 /data/data 私有目录。
+     */
+    fun underSdcard(path: String): PathVerdict {
+        // 高级自动化模式：解除 /sdcard 沙箱，允许访问设备上 shell UID 可达的任意路径
+        // （仍受下游 ShizukuShellService.isValidPath 的注入/遍历校验约束）。
+        if (com.apk.claw.android.utils.KVUtils.isAdvancedAutomationMode()) {
+            return PathVerdict(true, path, resolved = path)
+        }
+        return check(path, sandboxDir = SDCARD_SANDBOX)
     }
 
     // ── 内部 ──────────────────────────────────────────

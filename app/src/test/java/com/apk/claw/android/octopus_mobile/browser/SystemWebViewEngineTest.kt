@@ -107,9 +107,11 @@ class SystemWebViewEngineTest {
     }
 
     @Test
-    fun `createView allows universal access from file URLs`() {
+    fun `createView blocks universal access from file URLs`() {
+        // 安全：file:// 页面不得跨源读取本地文件/其它 file:// 源。
         val view = engine.createView(context) as WebView
-        assertTrue(view.settings.allowUniversalAccessFromFileURLs)
+        assertFalse(view.settings.allowUniversalAccessFromFileURLs)
+        assertFalse(view.settings.allowFileAccessFromFileURLs)
     }
 
     @Test
@@ -119,9 +121,10 @@ class SystemWebViewEngineTest {
     }
 
     @Test
-    fun `createView sets mixed content always allow`() {
+    fun `createView sets mixed content to compatibility mode`() {
+        // 安全：HTTPS 页面拦截 HTTP 脚本/iframe，避免被动降级为明文。
         val view = engine.createView(context) as WebView
-        assertEquals(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW, view.settings.mixedContentMode)
+        assertEquals(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE, view.settings.mixedContentMode)
     }
 
     @Test

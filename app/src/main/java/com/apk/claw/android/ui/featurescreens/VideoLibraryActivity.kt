@@ -3,11 +3,13 @@ package com.apk.claw.android.ui.featurescreens
 import android.os.Bundle
 import android.os.Environment
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,8 +28,7 @@ import kotlinx.coroutines.withContext
 class VideoLibraryActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { VideoLibraryScreen(onBack = { finish() }) }
-        runCatching { window.statusBarColor = com.apk.claw.android.ui.compose.theme.OctopusColors.statusBarArgb }
+        setFeatureContent { VideoLibraryScreen(onBack = { finish() }) }
     }
 }
 
@@ -65,7 +66,7 @@ fun VideoLibraryScreen(onBack: () -> Unit) {
                                 }
                             },
                         ) {
-                            Text("🎬", fontSize = 18.sp)
+                            Icon(Icons.Filled.Movie, contentDescription = null, tint = FPrimary, modifier = Modifier.size(20.dp))
                             Spacer(Modifier.width(10.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(f.name, color = FText, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1)

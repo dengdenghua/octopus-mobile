@@ -66,7 +66,8 @@ def clean_state():
     """每个测试前清空 DB 表 + 限流字典,保证测试独立可运行。"""
     init_db()
     with closing(db()) as c:
-        for t in ("users", "sms_codes", "email_codes", "orders", "usage_log", "admin_log"):
+        for t in ("users", "sms_codes", "email_codes", "orders", "usage_log", "admin_log",
+                  "credit_transactions", "device_reports", "remote_devices", "remote_pair_codes"):
             c.execute(f"DELETE FROM {t}")
         c.commit()
     app_module._rl.clear()
@@ -141,6 +142,41 @@ class TestHealthz:
         assert "status" in r.json()
 
 
+class TestShizukuDownload:
+    def test_shizuku_latest_unconfigured(self, client, monkeypatch):
+        monkeypatch.setattr(app_module, "SHIZUKU_APK_PATH", os.path.join(_TMPDIR, "missing-shizuku.apk"))
+        r = client.get("/downloads/shizuku/latest")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["name"] == "Shizuku"
+        assert data["available"] is False
+        assert "downloadUrl" not in data
+
+        r = client.get("/downloads/shizuku.apk")
+        assert r.status_code == 404
+
+    def test_shizuku_latest_and_apk_download(self, client, tmp_path, monkeypatch):
+        apk = tmp_path / "shizuku.apk"
+        payload = b"fake apk bytes for endpoint test"
+        apk.write_bytes(payload)
+        monkeypatch.setattr(app_module, "SHIZUKU_APK_PATH", str(apk))
+        monkeypatch.setattr(app_module, "SHIZUKU_VERSION", "test-version")
+
+        r = client.get("/downloads/shizuku/latest")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["available"] is True
+        assert data["version"] == "test-version"
+        assert data["sizeBytes"] == len(payload)
+        assert data["sha256"] == app_module._file_sha256(str(apk))
+        assert data["downloadUrl"].endswith("/downloads/shizuku.apk")
+
+        r = client.get("/downloads/shizuku.apk")
+        assert r.status_code == 200
+        assert r.content == payload
+        assert r.headers["content-type"].startswith("application/vnd.android.package-archive")
+
+
 # ═══════════════════════════════════════════════════════════════════════
 # 2. 账号注册与登录
 # ═══════════════════════════════════════════════════════════════════════
@@ -157,6 +193,21 @@ class TestEmailAuth:
         for bad in ["not-an-email", "a@b", "@example.com", "a@.com", ""]:
             r = client.post("/auth/email/send", json={"email": bad})
             assert r.status_code == 400, f"{bad!r} should be 400"
+
+    def test_email_send_failure_removes_code(self, client, monkeypatch):
+        email = "smtp-fail@example.com"
+
+        def _boom(_email, _code):
+            raise RuntimeError("smtp failed")
+
+        monkeypatch.setattr(app_module, "EMAIL_PROVIDER", "smtp")
+        monkeypatch.setattr(app_module, "send_email", _boom)
+        r = client.post("/auth/email/send", json={"email": email})
+        assert r.status_code == 502
+        assert r.json()["detail"] == "email send failed"
+        with closing(db()) as c:
+            rec = c.execute("SELECT * FROM email_codes WHERE email = ?", (email,)).fetchone()
+        assert rec is None
 
     def test_email_login_new_user(self, client):
         email = "new@example.com"
@@ -358,8 +409,9 @@ class TestBilling:
         ok = _reserve_credits(uid, 0)
         assert ok is True
 
-    def test_reconcile_refund(self, client):
+    def test_reconcile_refund(self, client, monkeypatch):
         """预扣 50,实际扣 10 → 退 40。"""
+        monkeypatch.setattr(app_module, "CREDITS_PER_1K_TOKENS", 1.0)
         token, uid = _email_register(client, "bill4@example.com")
         _reserve_credits(uid, 50)
         actual = _reconcile_usage(uid, "agnes-2.0-flash", 5000, 5000, 1.0, 50)
@@ -409,6 +461,7 @@ class TestBilling:
 
     def test_chat_insufficient_credits_402(self, client, monkeypatch):
         """余额不足 → POST /v1/chat/completions → 402。"""
+        monkeypatch.setattr(app_module, "FREE_DAILY_CREDITS", 0)
         token, uid = _email_register(client, "bill8@example.com")
         # 清空积分
         with closing(db()) as c:
@@ -443,6 +496,77 @@ class TestBilling:
             json={"messages": [{"role": "user", "content": "hi"}]},
         )
         assert r.status_code == 401
+
+    def test_daily_free_quota_covers_small_chat(self, client, monkeypatch):
+        """每日免费额度优先抵扣,小请求不扣余额。"""
+        monkeypatch.setattr(app_module, "FREE_DAILY_CREDITS", 5)
+        token, uid = _email_register(client, "bill10@example.com")
+        with closing(db()) as c:
+            c.execute("UPDATE users SET credits = 0 WHERE user_id = ?", (uid,))
+            c.commit()
+        # 配置假上游,让请求走到结算(上游返回空 usage 会按 prompt 估算兜底)
+        monkeypatch.setitem(
+            app_module.PROVIDERS, "agnes",
+            {"base_url": "https://fake.example.com/v1", "api_key": "fake-key"},
+        )
+        # 伪造上游返回 200 + 无 usage(测试里 httpx 会真的发请求到 fake.example.com,
+        # 无法连接会抛异常并走 _settle(0,0),这样也能验证免费额度不扣余额)
+        r = client.post(
+            "/v1/chat/completions",
+            json={"model": "agnes-2.0-flash", "messages": [{"role": "user", "content": "hi"}]},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        # 上游连不上返回 502,但重点是余额没被扣
+        with closing(db()) as c:
+            bal = c.execute("SELECT credits FROM users WHERE user_id = ?", (uid,)).fetchone()["credits"]
+        assert bal == 0
+
+    def test_usage_reserve_rolls_back_free_buckets_on_insufficient_paid(self, client, monkeypatch):
+        """赠送/每日额度已参与预留,但永久积分不足时应整体回滚。"""
+        monkeypatch.setattr(app_module, "FREE_DAILY_CREDITS", 5)
+        token, uid = _email_register(client, "bill11@example.com")
+        with closing(db()) as c:
+            c.execute(
+                "UPDATE users SET credits = 0, gift_credits = 3, gift_month = ?, daily_free_used = 0, daily_free_date = ? "
+                "WHERE user_id = ?",
+                (app_module._this_month(), app_module._today_str(), uid),
+            )
+            c.commit()
+
+        reserved = app_module._reserve_usage_credits(uid, 10, ref_id="test_hold")
+        assert reserved is None
+        with closing(db()) as c:
+            row = c.execute(
+                "SELECT credits, gift_credits, daily_free_used FROM users WHERE user_id = ?", (uid,)
+            ).fetchone()
+        assert row["credits"] == 0
+        assert row["gift_credits"] == 3
+        assert row["daily_free_used"] == 0
+
+    def test_usage_reconcile_refunds_unused_gift_daily_and_paid(self, client, monkeypatch):
+        """实际账单低于 worst-case 时,赠送/每日免费/永久积分都按未用量退回。"""
+        monkeypatch.setattr(app_module, "FREE_DAILY_CREDITS", 5)
+        monkeypatch.setattr(app_module, "CREDITS_PER_1K_TOKENS", 1.0)
+        token, uid = _email_register(client, "bill12@example.com")
+        with closing(db()) as c:
+            c.execute(
+                "UPDATE users SET credits = 10, gift_credits = 3, gift_month = ?, daily_free_used = 0, daily_free_date = ? "
+                "WHERE user_id = ?",
+                (app_module._this_month(), app_module._today_str(), uid),
+            )
+            c.commit()
+
+        reserved = app_module._reserve_usage_credits(uid, 10, ref_id="test_hold")
+        assert reserved == {"gift": 3, "daily": 5, "paid": 2}
+        actual = _reconcile_usage(uid, "agnes-2.0-flash", 1000, 0, 1.0, 10, ref_id="test_hold", reserved=reserved)
+        assert actual == 1
+        with closing(db()) as c:
+            row = c.execute(
+                "SELECT credits, gift_credits, daily_free_used FROM users WHERE user_id = ?", (uid,)
+            ).fetchone()
+        assert row["credits"] == 10
+        assert row["gift_credits"] == 2
+        assert row["daily_free_used"] == 0
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -792,15 +916,43 @@ class TestInvite:
 # 10. 订单与结算
 # ═══════════════════════════════════════════════════════════════════════
 class TestOrders:
+    def test_billing_estimate(self, client):
+        """/billing/estimate 返回预估积分与人民币。"""
+        token, uid = _email_register(client, "est1@example.com")
+        r = client.post(
+            "/billing/estimate",
+            json={"model": "agnes-2.0-flash", "messages": [{"role": "user", "content": "hello"}]},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert r.status_code == 200
+        d = r.json()
+        assert d["model"] == "agnes-2.0-flash"
+        assert d["multiplier"] == 0.2
+        assert d["worstCaseCredits"] >= 1
+        assert "chargeableCredits" in d
+        assert "estimatedRmb" in d
+
     def test_create_order(self, client):
         token, uid = _email_register(client, "ord1@example.com")
-        r = client.post("/billing/orders", json={"goodsId": "g_100"},
+        r = client.post("/billing/orders", json={"goodsId": "sub_19"},
                         headers={"Authorization": f"Bearer {token}"})
         assert r.status_code == 200
         d = r.json()
         assert d["orderNo"]
-        assert d["amountFen"] == 990
-        assert d["credits"] == 100
+        assert d["amountFen"] == 9900
+        assert d["credits"] == 1500
+        assert d["currency"] == "CNY"
+        assert d["amountMinor"] == 9900
+
+    def test_create_order_usd_uses_usd_pricing_and_credits(self, client):
+        token, uid = _email_register(client, "ord1b@example.com")
+        r = client.post("/billing/orders", json={"goodsId": "sub_99", "currency": "USD"},
+                        headers={"Authorization": f"Bearer {token}"})
+        assert r.status_code == 200
+        d = r.json()
+        assert d["currency"] == "USD"
+        assert d["amountMinor"] == 6900
+        assert d["credits"] == 8500
 
     def test_create_order_invalid_goods(self, client):
         token, uid = _email_register(client, "ord2@example.com")
@@ -811,7 +963,7 @@ class TestOrders:
     def test_query_order_mock_settle(self, client):
         """mock 支付:查单即结算 → PAID + 积分到账。"""
         token, uid = _email_register(client, "ord3@example.com")
-        r = client.post("/billing/orders", json={"goodsId": "g_100"},
+        r = client.post("/billing/orders", json={"goodsId": "sub_19"},
                         headers={"Authorization": f"Bearer {token}"})
         order_no = r.json()["orderNo"]
         r = client.get(f"/billing/orders/{order_no}",
@@ -819,10 +971,24 @@ class TestOrders:
         assert r.status_code == 200
         d = r.json()
         assert d["status"] == "PAID"
-        assert d["credits"] == 100
-        # 查余额:100(注册) + 100(充值) = 200
+        assert d["credits"] == 1500
+        # 查余额:100(注册) + 1000(永久积分) + 500(月度赠送) = 1600
         r = client.get("/account/balance", headers={"Authorization": f"Bearer {token}"})
-        assert r.json()["credits"] == 200
+        assert r.json()["credits"] == 1600
+
+    def test_query_order_mock_settle_usd_uses_usd_credit_benefits(self, client):
+        token, uid = _email_register(client, "ord3b@example.com")
+        r = client.post("/billing/orders", json={"goodsId": "sub_99", "currency": "USD"},
+                        headers={"Authorization": f"Bearer {token}"})
+        order_no = r.json()["orderNo"]
+        r = client.get(f"/billing/orders/{order_no}",
+                       headers={"Authorization": f"Bearer {token}"})
+        assert r.status_code == 200
+        d = r.json()
+        assert d["status"] == "PAID"
+        assert d["credits"] == 8500
+        r = client.get("/account/balance", headers={"Authorization": f"Bearer {token}"})
+        assert r.json()["credits"] == 8600
 
     def test_query_order_not_found(self, client):
         token, uid = _email_register(client, "ord4@example.com")
@@ -833,7 +999,7 @@ class TestOrders:
     def test_membership_order_extends_expire(self, client):
         """购买会员商品 → member_expire_at 延长。"""
         token, uid = _email_register(client, "ord5@example.com")
-        r = client.post("/billing/orders", json={"goodsId": "m_month"},
+        r = client.post("/billing/orders", json={"goodsId": "sub_19"},
                         headers={"Authorization": f"Bearer {token}"})
         order_no = r.json()["orderNo"]
         client.get(f"/billing/orders/{order_no}",
@@ -850,7 +1016,44 @@ class TestOrders:
         assert r.status_code == 200
         items = r.json()["items"]
         assert len(items) == len(GOODS_BY_ID)
-        assert any(g["id"] == "m_month" for g in items)
+        assert any(g["id"] == "sub_19" for g in items)
+        assert next(g for g in items if g["id"] == "sub_99")["priceUsdCents"] == 6900
+        assert next(g for g in items if g["id"] == "sub_99")["usdCredits"] == 3500
+        assert next(g for g in items if g["id"] == "sub_99")["usdBonusCredits"] == 5000
+
+    def test_subscription_renew_rejects_non_mock_provider(self, client, monkeypatch):
+        """真支付模式下,公开续费接口不能直接给用户加积分/顺延会员。"""
+        token, uid = _email_register(client, "ord7@example.com")
+        with closing(db()) as c:
+            c.execute("UPDATE users SET sub_goods_id = ? WHERE user_id = ?", ("sub_19", uid))
+            c.commit()
+        monkeypatch.setattr(app_module, "PAYMENT_PROVIDER", "wechat")
+        r = client.post("/billing/subscription/renew", headers={"Authorization": f"Bearer {token}"})
+        assert r.status_code == 403
+
+    def test_create_order_pending_limit(self, client, monkeypatch):
+        """未支付订单过多时拒绝继续创建,避免刷 PENDING 脏单。"""
+        monkeypatch.setattr(app_module, "PENDING_ORDER_LIMIT", 1)
+        token, uid = _email_register(client, "ord8@example.com")
+        r = client.post("/billing/orders", json={"goodsId": "sub_19"},
+                        headers={"Authorization": f"Bearer {token}"})
+        assert r.status_code == 200
+        r = client.post("/billing/orders", json={"goodsId": "sub_19"},
+                        headers={"Authorization": f"Bearer {token}"})
+        assert r.status_code == 429
+
+    def test_create_order_rejects_unconfigured_real_payment_without_order(self, client, monkeypatch):
+        """真支付配置缺失时不创建订单。"""
+        token, uid = _email_register(client, "ord9@example.com")
+        monkeypatch.setattr(app_module, "PAYMENT_PROVIDER", "wechat")
+        monkeypatch.delenv("WECHAT_APP_ID", raising=False)
+        monkeypatch.delenv("WECHAT_PRIVATE_KEY", raising=False)
+        r = client.post("/billing/orders", json={"goodsId": "sub_19"},
+                        headers={"Authorization": f"Bearer {token}"})
+        assert r.status_code == 503
+        with closing(db()) as c:
+            n = c.execute("SELECT COUNT(*) n FROM orders WHERE user_id = ?", (uid,)).fetchone()["n"]
+        assert n == 0
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -893,3 +1096,254 @@ class TestModels:
         """/v1/models 不需要鉴权。"""
         r = client.get("/v1/models")
         assert r.status_code == 200
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# 12. 官网远程控制台配对
+# ═══════════════════════════════════════════════════════════════════════
+class TestRemotePairing:
+    def test_pair_start_and_claim_device(self, client):
+        token, uid = _email_register(client, "remote1@example.com")
+        headers = {"Authorization": f"Bearer {token}"}
+
+        r = client.post("/remote/pair/start", json={"deviceName": "测试手机"}, headers=headers)
+        assert r.status_code == 200
+        code = r.json()["code"]
+        assert len(code) == 6
+        assert r.json()["ttlSeconds"] == 300
+
+        r = client.post(
+            "/remote/pair/claim",
+            json={"code": code, "deviceName": "测试手机", "deviceId": "dev_test_1"},
+            headers=headers,
+        )
+        assert r.status_code == 200
+        d = r.json()
+        assert d["deviceId"] == "dev_test_1"
+        assert d["deviceToken"].startswith("rt_")
+
+        r = client.get("/remote/devices", headers=headers)
+        assert r.status_code == 200
+        items = r.json()["items"]
+        assert len(items) == 1
+        assert items[0]["deviceName"] == "测试手机"
+        assert items[0]["online"] is False
+        assert items[0]["revoked"] is False
+
+    def test_pair_claim_requires_same_user(self, client):
+        token_a, _ = _email_register(client, "remote2a@example.com")
+        token_b, _ = _email_register(client, "remote2b@example.com")
+        code = client.post(
+            "/remote/pair/start",
+            json={},
+            headers={"Authorization": f"Bearer {token_a}"},
+        ).json()["code"]
+
+        r = client.post(
+            "/remote/pair/claim",
+            json={"code": code, "deviceName": "不该成功"},
+            headers={"Authorization": f"Bearer {token_b}"},
+        )
+        assert r.status_code == 403
+
+    def test_revoke_remote_device(self, client):
+        token, uid = _email_register(client, "remote3@example.com")
+        headers = {"Authorization": f"Bearer {token}"}
+        code = client.post("/remote/pair/start", json={}, headers=headers).json()["code"]
+        client.post(
+            "/remote/pair/claim",
+            json={"code": code, "deviceName": "待撤销", "deviceId": "dev_revoke_1"},
+            headers=headers,
+        )
+
+        r = client.post("/remote/devices/dev_revoke_1/revoke", headers=headers)
+        assert r.status_code == 200
+        assert r.json()["ok"] is True
+
+        r = client.get("/remote/devices", headers=headers)
+        assert r.status_code == 200
+        assert r.json()["items"][0]["revoked"] is True
+
+    def test_remote_console_page_public_shell(self, client):
+        r = client.get("/remote/console")
+        assert r.status_code == 200
+        assert "Octopus 远程控制台" in r.text
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# 13. 会员/积分/计费模型增强
+# ═══════════════════════════════════════════════════════════════════════
+class TestMembership:
+    def test_membership_inactive_for_new_user(self, client):
+        token, uid = _email_register(client, "mem1@example.com")
+        r = client.get("/account/membership", headers={"Authorization": f"Bearer {token}"})
+        assert r.status_code == 200
+        d = r.json()
+        assert d["active"] is False
+        assert d["expireAt"] == 0
+        assert d["remainingDays"] == 0
+        assert any("解锁自有模型" in b for b in d["benefits"])
+
+    def test_membership_active_after_order(self, client):
+        token, uid = _email_register(client, "mem2@example.com")
+        r = client.post("/billing/orders", json={"goodsId": "sub_19"},
+                        headers={"Authorization": f"Bearer {token}"})
+        order_no = r.json()["orderNo"]
+        client.get(f"/billing/orders/{order_no}", headers={"Authorization": f"Bearer {token}"})
+        r = client.get("/account/membership", headers={"Authorization": f"Bearer {token}"})
+        assert r.status_code == 200
+        d = r.json()
+        assert d["active"] is True
+        assert d["expireAt"] > 0
+        assert d["remainingDays"] >= 29
+
+
+class TestCreditLedger:
+    def test_signup_recorded_in_ledger(self, client):
+        token, uid = _email_register(client, "ledger1@example.com")
+        r = client.get("/account/credits/transactions", headers={"Authorization": f"Bearer {token}"})
+        assert r.status_code == 200
+        d = r.json()
+        assert d["total"] >= 1
+        assert any(tx["source"] == "signup" and tx["delta"] == 100 for tx in d["items"])
+
+    def test_daily_claim_recorded_in_ledger(self, client):
+        token, uid = _email_register(client, "ledger2@example.com")
+        client.post("/account/daily-claim", headers={"Authorization": f"Bearer {token}"})
+        r = client.get("/account/credits/transactions", headers={"Authorization": f"Bearer {token}"})
+        assert r.status_code == 200
+        assert any(tx["source"] == "daily" and tx["delta"] == 20 for tx in r.json()["items"])
+
+    def test_order_settle_recorded_in_ledger(self, client):
+        token, uid = _email_register(client, "ledger3@example.com")
+        r = client.post("/billing/orders", json={"goodsId": "sub_19"},
+                        headers={"Authorization": f"Bearer {token}"})
+        order_no = r.json()["orderNo"]
+        client.get(f"/billing/orders/{order_no}", headers={"Authorization": f"Bearer {token}"})
+        r = client.get("/account/credits/transactions", headers={"Authorization": f"Bearer {token}"})
+        assert r.status_code == 200
+        assert any(tx["source"] == "order" and tx["delta"] == 1000 for tx in r.json()["items"])
+
+    def test_admin_adjust_recorded_in_ledger(self, client):
+        token, uid = _email_register(client, "ledger4@example.com")
+        client.post(
+            f"/admin/api/users/{uid}/credits",
+            json={"delta": 50, "reason": "ledger test"},
+            headers={"X-Admin-Token": "test-token"},
+        )
+        r = client.get("/account/credits/transactions", headers={"Authorization": f"Bearer {token}"})
+        assert r.status_code == 200
+        assert any(tx["source"] == "admin_adjust" and tx["delta"] == 50 for tx in r.json()["items"])
+
+    def test_credit_transactions_pagination(self, client):
+        token, uid = _email_register(client, "ledger5@example.com")
+        r = client.get("/account/credits/transactions?limit=1", headers={"Authorization": f"Bearer {token}"})
+        assert r.status_code == 200
+        d = r.json()
+        assert len(d["items"]) == 1
+        assert d["total"] >= 1
+
+
+class TestAccountUsage:
+    def test_account_usage_empty(self, client):
+        token, uid = _email_register(client, "usage1@example.com")
+        r = client.get("/account/usage", headers={"Authorization": f"Bearer {token}"})
+        assert r.status_code == 200
+        d = r.json()
+        assert d["total"] == 0
+        assert d["summary"]["calls"] == 0
+
+    def test_account_usage_records(self, client):
+        token, uid = _email_register(client, "usage2@example.com")
+        # 直接写入 usage_log
+        with closing(db()) as c:
+            c.execute(
+                "INSERT INTO usage_log(user_id, model, tokens_in, tokens_out, credits, ts) "
+                "VALUES(?,?,?,?,?,?)",
+                (uid, "agnes-2.0-flash", 100, 50, 5, _now_ms()),
+            )
+            c.commit()
+        r = client.get("/account/usage", headers={"Authorization": f"Bearer {token}"})
+        assert r.status_code == 200
+        d = r.json()
+        assert d["total"] == 1
+        assert d["summary"]["calls"] == 1
+        assert d["summary"]["credits"] == 5
+        assert d["items"][0]["model"] == "agnes-2.0-flash"
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# 14. App 协议对齐:设备注册/心跳/上报/状态
+# ═══════════════════════════════════════════════════════════════════════
+class TestDeviceProtocol:
+    def test_device_register_new(self, client):
+        token, uid = _email_register(client, "dev1@example.com")
+        r = client.post(
+            "/device/register",
+            json={"deviceName": "测试机", "deviceModel": "Pixel 8", "osVersion": "14",
+                  "appVersion": "1.2.3", "pushToken": "push_xxx"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert r.status_code == 200
+        d = r.json()
+        assert d["deviceId"].startswith("d_")
+        assert d["deviceToken"].startswith("dt_")
+        assert d["deviceName"] == "测试机"
+
+    def test_device_heartbeat(self, client):
+        token, uid = _email_register(client, "dev2@example.com")
+        reg = client.post("/device/register", json={"deviceName": "测试机"},
+                          headers={"Authorization": f"Bearer {token}"}).json()
+        device_id = reg["deviceId"]
+        r = client.post(
+            "/device/heartbeat",
+            json={"deviceId": device_id, "battery": 75, "isCharging": True,
+                  "currentApp": "com.example.app", "screenHash": "abc123"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert r.status_code == 200
+        d = r.json()
+        assert d["ok"] is True
+        assert d["battery"] == 75
+
+    def test_device_heartbeat_requires_device_id(self, client):
+        token, uid = _email_register(client, "dev3@example.com")
+        r = client.post("/device/heartbeat", json={"battery": 50},
+                        headers={"Authorization": f"Bearer {token}"})
+        assert r.status_code == 400
+
+    def test_device_heartbeat_other_users_device_fails(self, client):
+        token_a, _ = _email_register(client, "dev4a@example.com")
+        token_b, _ = _email_register(client, "dev4b@example.com")
+        device_id = client.post("/device/register", json={},
+                                headers={"Authorization": f"Bearer {token_a}"}).json()["deviceId"]
+        r = client.post("/device/heartbeat", json={"deviceId": device_id, "battery": 50},
+                        headers={"Authorization": f"Bearer {token_b}"})
+        assert r.status_code == 404
+
+    def test_device_report(self, client):
+        token, uid = _email_register(client, "dev5@example.com")
+        device_id = client.post("/device/register", json={"deviceName": "测试机"},
+                                headers={"Authorization": f"Bearer {token}"}).json()["deviceId"]
+        r = client.post(
+            "/device/report",
+            json={"deviceId": device_id, "type": "crash", "payload": {"reason": "oom"}},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert r.status_code == 200
+        assert r.json()["ok"] is True
+
+    def test_device_status(self, client):
+        token, uid = _email_register(client, "dev6@example.com")
+        device_id = client.post("/device/register", json={"deviceName": "测试机", "osVersion": "14"},
+                                headers={"Authorization": f"Bearer {token}"}).json()["deviceId"]
+        client.post("/device/heartbeat", json={"deviceId": device_id, "battery": 60},
+                    headers={"Authorization": f"Bearer {token}"})
+        r = client.get(f"/device/{device_id}/status", headers={"Authorization": f"Bearer {token}"})
+        assert r.status_code == 200
+        d = r.json()
+        assert d["deviceId"] == device_id
+        assert d["deviceName"] == "测试机"
+        assert d["osVersion"] == "14"
+        assert d["batteryLevel"] == 60
+        assert d["lastHeartbeatAt"] > 0

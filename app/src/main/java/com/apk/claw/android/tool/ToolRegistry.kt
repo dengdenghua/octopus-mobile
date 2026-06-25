@@ -9,16 +9,21 @@ import com.apk.claw.android.octopus_mobile.safety.ToolCallGuardrailController
 import com.apk.claw.android.octopus_mobile.safety.GuardrailDecision
 import com.apk.claw.android.octopus_mobile.safety.GuardrailAction
 import com.apk.claw.android.octopus_mobile.safety.ToolRiskPolicy
+import com.apk.claw.android.octopus_mobile.safety.CircuitBreaker
+import com.apk.claw.android.octopus_mobile.safety.PermissionModeManager
+import com.apk.claw.android.octopus_mobile.safety.PermissionPolicy
+import com.apk.claw.android.octopus_mobile.safety.ApprovalFlow
 import com.apk.claw.android.octopus_mobile.ToolAuditLog
 import com.apk.claw.android.octopus_mobile.evolution.TurnScorer
 import com.apk.claw.android.octopus_mobile.nerves.EventBus
+import java.util.concurrent.ConcurrentHashMap
 
 object ToolRegistry {
 
     enum class DeviceType { TV, MOBILE }
 
-    private val tools = LinkedHashMap<String, BaseTool>()
-    private val pluginTools = mutableSetOf<String>()  // 插件注册的工具名称
+    private val tools = ConcurrentHashMap<String, BaseTool>()
+    private val pluginTools = ConcurrentHashMap.newKeySet<String>()  // 插件注册的工具名称
     var deviceType: DeviceType = DeviceType.TV
         private set
 
@@ -28,13 +33,50 @@ object ToolRegistry {
     val guardrail = ToolCallGuardrailController()
 
     /** 安全门（PII/Secret 扫描 + LLM 法官） */
+    @Volatile
     var safetyGate: SafetyGate? = null
 
     /** 回合打分器（自进化 L1 层） */
+    @Volatile
     var turnScorer: TurnScorer? = null
 
     /** 事件总线（模块间解耦通知） */
+    @Volatile
     var eventBus: EventBus? = null
+
+    /** 断路器（按工具维度熔断，防止持续失败的工具拖垮系统） */
+    @Volatile
+    var circuitBreaker: CircuitBreaker? = null
+
+    /** Android Context（用于审批弹窗，由 Application 或 Activity 注入） */
+    @Volatile
+    var appContext: android.content.Context? = null
+
+    // ── 来源信任闸门(R2/R3/R12) ──
+    // 标记一段调用来自"不可信来源"：远程母体 WS 的 tool/execute、LAN HTTP debug execute、
+    // 由不可信触发源(通知/短信/屏幕文本)自动触发的主动规则。这些路径不经过 LLM agent，
+    // 也没有人工确认，历史上可直接驱动最高权限工具。
+    private val untrustedDepth = ThreadLocal.withInitial { 0 }
+
+    /** 在 block 内把当前线程的工具调用标记为"不可信来源"（同步执行，结束后恢复）。 */
+    fun <T> withUntrustedSource(block: () -> T): T {
+        untrustedDepth.set(untrustedDepth.get() + 1)
+        return try {
+            block()
+        } finally {
+            untrustedDepth.set((untrustedDepth.get() - 1).coerceAtLeast(0))
+        }
+    }
+
+    fun isUntrustedSource(): Boolean = untrustedDepth.get() > 0
+
+    /**
+     * 不可信来源调用高危工具时的确认回调（供 UI 接入"逐次人工确认"）。
+     * 返回 true=放行。未注册时回退到 [com.apk.claw.android.utils.KVUtils.isRemoteHighRiskAllowed]
+     * （默认 false=拦截）。
+     */
+    @Volatile
+    var highRiskConfirmer: ((toolName: String, params: Map<String, Any>) -> Boolean)? = null
 
     @JvmStatic
     fun getInstance(): ToolRegistry = this
@@ -69,6 +111,7 @@ object ToolRegistry {
     private fun registerCommonTools() {
         register(GetScreenInfoTool())
         register(LookAtScreenTool())
+        register(VisionMarkersTool())
         register(FindNodeInfoTool())
         register(InputTextTool())
         register(SystemKeyTool())
@@ -134,6 +177,9 @@ object ToolRegistry {
 
         // 100 行扩展示例工具（EXTENDING.md）
         HelloWorldTools.registerAll()
+
+        // Echo Universe 工具：让 agent 感知并影响 Echo 虚拟世界
+        EchoUniverseTools.registerAll()
     }
 
     private fun registerBrowserTools() {
@@ -220,12 +266,66 @@ object ToolRegistry {
             return audited(ToolResult.error("工具已停用: $name"), blockedBy = "settings")
         }
 
+        // ── 断路器熔断检查（全工具维度，防止持续失败拖垮系统）──
+        val breaker = circuitBreaker
+        if (breaker != null) {
+            try {
+                breaker.check()
+            } catch (e: CircuitBreaker.CircuitOpenException) {
+                eventBus?.publish(EventBus.ToolBlockedEvent(name, e.reason, "circuit_breaker"))
+                return audited(
+                    ToolResult.error("工具调用被熔断: ${e.reason}（冷却 ${e.cooldownSeconds}s）"),
+                    blockedBy = "circuit_breaker",
+                )
+            }
+        }
+
+        // ── 权限策略（统一读取 PermissionModeManager）──
+        val policy = PermissionModeManager.getCurrentPolicy()
+
+        // ── 高危工具来源闸门 + 审批流程 ──
+        // APPROVAL 模式：不可信来源调高危工具 → 弹窗审批
+        // FULL_POWER 模式：trustAllSources=true，跳过来源闸门，高危工具自动放行
+        val riskLevel = ToolRiskPolicy.riskOf(name)
+        val isHighRisk = riskLevel == ToolRiskPolicy.RISK_HIGH
+        val needsSourceGate = !policy.trustAllSources && isUntrustedSource() && isHighRisk
+
+        if (needsSourceGate) {
+            when (policy.highRiskAction) {
+                PermissionPolicy.RiskAction.BLOCK -> {
+                    eventBus?.publish(EventBus.ToolBlockedEvent(name, "high_risk_blocked", "policy"))
+                    return audited(
+                        ToolResult.error("高危工具「$name」被安全策略拦截（当前为审批模式）。"),
+                        blockedBy = "policy",
+                    )
+                }
+                PermissionPolicy.RiskAction.CONFIRM -> {
+                    // 弹窗审批（阻塞当前线程，等待用户确认）
+                    val riskDesc = "高危工具 · 不可信来源(${if (isUntrustedSource()) "远程/自动" else "本地"})"
+                    val approved = ApprovalFlow.requestApproval(appContext, name, params, riskDesc)
+                    if (!approved) {
+                        eventBus?.publish(EventBus.ToolBlockedEvent(name, "approval_denied", "policy"))
+                        return audited(
+                            ToolResult.error("高危工具「$name」被用户拒绝或审批超时。"),
+                            blockedBy = "approval",
+                        )
+                    }
+                }
+                PermissionPolicy.RiskAction.ALLOW -> {
+                    // 放行（不弹窗）
+                }
+            }
+        }
+
         // ── 安全门检查（PII/Secret 扫描）──
-        safetyGate?.let { gate ->
-            val verdict = gate.checkToolCall(name, params)
-            if (verdict.isBlocked) {
-                eventBus?.publish(EventBus.ToolBlockedEvent(name, verdict.reason, "safety"))
-                return audited(ToolResult.error("安全拦截: ${verdict.reason}"), blockedBy = "safety")
+        // FULL_POWER 模式下 safetyGateEnabled=false，跳过宪法法官
+        if (policy.safetyGateEnabled) {
+            safetyGate?.let { gate ->
+                val verdict = gate.checkToolCall(name, params)
+                if (verdict.isBlocked) {
+                    eventBus?.publish(EventBus.ToolBlockedEvent(name, verdict.reason, "safety"))
+                    return audited(ToolResult.error("安全拦截: ${verdict.reason}"), blockedBy = "safety")
+                }
             }
         }
 
@@ -240,6 +340,7 @@ object ToolRegistry {
         val result = try {
             tool.executeWithWaitAfter(params)
         } catch (e: Exception) {
+            breaker?.record(success = false)
             ToolResult.error("Tool execution failed: ${e.message}")
         }
 
@@ -256,6 +357,9 @@ object ToolRegistry {
             guardrail.observe(name, params, result.data, failed = false)
             result
         }
+
+        // ── 断路器记录结果 ──
+        breaker?.record(success = finalResult.isSuccess)
 
         // ── 自进化打分（无论是否 WARN 都记录）──
         turnScorer?.record(name, success = finalResult.isSuccess, reason = finalResult.data ?: finalResult.error ?: "")

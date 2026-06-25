@@ -9,8 +9,8 @@ import androidx.lifecycle.lifecycleScope
 import com.apk.claw.android.R
 import com.apk.claw.android.account.AccountRepository
 import com.apk.claw.android.base.BaseActivity
+import androidx.activity.addCallback
 import com.apk.claw.android.ui.compose.MainActivity
-import com.apk.claw.android.widget.CommonToolbar
 import com.apk.claw.android.widget.KButton
 import kotlinx.coroutines.launch
 
@@ -32,10 +32,13 @@ class LoginActivity : BaseActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_login)
 
-        findViewById<CommonToolbar>(R.id.toolbar).apply {
-            setTitle(getString(R.string.account_login_title))
-            showBackButton(true) { finish() }
+        val gated = intent.getBooleanExtra(EXTRA_GATE, false)
+        // 强制登录：从启动闸进入时隐藏返回、并拦截系统返回，必须登录/注册才能进入主界面。
+        findViewById<android.widget.ImageView>(R.id.ivBack).apply {
+            visibility = if (gated) android.view.View.GONE else android.view.View.VISIBLE
+            setOnClickListener { finish() }
         }
+        onBackPressedDispatcher.addCallback(this) { if (!gated) finish() }
 
         val etAccount = findViewById<EditText>(R.id.etMobile)
         val etCode = findViewById<EditText>(R.id.etCode)
@@ -68,7 +71,10 @@ class LoginActivity : BaseActivity() {
                 toast(invalidAccountMsg())
                 return@setOnClickListener
             }
+            // 立即给反馈：点下即变「发送中…」并置灰，避免网络往返期间按钮毫无变化、看着像“没倒计时/没反应”。
             btnSendCode.isEnabled = false
+            btnSendCode.alpha = 0.6f
+            btnSendCode.text = getString(R.string.account_sending)
             lifecycleScope.launch {
                 val res = if (mode == "phone") AccountRepository.sendSmsCode(acct)
                 else AccountRepository.sendEmailCode(acct)
@@ -83,6 +89,8 @@ class LoginActivity : BaseActivity() {
                     }
                 }.onFailure {
                     btnSendCode.isEnabled = true
+                    btnSendCode.alpha = 1f
+                    btnSendCode.text = getString(R.string.account_send_code)
                     toast(it.message ?: getString(R.string.account_code_send_failed))
                 }
             }
@@ -130,6 +138,8 @@ class LoginActivity : BaseActivity() {
 
     private fun startCountdown(btn: KButton) {
         countdown?.cancel()
+        btn.isEnabled = false
+        btn.alpha = 0.6f
         countdown = object : CountDownTimer(60_000, 1_000) {
             override fun onTick(msUntilFinished: Long) {
                 btn.text = getString(R.string.account_resend_in, (msUntilFinished / 1000).toInt())
@@ -137,6 +147,7 @@ class LoginActivity : BaseActivity() {
 
             override fun onFinish() {
                 btn.isEnabled = true
+                btn.alpha = 1f
                 btn.text = getString(R.string.account_send_code)
             }
         }.start()

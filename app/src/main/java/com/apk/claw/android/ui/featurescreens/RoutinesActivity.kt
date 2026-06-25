@@ -4,27 +4,44 @@ import android.app.AlertDialog
 import android.app.TimePickerDialog
 import android.content.Context
 import android.os.Bundle
+import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.Toast
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Alarm
+import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.apk.claw.android.R
 import com.apk.claw.android.octopus_mobile.ActionCache
+import com.apk.claw.android.octopus_mobile.RoutineParameterizer
 import com.apk.claw.android.octopus_mobile.RoutineStore
+import com.apk.claw.android.octopus_mobile.RoutineVariables
 import com.apk.claw.android.service.RoutineScheduler
 import com.apk.claw.android.ui.compose.screen.RoutineRunner
+import com.apk.claw.android.ui.compose.theme.OctopusColors
+import com.apk.claw.android.ui.compose.theme.OctopusIconSize
+import com.apk.claw.android.ui.compose.theme.OctopusShape
+import com.apk.claw.android.ui.compose.theme.OctopusSpacing
+import com.apk.claw.android.ui.compose.theme.OctopusTints
 import java.util.Calendar
 
 /**
@@ -37,8 +54,7 @@ import java.util.Calendar
 class RoutinesActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { RoutinesScreen(onBack = { finish() }) }
-        runCatching { window.statusBarColor = com.apk.claw.android.ui.compose.theme.OctopusColors.statusBarArgb }
+        setFeatureContent { RoutinesScreen(onBack = { finish() }) }
     }
 }
 
@@ -54,67 +70,166 @@ private fun RoutinesScreen(onBack: () -> Unit) {
         } else {
             LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(vertical = 6.dp)) {
                 item {
-                    Text(
-                        stringResource(R.string.routines_count_summary, items.size),
-                        color = FMuted, fontSize = 11.sp,
-                        modifier = Modifier.padding(start = 16.dp, bottom = 4.dp),
-                    )
+                    RoutinesSummaryCard(items)
                 }
                 items(items, key = { it.id }) { r ->
-                    val cached = ActionCache.get(r.id, r.prompt)
-                    val targetAndCount = stringResource(R.string.routines_item_target_and_count, r.targetLabel, r.runCount)
-                    val schedTime = "%02d:%02d".format(r.scheduleHour, r.scheduleMinute)
-                    val schedDaily = stringResource(R.string.routines_item_schedule_daily, schedTime)
-                    val schedOnce = stringResource(R.string.routines_item_schedule_once, schedTime)
-                    FCard {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(r.name, color = FText, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                                Spacer(Modifier.height(2.dp))
-                                Text(
-                                    buildString {
-                                        append(targetAndCount)
-                                        if (r.isScheduled) {
-                                            append(if (r.scheduleDaily) schedDaily else schedOnce)
-                                        }
-                                    },
-                                    color = if (r.isScheduled) FPrimary else FMuted, fontSize = 10.sp,
-                                )
-                            }
-                            if (cached != null) {
-                                Text(
-                                    stringResource(R.string.routines_item_lightning_steps, cached.steps.size), color = FPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
-                                    modifier = Modifier
-                                        .clickable { forgetFastPath(ctx, r) { refresh() } }
-                                        .padding(horizontal = 6.dp, vertical = 4.dp),
-                                )
-                            }
-                            Text(
-                                "⏰", fontSize = 16.sp,
-                                modifier = Modifier
-                                    .clickable { openSchedule(ctx, r) { refresh() } }
-                                    .padding(horizontal = 6.dp, vertical = 4.dp),
-                            )
-                            Text(
-                                stringResource(R.string.routines_item_run_button), color = FPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier
-                                    .clickable { Toast.makeText(ctx, RoutineRunner.run(ctx, r), Toast.LENGTH_LONG).show(); refresh() }
-                                    .padding(horizontal = 6.dp, vertical = 4.dp),
-                            )
-                            Text(
-                                "✕", color = FMuted, fontSize = 14.sp,
-                                modifier = Modifier
-                                    .clickable { RoutineScheduler.cancel(ctx, r.id); ActionCache.remove(r.id); RoutineStore.remove(r.id); refresh() }
-                                    .padding(4.dp),
-                            )
-                        }
-                        if (r.prompt != r.name) {
-                            Spacer(Modifier.height(6.dp))
-                            Text(r.prompt, color = FSub, fontSize = 12.sp, lineHeight = 17.sp, maxLines = 3)
-                        }
-                    }
+                    RoutineCard(
+                        routine = r,
+                        onForgetFastPath = { forgetFastPath(ctx, r) { refresh() } },
+                        onSchedule = { openSchedule(ctx, r) { refresh() } },
+                        onParameterize = { openParameterize(ctx, r) { refresh() } },
+                        onRun = { runRoutine(ctx, r) { refresh() } },
+                        onDelete = {
+                            RoutineScheduler.cancel(ctx, r.id)
+                            ActionCache.remove(r.id)
+                            RoutineStore.remove(r.id)
+                            refresh()
+                        },
+                    )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun RoutinesSummaryCard(items: List<RoutineStore.Routine>) {
+    val scheduled = items.count { it.isScheduled }
+    val inspiration = items.count { it.id.startsWith("inspiration-") }
+    FCard {
+        Text("自动化例程", color = FText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(OctopusSpacing.xs))
+        Text(
+            "把灵感、对话指令和定时任务沉淀成可重复执行的动作。",
+            color = FSub,
+            fontSize = 12.sp,
+            lineHeight = 17.sp,
+        )
+        Spacer(Modifier.height(OctopusSpacing.md))
+        Row(horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.sm), modifier = Modifier.fillMaxWidth()) {
+            SummaryMetric("总数", "${items.size}", OctopusTints.Routine, Modifier.weight(1f))
+            SummaryMetric("已定时", "$scheduled", OctopusTints.Hot, Modifier.weight(1f))
+            SummaryMetric("灵感复刻", "$inspiration", OctopusTints.Skill, Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+private fun SummaryMetric(label: String, value: String, tint: Color, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .background(tint.copy(alpha = if (OctopusColors.isLight) 0.11f else 0.16f), OctopusShape.medium)
+            .padding(vertical = OctopusSpacing.sm),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(label, color = FMuted, fontSize = 10.sp, maxLines = 1)
+        Text(value, color = tint, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+    }
+}
+
+@Composable
+private fun RoutineCard(
+    routine: RoutineStore.Routine,
+    onForgetFastPath: () -> Unit,
+    onSchedule: () -> Unit,
+    onParameterize: () -> Unit,
+    onRun: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    val cached = ActionCache.get(routine.id, routine.prompt)
+    val sourceTint = if (routine.id.startsWith("inspiration-")) OctopusTints.Skill else OctopusTints.Routine
+    FCard {
+        Row(verticalAlignment = Alignment.Top) {
+            Box(
+                modifier = Modifier
+                    .size(38.dp)
+                    .background(sourceTint.copy(alpha = 0.16f), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(if (routine.id.startsWith("inspiration-")) "灵" else "例", color = sourceTint, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            }
+            Spacer(Modifier.width(OctopusSpacing.sm))
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        routine.name,
+                        color = FText,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    FPill(if (routine.id.startsWith("inspiration-")) "灵感复刻" else "手动保存", sourceTint)
+                }
+                Spacer(Modifier.height(OctopusSpacing.xs))
+                Row(horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.xs)) {
+                    FPill("目标 ${routine.targetLabel}", OctopusTints.Window)
+                    FPill("运行 ${routine.runCount} 次", OctopusTints.Browser)
+                    if (routine.isScheduled) {
+                        FPill("%02d:%02d".format(routine.scheduleHour, routine.scheduleMinute), OctopusTints.Hot)
+                    }
+                    cached?.let { FPill("快路径 ${it.steps.size} 步", FPrimary) }
+                    if (routine.isParameterized) FPill("参数化 ${routine.variables.joinToString("/") { "{$it}" }}", OctopusTints.Skill)
+                }
+            }
+        }
+        if (routine.prompt != routine.name) {
+            Spacer(Modifier.height(OctopusSpacing.md))
+            Text(routine.prompt, color = FSub, fontSize = 12.sp, lineHeight = 17.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
+        }
+        Spacer(Modifier.height(OctopusSpacing.md))
+        Row(horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.sm), modifier = Modifier.fillMaxWidth()) {
+            if (cached != null) {
+                RoutineIconAction("忘", FPrimary, onForgetFastPath)
+                // 有快路径才可参数化（templatize 需要缓存步骤把写死值换成占位符）
+                RoutineIconAction(if (routine.isParameterized) "参✓" else "参", OctopusTints.Skill, onParameterize)
+            }
+            RoutineIconAction(Icons.Filled.Alarm, FWarning, onSchedule)
+            RoutineIconAction(Icons.Filled.PlayArrow, FPrimary, onRun, modifier = Modifier.weight(1f), label = stringResource(R.string.routines_item_run_button))
+            RoutineIconAction(Icons.Filled.DeleteOutline, FMuted, onDelete)
+        }
+    }
+}
+
+@Composable
+private fun RoutineIconAction(
+    text: String,
+    tint: Color,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .size(38.dp)
+            .background(tint.copy(alpha = 0.12f), OctopusShape.capsule)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(text, color = tint, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun RoutineIconAction(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    tint: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    label: String? = null,
+) {
+    Row(
+        modifier = modifier
+            .height(38.dp)
+            .background(tint.copy(alpha = 0.12f), OctopusShape.capsule)
+            .clickable(onClick = onClick)
+            .padding(horizontal = OctopusSpacing.sm),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+    ) {
+        Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(OctopusIconSize.small))
+        label?.let {
+            Spacer(Modifier.width(OctopusSpacing.xs))
+            Text(it, color = tint, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -165,4 +280,79 @@ private fun openSchedule(ctx: Context, r: RoutineStore.Routine, onChanged: () ->
             }
             .show()
     }, h0, m0, true).show()
+}
+
+/** ▶️ 运行例程：普通例程直接跑；参数化例程先弹框收 {变量} 值，拼出本次实际指令再跑。 */
+private fun runRoutine(ctx: Context, r: RoutineStore.Routine, onChanged: () -> Unit) {
+    if (!r.isParameterized) {
+        Toast.makeText(ctx, RoutineRunner.run(ctx, r), Toast.LENGTH_LONG).show()
+        onChanged()
+        return
+    }
+    val pad = (16 * ctx.resources.displayMetrics.density).toInt()
+    val container = LinearLayout(ctx).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(pad, pad / 2, pad, 0)
+    }
+    val inputs = r.variables.map { name ->
+        val field = EditText(ctx).apply { hint = "{$name}" }
+        container.addView(field)
+        name to field
+    }
+    AlertDialog.Builder(ctx)
+        .setTitle(ctx.getString(R.string.routines_item_run_button) + "：${r.name}")
+        .setMessage("模板：「${r.prompt}」\n填入本次实际值：")
+        .setView(container)
+        .setPositiveButton(ctx.getString(R.string.routines_item_run_button)) { _, _ ->
+            val values = inputs.associate { (n, f) -> n to f.text.toString().trim() }
+            val actual = RoutineVariables.substitute(r.prompt, values)
+            Toast.makeText(ctx, RoutineRunner.run(ctx, r, actual), Toast.LENGTH_LONG).show()
+            onChanged()
+        }
+        .setNegativeButton(ctx.getString(R.string.common_cancel), null)
+        .show()
+}
+
+/** 🧩 参数化：把写死值的例程升级成带 {变量} 的模板，之后可用不同输入复用同一条快路径。 */
+private fun openParameterize(ctx: Context, r: RoutineStore.Routine, onChanged: () -> Unit) {
+    if (r.isParameterized) {
+        AlertDialog.Builder(ctx)
+            .setTitle("已参数化")
+            .setMessage("模板：「${r.prompt}」\n运行时会让你填写：${r.variables.joinToString("、") { "{$it}" }}")
+            .setPositiveButton("知道了", null)
+            .show()
+        return
+    }
+    val pad = (16 * ctx.resources.displayMetrics.density).toInt()
+    val field = EditText(ctx).apply {
+        setText(r.prompt)
+        setSelection(r.prompt.length)
+        hint = "用 {名字} 标出可变部分，如 给{联系人}发{内容}"
+    }
+    val container = LinearLayout(ctx).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(pad, pad / 2, pad, 0)
+        addView(field)
+    }
+    AlertDialog.Builder(ctx)
+        .setTitle("参数化例程")
+        .setMessage("把可变部分用 {变量名} 标出来，下次可用不同输入复用同一条快路径。")
+        .setView(container)
+        .setPositiveButton("保存模板") { _, _ ->
+            val template = field.text.toString().trim()
+            if (!RoutineVariables.hasVariables(template)) {
+                Toast.makeText(ctx, "未发现 {变量}，请用花括号标出可变部分", Toast.LENGTH_LONG).show()
+                return@setPositiveButton
+            }
+            val ok = RoutineParameterizer.templatize(r.id, r.prompt, template)
+            Toast.makeText(
+                ctx,
+                if (ok) "已参数化：${RoutineVariables.names(template).joinToString("、") { "{$it}" }}"
+                else "参数化失败：模板与原指令对不上，或无快路径可改写",
+                Toast.LENGTH_LONG,
+            ).show()
+            onChanged()
+        }
+        .setNegativeButton(ctx.getString(R.string.common_cancel), null)
+        .show()
 }

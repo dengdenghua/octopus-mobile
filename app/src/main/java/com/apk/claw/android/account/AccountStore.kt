@@ -16,6 +16,8 @@ object AccountStore {
     private const val K_AVATAR = "ACCOUNT_AVATAR"
     private const val K_EMAIL = "ACCOUNT_EMAIL"
     private const val K_CREDITS = "ACCOUNT_CREDITS"
+    private const val K_PAID_CREDITS = "ACCOUNT_PAID_CREDITS"
+    private const val K_GIFT_CREDITS = "ACCOUNT_GIFT_CREDITS"
     private const val K_MEMBER_EXPIRE = "ACCOUNT_MEMBER_EXPIRE_AT"
 
     var token: String
@@ -47,6 +49,14 @@ object AccountStore {
         get() = KVUtils.getString(K_CREDITS, "0").toLongOrNull() ?: 0L
         set(v) = run { KVUtils.putString(K_CREDITS, v.toString()) }
 
+    var paidCredits: Long
+        get() = KVUtils.getString(K_PAID_CREDITS, "0").toLongOrNull() ?: 0L
+        set(v) = run { KVUtils.putString(K_PAID_CREDITS, v.toString()) }
+
+    var giftCredits: Long
+        get() = KVUtils.getString(K_GIFT_CREDITS, "0").toLongOrNull() ?: 0L
+        set(v) = run { KVUtils.putString(K_GIFT_CREDITS, v.toString()) }
+
     /** Membership expiry, epoch millis; 0 = none. Source of truth is the server. */
     var memberExpireAt: Long
         get() = KVUtils.getString(K_MEMBER_EXPIRE, "0").toLongOrNull() ?: 0L
@@ -74,6 +84,8 @@ object AccountStore {
         avatar = ""
         email = ""
         credits = 0
+        paidCredits = 0
+        giftCredits = 0
         memberExpireAt = 0
     }
 }

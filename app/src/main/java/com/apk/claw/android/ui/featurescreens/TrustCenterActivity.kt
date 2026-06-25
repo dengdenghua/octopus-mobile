@@ -8,14 +8,24 @@ import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccessibilityNew
+import androidx.compose.material.icons.filled.BatteryChargingFull
+import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Smartphone
+import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,8 +49,7 @@ import com.apk.claw.android.utils.KVUtils
 class TrustCenterActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { TrustCenterScreen(onBack = { finish() }) }
-        runCatching { window.statusBarColor = com.apk.claw.android.ui.compose.theme.OctopusColors.statusBarArgb }
+        setFeatureContent { TrustCenterScreen(onBack = { finish() }) }
     }
 }
 
@@ -96,6 +105,7 @@ fun TrustCenterScreen(onBack: () -> Unit) {
     val lanAddr = remember(tick) { runCatching { ConfigServerManager.getAddress() }.getOrNull() }
     val targetLabel = remember(tick) { ControlTarget.label() }
     var lanOn by remember(tick) { mutableStateOf(KVUtils.isLanControlEnabled()) }
+    var advOn by remember(tick) { mutableStateOf(KVUtils.isAdvancedAutomationMode()) }
 
     FeatureScaffold(title = stringResource(R.string.trustcenter_title), onBack = onBack) {
         Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
@@ -110,7 +120,7 @@ fun TrustCenterScreen(onBack: () -> Unit) {
             val ip = remember(tick) { lanIp() }
             FCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("📱", fontSize = 20.sp)
+                    Icon(Icons.Filled.Smartphone, contentDescription = null, tint = FPrimary, modifier = Modifier.size(22.dp))
                     Spacer(Modifier.width(10.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(deviceModel(), color = FText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
@@ -123,22 +133,22 @@ fun TrustCenterScreen(onBack: () -> Unit) {
             }
 
             FSectionTitle(stringResource(R.string.trustcenter_section_capabilities))
-            CapabilityRow("♿", stringResource(R.string.home_card_accessibility_title), stringResource(R.string.trustcenter_capability_accessibility_desc), a11y) {
+            CapabilityRow(Icons.Filled.AccessibilityNew, stringResource(R.string.home_card_accessibility_title), stringResource(R.string.trustcenter_capability_accessibility_desc), a11y) {
                 openIntent(ctx, Settings.ACTION_ACCESSIBILITY_SETTINGS)
             }
-            CapabilityRow("🪟", stringResource(R.string.perm_overlay), stringResource(R.string.trustcenter_capability_overlay_desc), overlay) {
+            CapabilityRow(Icons.Filled.Layers, stringResource(R.string.perm_overlay), stringResource(R.string.trustcenter_capability_overlay_desc), overlay) {
                 openIntent(ctx, Settings.ACTION_MANAGE_OVERLAY_PERMISSION, withPkg = true)
             }
-            CapabilityRow("🔋", stringResource(R.string.trustcenter_capability_battery), stringResource(R.string.trustcenter_capability_battery_desc), battery) {
+            CapabilityRow(Icons.Filled.BatteryChargingFull, stringResource(R.string.trustcenter_capability_battery), stringResource(R.string.trustcenter_capability_battery_desc), battery) {
                 openIntent(ctx, Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, withPkg = true)
             }
-            CapabilityRow("🔔", stringResource(R.string.ctrl_notifications), stringResource(R.string.trustcenter_capability_notification_desc), notif) {
+            CapabilityRow(Icons.Filled.Notifications, stringResource(R.string.ctrl_notifications), stringResource(R.string.trustcenter_capability_notification_desc), notif) {
                 openIntent(ctx, Settings.ACTION_APPLICATION_DETAILS_SETTINGS, withPkg = true)
             }
-            CapabilityRow("⚡", stringResource(R.string.trustcenter_capability_shizuku), stringResource(R.string.trustcenter_capability_shizuku_desc), shizuku) {
+            CapabilityRow(Icons.Filled.Bolt, stringResource(R.string.trustcenter_capability_shizuku), stringResource(R.string.trustcenter_capability_shizuku_desc), shizuku) {
                 runCatching { ShizukuManager.requestPermission() }
             }
-            CapabilityRow("💾", stringResource(R.string.perm_storage), stringResource(R.string.trustcenter_capability_storage_desc), storage) {
+            CapabilityRow(Icons.Filled.Storage, stringResource(R.string.perm_storage), stringResource(R.string.trustcenter_capability_storage_desc), storage) {
                 openIntent(ctx, Settings.ACTION_APPLICATION_DETAILS_SETTINGS, withPkg = true)
             }
 
@@ -163,6 +173,27 @@ fun TrustCenterScreen(onBack: () -> Unit) {
                 }
             }
 
+            FSectionTitle("高级 · 专用自动化设备")
+            FCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("满血模式 · 解除高危能力限制", color = FText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "⚠️ 仅用于你完全掌控的闲置/专用自动化手机。开启后：母体、局域网、主动规则可" +
+                                "无确认执行全部高危工具（发短信 / 发 Intent / 装应用 / 文件读写删 / 浏览器执行 JS），" +
+                                "文件工具不再限制在 /sdcard。会显著降低安全性——日常主力机请勿开启。",
+                            color = FWarning, fontSize = 10.sp, lineHeight = 14.sp,
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Switch(
+                        checked = advOn,
+                        onCheckedChange = { advOn = it; KVUtils.setAdvancedAutomationMode(it) },
+                        colors = SwitchDefaults.colors(checkedTrackColor = FWarning, checkedThumbColor = Color.White),
+                    )
+                }
+            }
+
             FSectionTitle(stringResource(R.string.trustcenter_section_target))
             FCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -179,11 +210,14 @@ fun TrustCenterScreen(onBack: () -> Unit) {
                     modifier = Modifier.fillMaxWidth().clickable {
                         KVUtils.setLanControlEnabled(false)
                         lanOn = false
+                        // 一键收回同时关闭"满血模式"，恢复安全默认。
+                        KVUtils.setAdvancedAutomationMode(false)
+                        advOn = false
                         ControlTarget.setLocal()
                         tick++
                     },
                 ) {
-                    Text("🛑", fontSize = 16.sp)
+                    Icon(Icons.Filled.Block, contentDescription = null, tint = FWarning, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(10.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(stringResource(R.string.trustcenter_action_revoke), color = FText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
@@ -201,10 +235,10 @@ fun TrustCenterScreen(onBack: () -> Unit) {
 }
 
 @Composable
-private fun CapabilityRow(icon: String, name: String, desc: String, granted: Boolean, onManage: () -> Unit) {
+private fun CapabilityRow(icon: ImageVector, name: String, desc: String, granted: Boolean, onManage: () -> Unit) {
     FCard {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable(onClick = onManage)) {
-            Text(icon, fontSize = 18.sp)
+            Icon(icon, contentDescription = null, tint = if (granted) FSuccess else FSub, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(name, color = FText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)

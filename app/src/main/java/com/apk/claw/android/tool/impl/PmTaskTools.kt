@@ -3,6 +3,7 @@ package com.apk.claw.android.tool.impl
 import com.apk.claw.android.tool.BaseTool
 import com.apk.claw.android.tool.ToolParameter
 import com.apk.claw.android.tool.ToolResult
+import com.apk.claw.android.utils.XLog
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -28,7 +29,8 @@ object PmConfig {
     private fun read(key: String): String =
         try {
             com.tencent.mmkv.MMKV.defaultMMKV()?.decodeString(key, "") ?: ""
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            XLog.w("PmConfig", "read $key failed", e)
             "" // MMKV 未初始化(如单测环境)→ 视为未配置
         }
 }

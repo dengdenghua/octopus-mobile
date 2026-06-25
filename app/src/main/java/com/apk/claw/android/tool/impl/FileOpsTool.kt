@@ -1,5 +1,6 @@
 package com.apk.claw.android.tool.impl
 
+import com.apk.claw.android.octopus_mobile.safety.PathGuard
 import com.apk.claw.android.shizuku.ShizukuShellService
 import com.apk.claw.android.tool.BaseTool
 import com.apk.claw.android.tool.ToolParameter
@@ -47,12 +48,16 @@ class FileOpsTool : BaseTool() {
     override fun execute(params: Map<String, Any>): ToolResult {
         val action = requireString(params, "action")
         val source = optionalString(params, "source", "")
+        val destination = optionalString(params, "destination", "")
 
-        // 路径安全检查
-        if (source.startsWith("/data/data/") || source.startsWith("/data/system/") ||
-            optionalString(params, "destination", "").startsWith("/data/data/") ||
-            optionalString(params, "destination", "").startsWith("/data/system/")) {
-            return ToolResult.error("Access denied: /data/data/ and /data/system/ require root.")
+        // 路径安全检查 —— 限制在 /sdcard 沙箱内，拦截 /system /proc 及其他 App 私有目录、路径遍历。
+        if (source.isNotEmpty()) {
+            val v = PathGuard.underSdcard(source)
+            if (!v.allow) return ToolResult.error("Access denied: source 越界或敏感 (${v.reason})。仅允许 /sdcard 下的路径。")
+        }
+        if (destination.isNotEmpty()) {
+            val v = PathGuard.underSdcard(destination)
+            if (!v.allow) return ToolResult.error("Access denied: destination 越界或敏感 (${v.reason})。仅允许 /sdcard 下的路径。")
         }
 
         return when (action) {

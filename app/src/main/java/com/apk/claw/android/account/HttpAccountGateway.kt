@@ -87,8 +87,8 @@ class HttpAccountGateway(baseUrl: String) : AccountGateway {
     override suspend fun goods(token: String): GoodsList =
         get("/billing/goods", token, GoodsList::class.java)
 
-    override suspend fun createOrder(token: String, goodsId: String): CreateOrderResult =
-        post("/billing/orders", mapOf("goodsId" to goodsId), token, CreateOrderResult::class.java)
+    override suspend fun createOrder(token: String, goodsId: String, currency: String): CreateOrderResult =
+        post("/billing/orders", mapOf("goodsId" to goodsId, "currency" to currency), token, CreateOrderResult::class.java)
 
     override suspend fun queryOrder(token: String, orderNo: String): OrderStatusResult =
         get("/billing/orders/$orderNo", token, OrderStatusResult::class.java)
@@ -101,6 +101,88 @@ class HttpAccountGateway(baseUrl: String) : AccountGateway {
 
     override suspend fun redeemInvite(token: String, code: String): RedeemResult =
         post("/invite/redeem", mapOf("code" to code), token, RedeemResult::class.java)
+
+    override suspend fun membership(token: String): MembershipResult =
+        get("/account/membership", token, MembershipResult::class.java)
+
+    override suspend fun creditTransactions(token: String, limit: Int, offset: Int): CreditTransactionsResult =
+        get("/account/credits/transactions?limit=$limit&offset=$offset", token, CreditTransactionsResult::class.java)
+
+    override suspend fun usage(token: String, limit: Int, offset: Int): UsageResult =
+        get("/account/usage?limit=$limit&offset=$offset", token, UsageResult::class.java)
+
+    override suspend fun billingEstimate(
+        token: String,
+        model: String?,
+        messages: List<Map<String, String>>,
+        maxTokens: Int?,
+    ): BillingEstimateResult = post(
+        "/billing/estimate",
+        buildMap {
+            model?.let { put("model", it) }
+            put("messages", messages)
+            maxTokens?.let { put("maxTokens", it) }
+        },
+        token,
+        BillingEstimateResult::class.java,
+    )
+
+    override suspend fun registerDevice(
+        token: String,
+        deviceId: String?,
+        deviceName: String?,
+        pushToken: String?,
+        osVersion: String?,
+        appVersion: String?,
+        deviceModel: String?,
+    ): DeviceRegisterResult = post(
+        "/device/register",
+        buildMap {
+            deviceId?.let { put("deviceId", it) }
+            deviceName?.let { put("deviceName", it) }
+            pushToken?.let { put("pushToken", it) }
+            osVersion?.let { put("osVersion", it) }
+            appVersion?.let { put("appVersion", it) }
+            deviceModel?.let { put("deviceModel", it) }
+        },
+        token,
+        DeviceRegisterResult::class.java,
+    )
+
+    override suspend fun sendDeviceHeartbeat(
+        token: String,
+        deviceId: String,
+        battery: Int?,
+        isCharging: Boolean,
+        currentApp: String?,
+        screenHash: String?,
+    ): DeviceHeartbeatResult = post(
+        "/device/heartbeat",
+        buildMap {
+            put("deviceId", deviceId)
+            battery?.let { put("battery", it) }
+            put("isCharging", isCharging)
+            currentApp?.let { put("currentApp", it) }
+            screenHash?.let { put("screenHash", it) }
+        },
+        token,
+        DeviceHeartbeatResult::class.java,
+    )
+
+    override suspend fun reportDeviceEvent(
+        token: String,
+        deviceId: String,
+        type: String,
+        payload: Map<String, Any>,
+    ): DeviceReportResult = post(
+        "/device/report",
+        mapOf("deviceId" to deviceId, "type" to type, "payload" to payload),
+        token,
+        DeviceReportResult::class.java,
+    )
+
+    override suspend fun deviceStatus(token: String, deviceId: String): DeviceStatusResult =
+        get("/device/$deviceId/status", token, DeviceStatusResult::class.java)
 
     companion object {
         private val JSON = "application/json; charset=utf-8".toMediaTypeOrNull()

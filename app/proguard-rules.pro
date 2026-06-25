@@ -40,6 +40,19 @@
 # release 下 R8 会改名导致 token/credits 等解析成 null → 登录/积分/邀请全坏。整包保留字段名。
 -keep class com.apk.claw.android.account.** { *; }
 
+# 广场/技能中心 + 宇宙(ECHO Universe) wire DTO：同样经 Gson 反射、字段名 == JSON 键、
+# 仅部分字段有 @SerializedName。不保留则 release 下 R8 改名导致未注解字段解析为空：
+#   /square/feed、/square/discovery、/config 全空 → 广场只剩种子、club 域名派生失效；
+#   /api/universe/feed 的 day/beliefs/goals/friends/memory/diary/growth 等全空。
+# 该包内所有 *Dto 一律整类保留字段名；非 Dto 命名的 wire 类显式列出。
+-keep class com.apk.claw.android.ui.compose.screen.**Dto { *; }
+-keep class com.apk.claw.android.ui.compose.screen.RemoteConfig$AppConfigDto { *; }
+-keep class com.apk.claw.android.ui.compose.screen.EchoCharacterOption { *; }
+-keep class com.apk.claw.android.ui.compose.screen.GhostChatMessage { *; }
+-keep class com.apk.claw.android.ui.compose.screen.OpenAiChatResponse { *; }
+-keep class com.apk.claw.android.ui.compose.screen.OpenAiChoice { *; }
+-keep class com.apk.claw.android.ui.compose.screen.OpenAiMessage { *; }
+
 # ============================================================
 # Gson
 # ============================================================

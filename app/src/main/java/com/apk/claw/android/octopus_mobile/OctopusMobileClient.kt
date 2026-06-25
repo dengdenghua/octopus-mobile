@@ -10,6 +10,7 @@ import okhttp3.*
 import okio.ByteString
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Octopus Mobile 客户端 —— Octopus Mobile 与 octopus-agent Runtime 之间的 WebSocket 通道.
@@ -53,7 +54,8 @@ open class OctopusMobileClient(
     /** 通用消息监听器列表（多订阅者） */
     private val messageListeners = java.util.concurrent.CopyOnWriteArrayList<(String) -> Unit>()
 
-    /** 接收消息回调（兼容旧 API，调用 addMessageListener / removeMessageListener） */
+    /** 接收消息回调（兼容旧 API，调用 addMessageListener / removeMessageListener）。
+     *  无 backing field，实际由线程安全的 [messageListeners] 支持。 */
     var onMessage: ((String) -> Unit)?
         get() = messageListeners.firstOrNull()
         set(value) {
@@ -62,15 +64,19 @@ open class OctopusMobileClient(
         }
 
     /** 连接状态变化回调 */
+    @Volatile
     var onStateChanged: ((ConnectionState) -> Unit)? = null
 
     /** 工具执行回调：收到母体 tool/execute 后调用 */
+    @Volatile
     var onToolExecute: ((ToolCall) -> Unit)? = null
 
     /** PC 屏幕帧回调：收到母体 push_pc_frame 推来的二进制帧后调用（远程桌面用） */
+    @Volatile
     var onPcFrame: ((ByteArray) -> Unit)? = null
 
     /** 配置变更回调：收到母体 config/sync_pull_response 后调用 */
+    @Volatile
     var onConfigChange: ((String) -> Unit)? = null
 
     /** 等待远程任务结果的 future：task_id → CompletableDeferred */
@@ -114,7 +120,7 @@ open class OctopusMobileClient(
                 // 收到任何消息且处于 HELLO_SENT 状态 → 视为握手成功
                 if (state == ConnectionState.HELLO_SENT) {
                     setState(ConnectionState.ONLINE)
-                    reconnectAttempts = 0
+                    reconnectAttempts.set(0)
                 }
                 handleIncomingMessage(text)
                 onMessage?.invoke(text)
@@ -124,7 +130,7 @@ open class OctopusMobileClient(
                 // 二进制帧：母体 push_pc_frame 推来的 PC 屏幕帧（远程桌面）
                 if (state == ConnectionState.HELLO_SENT) {
                     setState(ConnectionState.ONLINE)
-                    reconnectAttempts = 0
+                    reconnectAttempts.set(0)
                 }
                 onPcFrame?.invoke(bytes.toByteArray())
             }
@@ -155,17 +161,18 @@ open class OctopusMobileClient(
     }
 
     /** 指数退避重连（基础 2s，最大 30s） */
-    private var reconnectAttempts = 0
+    private val reconnectAttempts = AtomicInteger(0)
+    @Volatile
     private var reconnectJob: kotlinx.coroutines.Job? = null
 
     private fun scheduleReconnect() {
-        if (state == ConnectionState.OFFLINE && reconnectAttempts < 10) {
-            reconnectAttempts++
+        val attempts = reconnectAttempts.incrementAndGet()
+        if (state == ConnectionState.OFFLINE && attempts <= 10) {
             val baseDelay = 2000L
             val maxDelay = 30_000L
-            val delay = minOf(baseDelay * (1L shl (reconnectAttempts - 1)), maxDelay)
+            val delay = minOf(baseDelay * (1L shl (attempts - 1).coerceAtLeast(0)), maxDelay)
             val jitter = (Math.random() * 1000).toLong()
-            Log.i(tag, "Reconnecting in ${delay + jitter}ms (attempt $reconnectAttempts)")
+            Log.i(tag, "Reconnecting in ${delay + jitter}ms (attempt $attempts)")
             reconnectJob?.cancel()
             reconnectJob = scope.launch {
                 kotlinx.coroutines.delay(delay + jitter)
@@ -174,6 +181,8 @@ open class OctopusMobileClient(
                     connect()
                 }
             }
+        } else {
+            reconnectAttempts.decrementAndGet()
         }
     }
 
@@ -377,7 +386,7 @@ open class OctopusMobileClient(
      */
     fun disconnect() {
         reconnectJob?.cancel()
-        reconnectAttempts = 0
+        reconnectAttempts.set(0)
         webSocket?.close(1000, "client disconnect")
         webSocket = null
         setState(ConnectionState.OFFLINE)

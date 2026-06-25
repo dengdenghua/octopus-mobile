@@ -37,6 +37,7 @@ import java.util.Locale
 class AccountActivity : BaseActivity() {
 
     private lateinit var tvCredits: TextView
+    private lateinit var tvCreditsBreakdown: TextView
     private lateinit var tvMobile: TextView
     private lateinit var tvMember: TextView
     private lateinit var llGoods: LinearLayout
@@ -45,6 +46,7 @@ class AccountActivity : BaseActivity() {
     private lateinit var etInviteCode: EditText
     private lateinit var llRedeem: LinearLayout
     private lateinit var btnTierFast: KButton
+    private lateinit var btnTierFlash: KButton
     private lateinit var btnTierPremium: KButton
     private lateinit var tvTierHint: TextView
 
@@ -62,6 +64,7 @@ class AccountActivity : BaseActivity() {
             showBackButton(true) { finish() }
         }
         tvCredits = findViewById(R.id.tvCredits)
+        tvCreditsBreakdown = findViewById(R.id.tvCreditsBreakdown)
         tvMobile = findViewById(R.id.tvMobile)
         tvMember = findViewById(R.id.tvMember)
         llGoods = findViewById(R.id.llGoods)
@@ -70,11 +73,13 @@ class AccountActivity : BaseActivity() {
         etInviteCode = findViewById(R.id.etInviteCode)
         llRedeem = findViewById(R.id.llRedeem)
         btnTierFast = findViewById(R.id.btnTierFast)
+        btnTierFlash = findViewById(R.id.btnTierFlash)
         btnTierPremium = findViewById(R.id.btnTierPremium)
         tvTierHint = findViewById(R.id.tvTierHint)
         tvMobile.text = AccountStore.mobile
 
         btnTierFast.setOnClickListener { setTier(AccountConfig.TIER_FAST) }
+        btnTierFlash.setOnClickListener { setTier(AccountConfig.TIER_FLASH) }
         btnTierPremium.setOnClickListener { setTier(AccountConfig.TIER_PREMIUM) }
         renderTier()
 
@@ -98,6 +103,11 @@ class AccountActivity : BaseActivity() {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 AccountRepository.state.collect { s ->
                     tvCredits.text = s.credits.toString()
+                    tvCreditsBreakdown.text = getString(
+                        R.string.account_credits_breakdown,
+                        s.paidCredits,
+                        s.giftCredits,
+                    )
                     if (s.mobile.isNotEmpty()) tvMobile.text = s.mobile
                     tvMember.text = if (s.byoUnlocked) {
                         getString(R.string.account_member_active, formatDate(s.memberExpireAt))
@@ -117,14 +127,22 @@ class AccountActivity : BaseActivity() {
 
     private fun renderGoods(goods: List<Goods>) {
         llGoods.removeAllViews()
+        val usd = selectedCurrency() == "USD"
         goods.forEach { g ->
             val row = layoutInflater.inflate(R.layout.item_goods, llGoods, false)
             row.findViewById<TextView>(R.id.tvGoodsTitle).text = g.title
-            val bonus = if (g.bonusCredits > 0) getString(R.string.account_goods_bonus, g.bonusCredits) else ""
-            row.findViewById<TextView>(R.id.tvGoodsSub).text =
-                getString(R.string.account_goods_credits, g.credits) + bonus
+            val credits = if (usd && g.usdCredits > 0) g.usdCredits else g.credits
+            val bonus = if (usd && g.usdBonusCredits > 0) g.usdBonusCredits else g.bonusCredits
+            val isSub = g.kind == "subscription"
+            row.findViewById<TextView>(R.id.tvGoodsSub).text = if (isSub) {
+                // 订阅:区分两桶 + 月清 + BYO 权益
+                getString(R.string.account_goods_sub_subscription, credits, bonus)
+            } else {
+                getString(R.string.account_goods_credits, credits) +
+                    (if (bonus > 0) getString(R.string.account_goods_bonus, bonus) else "")
+            }
             row.findViewById<KButton>(R.id.btnBuy).apply {
-                text = formatPrice(g)
+                text = formatPrice(g) + (if (isSub) getString(R.string.account_per_month_suffix) else "")
                 setOnClickListener { buy(g) }
             }
             llGoods.addView(row)
@@ -133,7 +151,7 @@ class AccountActivity : BaseActivity() {
 
     private fun buy(g: Goods) {
         lifecycleScope.launch {
-            val r = AccountRepository.createOrder(g.id)
+            val r = AccountRepository.createOrder(g.id, selectedCurrency())
             val order = r.getOrNull()
             if (order == null) {
                 toast(r.exceptionOrNull()?.message ?: getString(R.string.account_order_failed))
@@ -212,17 +230,26 @@ class AccountActivity : BaseActivity() {
 
     /** 高亮当前档位按钮 + 更新说明文案(只显示档位,不暴露底层模型名)。 */
     private fun renderTier() {
-        val premium = AccountConfig.modelTier == AccountConfig.TIER_PREMIUM
+        val tier = AccountConfig.modelTier
         val brand = getColor(R.color.colorBrandPrimary)
         val muted = getColor(R.color.colorContainerBrighten)
         val onBrand = getColor(android.R.color.white)
         val onMuted = getColor(R.color.colorTextPrimary)
-        btnTierFast.setBgColor(if (!premium) brand else muted)
-        btnTierFast.setTextColor(if (!premium) onBrand else onMuted)
-        btnTierPremium.setBgColor(if (premium) brand else muted)
-        btnTierPremium.setTextColor(if (premium) onBrand else onMuted)
+
+        fun apply(button: KButton, selected: Boolean) {
+            button.setBgColor(if (selected) brand else muted)
+            button.setTextColor(if (selected) onBrand else onMuted)
+        }
+
+        apply(btnTierFast, tier == AccountConfig.TIER_FAST)
+        apply(btnTierFlash, tier == AccountConfig.TIER_FLASH)
+        apply(btnTierPremium, tier == AccountConfig.TIER_PREMIUM)
         tvTierHint.text = getString(
-            if (premium) R.string.account_tier_premium_hint else R.string.account_tier_fast_hint
+            when (tier) {
+                AccountConfig.TIER_FLASH -> R.string.account_tier_flash_hint
+                AccountConfig.TIER_PREMIUM -> R.string.account_tier_premium_hint
+                else -> R.string.account_tier_fast_hint
+            }
         )
     }
 
@@ -241,9 +268,10 @@ class AccountActivity : BaseActivity() {
         SimpleDateFormat("yyyy-MM-dd", Locale.US).format(epochMillis)
 
     /** 英文区显示美元价(priceUsdCents),其余显示人民币(priceFen)。 */
+    private fun selectedCurrency(): String = if (Locale.getDefault().language == "en") "USD" else "CNY"
+
     private fun formatPrice(g: Goods): String {
-        val english = Locale.getDefault().language == "en"
-        val (sym, cents) = if (english && g.priceUsdCents > 0) "$" to g.priceUsdCents else "¥" to g.priceFen
+        val (sym, cents) = if (selectedCurrency() == "USD" && g.priceUsdCents > 0) "$" to g.priceUsdCents else "¥" to g.priceFen
         return if (cents % 100 == 0L) sym + (cents / 100) else sym + String.format(Locale.US, "%.2f", cents / 100.0)
     }
 

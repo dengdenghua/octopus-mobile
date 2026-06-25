@@ -1,12 +1,14 @@
 package com.apk.claw.android.octopus_mobile.browser
 
 import android.util.Log
+import com.apk.claw.android.octopus_mobile.safety.UrlGuard
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
 import java.io.FileOutputStream
+import java.net.URI
 import java.util.concurrent.TimeUnit
 
 /**
@@ -113,6 +115,15 @@ class ExtensionInstaller(
     suspend fun installFromAmo(amoUrl: String): InstallResult {
         return withContext(Dispatchers.IO) {
             try {
+                // 仅允许官方 addons.mozilla.org（含 allizom 预发布）的 https URL，防止任意来源安装。
+                val host = try { URI(amoUrl).host?.lowercase() } catch (e: Exception) { null }
+                val amoAllowed = host != null && (
+                    host == "addons.mozilla.org" || host.endsWith(".addons.mozilla.org") ||
+                        host == "addons.allizom.org" || host.endsWith(".addons.allizom.org")
+                )
+                if (!amoUrl.trim().lowercase().startsWith("https://") || !amoAllowed) {
+                    return@withContext InstallResult.Failed("AMO install only allows https://addons.mozilla.org URLs")
+                }
                 Log.d(TAG, "Installing from AMO: $amoUrl")
                 val result = engine.installExtensionFromUrl(amoUrl)
                 val ext = result.await()  // GeckoResult → suspend
@@ -209,6 +220,14 @@ class ExtensionInstaller(
     }
 
     private fun download(url: String): ByteArray {
+        // SSRF / 明文防护：仅允许 https，且不得指向内网/回环/云元数据端点。
+        val verdict = UrlGuard.check(url)
+        if (!verdict.allow) {
+            throw RuntimeException("Blocked unsafe extension URL: ${verdict.reason}")
+        }
+        if (!url.trim().lowercase().startsWith("https://")) {
+            throw RuntimeException("Only https extension downloads are allowed")
+        }
         val request = Request.Builder().url(url).build()
         val response = httpClient.newCall(request).execute()
         if (!response.isSuccessful) {

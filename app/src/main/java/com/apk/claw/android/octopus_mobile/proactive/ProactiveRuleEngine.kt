@@ -1,6 +1,7 @@
 package com.apk.claw.android.octopus_mobile.proactive
 
 import android.util.Log
+import com.apk.claw.android.octopus_mobile.safety.ToolRiskPolicy
 import com.apk.claw.android.tool.ToolRegistry
 import com.apk.claw.android.tool.ToolResult
 import com.apk.claw.android.utils.KVUtils
@@ -192,14 +193,29 @@ class ProactiveRuleEngine(
 
         return when (rule.action.type) {
             ActionType.EXECUTE_TOOL, ActionType.EXECUTE_AND_NOTIFY -> {
-                val result = toolRegistry.executeTool(rule.action.toolName, rule.action.toolParams)
-                TriggerResult(
-                    ruleId = rule.id,
-                    ruleName = rule.name,
-                    actionTaken = true,
-                    toolResult = result,
-                    message = if (result.isSuccess) "✓ ${rule.name}" else "✗ ${rule.name}: ${result.error}"
-                )
+                // 安全(R12)：主动规则由不可信触发源(通知/短信/屏幕文本)自动触发，
+                // 禁止自动执行高危工具(send_sms / send_intent / file_ops / install_app 等)。
+                // 「高级自动化模式」开启时放行（专用自动化设备满血）。
+                if (ToolRiskPolicy.riskOf(rule.action.toolName) == ToolRiskPolicy.RISK_HIGH
+                    && !KVUtils.isAdvancedAutomationMode()) {
+                    Log.w(TAG, "[Proactive] 拒绝自动执行高危工具: ${rule.action.toolName} (规则: ${rule.name})")
+                    TriggerResult(
+                        ruleId = rule.id,
+                        ruleName = rule.name,
+                        actionTaken = false,
+                        toolResult = null,
+                        message = "⚠ ${rule.name}: 高危工具「${rule.action.toolName}」不允许由主动规则自动执行"
+                    )
+                } else {
+                    val result = toolRegistry.executeTool(rule.action.toolName, rule.action.toolParams)
+                    TriggerResult(
+                        ruleId = rule.id,
+                        ruleName = rule.name,
+                        actionTaken = true,
+                        toolResult = result,
+                        message = if (result.isSuccess) "✓ ${rule.name}" else "✗ ${rule.name}: ${result.error}"
+                    )
+                }
             }
             ActionType.NOTIFY_USER -> {
                 TriggerResult(

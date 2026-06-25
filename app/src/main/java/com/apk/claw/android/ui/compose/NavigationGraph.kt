@@ -1,17 +1,13 @@
 package com.apk.claw.android.ui.compose
 
-import android.content.Intent
 import androidx.compose.animation.core.tween
-import androidx.compose.ui.platform.LocalContext
-import com.apk.claw.android.ui.browser.BrowserActivity
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,8 +16,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.draw.clip
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
@@ -35,22 +31,33 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.apk.claw.android.ui.compose.screen.AgentSquareScreen
 import com.apk.claw.android.ui.compose.screen.ChatScreen
 import com.apk.claw.android.ui.compose.screen.DiscoverScreen
 import com.apk.claw.android.ui.compose.screen.FeatureHubScreen
 import com.apk.claw.android.ui.compose.screen.SettingsScreen
+import com.apk.claw.android.ui.compose.component.LiquidGlassLayer
+import com.apk.claw.android.ui.compose.component.rememberGlassPressState
+import com.apk.claw.android.ui.compose.theme.OctopusBackground
 import com.apk.claw.android.ui.compose.theme.OctopusColors
+import com.apk.claw.android.ui.compose.theme.OctopusGlass
+import com.apk.claw.android.ui.compose.theme.OctopusGlassMaterial
+import com.apk.claw.android.ui.compose.theme.OctopusIconSize
+import com.apk.claw.android.ui.compose.theme.OctopusShape
+import com.apk.claw.android.ui.compose.theme.OctopusLayout
+import com.apk.claw.android.ui.compose.theme.OctopusSpacing
 import kotlinx.coroutines.launch
 
 /**
@@ -63,9 +70,12 @@ import kotlinx.coroutines.launch
 @Composable
 fun OctopusApp() {
     val navController = rememberNavController()
-    val context = LocalContext.current
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
+    val selectedBottomRoute = when (currentDestination?.route) {
+        Screen.AgentSquare.route -> Screen.Features.route
+        else -> currentDestination?.route
+    }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     // 统一的轻量反馈入口：替代分散的 Toast
@@ -82,19 +92,15 @@ fun OctopusApp() {
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
             CompactBottomBar(
-                currentRoute = currentDestination?.route,
+                currentRoute = selectedBottomRoute,
                 onSelect = { screen ->
-                    if (screen == Screen.Discover) {
-                        // 「浏览器」Tab 直接打开内置浏览器本体(已有桌面式首页),不再走旧的 DiscoverScreen 落地页
-                        runCatching { context.startActivity(Intent(context, BrowserActivity::class.java)) }
-                    } else {
-                        navController.navigate(screen.route) {
-                            popUpTo(navController.graph.findStartDestination().id) {
-                                saveState = true
-                            }
-                            launchSingleTop = true
-                            restoreState = true
+                    if (selectedBottomRoute == screen.route && currentDestination?.route == screen.route) return@CompactBottomBar
+                    navController.navigate(screen.route) {
+                        popUpTo(navController.graph.findStartDestination().id) {
+                            saveState = true
                         }
+                        launchSingleTop = true
+                        restoreState = true
                     }
                 },
             )
@@ -108,58 +114,131 @@ fun OctopusApp() {
     }
 }
 
+// 底部 dock 专用颜色别名（跟随主题切换）
+private val NavPrimaryColor get() = OctopusColors.Primary
+private val NavTextMutedColor get() = OctopusColors.TextMuted
+private val NavGlassSurfaceColor get() = OctopusBackground.glassSurface
+private val NavGlassBorderColor get() = OctopusBackground.glassBorder
+
 @Composable
 private fun CompactBottomBar(
     currentRoute: String?,
     onSelect: (Screen) -> Unit,
 ) {
-    Surface(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .navigationBarsPadding(),
-        color = OctopusColors.Surface.copy(alpha = 0.98f),
-        border = BorderStroke(1.dp, OctopusColors.Border.copy(alpha = 0.65f)),
+            .background(OctopusBackground.pageBrush())
+            .navigationBarsPadding()
+            .padding(horizontal = OctopusSpacing.lg, vertical = OctopusSpacing.sm),
+        contentAlignment = Alignment.Center,
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().height(60.dp).padding(horizontal = 16.dp, vertical = 5.dp),
-            horizontalArrangement = Arrangement.SpaceAround,
-            verticalAlignment = Alignment.CenterVertically,
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = OctopusShape.capsule,
+            color = NavGlassSurfaceColor.copy(alpha = if (OctopusColors.isLight) 0.72f else 0.68f),
+            border = BorderStroke(OctopusLayout.bottomNavBorder, NavGlassBorderColor.copy(alpha = if (OctopusColors.isLight) 0.82f else 1f)),
+            shadowElevation = OctopusLayout.bottomNavElevation,
         ) {
-            Screen.bottomBar.forEach { screen ->
-                val selected = currentRoute == screen.route
-                Column(
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(OctopusLayout.bottomNavHeight)
+                    .clip(OctopusShape.capsule),
+            ) {
+                LiquidGlassLayer(
+                    shape = OctopusShape.capsule,
+                    blurRadius = OctopusGlass.liquidBlurRadius,
+                    tint = NavGlassSurfaceColor.copy(alpha = if (OctopusColors.isLight) 0.76f else 0.68f),
+                    highlightIntensity = OctopusGlass.highlightIntensity * 1.14f,
+                    material = OctopusGlassMaterial.Dock,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                Row(
                     modifier = Modifier
-                        .weight(1f)
-                        .height(50.dp)
-                        .clickable { onSelect(screen) },
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center,
+                        .fillMaxSize()
+                        .padding(horizontal = OctopusSpacing.sm, vertical = OctopusSpacing.sm),
+                    horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.sm),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(width = 52.dp, height = 28.dp)
-                            .background(
-                                if (selected) OctopusColors.Primary.copy(alpha = 0.12f) else androidx.compose.ui.graphics.Color.Transparent,
-                                RoundedCornerShape(14.dp),
-                            ),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            screen.icon,
-                            contentDescription = stringResource(screen.labelRes),
-                            tint = if (selected) OctopusColors.Primary else OctopusColors.TextMuted,
-                            modifier = Modifier.size(21.dp),
+                    Screen.bottomBar.forEach { screen ->
+                        val selected = currentRoute == screen.route
+                        BottomTabItem(
+                            screen = screen,
+                            selected = selected,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(OctopusLayout.bottomNavItemHeight),
+                            onClick = { onSelect(screen) },
                         )
                     }
-                    Text(
-                        stringResource(screen.labelRes),
-                        color = if (selected) OctopusColors.Primary else OctopusColors.TextMuted,
-                        fontSize = 10.sp,
-                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-                        maxLines = 1,
-                    )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun BottomTabItem(
+    screen: Screen,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    val press = rememberGlassPressState()
+    val label = stringResource(screen.labelRes)
+    val contentColor = if (selected) NavPrimaryColor else NavTextMutedColor
+    val bgBrush = if (selected) {
+        Brush.horizontalGradient(
+            listOf(
+                NavPrimaryColor.copy(alpha = 0.18f * press.boost),
+                Color.White.copy(alpha = (if (OctopusColors.isLight) 0.30f else 0.08f) * press.boost),
+                NavPrimaryColor.copy(alpha = 0.10f * press.boost),
+            )
+        )
+    } else {
+        Brush.horizontalGradient(listOf(Color.Transparent, Color.Transparent))
+    }
+    val borderColor = if (selected) Color.White.copy(alpha = if (OctopusColors.isLight) 0.78f else 0.18f) else Color.Transparent
+    Row(
+        modifier = modifier
+            .graphicsLayer {
+                scaleX = press.scale
+                scaleY = press.scale
+            }
+            .then(press.touchModifier)
+            .clip(OctopusShape.capsule)
+            .background(bgBrush, OctopusShape.capsule)
+            .clickable(
+                interactionSource = press.interactionSource,
+                indication = null,
+                onClick = onClick,
+            )
+            .padding(horizontal = OctopusSpacing.xs),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+    ) {
+        Surface(
+            shape = OctopusShape.capsule,
+            color = if (selected) Color.White.copy(alpha = if (OctopusColors.isLight) 0.34f else 0.10f) else Color.Transparent,
+            border = if (selected) BorderStroke(OctopusLayout.bottomNavBorder, borderColor) else null,
+        ) {
+            Icon(
+                screen.icon,
+                contentDescription = label,
+                tint = contentColor,
+                modifier = Modifier.padding(OctopusSpacing.xs).size(OctopusIconSize.medium),
+            )
+        }
+        if (selected) {
+            Text(
+                label,
+                color = contentColor,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                modifier = Modifier.padding(start = OctopusSpacing.xs),
+            )
         }
     }
 }
@@ -186,16 +265,17 @@ fun OctopusNavHost(
         popExitTransition = { fadeOut(tween(160)) },
     ) {
         composable(Screen.Discover.route) {
-            DiscoverScreen(onNavigate = { route ->
-                navController.navigate(route) {
-                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                    launchSingleTop = true
-                    restoreState = true
-                }
-            })
+            DiscoverScreen()
         }
         composable(Screen.Chat.route) { ChatScreen() }
-        composable(Screen.Features.route) { FeatureHubScreen() }
+        composable(Screen.Features.route) { FeatureHubScreen(onNavigateToAgentSquare = { navController.navigate(Screen.AgentSquare.route) }) }
+        composable(Screen.AgentSquare.route) {
+            AgentSquareScreen(
+                onBack = { navController.popBackStack() },
+                onOpenSearch = { /* TODO */ },
+                onCreatePost = { /* TODO */ },
+            )
+        }
         composable(Screen.Settings.route) { SettingsScreen(onMessage = showMessage) }
     }
 }

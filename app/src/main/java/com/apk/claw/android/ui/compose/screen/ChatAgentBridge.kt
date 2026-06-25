@@ -114,6 +114,7 @@ object ChatAgentBridge {
         onDone: (String) -> Unit,
         onError: (String) -> Unit,
         recordKey: String? = null,
+        untrusted: Boolean = false,
     ) {
         // 忙判断必须在改动任何共享状态(updateConfig/curTask)之前,拒绝并发任务。
         if (!busy.compareAndSet(false, true)) {
@@ -177,7 +178,7 @@ object ChatAgentBridge {
                 busy.set(false)
                 main.post { onError(ClawApplication.instance.getString(R.string.chat_agent_bridge_dialog_detected_full)) }
             }
-        })
+        }, untrusted)
     }
 
     /** 工具名 → 直观图标(未命中用通用扳手)。 */

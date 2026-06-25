@@ -248,7 +248,27 @@ class RuntimeConfigActivity : BaseActivity() {
         Toast.makeText(this, getString(R.string.channel_config_saved), Toast.LENGTH_SHORT).show()
     }
 
+    /**
+     * 若用户把"连接口令"(octopus://join?ws=...&token=...,桌面端团队邀请处展示/可扫码)
+     * 粘进了地址框,自动拆成 ws 地址 + token 填回两个字段 —— 免去手输 IP。
+     */
+    private fun maybeApplyConnectString() {
+        val raw = etRuntimeUrl.text.toString().trim()
+        if (!raw.startsWith("octopus://join")) return
+        try {
+            val uri = android.net.Uri.parse(raw)
+            val ws = uri.getQueryParameter("ws")
+            val token = uri.getQueryParameter("token")
+            if (!ws.isNullOrEmpty()) etRuntimeUrl.setText(ws)
+            if (!token.isNullOrEmpty()) etAuthToken.setText(token)
+            XLog.i(TAG, "Applied connect string: ws=$ws")
+        } catch (e: Exception) {
+            XLog.w(TAG, "Failed to parse connect string: ${e.message}")
+        }
+    }
+
     private fun saveToStorage() {
+        maybeApplyConnectString()
         KVUtils.setOctopusRpcUrl(etRuntimeUrl.text.toString().trim())
         KVUtils.setOctopusAuthToken(etAuthToken.text.toString().trim())
         KVUtils.setOctopusAutoConnect(cbAutoConnect.isChecked)

@@ -16,9 +16,49 @@ interface AccountGateway {
     suspend fun profile(token: String): AccountProfile
     suspend fun balance(token: String): BalanceResult
     suspend fun goods(token: String): GoodsList
-    suspend fun createOrder(token: String, goodsId: String): CreateOrderResult
+    suspend fun createOrder(token: String, goodsId: String, currency: String = "CNY"): CreateOrderResult
     suspend fun queryOrder(token: String, orderNo: String): OrderStatusResult
     suspend fun dailyClaim(token: String): DailyClaimResult
     suspend fun inviteInfo(token: String): InviteInfo
     suspend fun redeemInvite(token: String, code: String): RedeemResult
+
+    // membership / credits ledger / usage
+    suspend fun membership(token: String): MembershipResult
+    suspend fun creditTransactions(token: String, limit: Int = 50, offset: Int = 0): CreditTransactionsResult
+    suspend fun usage(token: String, limit: Int = 50, offset: Int = 0): UsageResult
+    suspend fun billingEstimate(
+        token: String,
+        model: String? = null,
+        messages: List<Map<String, String>> = emptyList(),
+        maxTokens: Int? = null,
+    ): BillingEstimateResult
+
+    // device protocol (register / heartbeat / report / status)
+    suspend fun registerDevice(
+        token: String,
+        deviceId: String? = null,
+        deviceName: String? = null,
+        pushToken: String? = null,
+        osVersion: String? = null,
+        appVersion: String? = null,
+        deviceModel: String? = null,
+    ): DeviceRegisterResult
+
+    suspend fun sendDeviceHeartbeat(
+        token: String,
+        deviceId: String,
+        battery: Int? = null,
+        isCharging: Boolean = false,
+        currentApp: String? = null,
+        screenHash: String? = null,
+    ): DeviceHeartbeatResult
+
+    suspend fun reportDeviceEvent(
+        token: String,
+        deviceId: String,
+        type: String,
+        payload: Map<String, Any> = emptyMap(),
+    ): DeviceReportResult
+
+    suspend fun deviceStatus(token: String, deviceId: String): DeviceStatusResult
 }

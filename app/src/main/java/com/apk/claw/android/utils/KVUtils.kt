@@ -1,7 +1,10 @@
 package com.apk.claw.android.utils
 
 import android.content.Context
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import com.tencent.mmkv.MMKV
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * MMKV 键值存储工具类
@@ -13,6 +16,10 @@ import com.tencent.mmkv.MMKV
  *   // 存取数据
  *   KVUtils.putString("key", "value")
  *   val value = KVUtils.getString("key", "default")
+ *
+ * 安全增强：
+ *   - 普通 KV 仍走 MMKV（性能）。
+ *   - 敏感凭据（API Key / Bot Token / AppSecret / Auth Token）走 [EncryptedSharedPreferences]。
  */
 object KVUtils {
 
@@ -46,8 +53,9 @@ object KVUtils {
     const val KEY_OCTOPUS_AUTO_CONNECT = "DEFAULT_OCTOPUS_AUTO_CONNECT"
 
     private lateinit var mmkv: MMKV
+    private lateinit var securePrefs: EncryptedSharedPreferences
     private val disabledToolsFallback = mutableSetOf<String>()
-    private val stringFallback = mutableMapOf<String, String>()
+    private val stringFallback = ConcurrentHashMap<String, String>()
 
     private const val DEFAULT_INT = 0
     private const val DEFAULT_LONG = 0L
@@ -55,16 +63,49 @@ object KVUtils {
     private const val DEFAULT_FLOAT = 0f
     private const val DEFAULT_DOUBLE = 0.0
 
+    /** 必须走加密存储的敏感 Key 集合 */
+    private val SECURE_KEYS = setOf(
+        KEY_DINGTALK_APP_SECRET,
+        KEY_FEISHU_APP_SECRET,
+        KEY_QQ_APP_SECRET,
+        KEY_DISCORD_BOT_TOKEN,
+        KEY_TELEGRAM_BOT_TOKEN,
+        KEY_WECHAT_BOT_TOKEN,
+        KEY_OCTOPUS_AUTH_TOKEN,
+        KEY_LLM_API_KEY,
+        KEY_VISION_API_KEY,
+    )
+
     /**
      * 在 Application.onCreate 中调用初始化
      */
     fun init(context: Context) {
         MMKV.initialize(context)
         mmkv = MMKV.defaultMMKV()
+        // EncryptedSharedPreferences/Keystore 在部分设备（keystore 损坏/被清空/恢复备份）会抛异常或 Error。
+        // 失败时不初始化 securePrefs —— 敏感 key 自动退回 MMKV（见 get/putSecureString），
+        // 避免在 Application.onCreate 里未捕获导致"一启动就崩"。
+        try {
+            val masterKey = MasterKey.Builder(context)
+                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                .build()
+            securePrefs = EncryptedSharedPreferences.create(
+                context,
+                "octopus_secure_prefs",
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+            ) as EncryptedSharedPreferences
+        } catch (e: Throwable) {
+            XLog.e("KVUtils", "EncryptedSharedPreferences 初始化失败，敏感数据退回 MMKV: ${e.message}")
+        }
     }
 
     // ==================== String ====================
     fun putString(key: String, value: String?): Boolean {
+        if (key in SECURE_KEYS) {
+            return putSecureString(key, value)
+        }
         if (!::mmkv.isInitialized) {
             if (value == null) stringFallback.remove(key) else stringFallback[key] = value
             return true
@@ -73,10 +114,58 @@ object KVUtils {
     }
 
     fun getString(key: String, defaultValue: String = ""): String {
+        if (key in SECURE_KEYS) {
+            return getSecureString(key, defaultValue)
+        }
         if (!::mmkv.isInitialized) {
             return stringFallback[key] ?: defaultValue
         }
         return mmkv.decodeString(key, defaultValue) ?: defaultValue
+    }
+
+    /** 加密存储字符串（用于敏感凭据） */
+    private fun putSecureString(key: String, value: String?): Boolean {
+        if (!::securePrefs.isInitialized) {
+            // 加密存储不可用：退回 MMKV（mmkv 在 init 里先于 securePrefs 初始化，通常已就绪）。
+            if (::mmkv.isInitialized) return mmkv.encode(key, value)
+            if (value == null) stringFallback.remove(key) else stringFallback[key] = value
+            return true
+        }
+        return try {
+            securePrefs.edit().apply {
+                if (value == null) remove(key) else putString(key, value)
+            }.commit()
+        } catch (e: Exception) {
+            XLog.e("KVUtils", "加密写入失败，回退 MMKV: ${e.message}")
+            mmkv.encode(key, value)
+        }
+    }
+
+    /** 加密读取字符串（用于敏感凭据） */
+    private fun getSecureString(key: String, defaultValue: String = ""): String {
+        if (!::securePrefs.isInitialized) {
+            // 加密存储不可用：退回 MMKV，避免读空丢凭据。
+            return if (::mmkv.isInitialized) mmkv.decodeString(key, defaultValue) ?: defaultValue
+            else stringFallback[key] ?: defaultValue
+        }
+        val secure = try {
+            securePrefs.getString(key, null)
+        } catch (e: Exception) {
+            XLog.e("KVUtils", "加密读取失败，回退 MMKV: ${e.message}")
+            null
+        }
+        if (!secure.isNullOrEmpty()) return secure
+        // securePrefs 里没有该值：老用户升级时凭据还在 MMKV —— 一次性迁移过来（迁完清掉旧值，
+        // 避免日后被显式清除的密钥被 MMKV 旧值"复活"）。这修复了"升级后被登出/丢配置"。
+        val legacy = if (::mmkv.isInitialized) mmkv.decodeString(key, "") ?: "" else ""
+        if (legacy.isNotEmpty()) {
+            runCatchingLog("KVUtils") {
+                securePrefs.edit().putString(key, legacy).commit()
+                if (::mmkv.isInitialized) mmkv.removeValueForKey(key)
+            }
+            return legacy
+        }
+        return defaultValue
     }
 
     // ==================== Int ====================
@@ -135,18 +224,27 @@ object KVUtils {
 
     // ==================== 常用操作 ====================
     fun contains(key: String): Boolean {
+        if (key in SECURE_KEYS && ::securePrefs.isInitialized) {
+            return securePrefs.contains(key)
+        }
         return mmkv.containsKey(key)
     }
 
     fun remove(key: String) {
+        if (key in SECURE_KEYS && ::securePrefs.isInitialized) {
+            runCatchingLog("KVUtils") { securePrefs.edit().remove(key).commit() }
+        }
         mmkv.removeValueForKey(key)
     }
 
     fun remove(vararg keys: String) {
-        mmkv.removeValuesForKeys(keys)
+        keys.forEach { remove(it) }
     }
 
     fun clear() {
+        if (::securePrefs.isInitialized) {
+            runCatchingLog("KVUtils") { securePrefs.edit().clear().commit() }
+        }
         mmkv.clearAll()
     }
 
@@ -218,6 +316,37 @@ object KVUtils {
         }
     }
 
+    private const val KEY_GLASS_BLUR_RADIUS = "KEY_GLASS_BLUR_RADIUS"
+    private const val KEY_GLASS_QUALITY = "KEY_GLASS_QUALITY"
+    private const val KEY_GLASS_REFRACTION = "KEY_GLASS_REFRACTION"
+    private const val KEY_GLASS_HIGHLIGHT = "KEY_GLASS_HIGHLIGHT"
+    private const val KEY_GLASS_NOISE = "KEY_GLASS_NOISE"
+    private const val KEY_GLASS_ANIMATION = "KEY_GLASS_ANIMATION"
+
+    fun getGlassBlurRadius(): Float = getFloat(KEY_GLASS_BLUR_RADIUS, 18f)
+
+    fun setGlassBlurRadius(radius: Float) = putFloat(KEY_GLASS_BLUR_RADIUS, radius.coerceIn(0f, 48f))
+
+    fun getGlassQuality(): String = getString(KEY_GLASS_QUALITY, "high")
+
+    fun setGlassQuality(quality: String) = putString(KEY_GLASS_QUALITY, quality)
+
+    fun getGlassRefraction(): Float = getFloat(KEY_GLASS_REFRACTION, 1f)
+
+    fun setGlassRefraction(value: Float) = putFloat(KEY_GLASS_REFRACTION, value.coerceIn(0f, 2f))
+
+    fun getGlassHighlight(): Float = getFloat(KEY_GLASS_HIGHLIGHT, 1f)
+
+    fun setGlassHighlight(value: Float) = putFloat(KEY_GLASS_HIGHLIGHT, value.coerceIn(0f, 2f))
+
+    fun getGlassNoise(): Float = getFloat(KEY_GLASS_NOISE, 1f)
+
+    fun setGlassNoise(value: Float) = putFloat(KEY_GLASS_NOISE, value.coerceIn(0f, 2f))
+
+    fun isGlassAnimationEnabled(): Boolean = getBoolean(KEY_GLASS_ANIMATION, true)
+
+    fun setGlassAnimationEnabled(enabled: Boolean) = putBoolean(KEY_GLASS_ANIMATION, enabled)
+
     // ==================== 钉钉配置 ====================
     fun getDingtalkAppKey(): String = getString(KEY_DINGTALK_APP_KEY, "")
     fun setDingtalkAppKey(value: String) = putString(KEY_DINGTALK_APP_KEY, value)
@@ -251,6 +380,48 @@ object KVUtils {
     fun setWechatApiBaseUrl(value: String) = putString(KEY_WECHAT_API_BASE_URL, value)
     fun getWechatUpdatesCursor(): String = getString(KEY_WECHAT_UPDATES_CURSOR, "")
     fun setWechatUpdatesCursor(value: String) = putString(KEY_WECHAT_UPDATES_CURSOR, value)
+
+    // ==================== 通道发送者鉴权(ACL) ====================
+    // 安全:仅授权用户可驱动 Agent 控制设备。默认启用 + TOFU(首个发送者自动绑定为该通道 owner)。
+    private const val KEY_CHANNEL_ACL_ENABLED = "KEY_CHANNEL_ACL_ENABLED"
+    fun isChannelAclEnabled(): Boolean = getBoolean(KEY_CHANNEL_ACL_ENABLED, true)
+    fun setChannelAclEnabled(enabled: Boolean) = putBoolean(KEY_CHANNEL_ACL_ENABLED, enabled)
+
+    private fun channelAclKey(channel: String) = "KEY_CHANNEL_ACL_$channel"
+
+    /** 指定通道的授权发送者白名单（空=尚未配对）。 */
+    fun getChannelAllowedSenders(channel: String): Set<String> =
+        getString(channelAclKey(channel), "").split(",").filter { it.isNotBlank() }.toSet()
+
+    fun addChannelAllowedSender(channel: String, senderId: String) {
+        if (senderId.isBlank()) return
+        val s = getChannelAllowedSenders(channel).toMutableSet()
+        if (s.add(senderId)) putString(channelAclKey(channel), s.joinToString(","))
+    }
+
+    fun removeChannelAllowedSender(channel: String, senderId: String) {
+        val s = getChannelAllowedSenders(channel).toMutableSet()
+        if (s.remove(senderId)) putString(channelAclKey(channel), s.joinToString(","))
+    }
+
+    /** 清空某通道白名单 —— 让下一个发送者重新成为 owner（重新配对）。 */
+    fun clearChannelAllowedSenders(channel: String) = remove(channelAclKey(channel))
+
+    // 是否允许"远程/自动来源"(母体 WS、LAN HTTP、主动规则)调用高危工具。默认 false=拦截(安全)。
+    private const val KEY_REMOTE_HIGH_RISK = "KEY_REMOTE_HIGH_RISK_ALLOWED"
+    fun isRemoteHighRiskAllowed(): Boolean = getBoolean(KEY_REMOTE_HIGH_RISK, false)
+    fun setRemoteHighRiskAllowed(enabled: Boolean) = putBoolean(KEY_REMOTE_HIGH_RISK, enabled)
+
+    // ── 高级自动化模式(满血) ──
+    // 专用自动化设备总开关：解除「高危工具来源闸门 + 主动规则高危限制 + 文件工具 /sdcard 沙箱」，
+    // 让母体/LAN/主动规则可无确认执行全部高危工具、访问完整文件系统(仍受 shell UID 与注入校验约束)。
+    // 默认 false。仅用于你完全掌控的闲置/专用自动化设备。不影响"防外部攻击"类加固(发送者 ACL、密钥脱敏等)。
+    private const val KEY_ADVANCED_AUTOMATION = "KEY_ADVANCED_AUTOMATION_MODE"
+    fun isAdvancedAutomationMode(): Boolean {
+        if (!::mmkv.isInitialized) return false
+        return mmkv.decodeBool(KEY_ADVANCED_AUTOMATION, false)
+    }
+    fun setAdvancedAutomationMode(enabled: Boolean) = putBoolean(KEY_ADVANCED_AUTOMATION, enabled)
 
     // ==================== 技能(工具)启停 ====================
     private const val KEY_DISABLED_TOOLS = "KEY_DISABLED_TOOLS"

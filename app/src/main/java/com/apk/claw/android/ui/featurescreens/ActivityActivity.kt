@@ -2,7 +2,6 @@ package com.apk.claw.android.ui.featurescreens
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -23,8 +22,7 @@ import com.apk.claw.android.octopus_mobile.ActivityLog
 class ActivityActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { ActivityScreen(onBack = { finish() }) }
-        runCatching { window.statusBarColor = com.apk.claw.android.ui.compose.theme.OctopusColors.statusBarArgb }
+        setFeatureContent { ActivityScreen(onBack = { finish() }) }
     }
 }
 

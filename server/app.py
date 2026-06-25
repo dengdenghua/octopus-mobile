@@ -16,6 +16,7 @@ Octopus 账号 + 计费 + 会员 + 大模型中转 —— 服务端骨架(FastAP
 from __future__ import annotations
 
 import base64
+import datetime
 import hashlib
 import hmac
 import json
@@ -26,11 +27,12 @@ import secrets
 import sqlite3
 import threading
 import time
+import asyncio
 from contextlib import closing
 from typing import Any
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, StreamingResponse
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, StreamingResponse
 
 # ─────────────────────────── 配置(env 可覆盖) ───────────────────────────
 DB_PATH = os.environ.get("OCTO_DB", os.path.join(os.path.dirname(__file__), "octo.db"))
@@ -53,6 +55,13 @@ SMTP_FROM = os.environ.get("SMTP_FROM", "")
 
 # 支付:mock=下单后查单即视为已支付(本地跑通);生产接微信/支付宝,用 webhook 改单状态
 PAYMENT_PROVIDER = os.environ.get("PAYMENT_PROVIDER", "mock")  # mock | wechat | alipay
+if os.environ.get("ENV", "dev") == "production" and PAYMENT_PROVIDER == "mock":
+    raise RuntimeError("PAYMENT_PROVIDER=mock is not allowed in production. Configure wechat/alipay webhooks first.")
+if PAYMENT_PROVIDER not in {"mock", "wechat", "alipay"}:
+    raise RuntimeError("PAYMENT_PROVIDER must be one of: mock, wechat, alipay")
+ORDER_RATE_PER_MINUTE = int(os.environ.get("ORDER_RATE_PER_MINUTE", "10"))
+PENDING_ORDER_LIMIT = int(os.environ.get("PENDING_ORDER_LIMIT", "5"))
+PENDING_ORDER_WINDOW_MS = int(os.environ.get("PENDING_ORDER_WINDOW_MS", str(30 * 60 * 1000)))
 
 # 平台大模型上游(key 只在服务端)。支持多上游:每个模型按 provider 路由到不同 base/key。
 MIMO_API_KEY = os.environ.get("MIMO_API_KEY", "")
@@ -69,11 +78,10 @@ PROVIDERS = {
 DEFAULT_MODEL = os.environ.get("DEFAULT_MODEL", "agnes-2.0-flash")
 
 # 计费:多少积分/1k tokens(输入+输出合计),再乘模型 multiplier。
-# 校准(不亏成本):CREDITS_PER_1K_TOKENS ≥ MiMo每1k_token的¥成本 ÷ (multiplier × 每积分售价¥)。
-#   例:goods「100积分=¥9.90」→ 每积分≈¥0.099;若某模型 MiMo 报价 ¥0.004/1k、mult=1,
-#   则需 ≥ 0.004/(1×0.099) ≈ 0.04。默认 1 偏保守(远高于成本、不会亏);拿到 MiMo 实际
-#   报价后按上式把它下调到贴近成本即可(越小=用户每积分能用越多 token)。
-CREDITS_PER_1K_TOKENS = float(os.environ.get("CREDITS_PER_1K_TOKENS", "1"))
+# 校准(不亏成本):CREDITS_PER_1K_TOKENS ≥ 模型每1k_token的¥成本 ÷ (multiplier × 每积分售价¥)。
+# 默认值 0.1 已在 DeepSeek-V4 成本下保持 40%–70% 模型层毛利,同时让用户感知价格接近
+# 主流 AI 工具。可通过环境变量微调。
+CREDITS_PER_1K_TOKENS = float(os.environ.get("CREDITS_PER_1K_TOKENS", "0.1"))
 # 单次输出 token 上限(成本 + 防跑飞双保险)。请求里更大的 max_tokens 会被压到此值;未指定也设成它。
 # 思考型模型别设太小(否则正文被 reasoning 吃光),默认 8192。
 MAX_OUTPUT_TOKENS = int(os.environ.get("MAX_OUTPUT_TOKENS", "8192"))
@@ -85,13 +93,34 @@ DAILY_BONUS = int(os.environ.get("DAILY_BONUS", "20"))
 MEMBERSHIP_DAYS = int(os.environ.get("MEMBERSHIP_DAYS", "30"))
 # 内测:每账号累计「免费积分」上限(注册礼+每日领+mock充值+邀请 都算,发满即停;真实付费不受限)
 FREE_CAP = int(os.environ.get("FREE_CAP", "3000"))
+# 每日免费额度:每个自然日赠送的积分,用完才扣余额。0 表示关闭。
+FREE_DAILY_CREDITS = int(os.environ.get("FREE_DAILY_CREDITS", "2"))
 # 邀请码(拉新返利):新人填码→新人得 REDEEMER、邀请人得 INVITER;均走免费上限
 REFERRAL_REDEEMER_BONUS = int(os.environ.get("REFERRAL_REDEEMER_BONUS", "200"))
 REFERRAL_INVITER_BONUS = int(os.environ.get("REFERRAL_INVITER_BONUS", "200"))
 
 # 会话:JWT(HS256,无第三方依赖)。生产务必把 JWT_SECRET 换成随机长串。
-JWT_SECRET = os.environ.get("JWT_SECRET", "dev-insecure-change-me")
+_jwt_secret_env = os.environ.get("JWT_SECRET", "")
+if not _jwt_secret_env:
+    if os.environ.get("ENV", "dev") == "production":
+        raise RuntimeError("JWT_SECRET must be set in production. Generate one with: python -c \"import secrets; print(secrets.token_urlsafe(48))\"")
+    # 未配置且非生产:生成一次性随机密钥(进程级),绝不回退到源码里的公开占位符,
+    # 避免误部署(忘了设 ENV=production)时任何人都能用已知 key 离线伪造任意账号 token。
+    # 代价:进程重启后旧 token 失效;多 worker 部署务必显式设置 JWT_SECRET。
+    _jwt_secret_env = secrets.token_urlsafe(48)
+    print("[WARN] JWT_SECRET 未设置,已生成一次性随机密钥(重启后失效)。生产环境请显式配置 JWT_SECRET。", flush=True)
+JWT_SECRET = _jwt_secret_env
 JWT_EXPIRE_SECONDS = int(os.environ.get("JWT_EXPIRE_SECONDS", str(30 * 24 * 3600)))
+
+# 第三方辅助工具下载镜像。生产把 Shizuku 官方 APK 放到 SHIZUKU_APK_PATH 指向的位置;
+# 没有配置文件时接口会返回 available=false, App 可提示稍后重试或打开官方文档。
+SHIZUKU_APK_PATH = os.environ.get(
+    "SHIZUKU_APK_PATH",
+    os.path.join(os.path.dirname(__file__), "downloads", "shizuku.apk"),
+)
+SHIZUKU_VERSION = os.environ.get("SHIZUKU_VERSION", "latest")
+SHIZUKU_SOURCE_URL = os.environ.get("SHIZUKU_SOURCE_URL", "https://shizuku.rikka.app/download/")
+SHIZUKU_LICENSE_URL = os.environ.get("SHIZUKU_LICENSE_URL", "https://github.com/RikkaApps/Shizuku")
 
 # 管理后台:设了 ADMIN_TOKEN 才开放 /admin/api/*(未设=全部 503,默认安全)。务必用随机长串。
 ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "")
@@ -104,24 +133,87 @@ TRUSTED_PROXIES = int(os.environ.get("TRUSTED_PROXIES", "1"))
 # 商品目录(kind=membership 的购买会解锁当月 BYO)。priceFen=人民币分;priceUsdCents=美元分
 # (英文区显示,约 = 人民币价 ÷ 汇率 × 1.5 的美区溢价,取整到干净价位)。
 GOODS = [
-    {"id": "m_month", "title": "会员月卡", "credits": 500, "bonusCredits": 0,
-     "priceFen": 3900, "priceUsdCents": 899, "tag": "解锁自有模型", "kind": "membership"},
-    {"id": "g_100", "title": "100 积分", "credits": 100, "bonusCredits": 0,
-     "priceFen": 990, "priceUsdCents": 299, "tag": None, "kind": "credits"},
-    {"id": "g_500", "title": "500 积分", "credits": 500, "bonusCredits": 50,
-     "priceFen": 3990, "priceUsdCents": 899, "tag": "划算", "kind": "credits"},
-    {"id": "g_1000", "title": "1000 积分", "credits": 1000, "bonusCredits": 200,
-     "priceFen": 6900, "priceUsdCents": 1499, "tag": "超值", "kind": "credits"},
+    # 月度订阅:credits=永久积分(滚存)、bonusCredits=月度赠送(月底清零)、memberDays=30(解锁 BYO)。
+    {"id": "sub_19", "title": "入门月卡", "credits": 1000, "bonusCredits": 500,
+     "priceFen": 9900, "priceUsdCents": 1990, "tag": "含自带模型(BYO)", "memberDays": 30, "kind": "subscription"},
+    {"id": "sub_29", "title": "划算月卡", "credits": 1500, "bonusCredits": 1500,
+     "priceFen": 14900, "priceUsdCents": 2990, "tag": "划算 · 含BYO", "memberDays": 30, "kind": "subscription"},
+    {"id": "sub_99", "title": "旗舰月卡", "credits": 5000, "bonusCredits": 7500,
+     "priceFen": 49900, "priceUsdCents": 6900, "usdCredits": 3500, "usdBonusCredits": 5000,
+     "tag": "超值 · 含BYO", "memberDays": 30, "kind": "subscription"},
 ]
 GOODS_BY_ID = {g["id"]: g for g in GOODS}
 
-# 模型目录 = 用户可见的「两个档位」(display_name 是档位名,不暴露底层模型名)。
-# 极速档:agnes(走对平台免费的上游=我们零成本),0.5×,快;高级档:mimo-pro,1.0×,慢但强。
-# 两档照常按 multiplier 扣用户积分。可用 MODELS_JSON 覆盖。
+# 广场目录(公开下发)。后台改这里即可全量更新，App 无需发版；
+# 颜色用 "#RRGGBB"，App 侧解析。与本机强相关的技能/插件不放这里(走 App 本地注册)。
+SQUARE_FEED: dict[str, Any] = {
+    "posts": [
+        {"id": "s1", "title": "让 AI 每天自动整理手机相册，生成回忆视频", "author": "影像助手", "authorInitial": "影",
+         "authorColor": "#8B5CF6", "likes": "1.2k", "tag": "自动化", "tagColor": "#6366F1", "coverHeightDp": 180,
+         "coverGradient": ["#667EEA", "#764BA2"]},
+        {"id": "s2", "title": "3 步搭一个会订外卖的助手", "author": "效率玩家", "authorInitial": "效",
+         "authorColor": "#10B981", "likes": "856", "tag": "教程", "tagColor": "#3B82F6", "coverHeightDp": 140,
+         "coverGradient": ["#11998E", "#38EF7D"]},
+        {"id": "s3", "title": "自动写一周周报，老板直呼专业", "author": "打工侠", "authorInitial": "打",
+         "authorColor": "#F59E0B", "likes": "2.3k", "tag": "职场", "tagColor": "#EC4899", "coverHeightDp": 200,
+         "coverGradient": ["#FC466B", "#3F5EFB"]},
+        {"id": "s4", "title": "自动比价，618 我省了 2000+", "author": "省钱 Bot", "authorInitial": "省",
+         "authorColor": "#06B6D4", "likes": "3.1k", "tag": "购物", "tagColor": "#EF4444", "coverHeightDp": 170,
+         "coverGradient": ["#00C6FF", "#0072FF"]},
+        {"id": "s5", "title": "接入智能家居，一句话控制全屋", "author": "极客居", "authorInitial": "极",
+         "authorColor": "#A855F7", "likes": "1.5k", "tag": "IoT", "tagColor": "#8B5CF6", "coverHeightDp": 150,
+         "coverGradient": ["#8E2DE2", "#4A00E0"]},
+        {"id": "s6", "title": "让助手帮你读论文，10 分钟抓重点", "author": "学术喵", "authorInitial": "学",
+         "authorColor": "#EC4899", "likes": "742", "tag": "学习", "tagColor": "#10B981", "coverHeightDp": 145,
+         "coverGradient": ["#134E5E", "#71B280"]},
+    ]
+}
+
+# 灵感发现流(公开下发)。topic 用 key(automation/efficiency/life/learning/device)，App 映射到本地化分类胶囊。
+SQUARE_DISCOVERY: dict[str, Any] = {
+    "posts": [
+        {"id": "agent-travel", "title": "Travel Planner: Flights to Itinerary in One Tap",
+         "desc": "Enter destination and budget to auto-search attractions, plan routes, and generate a shareable checklist.",
+         "author": "Travel Inspiration", "authorInitial": "T", "likes": "3.2k", "topic": "life", "tag": "Lifestyle",
+         "tagColor": "#F59E0B", "coverHeight": 168, "cover": ["#FFB199", "#FF0844"], "usage": "18.6k",
+         "successRate": "92%", "duration": "About 4 min", "permissions": ["Browser", "Location", "Screenshot"]},
+        {"id": "agent-weekly", "title": "Weekly Report Auto-Saver Template",
+         "desc": "Pulls chat logs, task lists, and schedules to auto-write a report your boss will love.",
+         "author": "Efficiency Player", "authorInitial": "E", "likes": "2.8k", "topic": "efficiency", "tag": "Efficiency",
+         "tagColor": "#6366F1", "coverHeight": 138, "cover": ["#667EEA", "#764BA2"], "usage": "12.4k",
+         "successRate": "95%", "duration": "About 2 min", "permissions": ["Calendar", "Clipboard", "Documents"]},
+        {"id": "agent-phone", "title": "Turn Old Phone into 24/7 Executor",
+         "desc": "Let your backup handle messages, screenshots, forwarding, and scheduled tasks while your main phone stays quiet.",
+         "author": "Geek Hub", "authorInitial": "G", "likes": "1.7k", "topic": "device", "tag": "Device",
+         "tagColor": "#14B8A6", "coverHeight": 190, "cover": ["#134E5E", "#71B280"], "usage": "8.1k",
+         "successRate": "89%", "duration": "About 6 min", "permissions": ["Accessibility", "Notifications", "Background"]},
+        {"id": "agent-shopping", "title": "Price Tracker Saved Me 2000+",
+         "desc": "Monitors historical prices, coupons, and platform promos, and alerts you when the price drops.",
+         "author": "Savings Bot", "authorInitial": "S", "likes": "4.6k", "topic": "automation", "tag": "Automation",
+         "tagColor": "#EF4444", "coverHeight": 156, "cover": ["#FFD194", "#D1913C"], "usage": "23.9k",
+         "successRate": "91%", "duration": "About 3 min", "permissions": ["Browser", "Notifications", "Timer"]},
+        {"id": "agent-paper", "title": "Paper Reader: Key Points in 10 Minutes",
+         "desc": "Reads PDFs, web pages, and screenshots, auto-extracts conclusions and citable insights.",
+         "author": "Academic Assistant", "authorInitial": "A", "likes": "986", "topic": "learning", "tag": "Learning",
+         "tagColor": "#A855F7", "coverHeight": 176, "cover": ["#00C6FF", "#0072FF"], "usage": "6.5k",
+         "successRate": "94%", "duration": "About 5 min", "permissions": ["Files", "Browser", "Clipboard"]},
+        {"id": "agent-voice", "title": "Voice Assistant: Handle Messages While Driving",
+         "desc": "Press and speak, auto-detects recipient, adjusts tone, and sends.",
+         "author": "Car Enthusiast", "authorInitial": "C", "likes": "742", "topic": "automation", "tag": "Voice",
+         "tagColor": "#22C55E", "coverHeight": 146, "cover": ["#F2994A", "#F2C94C"], "usage": "5.7k",
+         "successRate": "88%", "duration": "About 2 min", "permissions": ["Microphone", "Notifications", "Accessibility"]},
+    ]
+}
+
+# 模型目录 = 用户可见的「三个档位」(display_name 是档位名,不暴露底层模型名)。
+# 极速档:agnes,0.2×;标准档:mimo flash,0.45×;高级档:mimo pro,1.2×。
+# 三档照常按 multiplier 扣用户积分。可用 MODELS_JSON 覆盖。
 _DEFAULT_MODELS = [
-    {"id": "agnes-2.0-flash", "display_name": "极速", "tier": "fast", "multiplier": 0.5,
+    {"id": "agnes-2.0-flash", "display_name": "极速", "tier": "fast", "multiplier": 0.2,
      "provider": "agnes", "recommended": True},
-    {"id": "mimo-v2.5-pro", "display_name": "高级", "tier": "premium", "multiplier": 1.0,
+    {"id": "mimo-v2-flash", "display_name": "标准", "tier": "flash", "multiplier": 0.45,
+     "provider": "mimo", "recommended": True},
+    {"id": "mimo-v2.5-pro", "display_name": "高级", "tier": "premium", "multiplier": 1.2,
      "provider": "mimo", "recommended": True},
 ]
 # 模型 id -> 完整 spec(provider/multiplier/...);MODELS_JSON 里没写 provider 的默认归到 mimo(向后兼容)。
@@ -193,7 +285,9 @@ def init_db() -> None:
                 free_granted INTEGER NOT NULL DEFAULT 0,
                 member_expire_at INTEGER NOT NULL DEFAULT 0,
                 last_claim_day TEXT DEFAULT '', created_at INTEGER NOT NULL,
-                invite_code TEXT, invited_by TEXT
+                invite_code TEXT, invited_by TEXT,
+                daily_free_used INTEGER NOT NULL DEFAULT 0,
+                daily_free_date TEXT DEFAULT ''
             );
             CREATE TABLE IF NOT EXISTS sms_codes(
                 mobile TEXT PRIMARY KEY, code TEXT NOT NULL, expire_at INTEGER NOT NULL
@@ -214,6 +308,31 @@ def init_db() -> None:
                 id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER, action TEXT,
                 target_user TEXT, detail TEXT
             );
+            CREATE TABLE IF NOT EXISTS remote_devices(
+                device_id TEXT PRIMARY KEY, user_id TEXT NOT NULL,
+                device_name TEXT NOT NULL, token_hash TEXT NOT NULL,
+                created_at INTEGER NOT NULL, last_seen INTEGER NOT NULL,
+                revoked INTEGER NOT NULL DEFAULT 0,
+                push_token TEXT DEFAULT '', os_version TEXT DEFAULT '',
+                app_version TEXT DEFAULT '', device_model TEXT DEFAULT '',
+                battery_level INTEGER DEFAULT -1, last_heartbeat_at INTEGER DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS remote_pair_codes(
+                code TEXT PRIMARY KEY, user_id TEXT NOT NULL,
+                device_name TEXT NOT NULL DEFAULT '', expires_at INTEGER NOT NULL,
+                claimed_device_id TEXT DEFAULT '', created_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS credit_transactions(
+                id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL,
+                delta INTEGER NOT NULL, balance_after INTEGER NOT NULL,
+                source TEXT NOT NULL, detail TEXT DEFAULT '', ref_id TEXT DEFAULT '',
+                ts INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS device_reports(
+                id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL,
+                device_id TEXT NOT NULL, report_type TEXT NOT NULL,
+                payload TEXT NOT NULL, ts INTEGER NOT NULL
+            );
             """
         )
         # 迁移:给已存在的 users 表补 email 列(幂等)
@@ -226,15 +345,40 @@ def init_db() -> None:
         except sqlite3.OperationalError:
             pass  # 列已存在
         for _col in ("invite_code TEXT", "invited_by TEXT",
-                     "banned INTEGER NOT NULL DEFAULT 0"):
+                     "banned INTEGER NOT NULL DEFAULT 0",
+                     "daily_free_used INTEGER NOT NULL DEFAULT 0",
+                     "daily_free_date TEXT DEFAULT ''",
+                     "gift_credits INTEGER NOT NULL DEFAULT 0",  # 赠送积分(月清),与永久 credits 分桶
+                     "gift_month TEXT DEFAULT ''",               # 赠送所属月份 YYYYMM;跨月即失效
+                     "sub_goods_id TEXT DEFAULT ''"):            # 当前订阅档(续费用)
             try:
                 c.execute(f"ALTER TABLE users ADD COLUMN {_col}")
+            except sqlite3.OperationalError:
+                pass  # 列已存在
+        for _col in ("currency TEXT DEFAULT 'CNY'",
+                     "amount_minor INTEGER NOT NULL DEFAULT 0"):
+            try:
+                c.execute(f"ALTER TABLE orders ADD COLUMN {_col}")
             except sqlite3.OperationalError:
                 pass  # 列已存在
         c.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_invite "
             "ON users(invite_code) WHERE invite_code IS NOT NULL"
         )
+        c.execute("CREATE INDEX IF NOT EXISTS idx_remote_devices_user ON remote_devices(user_id, revoked)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_remote_pair_codes_user ON remote_pair_codes(user_id, expires_at)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_credit_txn_user ON credit_transactions(user_id, ts)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_device_reports_user ON device_reports(user_id, device_id, ts)")
+        # 迁移:给已存在的 remote_devices 表补新列(幂等)
+        for _col in (
+            "push_token TEXT DEFAULT ''", "os_version TEXT DEFAULT ''",
+            "app_version TEXT DEFAULT ''", "device_model TEXT DEFAULT ''",
+            "battery_level INTEGER DEFAULT -1", "last_heartbeat_at INTEGER DEFAULT 0",
+        ):
+            try:
+                c.execute(f"ALTER TABLE remote_devices ADD COLUMN {_col}")
+            except sqlite3.OperationalError:
+                pass
         c.commit()
 
 
@@ -304,11 +448,144 @@ def actor(authorization: str = Header(default="")) -> sqlite3.Row:
     return row
 
 
+def user_from_bearer_token(token: str) -> sqlite3.Row | None:
+    """Load a user row from a raw JWT token. Used by WebSocket endpoints."""
+    claims = jwt_decode(token, JWT_SECRET) if token else None
+    if not claims:
+        return None
+    with closing(db()) as c:
+        row = c.execute("SELECT * FROM users WHERE user_id = ?", (claims.get("sub"),)).fetchone()
+    if row is None or row["banned"]:
+        return None
+    return row
+
+
+def _remote_secret_hash(secret: str) -> str:
+    return hmac.new(JWT_SECRET.encode("utf-8"), secret.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def _new_pair_code(c: sqlite3.Connection) -> str:
+    for _ in range(24):
+        code = f"{secrets.randbelow(1_000_000):06d}"
+        if not c.execute("SELECT 1 FROM remote_pair_codes WHERE code = ?", (code,)).fetchone():
+            return code
+    return f"{secrets.randbelow(1_000_000_000):09d}"
+
+
+class RemoteRelayHub:
+    """In-memory WebSocket switchboard for website console <-> online phone."""
+
+    def __init__(self) -> None:
+        self._lock = asyncio.Lock()
+        self._devices: dict[str, WebSocket] = {}
+        self._consoles: dict[str, set[WebSocket]] = {}
+        self._device_info: dict[str, dict[str, str]] = {}
+
+    async def attach_device(self, device_id: str, ws: WebSocket) -> None:
+        async with self._lock:
+            old = self._devices.get(device_id)
+            if old is not None and old is not ws:
+                await old.close(code=4001, reason="replaced")
+            self._devices[device_id] = ws
+            consoles = list(self._consoles.get(device_id, set()))
+        await self._broadcast(consoles, {"type": "device_status", "deviceId": device_id, "online": True})
+
+    async def detach_device(self, device_id: str, ws: WebSocket) -> None:
+        async with self._lock:
+            if self._devices.get(device_id) is ws:
+                self._devices.pop(device_id, None)
+                self._device_info.pop(device_id, None)
+            consoles = list(self._consoles.get(device_id, set()))
+        await self._broadcast(consoles, {"type": "device_status", "deviceId": device_id, "online": False})
+
+    async def update_device_info(self, device_id: str, info: dict[str, Any]) -> None:
+        lan_base_url = str(info.get("lanBaseUrl") or "").strip()
+        lan_auth_token = str(info.get("lanAuthToken") or "").strip()
+        lan_console_url = str(info.get("lanConsoleUrl") or "").strip()
+        safe_info = {
+            "lanBaseUrl": lan_base_url if lan_base_url.startswith("http://") else "",
+            "lanAuthToken": lan_auth_token[:256],
+            "lanConsoleUrl": lan_console_url if lan_console_url.startswith("http://") else "",
+        }
+        async with self._lock:
+            self._device_info[device_id] = safe_info
+            targets = list(self._consoles.get(device_id, set()))
+        await self._broadcast(targets, {
+            "type": "device_status",
+            "deviceId": device_id,
+            "online": True,
+            **safe_info,
+        })
+
+    async def attach_console(self, device_id: str, ws: WebSocket) -> bool:
+        async with self._lock:
+            self._consoles.setdefault(device_id, set()).add(ws)
+            online = device_id in self._devices
+        return online
+
+    async def detach_console(self, device_id: str, ws: WebSocket) -> None:
+        async with self._lock:
+            bucket = self._consoles.get(device_id)
+            if bucket is not None:
+                bucket.discard(ws)
+                if not bucket:
+                    self._consoles.pop(device_id, None)
+
+    async def send_to_device(self, device_id: str, message: dict[str, Any]) -> bool:
+        async with self._lock:
+            ws = self._devices.get(device_id)
+        if ws is None:
+            return False
+        await ws.send_json(message)
+        return True
+
+    async def send_to_consoles(self, device_id: str, message: dict[str, Any]) -> None:
+        async with self._lock:
+            targets = list(self._consoles.get(device_id, set()))
+        await self._broadcast(targets, message)
+
+    async def is_online(self, device_id: str) -> bool:
+        async with self._lock:
+            return device_id in self._devices
+
+    async def device_info(self, device_id: str) -> dict[str, str]:
+        async with self._lock:
+            return dict(self._device_info.get(device_id, {}))
+
+    async def _broadcast(self, targets: list[WebSocket], message: dict[str, Any]) -> None:
+        for target in targets:
+            try:
+                await target.send_json(message)
+            except Exception:
+                pass
+
+
+remote_hub = RemoteRelayHub()
+
+
 def _user(c: sqlite3.Connection, user_id: str) -> sqlite3.Row:
     return c.execute("SELECT * FROM users WHERE user_id = ?", (user_id,)).fetchone()
 
 
-def _grant_free(c: sqlite3.Connection, user_id: str, want: int) -> int:
+def _record_credit_txn(
+    c: sqlite3.Connection,
+    user_id: str,
+    delta: int,
+    source: str,
+    detail: str = "",
+    ref_id: str = "",
+) -> int:
+    """Record a credit change in the ledger and return the new balance."""
+    bal = _user(c, user_id)["credits"]
+    c.execute(
+        "INSERT INTO credit_transactions(user_id, delta, balance_after, source, detail, ref_id, ts) "
+        "VALUES(?,?,?,?,?,?,?)",
+        (user_id, delta, bal, source, detail, ref_id, now_ms()),
+    )
+    return bal
+
+
+def _grant_free(c: sqlite3.Connection, user_id: str, want: int, source: str = "", detail: str = "", ref_id: str = "") -> int:
     """发放免费积分,受每账号累计上限 FREE_CAP 约束。返回实际发放数。"""
     row = c.execute("SELECT free_granted FROM users WHERE user_id = ?", (user_id,)).fetchone()
     used = int((row["free_granted"] if row else 0) or 0)
@@ -318,6 +595,7 @@ def _grant_free(c: sqlite3.Connection, user_id: str, want: int) -> int:
             "UPDATE users SET credits = credits + ?, free_granted = free_granted + ? WHERE user_id = ?",
             (grant, grant, user_id),
         )
+        _record_credit_txn(c, user_id, grant, source or "free_grant", detail, ref_id)
     return grant
 
 
@@ -415,7 +693,7 @@ def sms_login(body: dict[str, Any]) -> dict[str, Any]:
                 "VALUES(?,?,?,?,?,?)",
                 (uid, mobile, f"用户{mobile[-4:]}", 0, now_ms(), _gen_invite_code(c)),
             )
-            _grant_free(c, uid, SIGNUP_BONUS)
+            _grant_free(c, uid, SIGNUP_BONUS, source="signup", detail="新用户注册礼")
         else:
             uid = user["user_id"]
         c.execute("DELETE FROM sms_codes WHERE mobile = ?", (mobile,))
@@ -454,7 +732,18 @@ def email_send(body: dict[str, Any], request: Request) -> dict[str, Any]:
             (email, code, now_ms() + 300_000),
         )
         c.commit()
-    send_email(email, code)
+    try:
+        send_email(email, code)
+    except HTTPException:
+        with closing(db()) as c:
+            c.execute("DELETE FROM email_codes WHERE email = ?", (email,))
+            c.commit()
+        raise
+    except Exception as exc:  # noqa: BLE001 — SMTP 授权/网络失败时不要暴露裸 500
+        with closing(db()) as c:
+            c.execute("DELETE FROM email_codes WHERE email = ?", (email,))
+            c.commit()
+        raise HTTPException(status_code=502, detail="email send failed") from exc
     out = {"ok": True, "ttlSeconds": 300}
     if EMAIL_PROVIDER == "mock":
         out["devCode"] = code
@@ -486,7 +775,7 @@ def email_login(body: dict[str, Any], request: Request) -> dict[str, Any]:
                 "VALUES(?,?,?,?,?,?)",
                 (uid, email, nick, 0, now_ms(), _gen_invite_code(c)),
             )
-            _grant_free(c, uid, SIGNUP_BONUS)
+            _grant_free(c, uid, SIGNUP_BONUS, source="signup", detail="新用户注册礼")
         else:
             uid = user["user_id"]
             nick = user["nickname"] or nick
@@ -510,7 +799,11 @@ def profile(u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
 @app.get("/account/balance")
 def balance(u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
     active = u["member_expire_at"] > now_ms()
-    return {"credits": u["credits"], "membershipActive": active,
+    with closing(db()) as c:
+        gift = _gift_available(c, u["user_id"])
+    paid = int(u["credits"] or 0)
+    return {"credits": paid + gift, "paidCredits": paid, "giftCredits": gift,
+            "membershipActive": active,
             "membershipExpireAt": u["member_expire_at"] if active else 0}
 
 
@@ -523,10 +816,443 @@ def daily_claim(u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
             "UPDATE users SET last_claim_day = ? WHERE user_id = ? AND last_claim_day <> ?",
             (today, u["user_id"], today),
         )
-        granted = _grant_free(c, u["user_id"], DAILY_BONUS) if guard.rowcount > 0 else 0
+        granted = _grant_free(c, u["user_id"], DAILY_BONUS, source="daily", detail=f"每日签到 {today}") if guard.rowcount > 0 else 0
         c.commit()
         bal = _user(c, u["user_id"])["credits"]
     return {"claimed": granted > 0, "credits": granted, "balance": bal}
+
+
+@app.get("/account/membership")
+def membership(u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    """返回会员状态、到期时间、累计会员天数估算与权益说明,供 App 渲染会员中心。"""
+    active = u["member_expire_at"] > now_ms()
+    now = now_ms()
+    remaining_ms = max(0, u["member_expire_at"] - now) if active else 0
+    remaining_days = remaining_ms // (24 * 3600 * 1000)
+    with closing(db()) as c:
+        free_avail = _daily_free_available(c, u["user_id"])
+    return {
+        "active": active,
+        "expireAt": u["member_expire_at"] if active else 0,
+        "remainingDays": int(remaining_days),
+        "benefits": (
+            ["解锁自有模型(BYO)", "不消耗平台积分"]
+            + (["每日免费额度"] if FREE_DAILY_CREDITS > 0 else [])
+        ),
+        "dailyFreeCredits": FREE_DAILY_CREDITS,
+        "dailyFreeRemaining": free_avail,
+    }
+
+
+@app.get("/account/credits/transactions")
+def credit_transactions(
+    limit: int = 50,
+    offset: int = 0,
+    u: sqlite3.Row = Depends(actor),
+) -> dict[str, Any]:
+    """用户积分流水,按时间倒序。"""
+    limit = max(1, min(200, limit))
+    offset = max(0, offset)
+    with closing(db()) as c:
+        rows = c.execute(
+            "SELECT id, delta, balance_after, source, detail, ref_id, ts FROM credit_transactions "
+            "WHERE user_id = ? ORDER BY id DESC LIMIT ? OFFSET ?",
+            (u["user_id"], limit, offset),
+        ).fetchall()
+        total = c.execute(
+            "SELECT COUNT(*) n FROM credit_transactions WHERE user_id = ?", (u["user_id"],)
+        ).fetchone()["n"]
+    return {
+        "total": total,
+        "items": [
+            {
+                "id": r["id"],
+                "delta": r["delta"],
+                "balanceAfter": r["balance_after"],
+                "source": r["source"],
+                "detail": r["detail"],
+                "refId": r["ref_id"],
+                "ts": r["ts"],
+            }
+            for r in rows
+        ],
+    }
+
+
+@app.get("/account/usage")
+def account_usage(
+    limit: int = 50,
+    offset: int = 0,
+    u: sqlite3.Row = Depends(actor),
+) -> dict[str, Any]:
+    """用户大模型调用用量明细,按时间倒序。"""
+    limit = max(1, min(200, limit))
+    offset = max(0, offset)
+    with closing(db()) as c:
+        rows = c.execute(
+            "SELECT id, model, tokens_in, tokens_out, credits, ts FROM usage_log "
+            "WHERE user_id = ? ORDER BY id DESC LIMIT ? OFFSET ?",
+            (u["user_id"], limit, offset),
+        ).fetchall()
+        total = c.execute(
+            "SELECT COUNT(*) n FROM usage_log WHERE user_id = ?", (u["user_id"],)
+        ).fetchone()["n"]
+        agg = c.execute(
+            "SELECT COALESCE(SUM(tokens_in),0) tin, COALESCE(SUM(tokens_out),0) tout, "
+            "COALESCE(SUM(credits),0) spent, COUNT(*) calls FROM usage_log WHERE user_id = ?",
+            (u["user_id"],),
+        ).fetchone()
+    return {
+        "total": total,
+        "summary": {
+            "tokensIn": agg["tin"],
+            "tokensOut": agg["tout"],
+            "credits": agg["spent"],
+            "calls": agg["calls"],
+        },
+        "items": [dict(r) for r in rows],
+    }
+
+
+# ─────────────────────────── endpoints: remote console pairing / relay ───────────────────────────
+@app.post("/remote/pair/start")
+def remote_pair_start(body: dict[str, Any] = None, u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    """Create a short-lived pairing code from the website console."""
+    device_name = str((body or {}).get("deviceName", "")).strip()[:64]
+    ttl_ms = 5 * 60 * 1000
+    with closing(db()) as c:
+        code = _new_pair_code(c)
+        c.execute(
+            "INSERT INTO remote_pair_codes(code, user_id, device_name, expires_at, created_at) "
+            "VALUES(?,?,?,?,?)",
+            (code, u["user_id"], device_name, now_ms() + ttl_ms, now_ms()),
+        )
+        c.commit()
+    return {"code": code, "ttlSeconds": ttl_ms // 1000}
+
+
+@app.post("/remote/pair/claim")
+def remote_pair_claim(body: dict[str, Any], u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    """Claim a website-generated pairing code from the phone app."""
+    code = str(body.get("code", "")).strip()
+    device_name = str(body.get("deviceName", "")).strip()[:64] or "Octopus Mobile"
+    if not re.fullmatch(r"\d{6,9}", code):
+        raise HTTPException(status_code=400, detail="配对码格式不正确")
+    device_id = str(body.get("deviceId", "")).strip() or ("d_" + secrets.token_hex(8))
+    secret = "rt_" + secrets.token_urlsafe(32)
+    with closing(db()) as c:
+        rec = c.execute("SELECT * FROM remote_pair_codes WHERE code = ?", (code,)).fetchone()
+        if rec is None or rec["expires_at"] < now_ms() or rec["claimed_device_id"]:
+            raise HTTPException(status_code=400, detail="配对码无效或已过期")
+        if rec["user_id"] != u["user_id"]:
+            raise HTTPException(status_code=403, detail="配对码不属于当前账号")
+        c.execute(
+            "INSERT INTO remote_devices(device_id, user_id, device_name, token_hash, created_at, last_seen, revoked) "
+            "VALUES(?,?,?,?,?,?,0) "
+            "ON CONFLICT(device_id) DO UPDATE SET user_id=excluded.user_id, device_name=excluded.device_name, "
+            "token_hash=excluded.token_hash, last_seen=excluded.last_seen, revoked=0",
+            (device_id, u["user_id"], device_name, _remote_secret_hash(secret), now_ms(), now_ms()),
+        )
+        c.execute("UPDATE remote_pair_codes SET claimed_device_id = ? WHERE code = ?", (device_id, code))
+        c.commit()
+    return {"deviceId": device_id, "deviceToken": secret, "deviceName": device_name}
+
+
+@app.get("/remote/devices")
+async def remote_devices(u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    with closing(db()) as c:
+        rows = c.execute(
+            "SELECT device_id, device_name, created_at, last_seen, revoked FROM remote_devices "
+            "WHERE user_id = ? ORDER BY last_seen DESC",
+            (u["user_id"],),
+        ).fetchall()
+    items = []
+    for r in rows:
+        online = (not r["revoked"]) and await remote_hub.is_online(r["device_id"])
+        lan_info = await remote_hub.device_info(r["device_id"]) if online else {}
+        items.append({
+            "deviceId": r["device_id"],
+            "deviceName": r["device_name"],
+            "createdAt": r["created_at"],
+            "lastSeen": r["last_seen"],
+            "revoked": bool(r["revoked"]),
+            "online": online,
+            "lanBaseUrl": lan_info.get("lanBaseUrl", ""),
+            "lanAuthToken": lan_info.get("lanAuthToken", ""),
+            "lanConsoleUrl": lan_info.get("lanConsoleUrl", ""),
+            "directControlAvailable": bool(lan_info.get("lanConsoleUrl")),
+        })
+    return {
+        "items": items
+    }
+
+
+@app.post("/remote/devices/{device_id}/revoke")
+async def remote_device_revoke(device_id: str, u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    with closing(db()) as c:
+        cur = c.execute(
+            "UPDATE remote_devices SET revoked = 1 WHERE device_id = ? AND user_id = ?",
+            (device_id, u["user_id"]),
+        )
+        c.commit()
+    if cur.rowcount == 0:
+        raise HTTPException(status_code=404, detail="设备不存在")
+    await remote_hub.send_to_device(device_id, {"type": "revoked"})
+    return {"ok": True}
+
+
+@app.get("/remote/console", response_class=HTMLResponse)
+@app.get("/remote/console/", response_class=HTMLResponse)
+def remote_console_page() -> HTMLResponse:
+    return HTMLResponse(REMOTE_CONSOLE_HTML, headers={
+        "X-Robots-Tag": "noindex",
+        "Content-Security-Policy": ("default-src 'self'; img-src 'self' data:; "
+                                    "style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; "
+                                    "connect-src 'self' ws: wss:; base-uri 'none'; form-action 'none'"),
+    })
+
+
+def _load_remote_device(device_id: str) -> sqlite3.Row | None:
+    with closing(db()) as c:
+        return c.execute("SELECT * FROM remote_devices WHERE device_id = ?", (device_id,)).fetchone()
+
+
+@app.websocket("/remote/device/ws")
+async def remote_device_ws(ws: WebSocket, device_id: str = "", device_token: str = "") -> None:
+    await ws.accept()
+    row = _load_remote_device(device_id)
+    if (
+        row is None
+        or row["revoked"]
+        or not hmac.compare_digest(row["token_hash"], _remote_secret_hash(device_token))
+    ):
+        await ws.close(code=4003, reason="device auth failed")
+        return
+    with closing(db()) as c:
+        c.execute("UPDATE remote_devices SET last_seen = ? WHERE device_id = ?", (now_ms(), device_id))
+        c.commit()
+    await remote_hub.attach_device(device_id, ws)
+    await ws.send_json({"type": "hello", "deviceId": device_id})
+    try:
+        while True:
+            msg = await ws.receive_json()
+            if isinstance(msg, dict):
+                msg.setdefault("deviceId", device_id)
+                if msg.get("type") == "device_info":
+                    await remote_hub.update_device_info(device_id, msg)
+                else:
+                    await remote_hub.send_to_consoles(device_id, msg)
+    except WebSocketDisconnect:
+        pass
+    finally:
+        await remote_hub.detach_device(device_id, ws)
+        with closing(db()) as c:
+            c.execute("UPDATE remote_devices SET last_seen = ? WHERE device_id = ?", (now_ms(), device_id))
+            c.commit()
+
+
+@app.websocket("/remote/console/ws")
+async def remote_console_ws(ws: WebSocket, device_id: str = "", token: str = "") -> None:
+    await ws.accept()
+    u = user_from_bearer_token(token)
+    row = _load_remote_device(device_id)
+    if u is None or row is None or row["user_id"] != u["user_id"] or row["revoked"]:
+        await ws.close(code=4003, reason="console auth failed")
+        return
+    online = await remote_hub.attach_console(device_id, ws)
+    await ws.send_json({
+        "type": "device_status",
+        "deviceId": device_id,
+        "online": online,
+        **(await remote_hub.device_info(device_id) if online else {}),
+    })
+    try:
+        while True:
+            msg = await ws.receive_json()
+            if not isinstance(msg, dict):
+                continue
+            msg.setdefault("from", "console")
+            ok = await remote_hub.send_to_device(device_id, msg)
+            if not ok:
+                await ws.send_json({"type": "error", "id": msg.get("id"), "message": "设备不在线"})
+    except WebSocketDisconnect:
+        pass
+    finally:
+        await remote_hub.detach_console(device_id, ws)
+
+
+# ─────────────────────────── endpoints: App 设备绑定 / 心跳 / 上报 ───────────────────────────
+@app.post("/device/register")
+def device_register(body: dict[str, Any], u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    """App 首次或升级后注册/更新设备信息(推 token、系统版本、App 版本等)。
+    deviceId 为空时服务端生成一个新的。返回 deviceId + deviceToken(用于后续心跳鉴权)。"""
+    device_id = str(body.get("deviceId", "")).strip() or ("d_" + secrets.token_hex(8))
+    device_name = str(body.get("deviceName", "")).strip()[:64] or "Octopus Mobile"
+    push_token = str(body.get("pushToken", "")).strip()[:512]
+    os_version = str(body.get("osVersion", "")).strip()[:32]
+    app_version = str(body.get("appVersion", "")).strip()[:32]
+    device_model = str(body.get("deviceModel", "")).strip()[:64]
+    secret = "dt_" + secrets.token_urlsafe(32)
+    with closing(db()) as c:
+        c.execute(
+            "INSERT INTO remote_devices(device_id, user_id, device_name, token_hash, created_at, last_seen, "
+            "revoked, push_token, os_version, app_version, device_model) "
+            "VALUES(?,?,?,?,?,?,0,?,?,?,?) "
+            "ON CONFLICT(device_id) DO UPDATE SET user_id=excluded.user_id, device_name=excluded.device_name, "
+            "token_hash=excluded.token_hash, last_seen=excluded.last_seen, revoked=0, "
+            "push_token=excluded.push_token, os_version=excluded.os_version, "
+            "app_version=excluded.app_version, device_model=excluded.device_model",
+            (device_id, u["user_id"], device_name, _remote_secret_hash(secret), now_ms(), now_ms(),
+             push_token, os_version, app_version, device_model),
+        )
+        c.commit()
+    return {"deviceId": device_id, "deviceToken": secret, "deviceName": device_name}
+
+
+@app.post("/device/heartbeat")
+def device_heartbeat(body: dict[str, Any], u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    """App 周期性心跳上报:电量、充电状态、当前前台应用、屏幕哈希等。
+    同时更新设备的最后活跃时间,并可用于统计在线时长。"""
+    device_id = str(body.get("deviceId", "")).strip()
+    battery = body.get("battery")
+    battery = int(battery) if isinstance(battery, int) else -1
+    is_charging = bool(body.get("isCharging"))
+    current_app = str(body.get("currentApp", "")).strip()[:128]
+    screen_hash = str(body.get("screenHash", "")).strip()[:64]
+    if not device_id:
+        raise HTTPException(status_code=400, detail="deviceId 必填")
+    with closing(db()) as c:
+        cur = c.execute(
+            "UPDATE remote_devices SET last_seen = ?, last_heartbeat_at = ?, battery_level = ? "
+            "WHERE device_id = ? AND user_id = ? AND revoked = 0",
+            (now_ms(), now_ms(), battery, device_id, u["user_id"]),
+        )
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="设备不存在或已撤销")
+        c.commit()
+    return {"ok": True, "serverTs": now_ms(), "battery": battery, "charging": is_charging,
+            "currentApp": current_app, "screenHash": screen_hash}
+
+
+@app.post("/device/report")
+def device_report(body: dict[str, Any], u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    """App 结构化事件上报(崩溃、性能、用户行为等),服务端留痕供后台排查。"""
+    device_id = str(body.get("deviceId", "")).strip()
+    report_type = str(body.get("type", "")).strip()[:32]
+    payload = body.get("payload", {})
+    if not device_id or not report_type:
+        raise HTTPException(status_code=400, detail="deviceId 和 type 必填")
+    payload_json = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))[:8192]
+    with closing(db()) as c:
+        # 校验设备归属
+        dev = c.execute(
+            "SELECT 1 FROM remote_devices WHERE device_id = ? AND user_id = ? AND revoked = 0",
+            (device_id, u["user_id"]),
+        ).fetchone()
+        if dev is None:
+            raise HTTPException(status_code=404, detail="设备不存在或已撤销")
+        c.execute(
+            "INSERT INTO device_reports(user_id, device_id, report_type, payload, ts) "
+            "VALUES(?,?,?,?,?)",
+            (u["user_id"], device_id, report_type, payload_json, now_ms()),
+        )
+        c.commit()
+    return {"ok": True}
+
+
+@app.get("/device/{device_id}/status")
+def device_status(device_id: str, u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    """查询指定设备状态(电量、版本、最后心跳等)。"""
+    with closing(db()) as c:
+        row = c.execute(
+            "SELECT device_id, device_name, created_at, last_seen, last_heartbeat_at, "
+            "battery_level, os_version, app_version, device_model, revoked FROM remote_devices "
+            "WHERE device_id = ? AND user_id = ?",
+            (device_id, u["user_id"]),
+        ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="设备不存在")
+    return {
+        "deviceId": row["device_id"],
+        "deviceName": row["device_name"],
+        "createdAt": row["created_at"],
+        "lastSeen": row["last_seen"],
+        "lastHeartbeatAt": row["last_heartbeat_at"],
+        "batteryLevel": row["battery_level"],
+        "osVersion": row["os_version"],
+        "appVersion": row["app_version"],
+        "deviceModel": row["device_model"],
+        "revoked": bool(row["revoked"]),
+    }
+
+
+REMOTE_CONSOLE_HTML = r"""<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Octopus 远程控制台</title>
+<style>
+*{box-sizing:border-box}body{margin:0;min-height:100vh;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#172033;background:linear-gradient(145deg,#eef4ff,#f7fbff 46%,#eef8f1)}
+.wrap{max-width:1100px;margin:0 auto;padding:28px 16px 40px}.top{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:18px}
+h1{margin:0;font-size:30px;letter-spacing:0}.sub{margin:6px 0 0;color:#63708a;font-size:14px}.grid{display:grid;grid-template-columns:360px 1fr;gap:16px}
+.card{background:rgba(255,255,255,.72);border:1px solid rgba(255,255,255,.8);border-radius:22px;padding:18px;box-shadow:0 18px 48px rgba(61,83,123,.13);backdrop-filter:blur(18px)}
+.title{font-weight:800;margin-bottom:12px}.field{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}label{font-size:12px;color:#63708a;font-weight:700}
+input,textarea{width:100%;border:1px solid rgba(90,107,134,.18);background:rgba(255,255,255,.78);border-radius:14px;padding:11px 12px;font-size:14px;outline:none;color:#172033}
+textarea{min-height:110px;resize:vertical;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.row{display:flex;gap:8px;flex-wrap:wrap}.btn{border:0;border-radius:14px;padding:10px 14px;font-weight:800;cursor:pointer;color:white;background:linear-gradient(135deg,#4f6df5,#35b87a);box-shadow:0 12px 26px rgba(79,109,245,.2)}
+.btn.secondary{color:#22345a;background:rgba(255,255,255,.82);border:1px solid rgba(90,107,134,.14);box-shadow:none}.btn.danger{background:linear-gradient(135deg,#e34f61,#ff826a)}
+.device{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px;border-radius:16px;background:rgba(255,255,255,.54);border:1px solid rgba(90,107,134,.1);margin-bottom:8px}
+.name{font-weight:800}.meta{font-size:12px;color:#63708a;margin-top:3px}.pill{font-size:12px;font-weight:800;border-radius:999px;padding:5px 8px;background:#edf2ff;color:#4f6df5}.pill.on{background:#e8f8ee;color:#159354}.pill.off{background:#f4f0ef;color:#8a6a60}
+.log{height:360px;overflow:auto;background:#10131c;color:#dce6f7;border-radius:18px;padding:12px;font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap}
+.code{font-size:34px;font-weight:900;letter-spacing:8px;color:#22345a}.hint{font-size:12px;color:#63708a;line-height:1.6}.hidden{display:none}
+@media(max-width:820px){.top{display:block}.grid{grid-template-columns:1fr}.wrap{padding:20px 12px}.log{height:260px}}
+</style>
+</head>
+<body><div class="wrap">
+  <div class="top"><div><h1>Octopus 远程控制台</h1><p class="sub">通过官网域名配对手机,授权后控制在线设备。</p></div><button class="btn secondary" onclick="refreshDevices()">刷新设备</button></div>
+  <div class="grid">
+    <section class="card">
+      <div class="title">账号与配对</div>
+      <div class="field"><label>登录 token</label><input id="token" placeholder="粘贴网页登录返回的 JWT"></div>
+      <div class="row"><button class="btn" onclick="saveToken()">保存 token</button><button class="btn secondary" onclick="clearToken()">清除</button></div>
+      <hr style="border:0;border-top:1px solid rgba(90,107,134,.12);margin:16px 0">
+      <div class="field"><label>设备备注</label><input id="pairName" placeholder="例如: 我的安卓手机"></div>
+      <div class="row"><button class="btn" onclick="startPair()">生成配对码</button></div>
+      <div id="pairBox" class="hidden" style="margin-top:14px"><div class="hint">在手机 App 中输入该配对码,5 分钟内有效。</div><div class="code" id="pairCode"></div></div>
+      <hr style="border:0;border-top:1px solid rgba(90,107,134,.12);margin:16px 0">
+      <div class="title">设备</div>
+      <div id="devices"></div>
+    </section>
+    <section class="card">
+      <div class="title">控制会话</div>
+      <div class="hint" id="sessionHint">选择一台在线设备后连接。</div>
+      <div class="row" style="margin:12px 0"><button class="btn" onclick="connectSelected()">优先直连</button><button class="btn secondary" onclick="connectRelay()">服务器中转</button><button class="btn secondary" onclick="disconnect()">断开</button><button class="btn danger" onclick="revokeSelected()">撤销授权</button></div>
+      <div class="field"><label>发送 JSON 指令</label><textarea id="payload">{"type":"control","action":"home"}</textarea></div>
+      <div class="row"><button class="btn" onclick="sendPayload()">发送</button><button class="btn secondary" onclick="quick('back')">返回</button><button class="btn secondary" onclick="quick('home')">主屏</button><button class="btn secondary" onclick="quick('recent')">最近</button></div>
+      <div style="height:12px"></div><div class="log" id="log"></div>
+    </section>
+  </div>
+</div>
+<script>
+const $=s=>document.querySelector(s);let selected="",ws=null,devices={};
+$("#token").value=localStorage.octoRemoteToken||"";
+function tok(){return $("#token").value.trim()}function auth(){return {"Authorization":"Bearer "+tok(),"Content-Type":"application/json"}}
+function log(x){const el=$("#log");el.textContent+=((typeof x==="string")?x:JSON.stringify(x,null,2))+"\n";el.scrollTop=el.scrollHeight}
+function saveToken(){localStorage.octoRemoteToken=tok();refreshDevices()}function clearToken(){localStorage.removeItem("octoRemoteToken");$("#token").value="";$("#devices").innerHTML=""}
+async function api(path,opt={}){const r=await fetch(path,{...opt,headers:{...auth(),...(opt.headers||{})}});if(!r.ok)throw new Error(await r.text());return r.json()}
+async function startPair(){try{const d=await api("/remote/pair/start",{method:"POST",body:JSON.stringify({deviceName:$("#pairName").value})});$("#pairCode").textContent=d.code;$("#pairBox").classList.remove("hidden");log("配对码已生成: "+d.code)}catch(e){log("生成失败: "+e.message)}}
+async function refreshDevices(){try{const d=await api("/remote/devices");devices={};(d.items||[]).forEach(x=>devices[x.deviceId]=x);$("#devices").innerHTML=(d.items||[]).map(x=>`<div class="device" onclick="selectDevice('${x.deviceId}')"><div><div class="name">${esc(x.deviceName)}</div><div class="meta">${esc(x.deviceId)} · ${x.revoked?"已撤销":"最后在线 "+new Date(x.lastSeen).toLocaleString()}${x.directControlAvailable?" · 局域网直连可用":""}</div></div><span class="pill ${x.online?"on":"off"}">${x.directControlAvailable?"直连":(x.online?"在线":"离线")}</span></div>`).join("")||"<div class='hint'>暂无设备,先生成配对码。</div>"}catch(e){log("设备加载失败: "+e.message)}}
+function selectDevice(id){selected=id;const d=devices[id]||{};$("#sessionHint").textContent="已选择: "+(d.deviceName||id)+(d.directControlAvailable?" · 将优先打开局域网直连控制台":" · 可用服务器中转")}
+function wsUrl(){const p=location.protocol==="https:"?"wss:":"ws:";return p+"//"+location.host+"/remote/console/ws?device_id="+encodeURIComponent(selected)+"&token="+encodeURIComponent(tok())}
+function connectSelected(){if(!selected){log("请先选择设备");return}const d=devices[selected]||{};if(d.lanConsoleUrl){log("正在打开局域网直连控制台: "+d.lanConsoleUrl);window.open(d.lanConsoleUrl,"_blank","noopener");return}connectRelay()}
+function connectRelay(){if(!selected){log("请先选择设备");return}disconnect();ws=new WebSocket(wsUrl());ws.onopen=()=>log("服务器中转已连接");ws.onmessage=e=>{try{const msg=JSON.parse(e.data);log(msg);if(msg.type==="device_status"&&msg.deviceId){devices[msg.deviceId]={...(devices[msg.deviceId]||{}),...msg,directControlAvailable:!!msg.lanConsoleUrl}}}catch(_){log(e.data)}};ws.onclose=e=>log("连接关闭: "+e.code+" "+e.reason);ws.onerror=()=>log("连接异常")}
+function disconnect(){if(ws){ws.close(1000,"console disconnect");ws=null}}
+function sendPayload(){if(!ws||ws.readyState!==1){log("尚未连接设备");return}try{const msg=JSON.parse($("#payload").value);msg.id=msg.id||Date.now().toString(36);ws.send(JSON.stringify(msg));log({sent:msg})}catch(e){log("JSON 格式错误: "+e.message)}}
+function quick(action){$("#payload").value=JSON.stringify({type:"control",action},null,2);sendPayload()}
+async function revokeSelected(){if(!selected){log("请先选择设备");return}try{await api("/remote/devices/"+encodeURIComponent(selected)+"/revoke",{method:"POST",body:"{}"});log("已撤销授权");refreshDevices()}catch(e){log("撤销失败: "+e.message)}}
+function esc(s){return String(s||"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]))}
+refreshDevices();
+</script></body></html>"""
 
 
 # ─────────────────────────── endpoints: invite(拉新返利) ───────────────────────────
@@ -566,8 +1292,10 @@ def invite_redeem(body: dict[str, Any], u: sqlite3.Row = Depends(actor)) -> dict
         )
         if upd.rowcount == 0:
             raise HTTPException(status_code=400, detail="你已使用过邀请码")
-        got = _grant_free(c, u["user_id"], REFERRAL_REDEEMER_BONUS)        # 新人
-        _grant_free(c, inviter["user_id"], REFERRAL_INVITER_BONUS)         # 邀请人
+        got = _grant_free(c, u["user_id"], REFERRAL_REDEEMER_BONUS, source="invite_redeemer",
+                          detail=f"填写邀请码 {code}", ref_id=inviter["user_id"])        # 新人
+        _grant_free(c, inviter["user_id"], REFERRAL_INVITER_BONUS, source="invite_inviter",
+                    detail=f"邀请好友 {u['user_id']}", ref_id=u["user_id"])         # 邀请人
         c.commit()
         bal = _user(c, u["user_id"])["credits"]
     return {"ok": True, "credits": got, "balance": bal}
@@ -576,26 +1304,141 @@ def invite_redeem(body: dict[str, Any], u: sqlite3.Row = Depends(actor)) -> dict
 # ─────────────────────────── endpoints: billing ───────────────────────────
 @app.get("/billing/goods")
 def goods(u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
-    return {"items": GOODS}
+    return {"items": [_present_goods(g) for g in GOODS]}
+
+
+@app.get("/square/feed")
+def square_feed() -> dict[str, Any]:
+    """广场目录(公开，无需登录)。后台改 SQUARE_FEED 即可全量下发，App 无需发版。"""
+    return SQUARE_FEED
+
+
+@app.get("/square/discovery")
+def square_discovery() -> dict[str, Any]:
+    """灵感发现流(公开)。topic 用 key(automation/efficiency/life/learning/device)，App 侧映射到本地化分类。"""
+    return SQUARE_DISCOVERY
+
+
+@app.get("/config")
+def app_config(request: Request) -> dict[str, Any]:
+    """App 启动配置(公开)。技能中心(skill hub)子域名由服务端生成：
+    默认把请求主域 api.<root> 自动派生为 club.<root>；可用环境变量 SQUARE_BASE_URL 覆盖。
+    后台改一处，全网 App 下次进广场即切换，无需发版。"""
+    env = (os.environ.get("SQUARE_BASE_URL") or "").strip()
+    if env:
+        square = env
+    else:
+        host = (request.headers.get("host") or "").split(":")[0]
+        root = host[4:] if host.startswith("api.") else host
+        square = f"https://club.{root}" if root else "https://club.octoapk.com"
+    return {"squareBaseUrl": square}
+
+
+@app.post("/billing/estimate")
+def billing_estimate(body: dict[str, Any], u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    """根据 prompt + 预期输出长度预估一次调用会扣多少积分、折合人民币多少。
+    不传 model 时按默认模型;不传 maxTokens 时按 MAX_OUTPUT_TOKENS 估算 worst-case。"""
+    model, spec = _resolve_model(body.get("model"))
+    mult = float(spec.get("multiplier", 1.0))
+    req_max = body.get("maxTokens")
+    max_out = min(req_max, MAX_OUTPUT_TOKENS) if isinstance(req_max, int) and req_max > 0 else MAX_OUTPUT_TOKENS
+    prompt_est = sum(
+        len(str(m.get("content", ""))) for m in (body.get("messages") or []) if isinstance(m, dict)
+    ) // 4
+    worst_credits = max(1, math.ceil((prompt_est + max_out) / 1000 * CREDITS_PER_1K_TOKENS * mult))
+    with closing(db()) as c:
+        free_avail = _daily_free_available(c, u["user_id"])
+    chargeable_credits = max(0, worst_credits - free_avail)
+    # 按最低有效单价(1000 积分包)估算人民币成本
+    rmb_per_credit = 69.90 / 1200
+    return {
+        "model": model,
+        "tier": spec.get("tier", ""),
+        "multiplier": mult,
+        "promptTokensEstimated": prompt_est,
+        "maxTokens": max_out,
+        "worstCaseCredits": worst_credits,
+        "dailyFreeCredits": free_avail,
+        "chargeableCredits": chargeable_credits,
+        "estimatedRmb": round(chargeable_credits * rmb_per_credit, 4),
+    }
 
 
 @app.post("/billing/orders")
-def create_order(body: dict[str, Any], u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+def create_order(body: dict[str, Any], request: Request, u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    rate_limit(f"order:{u['user_id']}", ORDER_RATE_PER_MINUTE, 60)
+    rate_limit(f"order_ip:{client_ip(request)}", ORDER_RATE_PER_MINUTE * 3, 60)
     g = GOODS_BY_ID.get(str(body.get("goodsId", "")))
     if g is None:
         raise HTTPException(status_code=400, detail="套餐不存在")
+    currency = _normalize_currency(body.get("currency"))
+    amount_minor = _goods_amount_minor(g, currency)
+    paid_credits, bonus_credits = _goods_credits(g, currency)
+    if PAYMENT_PROVIDER != "mock" and not _payment_configured():
+        raise HTTPException(status_code=503, detail=f"payment '{PAYMENT_PROVIDER}' not configured")
     order_no = "O" + secrets.token_hex(10)
     with closing(db()) as c:
+        cutoff = now_ms() - PENDING_ORDER_WINDOW_MS
+        pending = c.execute(
+            "SELECT COUNT(*) n FROM orders WHERE user_id = ? AND status = 'PENDING' AND created_at >= ?",
+            (u["user_id"], cutoff),
+        ).fetchone()["n"]
+        if pending >= PENDING_ORDER_LIMIT:
+            raise HTTPException(status_code=429, detail="未支付订单过多,请先完成或稍后再试")
         c.execute(
-            "INSERT INTO orders(order_no, user_id, goods_id, amount_fen, status, created_at) "
-            "VALUES(?,?,?,?,?,?)",
-            (order_no, u["user_id"], g["id"], g["priceFen"], "PENDING", now_ms()),
+            "INSERT INTO orders(order_no, user_id, goods_id, amount_fen, currency, amount_minor, status, created_at) "
+            "VALUES(?,?,?,?,?,?,?,?)",
+            (order_no, u["user_id"], g["id"], amount_minor if currency == "CNY" else g["priceFen"],
+             currency, amount_minor, "PENDING", now_ms()),
         )
         c.commit()
     # mock: 无收银台,客户端直接查单即支付成功;生产返回微信/支付宝 H5 收银台 url。
     pay_url = None if PAYMENT_PROVIDER == "mock" else _create_cashier(order_no, g)
     return {"orderNo": order_no, "payUrl": pay_url, "amountFen": g["priceFen"],
-            "credits": g["credits"] + g["bonusCredits"]}
+            "currency": currency, "amountMinor": amount_minor,
+            "credits": paid_credits + bonus_credits}
+
+
+def _normalize_currency(value: Any) -> str:
+    currency = str(value or "CNY").strip().upper()
+    if currency not in {"CNY", "USD"}:
+        raise HTTPException(status_code=400, detail="不支持的币种")
+    return currency
+
+
+def _goods_credits(goods: dict[str, Any], currency: str) -> tuple[int, int]:
+    """按币种返回该商品的永久积分与赠送积分。未配置美元专属权益时回退默认值。"""
+    if currency == "USD":
+        paid = int(goods.get("usdCredits", goods["credits"]))
+        bonus = int(goods.get("usdBonusCredits", goods.get("bonusCredits", 0)))
+        return paid, bonus
+    return int(goods["credits"]), int(goods.get("bonusCredits", 0))
+
+
+def _present_goods(goods: dict[str, Any]) -> dict[str, Any]:
+    """对外商品目录保留现有字段,并显式下发美元区权益,让客户端有能力做双币种展示。"""
+    return {
+        **goods,
+        "usdCredits": int(goods.get("usdCredits", goods["credits"])),
+        "usdBonusCredits": int(goods.get("usdBonusCredits", goods.get("bonusCredits", 0))),
+    }
+
+
+def _goods_amount_minor(goods: dict[str, Any], currency: str) -> int:
+    if currency == "USD":
+        cents = int(goods.get("priceUsdCents", 0) or 0)
+        if cents <= 0:
+            raise HTTPException(status_code=400, detail="该套餐暂不支持美元计价")
+        return cents
+    return int(goods["priceFen"])
+
+
+def _payment_configured() -> bool:
+    """生产支付配置就绪检查。真支付未接好时不创建 PENDING 订单,避免账务脏数据。"""
+    if PAYMENT_PROVIDER == "mock":
+        return True
+    prefix = "WECHAT" if PAYMENT_PROVIDER == "wechat" else "ALIPAY"
+    return bool(os.environ.get(f"{prefix}_APP_ID") and os.environ.get(f"{prefix}_PRIVATE_KEY"))
 
 
 def _create_cashier(order_no: str, goods: dict[str, Any]) -> str:
@@ -605,19 +1448,34 @@ def _create_cashier(order_no: str, goods: dict[str, Any]) -> str:
 def _settle(c: sqlite3.Connection, order: sqlite3.Row) -> int:
     """Mark order PAID and grant credits / membership. Returns granted credits."""
     g = GOODS_BY_ID[order["goods_id"]]
-    want = g["credits"] + g["bonusCredits"]
+    uid = order["user_id"]
+    currency = _normalize_currency(order["currency"] or "CNY")
+    paid, gift = _goods_credits(g, currency)
     if PAYMENT_PROVIDER == "mock":
-        granted = _grant_free(c, order["user_id"], want)  # 内测免费充值:受每账号上限约束
+        granted = _grant_free(c, uid, paid, source="order",
+                              detail=f"订单 {order['order_no']} {g['title']}",
+                              ref_id=order["order_no"])  # 内测免费充值:受每账号上限约束
     else:
-        c.execute("UPDATE users SET credits = credits + ? WHERE user_id = ?", (want, order["user_id"]))
-        granted = want  # 真实付费:不受免费上限
-    if g["kind"] == "membership":  # 会员到期(解锁 BYO,用自己 key,不耗平台成本)
-        cur = _user(c, order["user_id"])
+        c.execute("UPDATE users SET credits = credits + ? WHERE user_id = ?", (paid, uid))
+        _record_credit_txn(c, uid, paid, source="order",
+                           detail=f"订单 {order['order_no']} {g['title']}",
+                           ref_id=order["order_no"])
+        granted = paid  # 真实付费:不受免费上限
+    # 月度赠送积分:覆盖为本月赠送额(订阅每月续费时刷新;跨月自动清零见 _gift_available)。
+    if gift > 0:
+        c.execute("UPDATE users SET gift_credits = ?, gift_month = ? WHERE user_id = ?",
+                  (gift, _this_month(), uid))
+    # 含自带模型(BYO)解锁:会员卡/订阅 顺延会员期(member_expire_at>now 即解锁 BYO)。
+    member_days = MEMBERSHIP_DAYS if g["kind"] == "membership" else int(g.get("memberDays", 0))
+    if member_days > 0:
+        cur = _user(c, uid)
         base = max(cur["member_expire_at"], now_ms())
         c.execute("UPDATE users SET member_expire_at = ? WHERE user_id = ?",
-                  (base + MEMBERSHIP_DAYS * 24 * 3600 * 1000, order["user_id"]))
+                  (base + member_days * 24 * 3600 * 1000, uid))
+    if g["kind"] == "subscription":  # 记录当前订阅档,供续费用
+        c.execute("UPDATE users SET sub_goods_id = ? WHERE user_id = ?", (g["id"], uid))
     c.execute("UPDATE orders SET status='PAID' WHERE order_no=?", (order["order_no"],))
-    return granted
+    return granted + gift
 
 
 @app.get("/billing/orders/{order_no}")
@@ -635,7 +1493,8 @@ def query_order(order_no: str, u: sqlite3.Row = Depends(actor)) -> dict[str, Any
             c.commit()
         elif status == "PAID":
             g = GOODS_BY_ID[o["goods_id"]]
-            granted = g["credits"] + g["bonusCredits"]
+            paid, gift = _goods_credits(g, _normalize_currency(o["currency"] or "CNY"))
+            granted = paid + gift
     return {"orderNo": order_no, "status": status, "credits": granted}
 
 
@@ -643,6 +1502,82 @@ def query_order(order_no: str, u: sqlite3.Row = Depends(actor)) -> dict[str, Any
 @app.post("/billing/webhook/{provider}")
 async def payment_webhook(provider: str, request: Request) -> JSONResponse:
     raise HTTPException(status_code=501, detail=f"webhook for '{provider}' not implemented")
+
+
+@app.post("/billing/subscription/renew")
+def subscription_renew(u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    """订阅续费(当前 mock:手动触发=模拟一次自动扣款成功)。真实自动续费由支付渠道的
+    周期扣款 webhook 调同一逻辑:给当前订阅档「滚存永久积分 + 刷新本月赠送(月清) + 顺延 30 天会员/BYO」。"""
+    if PAYMENT_PROVIDER != "mock":
+        raise HTTPException(status_code=403, detail="订阅续费只能由支付回调触发")
+    gid = u["sub_goods_id"]
+    if not gid or gid not in GOODS_BY_ID or GOODS_BY_ID[gid]["kind"] != "subscription":
+        raise HTTPException(status_code=400, detail="无有效订阅")
+    g = GOODS_BY_ID[gid]
+    uid = u["user_id"]
+    paid = int(g["credits"])
+    gift = int(g.get("bonusCredits", 0))
+    ref = f"renew_{now_ms()}"
+    with closing(db()) as c:
+        if PAYMENT_PROVIDER == "mock":
+            _grant_free(c, uid, paid, source="sub_renew", detail=f"订阅续费 {g['title']}", ref_id=ref)
+        else:
+            c.execute("UPDATE users SET credits = credits + ? WHERE user_id = ?", (paid, uid))
+            _record_credit_txn(c, uid, paid, source="sub_renew", detail=f"订阅续费 {g['title']}", ref_id=ref)
+        if gift > 0:
+            c.execute("UPDATE users SET gift_credits = ?, gift_month = ? WHERE user_id = ?",
+                      (gift, _this_month(), uid))
+        cur = _user(c, uid)
+        base = max(cur["member_expire_at"], now_ms())
+        c.execute("UPDATE users SET member_expire_at = ? WHERE user_id = ?",
+                  (base + MEMBERSHIP_DAYS * 24 * 3600 * 1000, uid))
+        c.commit()
+    return {"ok": True, "goodsId": gid, "paidCredits": paid, "giftCredits": gift, "memberDays": MEMBERSHIP_DAYS}
+
+
+# ─────────────────── 第三方辅助工具下载镜像 ───────────────────
+def _file_sha256(path: str) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+@app.get("/downloads/shizuku/latest")
+def shizuku_latest(request: Request) -> dict[str, Any]:
+    """App 内一键安装入口的元信息。APK 文件由运维放置,服务端只做受控静态分发。"""
+    exists = os.path.isfile(SHIZUKU_APK_PATH)
+    info: dict[str, Any] = {
+        "name": "Shizuku",
+        "packageName": "moe.shizuku.privileged.api",
+        "version": SHIZUKU_VERSION,
+        "available": exists,
+        "sourceUrl": SHIZUKU_SOURCE_URL,
+        "licenseUrl": SHIZUKU_LICENSE_URL,
+    }
+    if not exists:
+        info["detail"] = "Shizuku APK is not configured on this server"
+        return info
+    info.update(
+        {
+            "downloadUrl": str(request.url_for("download_shizuku_apk")),
+            "sizeBytes": os.path.getsize(SHIZUKU_APK_PATH),
+            "sha256": _file_sha256(SHIZUKU_APK_PATH),
+        }
+    )
+    return info
+
+
+@app.get("/downloads/shizuku.apk", name="download_shizuku_apk")
+def download_shizuku_apk() -> FileResponse:
+    if not os.path.isfile(SHIZUKU_APK_PATH):
+        raise HTTPException(status_code=404, detail="Shizuku APK is not configured")
+    return FileResponse(
+        SHIZUKU_APK_PATH,
+        media_type="application/vnd.android.package-archive",
+        filename="Shizuku.apk",
+    )
 
 
 # ─────────────────── 模型目录 + 中转(多上游路由,按模型倍率扣积分,0=免费) ───────────────────
@@ -656,7 +1591,111 @@ def _resolve_model(requested: str | None) -> tuple[str, dict[str, Any]]:
     return model, spec
 
 
-def _reserve_credits(user_id: str, hold: int) -> bool:
+def _today_str() -> str:
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d")
+
+
+def _daily_free_available(c: sqlite3.Connection, user_id: str) -> int:
+    """返回用户今日剩余免费额度(积分)。"""
+    if FREE_DAILY_CREDITS <= 0:
+        return 0
+    row = c.execute(
+        "SELECT daily_free_used, daily_free_date FROM users WHERE user_id = ?", (user_id,)
+    ).fetchone()
+    if row is None:
+        return FREE_DAILY_CREDITS
+    if row["daily_free_date"] != _today_str():
+        return FREE_DAILY_CREDITS
+    return max(0, FREE_DAILY_CREDITS - int(row["daily_free_used"] or 0))
+
+
+def _consume_daily_free(c: sqlite3.Connection, user_id: str, want: int) -> int:
+    """原子扣减今日免费额度,返回实际抵扣的积分数(0..want)。"""
+    avail = _daily_free_available(c, user_id)
+    take = min(avail, max(0, want))
+    if take:
+        c.execute(
+            "UPDATE users SET daily_free_used = CASE WHEN daily_free_date = ? "
+            "THEN daily_free_used + ? ELSE ? END, "
+            "daily_free_date = ? WHERE user_id = ?",
+            (_today_str(), take, take, _today_str(), user_id),
+        )
+    return take
+
+
+def _refund_daily_free(c: sqlite3.Connection, user_id: str, amount: int) -> int:
+    """退回本日免费额度(最多退到 FREE_DAILY_CREDITS),用于预留后实际用量较低或请求失败。"""
+    if amount <= 0 or FREE_DAILY_CREDITS <= 0:
+        return 0
+    row = c.execute(
+        "SELECT daily_free_used, daily_free_date FROM users WHERE user_id = ?", (user_id,)
+    ).fetchone()
+    if row is None or row["daily_free_date"] != _today_str():
+        return 0
+    used = max(0, int(row["daily_free_used"] or 0))
+    refund = min(used, amount)
+    if refund:
+        c.execute("UPDATE users SET daily_free_used = daily_free_used - ? WHERE user_id = ?", (refund, user_id))
+    return refund
+
+
+def _this_month() -> str:
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m")
+
+
+def _gift_available(c: sqlite3.Connection, user_id: str) -> int:
+    """赠送积分余额(仅当月有效;跨月即视为 0 —— 即"月底清零")。"""
+    row = c.execute("SELECT gift_credits, gift_month FROM users WHERE user_id = ?", (user_id,)).fetchone()
+    if row is None or row["gift_month"] != _this_month():
+        return 0
+    return max(0, int(row["gift_credits"] or 0))
+
+
+def _consume_gift(c: sqlite3.Connection, user_id: str, want: int) -> int:
+    """原子扣减当月赠送积分,返回实际抵扣数(0..want)。赠送优先于永久积分消费。"""
+    avail = _gift_available(c, user_id)
+    take = min(avail, max(0, want))
+    if take:
+        c.execute("UPDATE users SET gift_credits = gift_credits - ?, gift_month = ? WHERE user_id = ?",
+                  (take, _this_month(), user_id))
+    return take
+
+
+def _refund_gift(c: sqlite3.Connection, user_id: str, amount: int) -> int:
+    """退回当月赠送积分。跨月不退,避免把已过期权益复活。"""
+    if amount <= 0:
+        return 0
+    row = c.execute("SELECT gift_month FROM users WHERE user_id = ?", (user_id,)).fetchone()
+    if row is None or row["gift_month"] != _this_month():
+        return 0
+    c.execute("UPDATE users SET gift_credits = gift_credits + ?, gift_month = ? WHERE user_id = ?",
+              (amount, _this_month(), user_id))
+    return amount
+
+
+def _reserve_usage_credits(user_id: str, hold: int, ref_id: str = "") -> dict[str, int] | None:
+    """按优先级预留一次调用的额度:月度赠送 → 每日免费 → 永久积分。余额不足时原样回滚。"""
+    if hold <= 0:
+        return {"gift": 0, "daily": 0, "paid": 0}
+    with closing(db()) as c:
+        c.execute("BEGIN IMMEDIATE")
+        gift = _consume_gift(c, user_id, hold)
+        daily = _consume_daily_free(c, user_id, hold - gift) if FREE_DAILY_CREDITS > 0 else 0
+        paid = max(0, hold - gift - daily)
+        if paid:
+            cur = c.execute(
+                "UPDATE users SET credits = credits - ? WHERE user_id = ? AND credits >= ?",
+                (paid, user_id, paid),
+            )
+            if cur.rowcount == 0:
+                c.rollback()
+                return None
+            _record_credit_txn(c, user_id, -paid, source="usage_hold", detail="预扣积分", ref_id=ref_id)
+        c.commit()
+        return {"gift": gift, "daily": daily, "paid": paid}
+
+
+def _reserve_credits(user_id: str, hold: int, source: str = "usage_hold", ref_id: str = "") -> bool:
     """原子预扣 hold 积分(余额够才扣)。并发请求各自预扣 → 一旦余额覆盖不了下一个请求的
     worst-case 预扣就被拒,杜绝「调用前判余额>0、扣费在响应后」导致的并发超额消费。"""
     if hold <= 0:
@@ -666,26 +1705,61 @@ def _reserve_credits(user_id: str, hold: int) -> bool:
             "UPDATE users SET credits = credits - ? WHERE user_id = ? AND credits >= ?",
             (hold, user_id, hold),
         )
+        if cur.rowcount > 0:
+            _record_credit_txn(c, user_id, -hold, source=source, detail="预扣积分", ref_id=ref_id)
         c.commit()
         return cur.rowcount > 0
 
 
 def _reconcile_usage(user_id: str, model: str, tin: int, tout: int, mult: float, hold: int,
-                     free: bool = False) -> int:
-    """按实际用量结算:退还(预扣 hold − 实际 cost),多退少补(clamp≥0),记 usage_log。返回实际扣费。
-    tin=tout=0(上游报错/异常)时 actual=0 → 全额退还预扣。free=True(无限额度白名单)→ actual 恒 0,仍记 usage。"""
-    actual = 0 if free else (
+                     free: bool = False, ref_id: str = "", free_credits_used: int = 0,
+                     reserved: dict[str, int] | None = None) -> int:
+    """按实际用量结算:退还(预扣 hold − 实际 cost),记 usage_log 与积分流水。返回实际消耗。
+    tin=tout=0(上游报错/异常)时 actual=0 → 全额退还预扣。free=True(无限额度白名单)→ actual 恒 0,仍记 usage。
+    reserved:新链路的分桶预留;free_credits_used 仅保留给旧测试/兼容调用。"""
+    raw_actual = 0 if free else (
         max(1, math.ceil((tin + tout) / 1000 * CREDITS_PER_1K_TOKENS * mult)) if (tin + tout) else 0
     )
-    refund = hold - actual
+    if reserved is None:
+        actual = max(0, raw_actual - free_credits_used) if not free else 0
+        refund = hold - actual
+        with closing(db()) as c:
+            if refund:
+                c.execute("UPDATE users SET credits = MAX(0, credits + ?) WHERE user_id = ?", (refund, user_id))
+                _record_credit_txn(c, user_id, refund, source="usage_refund",
+                                   detail=f"模型 {model} 预扣退还", ref_id=ref_id)
+            if (tin + tout) > 0:
+                c.execute(
+                    "INSERT INTO usage_log(user_id, model, tokens_in, tokens_out, credits, ts) "
+                    "VALUES(?,?,?,?,?,?)",
+                    (user_id, model, tin, tout, raw_actual, now_ms()),
+                )
+            c.commit()
+        return actual
+
+    total_reserved = int(reserved.get("gift", 0)) + int(reserved.get("daily", 0)) + int(reserved.get("paid", 0))
+    actual = 0 if free else min(raw_actual, total_reserved)
+    remaining = actual
+    gift_used = min(int(reserved.get("gift", 0)), remaining)
+    remaining -= gift_used
+    daily_used = min(int(reserved.get("daily", 0)), remaining)
+    remaining -= daily_used
+    paid_used = min(int(reserved.get("paid", 0)), remaining)
     with closing(db()) as c:
-        if refund:
-            c.execute("UPDATE users SET credits = MAX(0, credits + ?) WHERE user_id = ?", (refund, user_id))
+        gift_refund = int(reserved.get("gift", 0)) - gift_used
+        daily_refund = int(reserved.get("daily", 0)) - daily_used
+        paid_refund = int(reserved.get("paid", 0)) - paid_used
+        _refund_gift(c, user_id, gift_refund)
+        _refund_daily_free(c, user_id, daily_refund)
+        if paid_refund:
+            c.execute("UPDATE users SET credits = credits + ? WHERE user_id = ?", (paid_refund, user_id))
+            _record_credit_txn(c, user_id, paid_refund, source="usage_refund",
+                               detail=f"模型 {model} 预扣退还", ref_id=ref_id)
         if (tin + tout) > 0:  # 有真实用量就记一条(便于看调用量/成本)
             c.execute(
                 "INSERT INTO usage_log(user_id, model, tokens_in, tokens_out, credits, ts) "
                 "VALUES(?,?,?,?,?,?)",
-                (user_id, model, tin, tout, actual, now_ms()),
+                (user_id, model, tin, tout, raw_actual, now_ms()),
             )
         c.commit()
     return actual
@@ -723,6 +1797,7 @@ async def chat_completions(body: dict[str, Any], request: Request, u: sqlite3.Ro
     headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
     user_id = u["user_id"]
     unlimited = (u["email"] or "").strip().lower() in UNLIMITED_EMAILS  # 白名单:不预扣、不扣费、不被余额拦
+    request_id = "req_" + secrets.token_hex(8)
 
     import httpx  # 惰性 import
 
@@ -732,15 +1807,18 @@ async def chat_completions(body: dict[str, Any], request: Request, u: sqlite3.Ro
 
     # ── 预扣(pre-auth reserve):按 worst-case(prompt 估算 + max_out)原子预留积分,不足→402;
     # 并发各自预扣,余额覆盖不了就被拒 → 杜绝超支;真实 usage 出来后结算多退少补。白名单 hold=0、不扣费。
+    # 每日免费额度优先抵扣本次预扣,剩余部分才从余额扣。
     prompt_est = sum(
         len(str(m.get("content", ""))) for m in (body.get("messages") or []) if isinstance(m, dict)
     ) // 4
     hold = 0 if unlimited else max(1, math.ceil((prompt_est + max_out) / 1000 * CREDITS_PER_1K_TOKENS * mult))
-    if hold and not _reserve_credits(user_id, hold):
+    reserved = {"gift": 0, "daily": 0, "paid": 0} if unlimited else _reserve_usage_credits(user_id, hold, ref_id=request_id)
+    if reserved is None:
         raise HTTPException(status_code=402, detail="积分不足,请充值")
 
     def _settle(tin: int, tout: int) -> None:  # 统一结算入口,白名单(free)恒不扣费
-        _reconcile_usage(user_id, model, tin, tout, mult, hold, free=unlimited)
+        _reconcile_usage(user_id, model, tin, tout, mult, hold, free=unlimited,
+                         ref_id=request_id, reserved=reserved)
 
     # ── 非流式 ──
     if not bool(body.get("stream")):
@@ -924,8 +2002,12 @@ def admin_adjust_credits(uid: str, body: dict[str, Any], _: bool = Depends(admin
         before = cur["credits"]
         c.execute("UPDATE users SET credits = MAX(0, credits + ?) WHERE user_id = ?", (delta, uid))
         bal = _user(c, uid)["credits"]
+        applied = bal - before
         # 审计记真实生效量(负向调整会被 MAX(0,…) 截断,applied 可能 != 请求 delta)
-        _admin_log(c, "credits", uid, f"req_delta={delta} applied={bal - before} reason={reason} {before}->{bal}")
+        _admin_log(c, "credits", uid, f"req_delta={delta} applied={applied} reason={reason} {before}->{bal}")
+        if applied:
+            _record_credit_txn(c, uid, applied, source="admin_adjust",
+                               detail=f"管理后台调整: {reason}", ref_id="admin")
         c.commit()
     return {"ok": True, "balance": bal}
 

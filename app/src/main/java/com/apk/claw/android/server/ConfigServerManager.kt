@@ -37,7 +37,8 @@ object ConfigServerManager {
     }
 
     /**
-     * 启动配置服务，必须有 WiFi 连接
+     * 启动配置服务，必须有 WiFi 连接。
+     * 绑定到当前 WiFi 接口 IP，而不是 0.0.0.0，减少暴露面。
      */
     fun start(context: Context): Boolean {
         val ctx = context.applicationContext
@@ -50,12 +51,18 @@ object ConfigServerManager {
 
         if (isRunning()) return true
 
+        val wifiIp = getWifiIpAddress(ctx)
+        if (wifiIp == null) {
+            XLog.e(TAG, "Cannot start ConfigServer: failed to obtain WiFi IP")
+            return false
+        }
+
         for (port in ConfigServer.PORT until ConfigServer.PORT + MAX_PORT_RETRY) {
             try {
-                val s = ConfigServer(ctx, port)
+                val s = ConfigServer(ctx, port, wifiIp)
                 s.start()
                 server = s
-                XLog.i(TAG, "ConfigServer started on port $port")
+                XLog.i(TAG, "ConfigServer started on $wifiIp:$port")
                 registerNetworkCallback(ctx)
                 return true
             } catch (e: Exception) {
@@ -180,7 +187,9 @@ object ConfigServerManager {
         val callback = object : ConnectivityManager.NetworkCallback() {
             override fun onLost(network: Network) {
                 XLog.i(TAG, "WiFi lost, stopping ConfigServer")
-                try { server?.stop() } catch (_: Exception) {}
+                try { server?.stop() } catch (e: Exception) {
+                    XLog.w(TAG, "stop server failed", e)
+                }
                 server = null
                 // 不清除 enabled 状态，WiFi 恢复后自动重启
                 _configChanged.tryEmit(Unit)
@@ -191,12 +200,16 @@ object ConfigServerManager {
                 // WiFi 重连后 IP 可能变化，重新启动
                 if (KVUtils.isConfigServerEnabled() && !isRunning()) {
                     val ctx = appContext ?: return
+                    val wifiIp = getWifiIpAddress(ctx) ?: run {
+                        XLog.e(TAG, "Cannot restart ConfigServer: failed to obtain WiFi IP")
+                        return
+                    }
                     for (port in ConfigServer.PORT until ConfigServer.PORT + MAX_PORT_RETRY) {
                         try {
-                            val s = ConfigServer(ctx, port)
+                            val s = ConfigServer(ctx, port, wifiIp)
                             s.start()
                             server = s
-                            XLog.i(TAG, "ConfigServer restarted on port $port")
+                            XLog.i(TAG, "ConfigServer restarted on $wifiIp:$port")
                             break
                         } catch (e: Exception) {
                             XLog.e(TAG, "Port $port unavailable on restart: ${e.message}")

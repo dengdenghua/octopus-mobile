@@ -7,6 +7,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 
 /**
@@ -39,6 +40,16 @@ fun OctopusTheme(
         if (OctopusColors.isLight != light) {
             OctopusColors.isLight = light
         }
+        val prefs = com.apk.claw.android.utils.KVUtils
+        val blurRadius = prefs.getGlassBlurRadius().dp
+        if (OctopusGlass.blurRadius != blurRadius) {
+            OctopusGlass.blurRadius = blurRadius
+        }
+        OctopusGlass.quality = OctopusGlassQuality.fromStorage(prefs.getGlassQuality())
+        OctopusGlass.refraction = prefs.getGlassRefraction()
+        OctopusGlass.highlight = prefs.getGlassHighlight()
+        OctopusGlass.noise = prefs.getGlassNoise()
+        OctopusGlass.animationEnabled = prefs.isGlassAnimationEnabled()
     }
 
     val colorScheme = if (light) lightColorScheme(

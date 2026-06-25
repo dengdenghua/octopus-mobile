@@ -119,7 +119,7 @@ class ScreenStreamer(
         if (client.currentState() != ConnectionState.ONLINE) return
 
         val tree = try {
-            service.getScreenTree()
+            service.screenTree
         } catch (e: Exception) {
             null
         } ?: return

@@ -1,0 +1,277 @@
+package com.apk.claw.android.ui.compose.screen
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
+import androidx.compose.foundation.lazy.staggeredgrid.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.apk.claw.android.R
+import com.apk.claw.android.ui.compose.theme.OctopusBackground
+import com.apk.claw.android.ui.compose.theme.OctopusColors
+import com.apk.claw.android.ui.compose.theme.OctopusIconSize
+import com.apk.claw.android.ui.compose.theme.OctopusShape
+import com.apk.claw.android.ui.compose.theme.OctopusSpacing
+import com.apk.claw.android.ui.compose.theme.OctopusTints
+import com.apk.claw.android.ui.compose.theme.OctopusType
+
+/**
+ * 灵感广场 —— 双列灵感瀑布流，展示自动化技能、用法、作品卡片。
+ */
+private val tabs = listOf(
+    R.string.agent_square_tab_recommend,
+    R.string.agent_square_tab_following,
+    R.string.agent_square_tab_hot,
+)
+
+@Composable
+fun AgentSquareScreen(
+    onBack: () -> Unit,
+    onOpenSearch: () -> Unit = {},
+    onCreatePost: () -> Unit = {},
+) {
+    // 广场目录来自服务端 API（可后台随意改），null=加载中；本地技能走本地注册表。
+    val remote by produceState<List<AgentPost>?>(initialValue = null) {
+        value = SquareRepository.remoteFeed()
+    }
+    val local = remember { SquareRepository.localFeed() }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(OctopusBackground.pageBrush())
+            .statusBarsPadding()
+            .navigationBarsPadding(),
+    ) {
+        AgentSquareTopBar(onBack, onOpenSearch, onCreatePost)
+        CategoryTabs()
+        AgentFeed(remote = remote, local = local)
+    }
+}
+
+@Composable
+private fun AgentSquareTopBar(
+    onBack: () -> Unit,
+    onOpenSearch: () -> Unit,
+    onCreatePost: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = OctopusSpacing.sm, vertical = OctopusSpacing.sm),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(onClick = onBack) {
+            Icon(
+                Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = stringResource(R.string.cd_back),
+                tint = OctopusColors.TextPrimary,
+                modifier = Modifier.size(OctopusIconSize.large),
+            )
+        }
+        Text(
+            stringResource(R.string.agent_square_title),
+            modifier = Modifier.weight(1f),
+            color = OctopusColors.TextPrimary,
+            fontSize = OctopusType.titleLg,
+            fontWeight = FontWeight.Bold,
+        )
+        IconButton(onClick = onOpenSearch) {
+            Icon(
+                Icons.Filled.Search,
+                contentDescription = stringResource(R.string.cd_search),
+                tint = OctopusColors.TextPrimary,
+                modifier = Modifier.size(OctopusIconSize.large),
+            )
+        }
+        IconButton(onClick = onCreatePost) {
+            Icon(
+                Icons.Filled.Add,
+                contentDescription = stringResource(R.string.cd_create),
+                tint = OctopusColors.Primary,
+                modifier = Modifier.size(OctopusIconSize.large),
+            )
+        }
+    }
+}
+
+@Composable
+private fun CategoryTabs() {
+    var selected by remember { mutableIntStateOf(0) }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = OctopusSpacing.lg, vertical = OctopusSpacing.sm),
+        horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.md),
+    ) {
+        tabs.forEachIndexed { index, tabRes ->
+            val isSelected = index == selected
+            Surface(
+                shape = OctopusShape.capsule,
+                color = if (isSelected) OctopusColors.Primary else OctopusColors.Surface,
+                modifier = Modifier.clickable { selected = index },
+            ) {
+                Text(
+                    stringResource(tabRes),
+                    modifier = Modifier.padding(horizontal = OctopusSpacing.lg, vertical = OctopusSpacing.sm),
+                    color = if (isSelected) OctopusColors.OnPrimary else OctopusColors.TextSecondary,
+                    fontSize = OctopusType.body,
+                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AgentFeed(remote: List<AgentPost>?, local: List<AgentPost>) {
+    // 加载中且无本地内容 → 居中转圈；否则本地技能在前 + 服务端目录在后，合成一个瀑布流。
+    if (remote == null && local.isEmpty()) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(color = OctopusColors.Primary)
+        }
+        return
+    }
+    val posts = local + (remote ?: emptyList())
+    LazyVerticalStaggeredGrid(
+        columns = StaggeredGridCells.Fixed(2),
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(OctopusSpacing.lg),
+        horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.md),
+        verticalItemSpacing = OctopusSpacing.md,
+    ) {
+        items(posts, key = { it.id }) { post ->
+            AgentPostCard(post)
+        }
+    }
+}
+
+@Composable
+private fun AgentPostCard(post: AgentPost) {
+    Surface(
+        shape = OctopusShape.large,
+        color = OctopusBackground.glassSurface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, OctopusBackground.glassBorder),
+        shadowElevation = 8.dp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(OctopusShape.large)
+            .clickable { },
+    ) {
+        Column {
+            // 封面
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(post.coverHeightDp.dp)
+                    .background(Brush.verticalGradient(post.coverGradient)),
+            ) {
+                // 深色 scrim 胶囊 + 彩色圆点 + 白字：在深/浅封面上都清晰可读，同时保留分类色彩标识
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(OctopusSpacing.sm)
+                        .background(Color.Black.copy(alpha = 0.38f), OctopusShape.capsule)
+                        .padding(horizontal = OctopusSpacing.sm, vertical = OctopusSpacing.xs),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(modifier = Modifier.size(6.dp).background(post.tagColor, CircleShape))
+                    Spacer(Modifier.width(OctopusSpacing.xs))
+                    Text(
+                        post.tag,
+                        color = Color.White,
+                        fontSize = OctopusType.tag,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            }
+            Column(modifier = Modifier.padding(OctopusSpacing.md)) {
+                Text(
+                    post.title,
+                    color = OctopusColors.TextPrimary,
+                    fontSize = OctopusType.body,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    lineHeight = 18.sp,
+                )
+                Spacer(Modifier.height(OctopusSpacing.sm))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(20.dp)
+                            .background(post.authorColor.copy(alpha = 0.18f), CircleShape),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            post.authorInitial,
+                            color = post.authorColor,
+                            fontSize = OctopusType.tag,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                    Spacer(Modifier.width(OctopusSpacing.xs))
+                    Text(
+                        post.author,
+                        modifier = Modifier.weight(1f),
+                        color = OctopusColors.TextMuted,
+                        fontSize = OctopusType.caption,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Icon(
+                        Icons.Filled.Favorite,
+                        contentDescription = null,
+                        tint = OctopusColors.TextMuted.copy(alpha = 0.6f),
+                        modifier = Modifier.size(OctopusIconSize.small),
+                    )
+                    Spacer(Modifier.width(OctopusSpacing.xs))
+                    Text(
+                        post.likes,
+                        color = OctopusColors.TextMuted,
+                        fontSize = OctopusType.tag,
+                    )
+                }
+            }
+        }
+    }
+}

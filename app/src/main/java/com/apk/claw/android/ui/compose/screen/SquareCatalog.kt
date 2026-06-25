@@ -1,0 +1,324 @@
+package com.apk.claw.android.ui.compose.screen
+
+import androidx.compose.ui.graphics.Color
+import com.apk.claw.android.R
+import com.apk.claw.android.account.AccountConfig
+import com.apk.claw.android.ui.compose.theme.OctopusTints
+import com.apk.claw.android.utils.KVUtils
+import com.google.gson.Gson
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.util.concurrent.TimeUnit
+
+/**
+ * 广场数据层。
+ *
+ * 设计目标（按需求）：
+ *  - **广场目录走服务端 API**（`<baseUrl>/square/feed`），后台可随意增删改，App 不用发版；
+ *    网络失败时回退到本地缓存，再回退到内置种子，保证永远有内容、不空屏。
+ *  - **与本机强相关的技能/插件走本地注册**（[LocalSkillRegistry]），不依赖服务端目录。
+ *
+ * UI（[AgentSquareScreen]）只消费 [AgentPost]，不关心来源。
+ */
+
+/** 广场卡片领域模型（颜色已解析为 Compose Color，UI 直接用）。 */
+internal data class AgentPost(
+    val id: String,
+    val title: String,
+    val author: String,
+    val authorInitial: String,
+    val authorColor: Color,
+    val likes: String,
+    val tag: String,
+    val tagColor: Color,
+    val coverHeightDp: Int,
+    val coverGradient: List<Color>,
+    /** true = 本地注册的技能/插件（非服务端目录）。 */
+    val local: Boolean = false,
+)
+
+/** 服务端下发的广场卡片：颜色用 "#RRGGBB" 字符串，方便后台随意编辑。 */
+internal data class SquarePostDto(
+    val id: String = "",
+    val title: String = "",
+    val author: String = "",
+    val authorInitial: String = "",
+    val authorColor: String = "#7C6FF0",
+    val likes: String = "",
+    val tag: String = "",
+    val tagColor: String = "#7C6FF0",
+    val coverHeightDp: Int = 160,
+    val coverGradient: List<String> = emptyList(),
+)
+
+internal data class SquareFeedDto(val posts: List<SquarePostDto> = emptyList())
+
+private fun parseColor(hex: String, fallback: Color): Color =
+    runCatching { Color(android.graphics.Color.parseColor(hex.trim())) }.getOrDefault(fallback)
+
+private fun SquarePostDto.toAgentPost(): AgentPost {
+    val grad = coverGradient
+        .mapNotNull { runCatching { Color(android.graphics.Color.parseColor(it.trim())) }.getOrNull() }
+        .ifEmpty { listOf(Color(0xFF667EEA), Color(0xFF764BA2)) }
+    return AgentPost(
+        id = id.ifBlank { title.hashCode().toString() },
+        title = title,
+        author = author,
+        authorInitial = authorInitial.ifBlank { author.take(1) },
+        authorColor = parseColor(authorColor, OctopusTints.Skill),
+        likes = likes,
+        tag = tag,
+        tagColor = parseColor(tagColor, OctopusTints.Routine),
+        coverHeightDp = coverHeightDp.coerceIn(120, 240),
+        coverGradient = grad,
+    )
+}
+
+/**
+ * 本地技能/插件注册表：与本机能力强相关的条目在本地注册，不走服务端目录。
+ * 各本地插件可在初始化时调用 [register] 把自己挂上来。
+ */
+internal object LocalSkillRegistry {
+    private val items = linkedMapOf<String, AgentPost>()
+
+    fun register(post: AgentPost) { items[post.id] = post.copy(local = true) }
+    fun unregister(id: String) { items.remove(id) }
+    fun all(): List<AgentPost> = items.values.toList()
+
+    init {
+        // 内置示例：本地相关技能（演示本地注册机制；真实插件可各自 register）
+        register(
+            AgentPost(
+                id = "local.notify", title = "通知巡检 · 重要消息汇总给我",
+                author = "本地技能", authorInitial = "本", authorColor = OctopusTints.Skill,
+                likes = "", tag = "本地", tagColor = OctopusTints.Window,
+                coverHeightDp = 140, coverGradient = listOf(Color(0xFF11998E), Color(0xFF38EF7D)),
+            )
+        )
+        register(
+            AgentPost(
+                id = "local.files", title = "文件整理 · 截图自动归档到文件夹",
+                author = "本地技能", authorInitial = "本", authorColor = OctopusTints.Cloud,
+                likes = "", tag = "本地", tagColor = OctopusTints.Window,
+                coverHeightDp = 150, coverGradient = listOf(Color(0xFF667EEA), Color(0xFF764BA2)),
+            )
+        )
+    }
+}
+
+/** 广场目录仓库：服务端 → 缓存 → 内置种子，三级回退。 */
+internal object SquareRepository {
+    private const val CACHE_KEY = "SQUARE_FEED_CACHE_JSON"
+    private val gson = Gson()
+    private val http = OkHttpClient.Builder()
+        .connectTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(15, TimeUnit.SECONDS)
+        .build()
+
+    /** 服务端目录（后台可随意改）。失败回退缓存，再回退内置种子。 */
+    suspend fun remoteFeed(): List<AgentPost> = withContext(Dispatchers.IO) {
+        RemoteConfig.refresh()  // 先取服务端下发的技能中心域名（拿不到则用缓存/默认）
+        val base = AccountConfig.squareBaseUrl.trim().trimEnd('/')
+        if (base.isNotBlank()) {
+            runCatching {
+                val req = Request.Builder().url("$base/square/feed").get().build()
+                http.newCall(req).execute().use { resp ->
+                    val body = resp.body?.string().orEmpty()
+                    if (resp.isSuccessful && body.isNotBlank()) {
+                        val feed = gson.fromJson(body, SquareFeedDto::class.java)
+                        if (feed?.posts?.isNotEmpty() == true) {
+                            KVUtils.putString(CACHE_KEY, body)            // 缓存成功结果
+                            return@withContext feed.posts.map { it.toAgentPost() }
+                        }
+                    }
+                }
+            }
+        }
+        cachedOrSeed()
+    }
+
+    private fun cachedOrSeed(): List<AgentPost> {
+        val cached = KVUtils.getString(CACHE_KEY, "")
+        if (cached.isNotBlank()) {
+            runCatching {
+                val feed = gson.fromJson(cached, SquareFeedDto::class.java)
+                if (feed?.posts?.isNotEmpty() == true) return feed.posts.map { it.toAgentPost() }
+            }
+        }
+        return SEED
+    }
+
+    /** 本地技能/插件（本地注册，不依赖服务端）。 */
+    fun localFeed(): List<AgentPost> = LocalSkillRegistry.all()
+
+    /** 离线兜底种子：服务端与缓存都不可用时仍有内容可展示。 */
+    private val SEED: List<AgentPost> = listOf(
+        AgentPost("seed.1", "让 AI 每天自动整理手机相册，生成回忆视频", "影像助手", "影", OctopusTints.Video, "1.2k", "自动化", OctopusTints.Routine, 180, listOf(Color(0xFF667EEA), Color(0xFF764BA2))),
+        AgentPost("seed.2", "3 步搭一个会订外卖的助手", "效率玩家", "效", OctopusTints.Skill, "856", "教程", OctopusTints.Browser, 140, listOf(Color(0xFF11998E), Color(0xFF38EF7D))),
+        AgentPost("seed.3", "自动写一周周报，老板直呼专业", "打工侠", "打", OctopusTints.Window, "2.3k", "职场", OctopusTints.Memory, 200, listOf(Color(0xFFFC466B), Color(0xFF3F5EFB))),
+        AgentPost("seed.4", "用语音唤醒助手，开车时也能回消息", "车载达人", "车", OctopusTints.Plugin, "634", "语音", OctopusTints.Trust, 160, listOf(Color(0xFFF2994A), Color(0xFFF2C94C))),
+        AgentPost("seed.5", "自动比价，618 我省了 2000+", "省钱 Bot", "省", OctopusTints.Cloud, "3.1k", "购物", OctopusTints.Hot, 170, listOf(Color(0xFF00C6FF), Color(0xFF0072FF))),
+        AgentPost("seed.6", "接入智能家居，一句话控制全屋", "极客居", "极", OctopusTints.Evolve, "1.5k", "IoT", OctopusTints.Plugin, 150, listOf(Color(0xFF8E2DE2), Color(0xFF4A00E0))),
+        AgentPost("seed.7", "生成旅行攻略，细到每天照着走", "旅行灵感", "旅", OctopusTints.Browser, "987", "生活", OctopusTints.Routine, 190, listOf(Color(0xFFEE9CA7), Color(0xFFFFDDE1))),
+        AgentPost("seed.8", "让助手帮你读论文，10 分钟抓重点", "学术喵", "学", OctopusTints.Memory, "742", "学习", OctopusTints.Skill, 145, listOf(Color(0xFF134E5E), Color(0xFF71B280))),
+    )
+}
+
+// ───────────────────────── 灵感发现流（FeatureHub「灵感」tab）─────────────────────────
+
+/**
+ * 灵感发现卡片（富模型：封面/作者/用量/成功率/权限/详情）。
+ * 内容文本走服务端，可后台随意改；[topicRes] 仍是本地化分类资源，保留 App 内分类胶囊/筛选/封面图标逻辑。
+ */
+internal data class AgentDiscoveryPost(
+    val id: String,
+    val title: String,
+    val desc: String,
+    val author: String,
+    val authorInitial: String,
+    val likes: String,
+    val topicRes: Int,
+    val tag: String,
+    val tagColor: Color,
+    val coverHeight: Int,
+    val cover: List<Color>,
+    val usage: String,
+    val successRate: String,
+    val duration: String,
+    val permissions: List<String>,
+)
+
+/** 服务端下发的灵感卡片（颜色 "#RRGGBB"、topic 用 key、文本与权限直给字符串）。 */
+internal data class DiscoveryPostDto(
+    val id: String = "",
+    val title: String = "",
+    val desc: String = "",
+    val author: String = "",
+    val authorInitial: String = "",
+    val likes: String = "",
+    val topic: String = "",
+    val tag: String = "",
+    val tagColor: String = "#7C6FF0",
+    val coverHeight: Int = 160,
+    val cover: List<String> = emptyList(),
+    val usage: String = "",
+    val successRate: String = "",
+    val duration: String = "",
+    val permissions: List<String> = emptyList(),
+)
+
+internal data class DiscoveryFeedDto(val posts: List<DiscoveryPostDto> = emptyList())
+
+/** 服务端 topic key → 本地化分类资源（沿用 App 内已有分类胶囊/筛选/图标）。 */
+private fun topicKeyToRes(key: String): Int = when (key.trim().lowercase()) {
+    "automation" -> R.string.agent_topic_automation
+    "efficiency" -> R.string.agent_topic_efficiency
+    "life", "lifestyle" -> R.string.agent_topic_life
+    "learning" -> R.string.agent_topic_learning
+    "device" -> R.string.agent_topic_device
+    else -> R.string.agent_topic_automation
+}
+
+private fun DiscoveryPostDto.toPost(): AgentDiscoveryPost {
+    val cov = cover
+        .mapNotNull { runCatching { Color(android.graphics.Color.parseColor(it.trim())) }.getOrNull() }
+        .ifEmpty { listOf(Color(0xFF667EEA), Color(0xFF764BA2)) }
+    return AgentDiscoveryPost(
+        id = id.ifBlank { title.hashCode().toString() },
+        title = title, desc = desc, author = author,
+        authorInitial = authorInitial.ifBlank { author.take(1) },
+        likes = likes,
+        topicRes = topicKeyToRes(topic),
+        tag = tag.ifBlank { topic },
+        tagColor = parseColor(tagColor, OctopusTints.Routine),
+        coverHeight = coverHeight.coerceIn(120, 240),
+        cover = cov,
+        usage = usage, successRate = successRate, duration = duration,
+        permissions = permissions,
+    )
+}
+
+/** 灵感发现流仓库：服务端 `/square/discovery` → 缓存 → 内置种子。 */
+internal object DiscoveryRepository {
+    private const val CACHE_KEY = "SQUARE_DISCOVERY_CACHE_JSON"
+    private val gson = Gson()
+    private val http = OkHttpClient.Builder()
+        .connectTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(15, TimeUnit.SECONDS)
+        .build()
+
+    suspend fun feed(): List<AgentDiscoveryPost> = withContext(Dispatchers.IO) {
+        RemoteConfig.refresh()  // 先取服务端下发的技能中心域名（拿不到则用缓存/默认）
+        val base = AccountConfig.squareBaseUrl.trim().trimEnd('/')
+        if (base.isNotBlank()) {
+            runCatching {
+                val req = Request.Builder().url("$base/square/discovery").get().build()
+                http.newCall(req).execute().use { resp ->
+                    val body = resp.body?.string().orEmpty()
+                    if (resp.isSuccessful && body.isNotBlank()) {
+                        val feed = gson.fromJson(body, DiscoveryFeedDto::class.java)
+                        if (feed?.posts?.isNotEmpty() == true) {
+                            KVUtils.putString(CACHE_KEY, body)
+                            return@withContext feed.posts.map { it.toPost() }
+                        }
+                    }
+                }
+            }
+        }
+        cachedOrSeed()
+    }
+
+    private fun cachedOrSeed(): List<AgentDiscoveryPost> {
+        val cached = KVUtils.getString(CACHE_KEY, "")
+        if (cached.isNotBlank()) {
+            runCatching {
+                val feed = gson.fromJson(cached, DiscoveryFeedDto::class.java)
+                if (feed?.posts?.isNotEmpty() == true) return feed.posts.map { it.toPost() }
+            }
+        }
+        return SEED
+    }
+
+    /** 离线兜底种子（与原硬编码内容一致，仅作为服务端/缓存不可用时的回退）。 */
+    private val SEED: List<AgentDiscoveryPost> = listOf(
+        AgentDiscoveryPost("agent-travel", "Travel Planner: Flights to Itinerary in One Tap", "Enter destination and budget to auto-search attractions, plan routes, and generate a shareable checklist.", "Travel Inspiration", "T", "3.2k", R.string.agent_topic_life, "Lifestyle", OctopusTints.Routine, 168, listOf(Color(0xFFFFB199), Color(0xFFFF0844)), "18.6k", "92%", "About 4 min", listOf("Browser", "Location", "Screenshot")),
+        AgentDiscoveryPost("agent-weekly", "Weekly Report Auto-Saver Template", "Pulls chat logs, task lists, and schedules to auto-write a report your boss will love.", "Efficiency Player", "E", "2.8k", R.string.agent_topic_efficiency, "Efficiency", OctopusTints.Skill, 138, listOf(Color(0xFF667EEA), Color(0xFF764BA2)), "12.4k", "95%", "About 2 min", listOf("Calendar", "Clipboard", "Documents")),
+        AgentDiscoveryPost("agent-phone", "Turn Old Phone into 24/7 Executor", "Let your backup handle messages, screenshots, forwarding, and scheduled tasks while your main phone stays quiet.", "Geek Hub", "G", "1.7k", R.string.agent_topic_device, "Device", OctopusTints.Window, 190, listOf(Color(0xFF134E5E), Color(0xFF71B280)), "8.1k", "89%", "About 6 min", listOf("Accessibility", "Notifications", "Background")),
+        AgentDiscoveryPost("agent-shopping", "Price Tracker Saved Me 2000+", "Monitors historical prices, coupons, and platform promos, and alerts you when the price drops.", "Savings Bot", "S", "4.6k", R.string.agent_topic_automation, "Automation", OctopusTints.Hot, 156, listOf(Color(0xFFFFD194), Color(0xFFD1913C)), "23.9k", "91%", "About 3 min", listOf("Browser", "Notifications", "Timer")),
+        AgentDiscoveryPost("agent-paper", "Paper Reader: Key Points in 10 Minutes", "Reads PDFs, web pages, and screenshots, auto-extracts conclusions and citable insights.", "Academic Assistant", "A", "986", R.string.agent_topic_learning, "Learning", OctopusTints.Memory, 176, listOf(Color(0xFF00C6FF), Color(0xFF0072FF)), "6.5k", "94%", "About 5 min", listOf("Files", "Browser", "Clipboard")),
+        AgentDiscoveryPost("agent-voice", "Voice Assistant: Handle Messages While Driving", "Press and speak, auto-detects recipient, adjusts tone, and sends.", "Car Enthusiast", "C", "742", R.string.agent_topic_automation, "Voice", OctopusTints.Trust, 146, listOf(Color(0xFFF2994A), Color(0xFFF2C94C)), "5.7k", "88%", "About 2 min", listOf("Microphone", "Notifications", "Accessibility")),
+    )
+}
+
+/**
+ * App 远程配置：从主 API `<baseUrl>/config` 拉取技能中心域名等并缓存进 [AccountConfig]。
+ * 即「子域名由服务端生成/控制」——后台改一处，全网 App 下次进广场即生效，无需发版。
+ */
+internal object RemoteConfig {
+    private val gson = Gson()
+    private val http = OkHttpClient.Builder()
+        .connectTimeout(8, TimeUnit.SECONDS)
+        .readTimeout(10, TimeUnit.SECONDS)
+        .build()
+
+    private data class AppConfigDto(val squareBaseUrl: String? = null)
+
+    /** 拉一次远程配置；失败静默（保留上次缓存/默认）。 */
+    suspend fun refresh() {
+        withContext(Dispatchers.IO) {
+            val base = AccountConfig.baseUrl.trim().trimEnd('/')
+            if (base.isBlank()) return@withContext
+            runCatching {
+                val req = Request.Builder().url("$base/config").get().build()
+                http.newCall(req).execute().use { resp ->
+                    if (resp.isSuccessful) {
+                        val cfg = gson.fromJson(resp.body?.string().orEmpty(), AppConfigDto::class.java)
+                        cfg?.squareBaseUrl?.let { AccountConfig.setRemoteSquareBaseUrl(it) }
+                    }
+                }
+            }
+        }
+    }
+}

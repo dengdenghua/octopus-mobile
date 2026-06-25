@@ -4,6 +4,7 @@ import com.apk.claw.android.octopus_mobile.browser.BrowserEngine
 import com.apk.claw.android.tool.BaseTool
 import com.apk.claw.android.tool.ToolParameter
 import com.apk.claw.android.tool.ToolResult
+import com.apk.claw.android.utils.XLog
 
 /**
  * WebView.evaluateJavascript 的回调返回 JSON 编码值（字符串带双引号、转义）。
@@ -15,7 +16,8 @@ private fun unwrapJsString(value: String?): String? {
     if (trimmed.length >= 2 && trimmed.startsWith("\"") && trimmed.endsWith("\"")) {
         return try {
             org.json.JSONTokener(trimmed).nextValue() as? String ?: value
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            XLog.w("BrowserTools", "unwrapJsString failed: $value", e)
             value
         }
     }
@@ -43,6 +45,16 @@ class NavigateTool(
 
     override fun execute(params: Map<String, Any>): ToolResult {
         val url = requireString(params, "url")
+        // 仅允许 http/https：拦截 file:// / javascript: / data: / content: / intent: 等
+        // 危险 scheme（本地文件读取、UXSS、Intent 跳转、SSRF 入口）。
+        val lower = url.trim().lowercase()
+        val blockedSchemes = listOf(
+            "file:", "javascript:", "data:", "content:", "intent:",
+            "about:", "blob:", "ftp:", "ws:", "wss:", "jar:", "resource:",
+        )
+        if (blockedSchemes.any { lower.startsWith(it) }) {
+            return ToolResult.error("Blocked unsafe URL scheme; only http/https are allowed.")
+        }
         engine.navigate(url)
         return ToolResult.success("Navigated to: $url")
     }
@@ -73,11 +85,16 @@ class GetDomTool(
         var result: String? = null
         var completed = false
 
+        // selector/attribute 以 JSON 字面量注入，避免 CSS 选择器被当作 JS 代码执行
+        // （否则等价于任意 JS 注入）。attribute 用方括号取值。
+        val selJson = org.json.JSONObject.quote(selector)
+        val attrJson = org.json.JSONObject.quote(attribute)
         val script = """
             (function() {
-                var el = document.querySelector('$selector');
-                if (!el) return 'Element not found: $selector';
-                return el.$attribute || el.outerHTML;
+                var sel = $selJson;
+                var el = document.querySelector(sel);
+                if (!el) return 'Element not found: ' + sel;
+                return el[$attrJson] || el.outerHTML;
             })()
         """.trimIndent()
 
@@ -123,12 +140,14 @@ class BrowserClickTool(
         var result: String? = null
         var completed = false
 
+        val selJson = org.json.JSONObject.quote(selector)
         val script = """
             (function() {
-                var el = document.querySelector('$selector');
-                if (!el) return 'Element not found: $selector';
+                var sel = $selJson;
+                var el = document.querySelector(sel);
+                if (!el) return 'Element not found: ' + sel;
                 el.click();
-                return 'Clicked: $selector';
+                return 'Clicked: ' + sel;
             })()
         """.trimIndent()
 
@@ -181,15 +200,19 @@ class BrowserTypeTool(
         var result: String? = null
         var completed = false
 
+        // selector/text 以 JSON 字面量注入，避免被当作 JS 代码执行（任意 JS 注入）。
+        val selJson = org.json.JSONObject.quote(selector)
+        val textJson = org.json.JSONObject.quote(text)
         val script = """
             (function() {
-                var el = document.querySelector('$selector');
-                if (!el) return 'Element not found: $selector';
-                el.value = '${text.replace("'", "\\'")}';
+                var sel = $selJson;
+                var el = document.querySelector(sel);
+                if (!el) return 'Element not found: ' + sel;
+                el.value = $textJson;
                 el.dispatchEvent(new Event('input', {bubbles: true}));
                 el.dispatchEvent(new Event('change', {bubbles: true}));
                 $submitCode
-                return 'Typed into: $selector';
+                return 'Typed into: ' + sel;
             })()
         """.trimIndent()
 
