@@ -8,6 +8,7 @@ import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.apk.claw.android.R
 
@@ -23,6 +24,7 @@ sealed class Screen(val route: String, @StringRes val labelRes: Int, val icon: I
     data object Features : Screen("features", R.string.nav_features, Icons.Filled.GridView)
     data object Settings : Screen("settings", R.string.nav_settings, Icons.Filled.Settings)
     data object AgentSquare : Screen("agent_square", R.string.nav_agent_square, Icons.Filled.SmartToy)
+    data object Universe : Screen("universe", R.string.nav_universe, Icons.Filled.AutoAwesome)
 
     companion object {
         /** 底部 Tab：对话优先。设备不再独立成页——设备发现/选择已并入对话目标选择器，

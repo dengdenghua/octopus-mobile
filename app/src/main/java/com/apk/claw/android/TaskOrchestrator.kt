@@ -175,9 +175,8 @@ class TaskOrchestrator(
         }
         // 通知当前任务被暂停
         ChannelManager.sendMessage(cur.channel, ClawApplication.instance.getString(R.string.channel_msg_task_cancelled), cur.messageId)
-        // 暂停并重新排队；当前任务已出队，需显式保存运行中任务。
+        // 暂停当前任务：保持暂停态等待显式恢复，不立即 resume（否则 pause 形同虚设）
         taskQueue.pauseRunningTask(cur)
-        taskQueue.resumeTask(cur.id)
         currentTask = null
         FloatingCircleManager.setErrorState()
         XLog.i(TAG, "Current task paused: ${cur.id}")

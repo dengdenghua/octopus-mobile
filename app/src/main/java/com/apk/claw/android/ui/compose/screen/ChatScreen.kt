@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Monitor
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.KeyboardVoice
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PhoneAndroid
@@ -96,6 +97,7 @@ import com.apk.claw.android.ui.compose.theme.OctopusShape
 import com.apk.claw.android.ui.compose.theme.OctopusSpacing
 import com.apk.claw.android.ui.compose.theme.OctopusTints
 import com.apk.claw.android.ui.compose.theme.OctopusType
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import java.util.Calendar
 
@@ -179,6 +181,7 @@ fun ChatScreen() {
     val expandedGroups = remember { mutableStateMapOf<Long, Boolean>() }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
+    var ghostChatJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     val ackText = stringResource(R.string.chat_ack)
     val thinkingText = stringResource(R.string.chat_thinking)
     val newChatTitle = stringResource(R.string.chat_new)
@@ -208,8 +211,11 @@ fun ChatScreen() {
         if (currentId.isNotEmpty()) {
             ChatStore.save(currentId, messages)
             val firstUser = messages.firstOrNull { it is ChatMessage.UserMessage } as? ChatMessage.UserMessage
-            if (firstUser != null) {
-                val title = firstUser.text.take(18)
+            val ghostPersona = GhostChatSessionStore.load(currentId)
+            if (firstUser != null || ghostPersona != null) {
+                val title = ghostPersona?.let { GhostChatSessionStore.titleFor(it) }
+                    ?: firstUser?.text?.take(18)
+                    ?: newChatTitle
                 val now = System.currentTimeMillis()
                 SessionStore.updateMeta(currentId, title, now)
                 val i = sessions.indexOfFirst { it.id == currentId }
@@ -244,6 +250,7 @@ fun ChatScreen() {
     }
     val deleteSession = { id: String ->
         SessionStore.delete(id)
+        GhostChatSessionStore.clear(id)
         sessions.removeAll { it.id == id }
         if (id == currentId) {
             val next = sessions.firstOrNull()?.id
@@ -260,7 +267,44 @@ fun ChatScreen() {
             messages.add(ChatMessage.UserMessage(t))
             inputText = ""
             scrollEnd(); persist()
-            if (ChatAgentBridge.isConfigured()) {
+            val ghostPersona = GhostChatSessionStore.load(currentId)
+            if (ghostPersona != null) {
+                isRunning = true
+                val thinking = ChatMessage.Thinking(thinkingText)
+                if (!messages.contains(thinking)) messages.add(thinking)
+                scrollEnd()
+                val history = messages
+                    .dropLast(1)
+                    .mapNotNull {
+                        when (it) {
+                            is ChatMessage.UserMessage -> GhostChatMessage("user", it.text)
+                            is ChatMessage.AgentMessage -> GhostChatMessage("assistant", it.text)
+                            else -> null
+                        }
+                    }
+                ghostChatJob = scope.launch {
+                    try {
+                        val answer = UniverseRepository.chatWithGhost(
+                            feed = ghostPersona,
+                            userText = t,
+                            history = history,
+                        )
+                        messages.remove(thinking)
+                        messages.add(ChatMessage.AgentMessage(answer))
+                    } catch (_: CancellationException) {
+                        messages.remove(thinking)
+                        messages.add(ChatMessage.AgentMessage("已停止。"))
+                    } catch (error: Throwable) {
+                        messages.remove(thinking)
+                        messages.add(ChatMessage.AgentMessage("⚠️ 母体 Runtime 未回应：${error.message.orEmpty()}"))
+                    } finally {
+                        ghostChatJob = null
+                        isRunning = false
+                        scrollEnd()
+                        persist()
+                    }
+                }
+            } else if (ChatAgentBridge.isConfigured()) {
                 isRunning = true
                 val thinking = ChatMessage.Thinking(thinkingText)
                 val showThinking = { if (!messages.contains(thinking)) { messages.add(thinking); scrollEnd() } }
@@ -324,7 +368,11 @@ fun ChatScreen() {
             }
         }
     }
-    val stop = { ChatAgentBridge.cancel() }
+    val stop = {
+        ghostChatJob?.cancel()
+        ghostChatJob = null
+        ChatAgentBridge.cancel()
+    }
     val closeDrawer = { scope.launch { drawerState.close() }; Unit }
 
     // ── 语音优先输入：麦克风「按住说话」，松手即发 ──────────────────
@@ -424,6 +472,39 @@ fun ChatScreen() {
                             color = TextMuted,
                         )
                     }
+                }
+            }
+            // 录制示范技能按钮：顶栏 REC 胶囊，录制中红色闪烁
+            val isRecording = remember { com.apk.claw.android.octopus_mobile.DemoRecorder.isRecording() }
+            val recPulse by rememberInfiniteTransition(label = "rec").animateFloat(
+                initialValue = 0.4f,
+                targetValue = 1f,
+                animationSpec = infiniteRepeatable(animation = tween(600), repeatMode = RepeatMode.Reverse),
+                label = "recPulse",
+            )
+            Surface(
+                shape = OctopusShape.capsule,
+                color = if (isRecording) ErrorColor.copy(alpha = recPulse * 0.85f) else Color.Transparent,
+                border = BorderStroke(1.dp, if (isRecording) ErrorColor else TextMuted.copy(alpha = 0.5f)),
+                modifier = Modifier.clickable { com.apk.claw.android.octopus_mobile.DemoRecorder.toggle() },
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = OctopusSpacing.sm, vertical = OctopusSpacing.xs),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(6.dp)
+                            .background(if (isRecording) Color.White else ErrorColor, CircleShape)
+                    )
+                    Spacer(Modifier.width(OctopusSpacing.xs))
+                    Text(
+                        "REC",
+                        color = if (isRecording) Color.White else ErrorColor,
+                        fontSize = OctopusType.tag,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.5.sp,
+                    )
                 }
             }
             // 目标选择器:决定 Agent 在「本机」还是某台局域网设备上执行(移到右上,与三点并排)

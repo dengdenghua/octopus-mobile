@@ -1,9 +1,9 @@
 # 部署 club.octoapk.com（技能中心 / 广场子域）
 
-**现状**（`dig` 实测）：`api.octoapk.com → 32.185.238.217`，`club.octoapk.com` 暂无记录。
+**现状**（`dig` 实测）：`api.octoapk.com → <your-server-ip>`，`club.octoapk.com` 暂无记录。
 服务器：Ubuntu，nginx(80/443) 反代 `uvicorn app:app @ 127.0.0.1:8081`。
 
-> 这四步需在**服务器 32.185.238.217** 和**octoapk.com 的 DNS 服务商后台**操作——
+> 这四步需在**服务器 <your-server-ip>** 和**octoapk.com 的 DNS 服务商后台**操作——
 > 都需要你的账号/SSH 权限，无法从本机代办。准备好后逐条执行即可（约 5 分钟）。
 
 ## 1) 申请 / 解析子域名（DNS 服务商后台，如 Cloudflare / 阿里云 / DNSPod）

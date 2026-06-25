@@ -55,24 +55,48 @@ object OctopusColors {
     val PrimaryContainer: Color get() = if (isLight) Color(0xFFF7F7FF) else Color(0xFF292933)
     val OnPrimaryContainer: Color get() = if (isLight) Color(0xFF2F2D84) else Color(0xFFE5E4FF)
     val PrimaryVariant: Color get() = if (isLight) Color(0xFF7E7DB2) else Color(0xFF53538A)
+    val OnVariant: Color get() = if (isLight) Color(0xFFE5E4FF) else Color(0xFF35343E)
+    val LowButtonBg: Color get() = if (isLight) Color(0xFFE5E4FF) else Color(0xFF31313D)
+    val FixedOnContainer: Color get() = Color(0xFF2F2D84)  // 不随主题切换（固定深紫）
 
     /** 辅色（保留原 Accent 语义，映射到 Success 系列作为强调色） */
     val Accent: Color get() = if (isLight) Color(0xFF2BA471) else Color(0xFF56C08D)
 
     // ── Semantic（与 XML colorError/Warning/Success/Info 对齐）──
     val Success: Color get() = if (isLight) Color(0xFF2BA471) else Color(0xFF56C08D)
+    val SuccessOnContainer: Color get() = if (isLight) Color(0xFF006C45) else Color(0xFF92DAB2)
+    val SuccessContainer: Color get() = if (isLight) Color(0xFFE3F9E9) else Color(0xFF002515)
     val Warning: Color get() = if (isLight) Color(0xFFE37318) else Color(0xFFFA9550)
+    val WarningOnContainer: Color get() = if (isLight) Color(0xFFBE5A00) else Color(0xFFFFD9C2)
+    val WarningContainer: Color get() = if (isLight) Color(0xFFFFF9F6) else Color(0xFF3B1700)
     val Error: Color get() = if (isLight) Color(0xFFF6685D) else Color(0xFFFF9285)
+    val ErrorOnContainer: Color get() = if (isLight) Color(0xFFD54941) else Color(0xFFFFD8D2)
+    val ErrorContainer: Color get() = if (isLight) Color(0xFFFFF8F7) else Color(0xFF490002)
     val Info: Color get() = if (isLight) Color(0xFF1AAFFF) else Color(0xFF009CF0)
+    val InfoOnContainer: Color get() = if (isLight) Color(0xFF007BBE) else Color(0xFFAFE3FF)
+    val InfoContainer: Color get() = if (isLight) Color(0xFFEEF9FF) else Color(0xFF003552)
+
+    // ── Fills（与 XML colorFill* 对齐）──
+    val FillPrimary: Color get() = if (isLight) Color(0x33787880) else Color(0x5C787880)
+    val FillSecondary: Color get() = if (isLight) Color(0x29787880) else Color(0x52787880)
+    val FillTertiary: Color get() = if (isLight) Color(0x1F787880) else Color(0x3D787880)
+    val FillQuaternary: Color get() = if (isLight) Color(0x14787880) else Color(0x2E787880)
 
     // ── Backgrounds（与 XML colorBg* / colorContainer* 对齐）──
     val Background: Color get() = if (isLight) Color(0xFFFFFFFF) else Color(0xFF0E0E0E)
     val BackgroundSecondary: Color get() = if (isLight) Color(0xFFF2F2F7) else Color(0xFF1D1D1F)
-    val Surface: Color get() = if (isLight) Color(0xFFFFFFFF) else Color(0xFF363638)
-    val SurfaceVariant: Color get() = if (isLight) Color(0xFFF2F2F7) else Color(0xFF2C2C2E)
-    val SurfaceDeep: Color get() = if (isLight) Color(0xFFF8F8FC) else Color(0xFF202021)
-    val SurfaceHigh: Color get() = if (isLight) Color(0xFFE0E0EA) else Color(0xFF333335)
-    val SurfaceHighest: Color get() = if (isLight) Color(0xFFD1D1D6) else Color(0xFF3A3A3C)
+    val BackgroundTertiary: Color get() = if (isLight) Color(0xFFFFFFFF) else Color(0xFF2C2C2E)
+    val ContainerBrighten: Color get() = if (isLight) Color(0xFFFFFFFF) else Color(0xFF363638)
+    val Surface: Color get() = ContainerBrighten
+    val ContainerLow: Color get() = if (isLight) Color(0xFFF8F8FC) else Color(0xFF202021)
+    val SurfaceDeep: Color get() = ContainerLow
+    val ContainerBase: Color get() = if (isLight) Color(0xFFF2F2F7) else Color(0xFF2C2C2E)
+    val SurfaceVariant: Color get() = ContainerBase
+    val ContainerHigh: Color get() = if (isLight) Color(0xFFE0E0EA) else Color(0xFF333335)
+    val SurfaceHigh: Color get() = ContainerHigh
+    val ContainerHighest: Color get() = if (isLight) Color(0xFFD1D1D6) else Color(0xFF3A3A3C)
+    val SurfaceHighest: Color get() = ContainerHighest
+    val ContainerInverse: Color get() = if (isLight) Color(0xFF2C2C2E) else Color(0xFFE5E5EA)
 
     // ── Borders（与 XML colorBorder* 对齐）──
     val Border: Color get() = if (isLight) Color(0x0F000000) else Color(0x0DFFFFFF)
@@ -90,10 +114,17 @@ object OctopusColors {
     /** 向后兼容别名：TextMuted = TextTertiary（原 OctopusColors.TextMuted 语义） */
     val TextMuted: Color get() = TextTertiary
 
+    // ── Fixed Text（不随主题切换，用于深色/浅色背景上的固定对比文字）──
+    val TextFixedWhitePrimary: Color get() = Color(0xE6FFFFFF)
+    val TextFixedWhiteSecondary: Color get() = Color(0x99FFFFFF)
+    val TextFixedBlackPrimary: Color get() = Color(0xF5000000)
+    val TextFixedBlackSecondary: Color get() = Color(0xAD000000)
+
     // ── Overlays（与 XML colorOverlay* 对齐）──
     /** 半透明遮罩（用于抽屉/弹窗背景） */
     val OverlayDim: Color get() = if (isLight) Color(0x80000000) else Color(0xAD000000)
     val OverlayScrim: Color get() = if (isLight) Color(0x33000000) else Color(0x52000000)
+    val OverlayLabel: Color get() = if (isLight) Color(0xAD000000) else Color(0xAD000000)
 
     /** 各 Activity 的 window.statusBarColor 用它，随主题自适应。 */
     val statusBarArgb: Int get() = Background.toArgb()

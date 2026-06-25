@@ -228,17 +228,23 @@ androidComponents {
 }
 
 fun getVersionGit(): String {
-    val process1 = Runtime.getRuntime().exec("git rev-parse --abbrev-ref HEAD")
-    val reader1 = BufferedReader(InputStreamReader(process1.inputStream))
-    val branch = reader1.readLine()?.trim()
-    reader1.close()
+    return try {
+        val process1 = Runtime.getRuntime().exec("git rev-parse --abbrev-ref HEAD")
+        val reader1 = BufferedReader(InputStreamReader(process1.inputStream))
+        val branch = reader1.readLine()?.trim()
+        reader1.close()
+        process1.waitFor()
 
-    val process2 = Runtime.getRuntime().exec("git rev-parse HEAD")
-    val reader2 = BufferedReader(InputStreamReader(process2.inputStream))
-    val sha1 = reader2.readLine()?.trim()
-    reader2.close()
-    // 将数据拼接起来，如果只需要SHA-1 那么就可以不执行process1命令
-    return "\"" + branch + "_" + sha1 + "\""
+        val process2 = Runtime.getRuntime().exec("git rev-parse HEAD")
+        val reader2 = BufferedReader(InputStreamReader(process2.inputStream))
+        val sha1 = reader2.readLine()?.trim()
+        reader2.close()
+        process2.waitFor()
+
+        "\"${branch ?: "unknown"}_${sha1 ?: "unknown"}\""
+    } catch (e: Exception) {
+        "\"unknown_unknown\""
+    }
 }
 
 fun getDateTime(): String {

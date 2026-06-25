@@ -150,9 +150,9 @@ object PathGuard {
      * 防止越界访问 /system、/proc、其他 App 的 /data/data 私有目录。
      */
     fun underSdcard(path: String): PathVerdict {
-        // 高级自动化模式：解除 /sdcard 沙箱，允许访问设备上 shell UID 可达的任意路径
+        // 完全权限模式：解除 /sdcard 沙箱，允许访问设备上 shell UID 可达的任意路径
         // （仍受下游 ShizukuShellService.isValidPath 的注入/遍历校验约束）。
-        if (com.apk.claw.android.utils.KVUtils.isAdvancedAutomationMode()) {
+        if (!PermissionModeManager.getCurrentPolicy().pathSandboxEnabled) {
             return PathVerdict(true, path, resolved = path)
         }
         return check(path, sandboxDir = SDCARD_SANDBOX)

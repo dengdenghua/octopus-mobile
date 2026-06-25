@@ -3,52 +3,14 @@
 <head>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Octopus 网页遥控台</title>
-<style>
-  *{box-sizing:border-box}
-  html,body{margin:0;height:100%;background:linear-gradient(135deg,#10131c 0%,#171a27 48%,#0d1119 100%);font-family:-apple-system,system-ui,sans-serif;color:#f4f7fb;overflow:hidden}
-  #app{display:flex;height:100vh;padding:12px;gap:12px}
-  /* 左:手机镜像 */
-  #left{display:flex;flex-direction:column;background:rgba(10,12,18,.72);border:1px solid rgba(255,255,255,.12);border-radius:22px;box-shadow:0 20px 56px rgba(0,0,0,.32);overflow:hidden;flex:0 0 auto;backdrop-filter:blur(22px)}
-  .ltbar{min-height:48px;display:flex;align-items:center;gap:8px;padding:7px 10px;background:rgba(255,255,255,.07);border-bottom:1px solid rgba(255,255,255,.1);white-space:nowrap}
-  .ltbar button{background:rgba(255,255,255,.1);color:#f4f7fb;border:1px solid rgba(255,255,255,.16);border-radius:999px;padding:7px 11px;font-size:12px;cursor:pointer}
-  .ltbar button:active{background:rgba(76,185,126,.32)}
-  #st{font-size:11px;color:#94c7ff;margin-left:4px}
-  #stage{position:relative;flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#050608;min-height:0}
-  #screen{max-height:100%;max-width:46vw;cursor:crosshair;user-select:none;-webkit-user-drag:none}
-  #msg2{position:absolute;bottom:10px;left:10px;color:#c7cedb;font-size:11px;max-width:44vw;background:rgba(0,0,0,.36);border:1px solid rgba(255,255,255,.08);border-radius:999px;padding:5px 9px}
-  /* 右:对话 */
-  #right{flex:1;display:flex;flex-direction:column;background:rgba(18,22,32,.68);border:1px solid rgba(255,255,255,.12);border-radius:22px;box-shadow:0 20px 56px rgba(0,0,0,.28);min-width:0;overflow:hidden;backdrop-filter:blur(22px)}
-  .rtbar{height:48px;display:flex;align-items:center;gap:10px;padding:0 16px;background:rgba(255,255,255,.07);border-bottom:1px solid rgba(255,255,255,.1);font-size:14px;font-weight:700}
-  .rtbar #run{font-size:11px;color:#ffb6d6;font-weight:600}
-  #chat{flex:1;overflow:auto;padding:14px;display:flex;flex-direction:column;gap:8px}
-  .b{max-width:80%;padding:9px 12px;border-radius:14px;font-size:14px;line-height:1.5;white-space:pre-wrap;word-break:break-word;border:1px solid rgba(255,255,255,.1)}
-  .user{align-self:flex-end;background:linear-gradient(135deg,#3c7dff,#6e8cff);color:#fff;border-bottom-right-radius:5px}
-  .asst{align-self:flex-start;background:rgba(255,255,255,.08);color:#f4f7fb;border-bottom-left-radius:5px}
-  .tool{align-self:flex-start;font-size:12px;color:#a9efbb;background:rgba(72,180,108,.16);border:1px solid rgba(169,239,187,.16);padding:5px 10px;border-radius:999px}
-  .err{align-self:flex-start;color:#ffd7da;background:rgba(208,64,82,.18);border:1px solid rgba(255,215,218,.15);padding:7px 11px;border-radius:12px;font-size:13px}
-  #inputrow{display:flex;gap:8px;padding:10px;border-top:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.04)}
-  #ta{flex:1;background:rgba(255,255,255,.08);color:#f4f7fb;border:1px solid rgba(255,255,255,.14);border-radius:14px;padding:10px 12px;font-size:14px;resize:none;height:44px;max-height:120px;outline:none}
-  #ta:focus{border-color:rgba(122,167,255,.72);background:rgba(255,255,255,.11)}
-  #send{background:linear-gradient(135deg,#34c76f,#22a967);color:#fff;border:none;border-radius:14px;padding:0 18px;font-size:14px;font-weight:700;cursor:pointer}
-  #send:disabled{background:rgba(255,255,255,.14);color:#9aa3b2;cursor:default}
-  /* 窄屏(手机/竖屏看本网页):上下堆叠 —— 上镜像、下对话,避免左右挤压 */
-  @media (max-width: 820px){
-    #app{flex-direction:column;padding:8px;gap:8px}
-    #left{flex:0 0 auto}
-    #stage{max-height:44vh}
-    #screen{max-width:100%;max-height:44vh}
-    #msg2{max-width:96vw}
-    .ltbar{flex-wrap:wrap;height:auto;min-height:44px;padding:6px 8px}
-    #right{flex:1;min-height:0}
-    .b{max-width:92%}
-  }
-</style>
+<link rel="stylesheet" href="console-style.css">
 </head>
 <body>
 <div id="app">
   <div id="left">
     <div class="ltbar">
       <b style="font-size:13px">🖥 手机</b><span id="st">连接中…</span>
+      <span id="latency">-- ms</span>
       <button onclick="act('back')">返回</button>
       <button onclick="act('home')">主屏</button>
       <button onclick="act('recent')">最近</button>
@@ -66,76 +28,15 @@
     </div>
   </div>
 </div>
-<script>
-  const q=new URLSearchParams(location.search), TOKEN=q.get('token')||'';
-  let DW=1080, DH=2400;
-  const img=document.getElementById('screen'), st=document.getElementById('st'), msg2=document.getElementById('msg2');
-  const chat=document.getElementById('chat'), ta=document.getElementById('ta'), sendBtn=document.getElementById('send'), runEl=document.getElementById('run');
-  function api(p){ return p+(p.includes('?')?'&':'?')+'token='+encodeURIComponent(TOKEN); }
-  async function post(action,body){
-    if(!TOKEN){ msg2.textContent='缺少 token,请从应用内复制带 token 的遥控台链接'; return; }
-    try{
-      const res=await fetch(api('/api/control/input'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({action},body||{}))});
-      const j=await res.json().catch(()=>null);
-      if(j&&j.code!==0) msg2.textContent=j.message||'操作失败';
-    }catch(e){ msg2.textContent='控制请求发送失败'; }
-  }
-  function act(a){ post(a); } function key(c){ post('key',{keyCode:c}); }
 
-  /* ── 左:手机镜像 + 控制 ── */
-  async function initMirror(){
-    if(!TOKEN){ st.textContent='○ 无 token'; msg2.textContent='用 …/console?token=你的token 打开'; sendBtn.disabled=true; bubble('err','缺少访问令牌,无法连接手机或启动任务。'); return; }
-    try{ const j=await (await fetch(api('/api/screen/info'))).json(); if(j&&j.data){DW=j.data.width;DH=j.data.height;} }catch(e){ msg2.textContent='屏幕信息获取失败'; }
-    img.onload=()=>{ st.textContent='● '+DW+'×'+DH; msg2.textContent=''; };
-    img.onerror=()=>{ st.textContent='○ 流断'; msg2.textContent='屏幕流断开,点刷新(确认 token / ConfigServer / 无障碍)'; };
-    reload();
-  }
-  function reload(){ img.src=api('/api/screen/stream?maxWidth=720&fps=12&quality=50&_='+Date.now()); }
-  function toDev(cx,cy){ const r=img.getBoundingClientRect();
-    return {x:Math.round(Math.min(1,Math.max(0,(cx-r.left)/r.width))*DW), y:Math.round(Math.min(1,Math.max(0,(cy-r.top)/r.height))*DH)}; }
-  let down=null,lp=null,moved=false;
-  img.addEventListener('mousedown',e=>{ down=toDev(e.clientX,e.clientY); down.t=Date.now(); moved=false;
-    lp=setTimeout(()=>{ if(down&&!moved){ post('long_press',{x:down.x,y:down.y,duration:600}); down=null; } },520); });
-  img.addEventListener('mousemove',e=>{ if(down){ const p=toDev(e.clientX,e.clientY); if(Math.hypot(p.x-down.x,p.y-down.y)>20)moved=true; } });
-  img.addEventListener('mouseup',e=>{ if(lp){clearTimeout(lp);lp=null;} if(!down)return; const up=toDev(e.clientX,e.clientY);
-    if(Math.hypot(up.x-down.x,up.y-down.y)>20) post('swipe',{x1:down.x,y1:down.y,x2:up.x,y2:up.y,duration:Math.min(800,Math.max(120,Date.now()-down.t))});
-    else post('tap',{x:up.x,y:up.y}); down=null; });
-  img.addEventListener('mouseleave',()=>{ if(lp){clearTimeout(lp);lp=null;} down=null; });
-  img.addEventListener('wheel',e=>{ e.preventDefault(); const r=img.getBoundingClientRect(); const c=toDev(r.left+r.width/2,r.top+r.height/2);
-    const dy=e.deltaY>0?-500:500; post('swipe',{x1:c.x,y1:c.y,x2:c.x,y2:Math.min(DH,Math.max(0,c.y+dy)),duration:200}); },{passive:false});
+<!-- 快捷键帮助面板 -->
+<div id="help-panel">
+  <h3>⌨ 快捷键</h3>
+  <div class="row"><span class="desc">显示/隐藏帮助</span><kbd>?</kbd></div>
+  <div class="row"><span class="desc">发送消息</span><kbd>Enter</kbd></div>
+  <div class="row"><span class="desc">换行</span><kbd>Shift+Enter</kbd></div>
+</div>
 
-  /* ── 右:对话(轮询任务助手事件) ── */
-  let cursor=0, curAsst=null;
-  function bubble(cls,text){ const d=document.createElement('div'); d.className='b '+cls; d.textContent=text; chat.appendChild(d); chat.scrollTop=chat.scrollHeight; return d; }
-  function applyEvent(ev){
-    if(ev.type==='user'){ bubble('user',ev.data); curAsst=null; }
-    else if(ev.type==='text'){ if(!curAsst) curAsst=bubble('asst',''); curAsst.textContent+=ev.data; chat.scrollTop=chat.scrollHeight; }
-    else if(ev.type==='tool'){ bubble('tool','🔧 '+ev.data); curAsst=null; }
-    else if(ev.type==='done'){ if((!curAsst||!curAsst.textContent)&&ev.data) bubble('asst',ev.data); curAsst=null; }
-    else if(ev.type==='error'){ bubble('err','⚠ '+ev.data); curAsst=null; }
-  }
-  async function poll(){
-    if(!TOKEN) return;
-    try{
-      const j=await (await fetch(api('/api/agent/events?since='+cursor))).json();
-      if(j&&j.events){ for(const ev of j.events){ applyEvent(ev); cursor=ev.i+1; } }
-      const running=j&&j.running;
-      sendBtn.disabled=!!running; runEl.textContent=running?'任务执行中…':'';
-    }catch(e){ runEl.textContent='连接中断'; }
-    setTimeout(poll, 800);
-  }
-  async function send(){
-    if(!TOKEN){ bubble('err','缺少访问令牌,无法发送指令。'); return; }
-    const t=ta.value.trim(); if(!t) return;
-    ta.value=''; sendBtn.disabled=true;
-    try{
-      const j=await (await fetch(api('/api/agent/run'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt:t})})).json();
-      if(j&&j.code!==0){ bubble('err',j.message||'任务启动失败'); sendBtn.disabled=false; }
-    }catch(e){ bubble('err','任务请求发送失败'); sendBtn.disabled=false; }
-  }
-  ta.addEventListener('keydown',e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); send(); } });
-
-  initMirror(); poll();
-</script>
+<script src="console-app.js"></script>
 </body>
 </html>

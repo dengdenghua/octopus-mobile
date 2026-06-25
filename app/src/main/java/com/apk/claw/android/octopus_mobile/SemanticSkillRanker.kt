@@ -34,16 +34,25 @@ object SemanticSkillRanker {
             .build()
     }
 
-    /** 从已配对的 ws RPC 地址推导 HTTP 网关基址:ws://host:8765 → http://host:8000。 */
+    /** 从已配对的 ws/wss RPC 地址推导 HTTP 网关基址。
+     *  wss://host:8765 → https://host:8000 (强制 TLS,保护 query 和排序结果不被嗅探/篡改)
+     *  ws://host:8765 → http://host:8000 (仅 loopback/局域网回退,生产环境应配 wss://) */
     private fun gatewayHttpBase(): String {
         val ws = KVUtils.getOctopusRpcUrl().trim()
         if (ws.isEmpty()) return ""
         return try {
-            val host = android.net.Uri.parse(ws).host ?: return ""
-            "http://$host:$GATEWAY_HTTP_PORT"
+            val uri = android.net.Uri.parse(ws)
+            val host = uri.host ?: return ""
+            val scheme = if (ws.startsWith("wss://")) "https" else "http"
+            "$scheme://$host:$GATEWAY_HTTP_PORT"
         } catch (e: Exception) {
             ""
         }
+    }
+
+    /** 获取母体配对 token,用于 HTTP 网关鉴权。 */
+    private fun gatewayAuthToken(): String {
+        return KVUtils.getOctopusAuthToken().trim()
     }
 
     /**
@@ -68,6 +77,13 @@ object SemanticSkillRanker {
             val request = Request.Builder()
                 .url("$base/api/retrieve/rank")
                 .post(payload.toString().toRequestBody("application/json".toMediaTypeOrNull()))
+                .apply {
+                    // 携带母体配对 token 鉴权,避免未授权请求
+                    val tok = gatewayAuthToken()
+                    if (tok.isNotEmpty()) {
+                        addHeader("Authorization", "Bearer $tok")
+                    }
+                }
                 .build()
             http.newCall(request).execute().use { resp ->
                 if (!resp.isSuccessful) return@withContext null

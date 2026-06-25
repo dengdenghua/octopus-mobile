@@ -70,7 +70,7 @@ object ToolRiskPolicy {
     fun summarizeResult(result: String?, maxChars: Int = 240): String =
         result?.replace('\n', ' ')?.take(maxChars).orEmpty()
 
-    private fun isSensitiveKey(key: String): Boolean {
+    fun isSensitiveKey(key: String): Boolean {
         val lower = key.lowercase()
         return SENSITIVE_KEY_PARTS.any { lower.contains(it) }
     }

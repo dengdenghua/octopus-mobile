@@ -163,6 +163,7 @@ private fun featureSections(): List<Pair<Int, List<FeatureItem>>> = listOf(
 @Composable
 fun FeatureHubScreen(
     onNavigateToAgentSquare: () -> Unit = {},
+    onNavigateToUniverse: () -> Unit = {},
 ) {
     val ctx = LocalContext.current
     var tab by remember { mutableStateOf(0) }
@@ -186,6 +187,7 @@ fun FeatureHubScreen(
                 0 -> ExploreTab(
                     onOpenActivity = { ctx.open(it) },
                     onNavigateToAgentSquare = onNavigateToAgentSquare,
+                    onNavigateToUniverse = onNavigateToUniverse,
                     onOpenPost = { selectedPost = it },
                 )
                 else -> ToolboxTab(sections) { ctx.open(it.target) }
@@ -248,6 +250,7 @@ private fun TabLabel(text: String, selected: Boolean, onClick: () -> Unit) {
 private fun ExploreTab(
     onOpenActivity: (Class<*>) -> Unit,
     onNavigateToAgentSquare: () -> Unit,
+    onNavigateToUniverse: () -> Unit,
     onOpenPost: (AgentDiscoveryPost) -> Unit,
 ) {
     var selectedTopic by remember { mutableStateOf(R.string.agent_square_tab_recommend) }
@@ -273,6 +276,7 @@ private fun ExploreTab(
         item(span = StaggeredGridItemSpan.FullLine) {
             AgentDiscoveryHeader(
                 onSearch = onNavigateToAgentSquare,
+                onUniverse = onNavigateToUniverse,
                 onCreate = { onOpenActivity(SkillsActivity::class.java) },
             )
         }
@@ -298,6 +302,7 @@ private fun ExploreTab(
 @Composable
 private fun AgentDiscoveryHeader(
     onSearch: () -> Unit,
+    onUniverse: () -> Unit,
     onCreate: () -> Unit,
 ) {
     GlassCard(modifier = Modifier.fillMaxWidth()) {
@@ -333,6 +338,7 @@ private fun AgentDiscoveryHeader(
             Spacer(Modifier.height(OctopusSpacing.md))
             Row(horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.sm), modifier = Modifier.fillMaxWidth()) {
                 AgentActionPill(Icons.Filled.Search, stringResource(R.string.agent_action_search), BrowserTint, Modifier.weight(1f), onSearch)
+                AgentActionPill(Icons.Filled.Psychology, stringResource(R.string.agent_action_universe), MemoryTint, Modifier.weight(1f), onUniverse)
                 AgentActionPill(Icons.Filled.Add, stringResource(R.string.agent_action_publish), SkillTint, Modifier.weight(1f), onCreate)
             }
         }
@@ -619,8 +625,38 @@ private fun AgentDiscoveryDetail(
 
                 Spacer(Modifier.height(OctopusSpacing.lg))
                 Row(horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.sm), modifier = Modifier.fillMaxWidth()) {
-                    AgentActionPill(Icons.Filled.Favorite, stringResource(R.string.agent_action_favorite), post.tagColor, Modifier.weight(1f), onDismiss)
-                    AgentActionPill(Icons.Filled.PlayArrow, stringResource(R.string.agent_action_reproduce), OctopusColors.Primary, Modifier.weight(1f), onRun)
+                    // 底部操作按钮用不透明 Surface，避免玻璃透明导致看不清
+                    Surface(
+                        shape = OctopusShape.capsule,
+                        color = OctopusColors.Surface,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, post.tagColor.copy(alpha = 0.4f)),
+                        modifier = Modifier.weight(1f).clickable(onClick = onDismiss),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(vertical = OctopusSpacing.md),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.Filled.Favorite, contentDescription = null, tint = post.tagColor, modifier = Modifier.size(OctopusIconSize.small))
+                            Spacer(Modifier.width(OctopusSpacing.xs))
+                            Text(stringResource(R.string.agent_action_favorite), color = OctopusColors.TextPrimary, fontSize = OctopusType.label, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                    Surface(
+                        shape = OctopusShape.capsule,
+                        color = OctopusColors.Primary,
+                        modifier = Modifier.weight(1f).clickable(onClick = onRun),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(vertical = OctopusSpacing.md),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.Filled.PlayArrow, contentDescription = null, tint = OctopusColors.OnPrimary, modifier = Modifier.size(OctopusIconSize.small))
+                            Spacer(Modifier.width(OctopusSpacing.xs))
+                            Text(stringResource(R.string.agent_action_reproduce), color = OctopusColors.OnPrimary, fontSize = OctopusType.label, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
                 }
             }
         }

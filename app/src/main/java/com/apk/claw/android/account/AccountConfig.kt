@@ -17,6 +17,8 @@ object AccountConfig {
     private const val KEY_MOCK = "ACCOUNT_MOCK_MODE"
     private const val KEY_MODEL_SOURCE = "ACCOUNT_MODEL_SOURCE"
     private const val KEY_MODEL_TIER = "ACCOUNT_MODEL_TIER"
+    private const val KEY_ECHO_UNIVERSE_BASE_URL = "ECHO_UNIVERSE_BASE_URL"
+    private const val KEY_OCTOPUS_RUNTIME_BASE_URL = "OCTOPUS_RUNTIME_BASE_URL"
 
     /** 用户可见的对话档位(不暴露底层模型名)。fast=极速/flash=标准/premium=高级。 */
     const val TIER_FAST = "fast"
@@ -73,6 +75,20 @@ object AccountConfig {
 
     /** OpenAI-compatible base of the relay (where the shared MiMo key lives). */
     fun platformLlmBaseUrl(): String = baseUrl.trimEnd('/') + "/v1"
+
+    /** ECHO Universe Engine backend. Emulator default points to the host machine. */
+    var echoUniverseBaseUrl: String
+        get() = KVUtils.getString(KEY_ECHO_UNIVERSE_BASE_URL, "http://10.0.2.2:8011")
+        set(v) {
+            KVUtils.putString(KEY_ECHO_UNIVERSE_BASE_URL, v.trim())
+        }
+
+    /** Mother runtime HTTP API. Used by ECHO Ghost chat via /v1/chat/completions. */
+    var octopusRuntimeBaseUrl: String
+        get() = KVUtils.getString(KEY_OCTOPUS_RUNTIME_BASE_URL, "http://10.0.2.2:8000")
+        set(v) {
+            KVUtils.putString(KEY_OCTOPUS_RUNTIME_BASE_URL, v.trim())
+        }
 
     /** "platform" (relay + MiMo + credits, default) or "byo" (user's own model). */
     var modelSource: String
