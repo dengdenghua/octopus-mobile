@@ -1,8 +1,8 @@
 package com.apk.claw.android.channel.wechat
+import com.apk.claw.android.utils.OctoHttp
 
 import com.apk.claw.android.utils.XLog
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.security.MessageDigest
@@ -25,7 +25,7 @@ object WeChatCdn {
     private const val TAG = "WeChatCdn"
     private const val UPLOAD_MAX_RETRIES = 3
 
-    private val httpClient = OkHttpClient.Builder()
+    private val httpClient = OctoHttp.shared.newBuilder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(60, TimeUnit.SECONDS)

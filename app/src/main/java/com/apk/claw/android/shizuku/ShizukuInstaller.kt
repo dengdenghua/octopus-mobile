@@ -1,4 +1,5 @@
 package com.apk.claw.android.shizuku
+import com.apk.claw.android.utils.OctoHttp
 
 import android.content.Context
 import android.content.Intent
@@ -11,7 +12,6 @@ import android.provider.Settings
 import androidx.core.content.FileProvider
 import com.apk.claw.android.R
 import com.apk.claw.android.account.AccountConfig
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
 import java.io.File
@@ -23,7 +23,7 @@ object ShizukuInstaller {
     private const val APK_FILE_NAME = "Shizuku.apk"
 
     private val main = Handler(Looper.getMainLooper())
-    private val http = OkHttpClient.Builder()
+    private val http = OctoHttp.shared.newBuilder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(120, TimeUnit.SECONDS)
         .build()

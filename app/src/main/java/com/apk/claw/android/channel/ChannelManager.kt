@@ -1,4 +1,5 @@
 package com.apk.claw.android.channel
+import com.apk.claw.android.utils.OctoHttp
 
 import com.apk.claw.android.channel.dingtalk.DingTalkChannelHandler
 import com.apk.claw.android.channel.discord.DiscordChannelHandler
@@ -10,7 +11,6 @@ import com.apk.claw.android.utils.XLog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import okhttp3.OkHttpClient
 import java.util.concurrent.ConcurrentHashMap
 
 enum class Channel(val displayName: String) {
@@ -27,7 +27,7 @@ object ChannelManager {
     private const val TAG = "ChannelManager"
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val httpClient = OkHttpClient()
+    private val httpClient = OctoHttp.shared
 
     private val handlers = ConcurrentHashMap<Channel, ChannelHandler>()
     @Volatile

@@ -1,4 +1,5 @@
 package com.apk.claw.android.tool.impl
+import com.apk.claw.android.utils.OctoHttp
 
 import com.apk.claw.android.account.AccountConfig
 import com.apk.claw.android.account.AccountStore
@@ -34,7 +35,7 @@ class EchoUniverseTools {
 
     // ── HTTP 客户端（与 UniverseRepository 对齐） ──
     private object Net {
-        val http: OkHttpClient = OkHttpClient.Builder()
+        val http: OkHttpClient = OctoHttp.shared.newBuilder()
             .connectTimeout(8, TimeUnit.SECONDS)
             .readTimeout(15, TimeUnit.SECONDS)
             .build()

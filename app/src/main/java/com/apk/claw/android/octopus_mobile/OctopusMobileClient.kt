@@ -1,4 +1,5 @@
 package com.apk.claw.android.octopus_mobile
+import com.apk.claw.android.utils.OctoHttp
 
 import android.util.Log
 import com.google.gson.Gson
@@ -42,7 +43,7 @@ open class OctopusMobileClient(
 
     private val gson = Gson()
 
-    private val httpClient: OkHttpClient = OkHttpClient.Builder()
+    private val httpClient: OkHttpClient = OctoHttp.shared.newBuilder()
         .pingInterval(30, TimeUnit.SECONDS)
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(0, TimeUnit.MILLISECONDS)  // WebSocket 长连接，无读超时

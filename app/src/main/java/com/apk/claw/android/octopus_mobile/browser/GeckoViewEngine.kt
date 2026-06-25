@@ -176,8 +176,8 @@ class GeckoViewEngine : BrowserEngine {
         val rt = runtime
         return EngineInfo(
             name = name,
-            version = "GeckoView 125.0.20240412",
-            userAgent = "Mozilla/5.0 (Android ${Build.VERSION.RELEASE}; Mobile; rv:125.0) Gecko/125.0 Firefox/125.0",
+            version = "GeckoView 151.0.20260513195118",
+            userAgent = "Mozilla/5.0 (Android ${Build.VERSION.RELEASE}; Mobile; rv:151.0) Gecko/151.0 Firefox/151.0",
             supportsExtensions = true,
             antiBotScore = antiBotScore,
             notes = "Firefox 内核，WebExtension API，CRX 自动转 XPI 安装"

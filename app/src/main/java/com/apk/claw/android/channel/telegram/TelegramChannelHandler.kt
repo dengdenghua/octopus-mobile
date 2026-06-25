@@ -1,4 +1,5 @@
 package com.apk.claw.android.channel.telegram
+import com.apk.claw.android.utils.OctoHttp
 
 import com.apk.claw.android.channel.Channel
 import com.apk.claw.android.channel.ChannelHandler
@@ -29,7 +30,7 @@ class TelegramChannelHandler(
     private var pollingThread: Thread? = null
 
     private val pollingHttpClient: OkHttpClient by lazy {
-        OkHttpClient.Builder()
+        OctoHttp.shared.newBuilder()
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(40, TimeUnit.SECONDS)
             .writeTimeout(15, TimeUnit.SECONDS)

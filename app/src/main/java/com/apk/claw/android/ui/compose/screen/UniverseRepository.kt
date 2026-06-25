@@ -1,4 +1,5 @@
 package com.apk.claw.android.ui.compose.screen
+import com.apk.claw.android.utils.OctoHttp
 
 import com.apk.claw.android.account.AccountConfig
 import com.apk.claw.android.account.AccountStore
@@ -8,7 +9,6 @@ import com.google.gson.annotations.SerializedName
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.UUID
@@ -137,7 +137,7 @@ internal object UniverseRepository {
     private const val LOCAL_USER_KEY = "ECHO_UNIVERSE_LOCAL_USER_ID"
     private val jsonType = "application/json; charset=utf-8".toMediaType()
     private val gson = Gson()
-    private val http = OkHttpClient.Builder()
+    private val http = OctoHttp.shared.newBuilder()
         .connectTimeout(8, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
         .build()

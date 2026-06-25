@@ -20,6 +20,7 @@ import java.util.List;
 
 import okhttp3.Call;
 import okhttp3.Callback;
+import com.apk.claw.android.utils.OctoHttp;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
@@ -73,7 +74,7 @@ public class QBotWebSocketManager {
     }
 
     private QBotWebSocketManager() {
-        httpClient = new OkHttpClient.Builder()
+        httpClient = OctoHttp.shared.newBuilder()
                 .connectTimeout(10, TimeUnit.SECONDS)
                 .readTimeout(60, TimeUnit.SECONDS)
                 .writeTimeout(10, TimeUnit.SECONDS)

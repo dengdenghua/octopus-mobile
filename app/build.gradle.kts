@@ -168,7 +168,8 @@ dependencies {
 
     // GeckoView — Firefox 内核 WebView 替代品（反爬免疫 + WebExtension 扩展支持）
     // 125.0 was pruned from Mozilla's maven; bumped to a current 151.x release.
-    implementation("org.mozilla.geckoview:geckoview:151.0.20260513195118")
+    // 版本在 gradle/libs.versions.toml 的 geckoview 统一管理。
+    implementation(libs.geckoview)
 
     // Shizuku API —— shell 级权限增强（触控注入 / 截屏 / 按键 / 系统设置）
     // 用户需安装 Shizuku App 并通过无线调试授权一次

@@ -1,4 +1,5 @@
 package com.apk.claw.android.widget
+import com.apk.claw.android.utils.OctoHttp
 
 import android.content.Context
 import android.graphics.BitmapFactory
@@ -6,7 +7,6 @@ import android.util.AttributeSet
 import android.util.Log
 import androidx.appcompat.widget.AppCompatImageView
 import kotlinx.coroutines.*
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.BufferedInputStream
 import java.util.concurrent.TimeUnit
@@ -28,7 +28,7 @@ class MjpegImageView @JvmOverloads constructor(
         private const val DEFAULT_BOUNDARY = "octopus_mjpeg_boundary"
     }
 
-    private val httpClient = OkHttpClient.Builder()
+    private val httpClient = OctoHttp.shared.newBuilder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(0, TimeUnit.MINUTES) // 流式读取无超时
         .build()

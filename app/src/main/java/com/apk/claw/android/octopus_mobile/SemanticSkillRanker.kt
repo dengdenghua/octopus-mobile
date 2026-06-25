@@ -1,4 +1,5 @@
 package com.apk.claw.android.octopus_mobile
+import com.apk.claw.android.utils.OctoHttp
 
 import com.apk.claw.android.utils.KVUtils
 import com.apk.claw.android.utils.XLog
@@ -28,7 +29,7 @@ object SemanticSkillRanker {
     private const val GATEWAY_HTTP_PORT = 8000
 
     private val http: OkHttpClient by lazy {
-        OkHttpClient.Builder()
+        OctoHttp.shared.newBuilder()
             .connectTimeout(3, TimeUnit.SECONDS)
             .readTimeout(8, TimeUnit.SECONDS)
             .build()
