@@ -54,11 +54,11 @@ SMTP_PASS = os.environ.get("SMTP_PASS", "")
 SMTP_FROM = os.environ.get("SMTP_FROM", "")
 
 # 支付:mock=下单后查单即视为已支付(本地跑通);生产接微信/支付宝,用 webhook 改单状态
-PAYMENT_PROVIDER = os.environ.get("PAYMENT_PROVIDER", "mock")  # mock | wechat | alipay
+PAYMENT_PROVIDER = os.environ.get("PAYMENT_PROVIDER", "mock")  # mock | stripe | wechat | alipay
 if os.environ.get("ENV", "dev") == "production" and PAYMENT_PROVIDER == "mock":
-    raise RuntimeError("PAYMENT_PROVIDER=mock is not allowed in production. Configure wechat/alipay webhooks first.")
-if PAYMENT_PROVIDER not in {"mock", "wechat", "alipay"}:
-    raise RuntimeError("PAYMENT_PROVIDER must be one of: mock, wechat, alipay")
+    raise RuntimeError("PAYMENT_PROVIDER=mock is not allowed in production. Configure a real provider (stripe/wechat/alipay) first.")
+if PAYMENT_PROVIDER not in {"mock", "stripe", "wechat", "alipay"}:
+    raise RuntimeError("PAYMENT_PROVIDER must be one of: mock, stripe, wechat, alipay")
 ORDER_RATE_PER_MINUTE = int(os.environ.get("ORDER_RATE_PER_MINUTE", "10"))
 PENDING_ORDER_LIMIT = int(os.environ.get("PENDING_ORDER_LIMIT", "5"))
 PENDING_ORDER_WINDOW_MS = int(os.environ.get("PENDING_ORDER_WINDOW_MS", str(30 * 60 * 1000)))
@@ -1429,7 +1429,7 @@ def create_order(body: dict[str, Any], request: Request, u: sqlite3.Row = Depend
         )
         c.commit()
     # mock: 无收银台,客户端直接查单即支付成功;生产返回微信/支付宝 H5 收银台 url。
-    pay_url = None if PAYMENT_PROVIDER == "mock" else _create_cashier(order_no, g)
+    pay_url = None if PAYMENT_PROVIDER == "mock" else _create_cashier(order_no, g, currency, amount_minor)
     return {"orderNo": order_no, "payUrl": pay_url, "amountFen": g["priceFen"],
             "currency": currency, "amountMinor": amount_minor,
             "credits": paid_credits + bonus_credits}
@@ -1473,12 +1473,55 @@ def _payment_configured() -> bool:
     """生产支付配置就绪检查。真支付未接好时不创建 PENDING 订单,避免账务脏数据。"""
     if PAYMENT_PROVIDER == "mock":
         return True
+    if PAYMENT_PROVIDER == "stripe":
+        return bool(os.environ.get("STRIPE_SECRET_KEY") and os.environ.get("STRIPE_WEBHOOK_SECRET"))
     prefix = "WECHAT" if PAYMENT_PROVIDER == "wechat" else "ALIPAY"
     return bool(os.environ.get(f"{prefix}_APP_ID") and os.environ.get(f"{prefix}_PRIVATE_KEY"))
 
 
-def _create_cashier(order_no: str, goods: dict[str, Any]) -> str:
+def _create_cashier(order_no: str, goods: dict[str, Any], currency: str, amount_minor: int) -> str:
+    if PAYMENT_PROVIDER == "stripe":
+        return _stripe_checkout_url(order_no, goods, currency, amount_minor)
     raise HTTPException(status_code=500, detail=f"payment '{PAYMENT_PROVIDER}' not wired yet")
+
+
+def _stripe_checkout_url(order_no: str, goods: dict[str, Any], currency: str, amount_minor: int) -> str:
+    """创建 Stripe Checkout Session,返回托管收银台 URL(用户在浏览器付卡)。
+    一次性支付(mode=payment);会员卡 30 天顺延由支付成功后 webhook→_settle 处理。
+    自动续费(Stripe Subscriptions)后续再加。注:Stripe 以国际卡为主,建议 currency=USD;
+    CNY 能否走取决于 Stripe 账户支持,不支持时 Stripe 直接返错(本函数透传 502)。"""
+    import httpx  # 惰性 import,与中转转发一致
+    secret = os.environ.get("STRIPE_SECRET_KEY", "")
+    if not secret:
+        raise HTTPException(status_code=503, detail="stripe not configured")
+    success_url = os.environ.get("STRIPE_SUCCESS_URL", "https://api.octoapk.com/pay/success")
+    cancel_url = os.environ.get("STRIPE_CANCEL_URL", "https://api.octoapk.com/pay/cancel")
+    form = {
+        "mode": "payment",
+        "success_url": success_url,
+        "cancel_url": cancel_url,
+        "client_reference_id": order_no,
+        "metadata[order_no]": order_no,
+        "line_items[0][quantity]": "1",
+        "line_items[0][price_data][currency]": currency.lower(),
+        "line_items[0][price_data][unit_amount]": str(int(amount_minor)),
+        "line_items[0][price_data][product_data][name]": str(goods.get("title") or goods["id"]),
+    }
+    try:
+        with httpx.Client(timeout=20) as client:
+            resp = client.post(
+                "https://api.stripe.com/v1/checkout/sessions",
+                data=form,
+                headers={"Authorization": f"Bearer {secret}"},
+            )
+    except httpx.HTTPError as e:
+        raise HTTPException(status_code=502, detail=f"stripe unreachable: {e}") from e
+    if resp.status_code >= 400:
+        raise HTTPException(status_code=502, detail=f"stripe error: {resp.text[:300]}")
+    url = resp.json().get("url")
+    if not url:
+        raise HTTPException(status_code=502, detail="stripe: no checkout url")
+    return url
 
 
 def _settle(c: sqlite3.Connection, order: sqlite3.Row) -> int:
@@ -1537,10 +1580,69 @@ def query_order(order_no: str, u: sqlite3.Row = Depends(actor)) -> dict[str, Any
     return {"orderNo": order_no, "status": status, "credits": granted}
 
 
-# 生产支付回调(微信/支付宝)在这里验签 → _settle → 200。骨架先留桩。
+# 生产支付回调在这里验签 → _settle → 200。
 @app.post("/billing/webhook/{provider}")
 async def payment_webhook(provider: str, request: Request) -> JSONResponse:
+    if provider == "stripe" and PAYMENT_PROVIDER == "stripe":
+        return await _stripe_webhook(request)
     raise HTTPException(status_code=501, detail=f"webhook for '{provider}' not implemented")
+
+
+def _stripe_verify_sig(payload: bytes, sig_header: str, secret: str) -> bool:
+    """验 Stripe-Signature:头形如 't=<ts>,v1=<hex>',v1 = HMAC-SHA256(f'{ts}.{payload}', secret)。"""
+    try:
+        parts = dict(p.split("=", 1) for p in sig_header.split(",") if "=" in p)
+        ts, v1 = parts.get("t", ""), parts.get("v1", "")
+        if not ts or not v1:
+            return False
+        if abs(int(time.time()) - int(ts)) > 300:  # 防重放:5 分钟容差
+            return False
+        signed = ts.encode() + b"." + payload
+        expected = hmac.new(secret.encode(), signed, hashlib.sha256).hexdigest()
+        return hmac.compare_digest(expected, v1)
+    except Exception:
+        return False
+
+
+async def _stripe_webhook(request: Request) -> JSONResponse:
+    secret = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+    if not secret:
+        raise HTTPException(status_code=503, detail="stripe webhook not configured")
+    payload = await request.body()
+    if not _stripe_verify_sig(payload, request.headers.get("stripe-signature", ""), secret):
+        raise HTTPException(status_code=400, detail="invalid signature")
+    try:
+        event = json.loads(payload.decode("utf-8"))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="invalid payload") from e
+    if event.get("type") != "checkout.session.completed":
+        return JSONResponse({"ok": True, "ignored": event.get("type")})
+    obj = (event.get("data") or {}).get("object") or {}
+    if obj.get("payment_status") not in (None, "paid", "no_payment_required"):
+        return JSONResponse({"ok": True, "unpaid": obj.get("payment_status")})
+    order_no = (obj.get("metadata") or {}).get("order_no") or obj.get("client_reference_id")
+    if not order_no:
+        return JSONResponse({"ok": True, "no_order": True})
+    with closing(db()) as c:
+        o = c.execute("SELECT * FROM orders WHERE order_no=?", (order_no,)).fetchone()
+        if o is not None and o["status"] == "PENDING":  # 幂等:已 PAID 的重复回调放过
+            _settle(c, o)
+            c.commit()
+    return JSONResponse({"ok": True})
+
+
+@app.get("/pay/success")
+def pay_success() -> HTMLResponse:
+    return HTMLResponse("<!doctype html><meta charset=utf-8><title>支付成功</title>"
+                        "<body style='font-family:sans-serif;text-align:center;padding-top:20vh'>"
+                        "<h2>✅ 支付成功</h2><p>积分 / 会员将自动到账,请返回 App 查看余额。</p></body>")
+
+
+@app.get("/pay/cancel")
+def pay_cancel() -> HTMLResponse:
+    return HTMLResponse("<!doctype html><meta charset=utf-8><title>已取消</title>"
+                        "<body style='font-family:sans-serif;text-align:center;padding-top:20vh'>"
+                        "<h2>支付已取消</h2><p>可返回 App 重试。</p></body>")
 
 
 @app.post("/billing/subscription/renew")
