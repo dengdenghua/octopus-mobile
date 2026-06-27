@@ -267,8 +267,9 @@ class AccountActivity : BaseActivity() {
     private fun formatDate(epochMillis: Long): String =
         SimpleDateFormat("yyyy-MM-dd", Locale.US).format(epochMillis)
 
-    /** 英文区显示美元价(priceUsdCents),其余显示人民币(priceFen)。 */
-    private fun selectedCurrency(): String = if (Locale.getDefault().language == "en") "USD" else "CNY"
+    /** 平台支付为 Stripe(国际卡,多数 Stripe 账户不支持 CNY),下单统一走 USD,价格也显示
+     *  美元价(priceUsdCents)。将来若接微信/支付宝(CNY)再按支付渠道区分。 */
+    private fun selectedCurrency(): String = "USD"
 
     private fun formatPrice(g: Goods): String {
         val (sym, cents) = if (selectedCurrency() == "USD" && g.priceUsdCents > 0) "$" to g.priceUsdCents else "¥" to g.priceFen
