@@ -41,6 +41,17 @@ object ToolRiskPolicy {
         "read_sms",
         "read_calendar",
         "get_usage_stats",
+        // 状态变更 / 外部写入类：纳入审计，避免远程/LAN 不可信源驱动这些操作却无审计轨迹。
+        // （仅审计，不新增拦截——HIGH 才会对不可信源走来源闸门。）
+        "navigate",            // UI 导航编排（驱动一连串点击）
+        "tap_by_vision",       // 视觉定位点击（与 tap 同类副作用）
+        "repeat_actions",      // 重放录制动作序列（子动作各自再过一遍 executeTool 管线）
+        "browser_navigate",    // 浏览器导航到任意 URL（SSRF 面，另由 UrlGuard 兜底）
+        "browser_click",       // 网页交互（与 tap 同类）
+        "browser_type",        // 网页输入（与 input_text 同类，可能填入凭据）
+        "create_pm_task",      // 写企业 PM 系统
+        "echo_act",            // 写 Echo 虚拟世界
+        "echo_bind",           // 绑定角色进 Echo 虚拟世界
     )
 
     /**
@@ -49,12 +60,11 @@ object ToolRiskPolicy {
      * 作用：[ToolRiskPolicyCoverageTest] 断言「每个已注册工具都必须出现在 HIGH/MEDIUM/LOW 之一」，
      * 从而堵住「新增工具未分类 → [riskOf] 静默默认 LOW → 绕过审计与来源闸门」这条「因遗漏而不安全」的漂移路径。
      *
-     * 重要：本集合**仅保持现状、不改变运行时行为**（这些工具此前即默认 LOW）。其中标注 ⚠ 的条目
-     * 在风险上存疑（状态变更/外部写入/可重放），应由安全专项复核是否上调到 MEDIUM/HIGH——
-     * 列于此处不代表「已认定安全」，只代表「当前分类为 LOW，且已被纳入漂移守护」。
+     * 这里的条目均为只读/观察类或低危 navigation：无副作用或仅产生本地良性导航效果，纳入审计意义不大。
+     * 任何会改变设备/应用/外部状态的工具都不应放在这里——见 MEDIUM/HIGH。
      */
     val KNOWN_LOW_RISK_TOOLS: Set<String> = setOf(
-        // 只读 / 观察类（确为低风险）
+        // 只读 / 观察类
         "get_screen_info", "look_at_screen", "find_node_info", "get_installed_apps",
         "get_window_info", "take_screenshot", "browser_get_dom", "browser_screenshot",
         "current_time", "device_info", "echo_observe", "list_pm_projects",
@@ -62,14 +72,9 @@ object ToolRiskPolicy {
         "finish", "wait", "hello_world",
         // 滚动 / 检索（轻量、低危）
         "scroll_to_find", "search_app_in_store",
-        // ⚠ 输入按键事件（与 system_key 同类，安全专项可考虑上调 MEDIUM）
+        // 输入按键事件：TV 遥控导航键，低危且高频，审计价值低于噪音成本，保留 LOW。
         "dpad_up", "dpad_down", "dpad_left", "dpad_right", "dpad_center",
         "press_menu", "press_power", "volume_up", "volume_down",
-        // ⚠ 状态变更 / 外部写入（安全专项复核）
-        "create_pm_task", "echo_act", "echo_bind",
-        "navigate", "tap_by_vision", "repeat_actions",
-        // ⚠ 浏览器交互（同族的 browser_evaluate/browser_install_extension 已列 HIGH）
-        "browser_navigate", "browser_click", "browser_type",
     )
 
     /** 已知未注册但有意保留在风险名单中的工具名（前向兼容），供漂移守护排除。 */
