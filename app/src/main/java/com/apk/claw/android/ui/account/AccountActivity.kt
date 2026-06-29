@@ -84,12 +84,6 @@ class AccountActivity : BaseActivity() {
         renderTier()
 
         findViewById<KButton>(R.id.btnDailyClaim).setOnClickListener { claimDaily() }
-        findViewById<KButton>(R.id.btnMediaStudio).apply {
-            text = "🎨 AI 生图 / 生视频"
-            setOnClickListener {
-                startActivity(Intent(this@AccountActivity, com.apk.claw.android.ui.media.MediaActivity::class.java))
-            }
-        }
         findViewById<KButton>(R.id.btnCopyCode).setOnClickListener { copyInviteCode() }
         findViewById<KButton>(R.id.btnRedeem).setOnClickListener { redeemInvite() }
         findViewById<KButton>(R.id.btnLogout).setOnClickListener {

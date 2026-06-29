@@ -98,9 +98,6 @@
             android:name=".ui.account.AccountActivity"
             android:exported="false" />
         <activity
-            android:name=".ui.media.MediaActivity"
-            android:exported="false" />
-        <activity
             android:name=".ui.settings.LlmConfigActivity"
             android:exported="false" />
         <activity
