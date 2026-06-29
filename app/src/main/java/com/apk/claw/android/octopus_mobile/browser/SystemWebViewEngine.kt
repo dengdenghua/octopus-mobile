@@ -3,8 +3,12 @@ package com.apk.claw.android.octopus_mobile.browser
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.util.Base64
+import android.util.Log
 import android.view.View
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
@@ -148,14 +152,51 @@ class SystemWebViewEngine : BrowserEngine {
 
     override fun screenshot(): String? {
         val wv = activeWebView ?: return null
-        wv.isDrawingCacheEnabled = true
-        val bitmap = Bitmap.createBitmap(wv.drawingCache)
-        wv.isDrawingCacheEnabled = false
+        val width = wv.width
+        val height = wv.height
+        if (width <= 0 || height <= 0) return null
+        return fallbackCanvasScreenshot(wv)
+    }
 
-        val baos = ByteArrayOutputStream()
-        bitmap.compress(Bitmap.CompressFormat.PNG, 100, baos)
-        bitmap.recycle()
-        return Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
+    private fun fallbackCanvasScreenshot(wv: WebView): String? {
+        val width = wv.width
+        val height = wv.height
+        if (width <= 0 || height <= 0) return null
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        wv.draw(canvas)
+        return bitmapToBase64(bitmap).also { bitmap.recycle() }
+    }
+
+    private fun bitmapToBase64(bitmap: Bitmap): String? {
+        return try {
+            val baos = ByteArrayOutputStream()
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, baos)
+            Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    override fun destroy() {
+        val wv = activeWebView
+        activeWebView = null
+        if (wv != null) {
+            val mainHandler = Handler(Looper.getMainLooper())
+            mainHandler.post {
+                try {
+                    wv.stopLoading()
+                    wv.webChromeClient = null
+                    wv.webViewClient = WebViewClient()
+                    wv.loadUrl("about:blank")
+                    wv.clearHistory()
+                    wv.removeAllViews()
+                    wv.destroy()
+                } catch (e: Exception) {
+                    Log.w("SystemWebViewEngine", "Error destroying WebView: ${e.message}")
+                }
+            }
+        }
     }
 
     override fun isAvailable(): Boolean = true

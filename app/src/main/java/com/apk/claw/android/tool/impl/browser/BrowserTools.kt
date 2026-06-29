@@ -29,7 +29,7 @@ private fun unwrapJsString(value: String?): String? {
  *
  * agent 调用：android.browser.navigate({"url": "https://example.com"})
  */
-class NavigateTool(
+class BrowserNavigateTool(
     private val engine: BrowserEngine
 ) : BaseTool() {
 
@@ -85,8 +85,6 @@ class GetDomTool(
         var result: String? = null
         var completed = false
 
-        // selector/attribute 以 JSON 字面量注入，避免 CSS 选择器被当作 JS 代码执行
-        // （否则等价于任意 JS 注入）。attribute 用方括号取值。
         val selJson = org.json.JSONObject.quote(selector)
         val attrJson = org.json.JSONObject.quote(attribute)
         val script = """
@@ -103,14 +101,14 @@ class GetDomTool(
             completed = true
         }
 
-        // 同步等待（最多 5 秒）
         val deadline = System.currentTimeMillis() + 5000
         while (!completed && System.currentTimeMillis() < deadline) {
-            Thread.sleep(50)
+            if (!sleepInterruptible(50)) return ToolResult.error("Task cancelled during DOM query")
         }
 
-        return if (completed && result != null) {
-            ToolResult.success(result!!)
+        val finalResult = result
+        return if (completed && finalResult != null) {
+            ToolResult.success(finalResult)
         } else {
             ToolResult.error("Failed to get DOM (timeout or engine error)")
         }
@@ -127,8 +125,8 @@ class BrowserClickTool(
     override fun getName() = "browser_click"
     override fun getDisplayName() = "浏览器点击"
 
-    override fun getDescriptionEN() = "Click an element in the browser by CSS selector."
-    override fun getDescriptionCN() = "通过 CSS 选择器在浏览器中点击元素。"
+    override fun getDescriptionEN() = "Click an element in the browser by CSS selector. Verifies element exists and checks post-click state."
+    override fun getDescriptionCN() = "通过 CSS 选择器在浏览器中点击元素。会验证元素存在并检查点击后状态变化。"
 
     override fun getParameters() = listOf(
         ToolParameter("selector", "string", "CSS selector of the element to click", true),
@@ -137,17 +135,22 @@ class BrowserClickTool(
     override fun execute(params: Map<String, Any>): ToolResult {
         val selector = requireString(params, "selector")
 
+        val selJson = org.json.JSONObject.quote(selector)
+
+        val beforeUrl = engine.currentUrl()
+
         var result: String? = null
         var completed = false
 
-        val selJson = org.json.JSONObject.quote(selector)
         val script = """
             (function() {
                 var sel = $selJson;
                 var el = document.querySelector(sel);
-                if (!el) return 'Element not found: ' + sel;
+                if (!el) return 'ERROR: Element not found: ' + sel;
+                var tag = el.tagName;
+                var text = (el.innerText || el.value || '').substring(0, 50);
                 el.click();
-                return 'Clicked: ' + sel;
+                return 'OK: Clicked <' + tag + '> \"' + text + '\"';
             })()
         """.trimIndent()
 
@@ -158,13 +161,23 @@ class BrowserClickTool(
 
         val deadline = System.currentTimeMillis() + 3000
         while (!completed && System.currentTimeMillis() < deadline) {
-            Thread.sleep(50)
+            if (!sleepInterruptible(50)) return ToolResult.error("Task cancelled during click")
         }
 
-        return if (completed && result != null) {
-            ToolResult.success(result!!)
+        val finalResult = result ?: return ToolResult.error("Click failed (timeout)")
+
+        if (finalResult.startsWith("ERROR:")) {
+            return ToolResult.error(finalResult.removePrefix("ERROR:").trim())
+        }
+
+        sleepInterruptible(300)
+        val afterUrl = engine.currentUrl()
+        val urlChanged = afterUrl != beforeUrl && afterUrl.isNotEmpty()
+
+        return if (urlChanged) {
+            ToolResult.success("$finalResult (page navigated to: $afterUrl)")
         } else {
-            ToolResult.error("Click failed (timeout)")
+            ToolResult.success("$finalResult")
         }
     }
 }
@@ -200,19 +213,19 @@ class BrowserTypeTool(
         var result: String? = null
         var completed = false
 
-        // selector/text 以 JSON 字面量注入，避免被当作 JS 代码执行（任意 JS 注入）。
         val selJson = org.json.JSONObject.quote(selector)
         val textJson = org.json.JSONObject.quote(text)
         val script = """
             (function() {
                 var sel = $selJson;
                 var el = document.querySelector(sel);
-                if (!el) return 'Element not found: ' + sel;
+                if (!el) return 'ERROR: Element not found: ' + sel;
+                var tag = el.tagName;
                 el.value = $textJson;
                 el.dispatchEvent(new Event('input', {bubbles: true}));
                 el.dispatchEvent(new Event('change', {bubbles: true}));
                 $submitCode
-                return 'Typed into: ' + sel;
+                return 'OK: Typed into <' + tag + '> \"' + $textJson.substring(0, 30) + '\"';
             })()
         """.trimIndent()
 
@@ -223,14 +236,16 @@ class BrowserTypeTool(
 
         val deadline = System.currentTimeMillis() + 3000
         while (!completed && System.currentTimeMillis() < deadline) {
-            Thread.sleep(50)
+            if (!sleepInterruptible(50)) return ToolResult.error("Task cancelled during type")
         }
 
-        return if (completed && result != null) {
-            ToolResult.success(result!!)
-        } else {
-            ToolResult.error("Type failed (timeout)")
+        val finalResult = result ?: return ToolResult.error("Type failed (timeout)")
+
+        if (finalResult.startsWith("ERROR:")) {
+            return ToolResult.error(finalResult.removePrefix("ERROR:").trim())
         }
+
+        return ToolResult.success(finalResult)
     }
 }
 
@@ -294,7 +309,7 @@ class BrowserEvaluateTool(
 
         val deadline = System.currentTimeMillis() + 10000
         while (!completed && System.currentTimeMillis() < deadline) {
-            Thread.sleep(50)
+            if (!sleepInterruptible(50)) return ToolResult.error("Task cancelled during JS evaluation")
         }
 
         return if (completed) {

@@ -2,14 +2,20 @@ package com.apk.claw.android.octopus_mobile.browser
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import com.apk.claw.android.BuildConfig
 import android.util.Base64
 import android.util.Log
+import android.view.PixelCopy
+import android.view.SurfaceView
 import android.view.View
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
@@ -19,21 +25,9 @@ import org.mozilla.geckoview.WebExtensionController
 import org.mozilla.geckoview.WebRequestError
 import android.net.Uri
 import java.io.ByteArrayOutputStream
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
-/**
- * GeckoView 引擎 —— 主力实现.
- *
- * 优势：
- *  - Mozilla Firefox 内核（非 Chromium WebView 阉割版）
- *  - 反爬免疫度：✅ 高（Firefox 指纹，反爬系统不标记为 bot）
- *  - 装扩展：✅ WebExtension API（CRX 自动转 XPI 后安装）
- *  - 自包含：✅ Maven 一行依赖
- *  - 包大：+15-20 MB（arm64-v8a）
- *
- * 使用：
- *  - build.gradle.kts 加 implementation("org.mozilla.geckoview:geckoview:125.0.20240412")
- *  - BrowserEngineFactory.selectBest() 自动选择
- */
 class GeckoViewEngine : BrowserEngine {
 
     override val name = "GeckoView"
@@ -46,33 +40,31 @@ class GeckoViewEngine : BrowserEngine {
     private var activeView: GeckoView? = null
     private var currentUrlValue: String = ""
 
-    // ── 可用性检测 ────────────────────────────────────
+    @Volatile private var evalResult: String? = null
+    @Volatile private var evalPending = false
+    @Volatile private var destroyed = false
+    private var evalCheckTask: Runnable? = null
 
     override fun isAvailable(): Boolean {
         return try {
             Class.forName("org.mozilla.geckoview.GeckoRuntime")
             true
         } catch (e: ClassNotFoundException) {
-            Log.w(TAG, "GeckoView not on classpath. Add dependency to build.gradle.kts.")
+            Log.w(TAG, "GeckoView not on classpath.")
             false
         }
     }
 
-    // ── 创建视图 ──────────────────────────────────────
-
     override fun createView(context: Context): View {
-        // 初始化 Runtime（全局单例）
         val rt = runtime ?: GeckoRuntime.getDefault(context).also {
             runtime = it
             configureRuntime(it)
         }
 
-        // 创建 Session
         val session = GeckoSession()
         configureSession(session)
         session.open(rt)
 
-        // 创建 View 并绑定 Session
         val view = GeckoView(context).apply {
             setSession(session)
         }
@@ -83,10 +75,7 @@ class GeckoViewEngine : BrowserEngine {
         return view
     }
 
-    // ── 导航 ──────────────────────────────────────────
-
     override fun navigate(url: String) {
-        // 先记录导航意图（即使会话未就绪，currentUrl() 也反映最近一次 navigate）
         currentUrlValue = url
         val session = activeSession ?: return
         session.load(GeckoSession.Loader().uri(Uri.parse(url)))
@@ -95,46 +84,189 @@ class GeckoViewEngine : BrowserEngine {
 
     override fun currentUrl(): String = currentUrlValue
 
-    // ── JS 执行 ───────────────────────────────────────
-
     override fun evaluateJs(script: String, callback: ((String?) -> Unit)?) {
         val session = activeSession ?: run {
             callback?.invoke(null)
             return
         }
-        // GeckoView 151+ removed GeckoSession.evaluateJavascript. The
-        // replacement is to install a privileged WebExtension that uses
-        // browser.tabs.executeScript / scripting.executeScript and
-        // forwards results via runtime.sendMessage. That requires a small
-        // companion extension shipped under app/src/main/assets and a
-        // WebExtensionController setup. Out of scope for this commit —
-        // stub to fail gracefully so callers don't crash.
-        // TODO: port to WebExtension-based JS evaluation.
-        Log.w("GeckoViewEngine", "evaluateJs() not yet ported to WebExtension on GeckoView 151+")
-        callback?.invoke(null)
+
+        // GeckoView 151 removed evaluateJavascript(). We use a javascript: URI
+        // that calls alert() with a unique prefix, and intercept via PromptDelegate.
+        // void() wrapper prevents page navigation (replaces content).
+        val wrappedScript = """
+            (function(){
+                try {
+                    var r = ($script);
+                    void(alert($JS_RESULT_PREFIX + JSON.stringify({"v": r === undefined ? null : r})));
+                } catch(e) {
+                    void(alert($JS_RESULT_PREFIX + JSON.stringify({"e": String(e && e.message || e)})));
+                }
+            })();
+        """.trimIndent()
+
+        evalResult = null
+        evalPending = true
+
+        try {
+            val jsUri = "javascript:" + Uri.encode(wrappedScript)
+            session.load(GeckoSession.Loader().uri(jsUri))
+        } catch (e: Exception) {
+            Log.e(TAG, "evaluateJs failed to load script", e)
+            evalPending = false
+            callback?.invoke(null)
+            return
+        }
+
+        val startMs = System.currentTimeMillis()
+        val timeoutMs = 5000L
+
+        evalCheckTask?.let { mainHandler.removeCallbacks(it) }
+        val checkTask = object : Runnable {
+            override fun run() {
+                if (destroyed) {
+                    evalPending = false
+                    callback?.invoke(null)
+                    return
+                }
+                if (!evalPending) {
+                    callback?.invoke(evalResult)
+                    evalCheckTask = null
+                    return
+                }
+                if (System.currentTimeMillis() - startMs > timeoutMs) {
+                    evalPending = false
+                    Log.w(TAG, "evaluateJs timed out for: ${script.take(80)}")
+                    callback?.invoke(null)
+                    evalCheckTask = null
+                    return
+                }
+                mainHandler.postDelayed(this, 50)
+            }
+        }
+        evalCheckTask = checkTask
+        mainHandler.postDelayed(checkTask, 50)
     }
 
-    // ── 截图 ──────────────────────────────────────────
+    private fun handleJsAlert(message: String): Boolean {
+        if (message.startsWith(JS_RESULT_PREFIX)) {
+            val json = message.substring(JS_RESULT_PREFIX.length)
+            try {
+                val obj = org.json.JSONObject(json)
+                if (obj.has("e")) {
+                    Log.w(TAG, "JS eval error: ${obj.getString("e")}")
+                    evalResult = null
+                } else if (obj.isNull("v")) {
+                    evalResult = null
+                } else {
+                    evalResult = obj.getString("v")
+                }
+            } catch (e: Exception) {
+                val raw = message.substring(JS_RESULT_PREFIX.length)
+                evalResult = raw
+            }
+            evalPending = false
+            return true
+        }
+        return false
+    }
 
     override fun screenshot(): String? {
         val view = activeView ?: return null
-        view.isDrawingCacheEnabled = true
-        val bitmap = Bitmap.createBitmap(view.drawingCache)
-        view.isDrawingCacheEnabled = false
+        val width = view.width
+        val height = view.height
+        if (width <= 0 || height <= 0) return null
 
-        val baos = ByteArrayOutputStream()
-        bitmap.compress(Bitmap.CompressFormat.PNG, 100, baos)
-        bitmap.recycle()
-        return Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val latch = CountDownLatch(1)
+        var copySuccess = false
+
+        val runnable = Runnable {
+            try {
+                val surfaceView = findSurfaceView(view)
+                if (surfaceView != null && surfaceView.holder?.surface?.isValid == true) {
+                    val loc = IntArray(2)
+                    surfaceView.getLocationInWindow(loc)
+                    val svWidth = surfaceView.width
+                    val svHeight = surfaceView.height
+                    if (svWidth > 0 && svHeight > 0) {
+                        val cropBitmap = Bitmap.createBitmap(svWidth, svHeight, Bitmap.Config.ARGB_8888)
+                        PixelCopy.request(
+                            surfaceView.holder.surface,
+                            cropBitmap,
+                            { result ->
+                                if (result == PixelCopy.SUCCESS) {
+                                    val canvas = Canvas(bitmap)
+                                    val vLoc = IntArray(2)
+                                    view.getLocationInWindow(vLoc)
+                                    canvas.drawBitmap(cropBitmap, (loc[0] - vLoc[0]).toFloat(), (loc[1] - vLoc[1]).toFloat(), null)
+                                    copySuccess = true
+                                } else {
+                                    Log.w(TAG, "PixelCopy failed: $result, falling back to draw")
+                                    val canvas = Canvas(bitmap)
+                                    view.draw(canvas)
+                                    copySuccess = true
+                                }
+                                cropBitmap.recycle()
+                                latch.countDown()
+                            },
+                            mainHandler
+                        )
+                        return@Runnable
+                    }
+                }
+                val canvas = Canvas(bitmap)
+                view.draw(canvas)
+                copySuccess = true
+                latch.countDown()
+            } catch (e: Exception) {
+                Log.e(TAG, "screenshot failed", e)
+                latch.countDown()
+            }
+        }
+
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            runnable.run()
+        } else {
+            mainHandler.post(runnable)
+        }
+
+        try {
+            if (!latch.await(3, TimeUnit.SECONDS)) {
+                Log.w(TAG, "screenshot timed out")
+                bitmap.recycle()
+                return null
+            }
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+            bitmap.recycle()
+            return null
+        }
+
+        if (!copySuccess) {
+            bitmap.recycle()
+            return null
+        }
+
+        return try {
+            val baos = ByteArrayOutputStream()
+            bitmap.compress(Bitmap.CompressFormat.PNG, 90, baos)
+            Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
+        } finally {
+            bitmap.recycle()
+        }
     }
 
-    // ── 扩展安装 ──────────────────────────────────────
+    private fun findSurfaceView(view: View): SurfaceView? {
+        if (view is SurfaceView) return view
+        if (view is android.view.ViewGroup) {
+            for (i in 0 until view.childCount) {
+                val found = findSurfaceView(view.getChildAt(i))
+                if (found != null) return found
+            }
+        }
+        return null
+    }
 
-    /**
-     * 安装 XPI 扩展（Firefox 格式）.
-     *
-     * agent 调用链：ExtensionInstaller.install() → CrxToXpiConverter → 此方法
-     */
     fun installXpi(xpiBytes: ByteArray, extensionId: String): GeckoResult<WebExtension> {
         val rt = runtime ?: throw IllegalStateException("GeckoRuntime not initialized")
         val tmpFile = java.io.File.createTempFile("ext_$extensionId", ".xpi")
@@ -142,60 +274,40 @@ class GeckoViewEngine : BrowserEngine {
         return rt.webExtensionController.install("file://${tmpFile.absolutePath}")
     }
 
-    /**
-     * 从 URL 安装扩展（AMO / 自托管）.
-     */
     fun installExtensionFromUrl(url: String): GeckoResult<WebExtension> {
         val rt = runtime ?: throw IllegalStateException("GeckoRuntime not initialized")
         return rt.webExtensionController.install(url)
     }
 
-    /**
-     * 列出已安装扩展.
-     */
     fun listExtensions(): GeckoResult<List<WebExtension>> {
         val rt = runtime ?: return GeckoResult.fromValue(emptyList())
         return rt.webExtensionController.list()
     }
 
-    /**
-     * 卸载扩展.
-     */
     fun uninstallExtension(extension: WebExtension): GeckoResult<Void> {
         val rt = runtime ?: throw IllegalStateException("GeckoRuntime not initialized")
         return rt.webExtensionController.uninstall(extension)
     }
 
-    // ── 引擎信息 ──────────────────────────────────────
-
-    override val antiBotScore: Int = 90  // Firefox 指纹，非 bot
-
+    override val antiBotScore: Int = 90
     override val supportsExtensions: Boolean = true
 
     override fun describe(): EngineInfo {
-        val rt = runtime
         return EngineInfo(
             name = name,
             version = "GeckoView 151.0.20260513195118",
             userAgent = "Mozilla/5.0 (Android ${Build.VERSION.RELEASE}; Mobile; rv:151.0) Gecko/151.0 Firefox/151.0",
             supportsExtensions = true,
             antiBotScore = antiBotScore,
-            notes = "Firefox 内核，WebExtension API，CRX 自动转 XPI 安装"
+            notes = "Firefox kernel, WebExtension API, PixelCopy screenshot, alert-bridge JS eval"
         )
     }
 
-    // ── 内部配置 ──────────────────────────────────────
-
     private fun configureRuntime(runtime: GeckoRuntime) {
         val settings = runtime.settings
-        // GeckoView 125 GeckoRuntimeSettings 确认存在的属性
-        // remoteDebuggingEnabled 仅在 DEBUG 构建开启，避免 release 设备被远程调试 WebView
         settings.remoteDebuggingEnabled = BuildConfig.DEBUG
-        // 开启扩展 Web API：AMO 页面的「Add to Firefox」才会路由到下面的安装委托。默认关闭。
         runCatching { settings.extensionsWebAPIEnabled = true }
 
-        // 扩展安装委托：用户在 AMO 页面点「Add to Firefox」时，GeckoView 会回调此处确认安装。
-        // 自动放行（用户已主动点击安装），让"直接逛火狐插件市场一键装"真正生效。
         runCatching {
             runtime.webExtensionController.promptDelegate = object : WebExtensionController.PromptDelegate {
                 override fun onInstallPromptRequest(
@@ -204,27 +316,19 @@ class GeckoViewEngine : BrowserEngine {
                     origins: Array<out String>,
                     dataCollectionPermissions: Array<out String>,
                 ): GeckoResult<WebExtension.PermissionPromptResponse> {
-                    Log.i("GeckoViewEngine", "Install prompt: ${extension.metaData?.name ?: extension.id} -> ALLOW")
-                    _events.tryEmit(EngineEvent.ConsoleMessage("info", "正在安装扩展：${extension.metaData?.name ?: extension.id}"))
-                    // 授予请求的权限即安装；不开隐私模式 / 不授技术数据采集
+                    Log.i(TAG, "Install prompt: ${extension.metaData?.name ?: "unknown"} -> ALLOW")
+                    _events.tryEmit(EngineEvent.ConsoleMessage("info", "Installing extension: ${extension.metaData?.name ?: "unknown"}"))
                     return GeckoResult.fromValue(WebExtension.PermissionPromptResponse(true, false, false))
                 }
             }
         }
-        // settings.webNotificationsEnabled was removed in GeckoView 151.
-        // Web notifications are now controlled via GeckoSession.PermissionDelegate.
-        // settings.webNotificationsEnabled = true
-        // javaScriptEnabled / trackingProtection / autoplay 已移至 GeckoSession.Settings
-        // 或由 GeckoView 默认行为处理（125+ 默认启用 JS）
     }
 
     private fun configureSession(session: GeckoSession) {
         val settings = session.settings
-        settings.userAgentOverride = null  // 用默认 Firefox UA
+        settings.userAgentOverride = null
         settings.useTrackingProtection = false
-        // JS 在 GeckoView 125 默认启用，无需显式设置
 
-        // 事件监听
         session.progressDelegate = object : GeckoSession.ProgressDelegate {
             override fun onPageStart(session: GeckoSession, url: String) {
                 currentUrlValue = url
@@ -239,9 +343,7 @@ class GeckoViewEngine : BrowserEngine {
         }
 
         session.contentDelegate = object : GeckoSession.ContentDelegate {
-            override fun onTitleChange(session: GeckoSession, title: String?) {
-                // title 变化
-            }
+            override fun onTitleChange(session: GeckoSession, title: String?) {}
             override fun onContextMenu(
                 session: GeckoSession,
                 screenX: Int, screenY: Int,
@@ -259,9 +361,108 @@ class GeckoViewEngine : BrowserEngine {
                 return null
             }
         }
+
+        session.promptDelegate = object : GeckoSession.PromptDelegate {
+            override fun onAlertPrompt(
+                session: GeckoSession,
+                prompt: GeckoSession.PromptDelegate.AlertPrompt
+            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
+                val msg = prompt.message ?: ""
+                if (handleJsAlert(msg)) {
+                    return GeckoResult.fromValue(prompt.dismiss())
+                }
+                return GeckoResult.fromValue(prompt.dismiss())
+            }
+
+            override fun onButtonPrompt(
+                session: GeckoSession,
+                prompt: GeckoSession.PromptDelegate.ButtonPrompt
+            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
+                return GeckoResult.fromValue(prompt.dismiss())
+            }
+
+            override fun onTextPrompt(
+                session: GeckoSession,
+                prompt: GeckoSession.PromptDelegate.TextPrompt
+            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
+                return GeckoResult.fromValue(prompt.dismiss())
+            }
+
+            override fun onAuthPrompt(
+                session: GeckoSession,
+                prompt: GeckoSession.PromptDelegate.AuthPrompt
+            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
+                return GeckoResult.fromValue(prompt.dismiss())
+            }
+
+            override fun onChoicePrompt(
+                session: GeckoSession,
+                prompt: GeckoSession.PromptDelegate.ChoicePrompt
+            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
+                return GeckoResult.fromValue(prompt.dismiss())
+            }
+
+            override fun onColorPrompt(
+                session: GeckoSession,
+                prompt: GeckoSession.PromptDelegate.ColorPrompt
+            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
+                return GeckoResult.fromValue(prompt.dismiss())
+            }
+
+            override fun onDateTimePrompt(
+                session: GeckoSession,
+                prompt: GeckoSession.PromptDelegate.DateTimePrompt
+            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
+                return GeckoResult.fromValue(prompt.dismiss())
+            }
+
+            override fun onFilePrompt(
+                session: GeckoSession,
+                prompt: GeckoSession.PromptDelegate.FilePrompt
+            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
+                return GeckoResult.fromValue(prompt.dismiss())
+            }
+
+            override fun onPopupPrompt(
+                session: GeckoSession,
+                prompt: GeckoSession.PromptDelegate.PopupPrompt
+            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
+                return GeckoResult.fromValue(prompt.confirm(AllowOrDeny.DENY))
+            }
+
+            override fun onBeforeUnloadPrompt(
+                session: GeckoSession,
+                prompt: GeckoSession.PromptDelegate.BeforeUnloadPrompt
+            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
+                return GeckoResult.fromValue(prompt.confirm(AllowOrDeny.ALLOW))
+            }
+        }
+    }
+
+    override fun destroy() {
+        destroyed = true
+        evalCheckTask?.let { mainHandler.removeCallbacks(it) }
+        evalCheckTask = null
+        evalPending = false
+        try {
+            activeSession?.close()
+        } catch (e: Exception) {
+            Log.w(TAG, "Error closing GeckoSession: ${e.message}")
+        }
+        activeSession = null
+        val view = activeView
+        if (view != null) {
+            mainHandler.post {
+                view.releaseSession()
+                view.removeAllViews()
+            }
+        }
+        activeView = null
     }
 
     companion object {
         private const val TAG = "GeckoViewEngine"
+        private val mainHandler = Handler(Looper.getMainLooper())
+        private const val JS_RESULT_PREFIX = "__OCTOPUS_JS_RESULT__:"
     }
 }
