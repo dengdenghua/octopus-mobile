@@ -10,16 +10,17 @@
 </head>
 <body>
   <div id="bar">
-    <a class="bar-btn" href="web/index.html" title="配置">配置</a>
     <button type="button" class="bar-btn" id="btn-back" title="返回">‹ 返回</button>
     <span class="bar-title">远程桌面 (WebRTC)</span>
     <span class="sp"></span>
     <span id="conn-badge" aria-hidden="true"></span>
     <span id="st" aria-live="polite">○ 连接中</span>
-    <button type="button" class="bar-btn" id="btn-backspace" title="退格" aria-label="退格"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/><line x1="18" y1="9" x2="12" y2="15"/><line x1="12" y1="9" x2="18" y2="15"/></svg></button>
-    <button type="button" class="bar-btn" id="btn-esc" title="Esc">Esc</button>
-    <button type="button" class="bar-btn" id="btn-kb" title="键盘" aria-label="切换键盘"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8"/></svg></button>
-    <button type="button" class="bar-btn" id="btn-help" title="帮助" aria-label="帮助">?</button>
+    <span class="bar-group" aria-label="工具">
+      <button type="button" class="bar-btn" id="btn-backspace" title="退格" aria-label="退格"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/><line x1="18" y1="9" x2="12" y2="15"/><line x1="12" y1="9" x2="18" y2="15"/></svg></button>
+      <button type="button" class="bar-btn" id="btn-esc" title="Esc">Esc</button>
+      <button type="button" class="bar-btn" id="btn-kb" title="键盘" aria-label="切换键盘"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8"/></svg></button>
+      <button type="button" class="bar-btn" id="btn-help" title="帮助" aria-label="帮助">?</button>
+    </span>
   </div>
   <div id="wrap"><video id="v" autoplay playsinline muted></video></div>
   <div id="status" aria-live="polite">正在与主机建立 WebRTC 连接…<br>（确认主机侧 pc_remote_webrtc.py 已运行；跨网需 STUN/TURN 可达）<div id="retry-countdown"></div></div>

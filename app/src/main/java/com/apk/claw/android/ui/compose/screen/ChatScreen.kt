@@ -1064,7 +1064,7 @@ private fun PromptSuggestion(prompt: HomePrompt, onClick: () -> Unit) {
         shape = OctopusShape.large,
         color = OctopusBackground.glassSurface,
         border = BorderStroke(1.dp, OctopusBackground.glassBorder),
-        shadowElevation = 6.dp,
+        shadowElevation = 1.dp,
     ) {
         Row(modifier = Modifier.padding(horizontal = OctopusSpacing.md, vertical = OctopusSpacing.md), verticalAlignment = Alignment.CenterVertically) {
             Surface(shape = CircleShape, color = prompt.color.copy(alpha = 0.14f)) {
@@ -1087,7 +1087,7 @@ private fun DrawerStatusPanel(llmOk: Boolean, a11yOk: Boolean, deviceCount: Int)
         shape = OctopusShape.large,
         color = OctopusBackground.glassSurface,
         border = BorderStroke(1.dp, OctopusBackground.glassBorder),
-        shadowElevation = 6.dp,
+        shadowElevation = 1.dp,
     ) {
         Column(modifier = Modifier.padding(OctopusSpacing.md), verticalArrangement = Arrangement.spacedBy(OctopusSpacing.sm)) {
             DrawerStatusRow(Icons.Filled.PhoneAndroid, stringResource(R.string.setup_a11y), a11yOk)

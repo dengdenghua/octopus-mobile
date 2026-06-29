@@ -192,7 +192,7 @@ private fun AgentPostCard(post: AgentPost) {
         shape = OctopusShape.large,
         color = OctopusBackground.glassSurface,
         border = androidx.compose.foundation.BorderStroke(1.dp, OctopusBackground.glassBorder),
-        shadowElevation = 8.dp,
+        shadowElevation = 2.dp,
         modifier = Modifier
             .fillMaxWidth()
             .clip(OctopusShape.large)

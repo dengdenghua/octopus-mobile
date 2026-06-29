@@ -111,6 +111,17 @@ html, body {
   flex-shrink: 0;
 }
 
+.ltbar-group {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--oct-sp-1);
+}
+
+.ltbar-sp {
+  flex: 1;
+  min-width: var(--oct-sp-2);
+}
+
 #st {
   font-size: var(--oct-fs-xs);
   color: var(--oct-text-3);
@@ -484,7 +495,8 @@ html, body {
     gap: 4px;
   }
   .ltbar-menu { display: block; }
-  .ltbar > [data-action] { display: none; }
+  .ltbar-group:has([data-action]) { display: none; }
+  .ltbar-sp { display: none; }
   #right { flex: 1; min-height: 0; }
   .b { max-width: 92%; }
   #latency { font-size: 10px; }
