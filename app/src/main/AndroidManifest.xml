@@ -139,6 +139,8 @@
         <activity android:name=".ui.featurescreens.VideoLibraryActivity" android:exported="false" />
         <activity android:name=".ui.featurescreens.CloudDriveActivity" android:exported="false" />
         <activity android:name=".ui.featurescreens.TrustCenterActivity" android:exported="false" />
+        <activity android:name=".ui.featurescreens.ChannelAclActivity" android:exported="false" />
+        <activity android:name=".ui.featurescreens.AuditLogActivity" android:exported="false" />
         <activity android:name=".ui.featurescreens.ActivityActivity" android:exported="false" />
         <activity android:name=".ui.featurescreens.RoutinesActivity" android:exported="false" />
         <activity android:name=".ui.featurescreens.ExtensionsActivity" android:exported="false" />

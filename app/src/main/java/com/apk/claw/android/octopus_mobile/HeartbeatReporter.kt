@@ -40,20 +40,55 @@ class HeartbeatReporter(
 
     private var heartbeatJob: Job? = null
 
+    /** 上次收到母体 ACK 的时间戳（用于检测母体僵死） */
+    @Volatile
+    private var lastAckReceivedAt: Long = 0L
+
+    /** 连续未收到 ACK 的次数 */
+    @Volatile
+    private var missedAcks: Int = 0
+
+    /** 连续 N 次未收到 ACK 则判定母体僵死，触发重连 */
+    private val maxMissedAcks = 3
+
+    /** ACK 超时窗口：超过此时间未收到 ACK 判定为丢失 */
+    private val ackTimeoutMs = intervalMs * 2
+
     /**
      * 启动心跳循环.
      */
     fun start(scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)) {
         stop()
+        // 注册 ACK 回调
+        client.onHeartbeatAck = {
+            lastAckReceivedAt = System.currentTimeMillis()
+            missedAcks = 0
+            Log.d(tag, "heartbeat ACK received")
+        }
         heartbeatJob = scope.launch {
+            lastAckReceivedAt = System.currentTimeMillis()
             // 立即发一次，缩短首次感知延迟
             sendOnce()
             while (isActive) {
                 delay(intervalMs)
+                // 检查 ACK 超时
+                val timeSinceAck = System.currentTimeMillis() - lastAckReceivedAt
+                if (timeSinceAck > ackTimeoutMs) {
+                    missedAcks++
+                    Log.w(tag, "heartbeat ACK timeout ($missedAcks/$maxMissedAcks), ${timeSinceAck}ms since last ACK")
+                    if (missedAcks >= maxMissedAcks) {
+                        Log.e(tag, "Parent runtime appears unresponsive ($maxMissedAcks missed ACKs), forcing reconnect")
+                        missedAcks = 0
+                        // 主动断开触发重连（OctopusMobileClient 的 onFailure/onClosed 会处理重连）
+                        client.forceReconnect()
+                        lastAckReceivedAt = System.currentTimeMillis()
+                        continue
+                    }
+                }
                 sendOnce()
             }
         }
-        Log.i(tag, "HeartbeatReporter started (interval=${intervalMs}ms)")
+        Log.i(tag, "HeartbeatReporter started (interval=${intervalMs}ms, ackTimeout=${ackTimeoutMs}ms)")
     }
 
     /**
@@ -62,6 +97,7 @@ class HeartbeatReporter(
     fun stop() {
         heartbeatJob?.cancel()
         heartbeatJob = null
+        client.onHeartbeatAck = null
     }
 
     /**
@@ -122,7 +158,13 @@ class HeartbeatReporter(
      */
     private fun detectCurrentApp(): String? {
         return try {
-            ClawAccessibilityService.getInstance()?.rootInActiveWindow?.packageName?.toString()
+            val root = ClawAccessibilityService.getInstance()?.rootInActiveWindow
+                ?: return null
+            try {
+                root.packageName?.toString()
+            } finally {
+                root.recycle()
+            }
         } catch (e: Exception) {
             null
         }

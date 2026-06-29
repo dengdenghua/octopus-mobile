@@ -1,21 +1,16 @@
 package com.apk.claw.android.tool
 
+import com.apk.claw.android.agent.CancellationToken
 import com.blankj.utilcode.util.ScreenUtils
 
 abstract class BaseTool {
 
     companion object {
-        /** 工具描述语言，设为 true 使用中文描述，false 使用英文 */
         @JvmField
         var useChineseDescription: Boolean = true
 
-        /** wait_after 参数的最大值（毫秒） */
         private const val MAX_WAIT_AFTER_MS = 10000L
 
-        /**
-         * 所有工具共用的 wait_after 参数定义。
-         * 由 getParametersWithWaitAfter() 自动追加到每个工具的参数列表末尾。
-         */
         @JvmStatic
         val WAIT_AFTER_PARAM = ToolParameter(
             "wait_after",
@@ -23,11 +18,56 @@ abstract class BaseTool {
             "Optional: milliseconds to wait after this action completes (e.g. 2000 for page load). Default 0 (no wait).",
             false
         )
+
+        /**
+         * 非幂等工具名集合。这些工具执行会改变设备/应用状态，失败时不应自动重试。
+         */
+        @JvmField
+        val NON_IDEMPOTENT_TOOLS: MutableSet<String> = hashSetOf(
+            "tap", "long_press", "swipe", "input_text",
+            "dpad_center", "dpad_up", "dpad_down", "dpad_left", "dpad_right",
+            "press_menu", "press_power", "volume_up", "volume_down",
+            "press_home", "press_recents", "press_back",
+            "system_key", "open_app", "send_sms", "send_intent", "send_file",
+            "clipboard", "file_ops", "backup_app", "launch_freeform", "resize_window",
+            "navigate", "media_player", "schedule_task", "cancel_scheduled_task",
+            "repeat_actions", "scroll", "scroll_to_find",
+            "browser_click", "browser_type", "browser_navigate", "browser_go_back",
+            "browser_go_forward", "browser_reload", "browser_submit", "browser_scroll",
+            "browser_tap_by_vision", "tap_by_vision", "vision_click",
+            "browser_evaluate", "browser_install_extension",
+            "search_app_in_store"
+        )
+
+        private val threadCancelToken = ThreadLocal<CancellationToken>()
+
+        @JvmStatic
+        fun currentCancellationToken(): CancellationToken? = threadCancelToken.get()
+
+        @JvmStatic
+        fun <T> withCancellationToken(token: CancellationToken?, block: () -> T): T {
+            val old = threadCancelToken.get()
+            threadCancelToken.set(token)
+            return try {
+                block()
+            } finally {
+                if (old != null) threadCancelToken.set(old) else threadCancelToken.remove()
+            }
+        }
     }
 
     abstract fun getName(): String
     abstract fun getParameters(): List<ToolParameter>
     abstract fun execute(params: @JvmSuppressWildcards Map<String, Any>): ToolResult
+
+    /**
+     * 是否为幂等工具。
+     * 幂等工具（默认）：重复执行不会产生副作用（read/get/list/observe 类），失败可安全自动重试。
+     * 非幂等工具：执行会改变状态（click/tap/input/send/submit 类），失败不应自动重试，
+     *           需要先验证当前状态再由 LLM 决策。
+     * 子类可覆写此方法，或在 NON_IDEMPOTENT_TOOLS 中注册工具名。
+     */
+    open fun isIdempotent(): Boolean = getName() !in NON_IDEMPOTENT_TOOLS
 
     /**
      * 返回工具参数列表 + wait_after 通用参数。
@@ -47,19 +87,57 @@ abstract class BaseTool {
      * 供 ToolRegistry.executeTool() 调用。
      */
     fun executeWithWaitAfter(params: @JvmSuppressWildcards Map<String, Any>): ToolResult {
-        val result = execute(params)
-        // 执行成功后才等待
-        if (result.isSuccess) {
-            val waitMs = optionalLong(params, "wait_after", 0)
-            if (waitMs in 1..MAX_WAIT_AFTER_MS) {
-                try {
-                    Thread.sleep(waitMs)
-                } catch (_: InterruptedException) {
-                    Thread.currentThread().interrupt()
+        return executeWithWaitAfter(params, null)
+    }
+
+    fun executeWithWaitAfter(
+        params: @JvmSuppressWildcards Map<String, Any>,
+        cancellationToken: CancellationToken?
+    ): ToolResult {
+        return withCancellationToken(cancellationToken) {
+            val result = try {
+                cancellationToken?.checkCancelled()
+                execute(params)
+            } catch (ie: InterruptedException) {
+                ToolResult.error("Task cancelled during tool execution")
+            }
+            if (result.isSuccess) {
+                val waitMs = optionalLong(params, "wait_after", 0)
+                if (waitMs in 1..MAX_WAIT_AFTER_MS) {
+                    if (cancellationToken != null) {
+                        cancellationToken.sleepInterruptible(waitMs)
+                    } else {
+                        try {
+                            Thread.sleep(waitMs)
+                        } catch (_: InterruptedException) {
+                            Thread.currentThread().interrupt()
+                        }
+                    }
                 }
             }
+            result
         }
-        return result
+    }
+
+    /** 子类可调用的可中断 sleep：响应 CancellationToken 取消。 */
+    protected fun sleepInterruptible(ms: Long): Boolean {
+        val token = currentCancellationToken()
+        return if (token != null) {
+            token.sleepInterruptible(ms)
+        } else {
+            try {
+                Thread.sleep(ms)
+                true
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+                false
+            }
+        }
+    }
+
+    /** 子类可调用：若当前任务已取消则抛 InterruptedException。 */
+    protected fun checkCancelled() {
+        currentCancellationToken()?.checkCancelled()
     }
 
     /** 英文描述，子类必须实现 */

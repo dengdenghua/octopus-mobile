@@ -54,7 +54,16 @@ class VisionMarkersTool : BaseTool() {
         val svc = ClawAccessibilityService.getInstance() ?: return ToolResult.error("无障碍服务未运行")
         val shot = svc.takeScreenshot(5000) ?: return ToolResult.error("截屏失败")
 
-        val marks = collectMarks(svc.rootInActiveWindow)
+        val root = svc.rootInActiveWindow
+        if (root == null) {
+            shot.recycle()
+            return ToolResult.error("无法获取当前界面节点")
+        }
+        val marks = try {
+            collectMarks(root)
+        } finally {
+            root.recycle()
+        }
         if (marks.isEmpty()) {
             shot.recycle()
             return ToolResult.error("当前屏没有可标记的可点元素")
@@ -94,7 +103,11 @@ class VisionMarkersTool : BaseTool() {
             val visible = tmp.width() > 8 && tmp.height() > 8
             val interesting = n.isClickable || !n.text.isNullOrBlank() || !n.contentDescription.isNullOrBlank()
             if (visible && interesting) out.add(Rect(tmp))
-            for (i in 0 until n.childCount) walk(n.getChild(i))
+            for (i in 0 until n.childCount) {
+                val child = n.getChild(i)
+                walk(child)
+                child?.recycle()
+            }
         }
         walk(root)
         return out

@@ -46,6 +46,7 @@ class ConfigServer(
         AgentRouteHandler(),
         FileRouteHandler(context),
         DebugRouteHandler(context),
+        McpRouteHandler(),
     )
 
     /** 当前生效的鉴权 token（首次启动时持久化到 KVUtils） */

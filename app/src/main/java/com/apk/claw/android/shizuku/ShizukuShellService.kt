@@ -30,6 +30,17 @@ object ShizukuShellService {
     private const val TAG = "ShizukuShell"
     private const val SHELL_TIMEOUT_MS = 10_000L
 
+    /** 可中断的 sleep：遇到 InterruptedException 时恢复中断标志位并返回 false。 */
+    private fun sleepInterruptible(ms: Long): Boolean {
+        return try {
+            Thread.sleep(ms)
+            true
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+            false
+        }
+    }
+
     /** 允许执行的命令前缀白名单（每条命令必须以其中之一开头） */
     private val ALLOWED_COMMAND_PREFIXES = listOf(
         "input ",
@@ -152,9 +163,13 @@ object ShizukuShellService {
      * 在 shell 进程中执行命令并返回输出。
      * 这是所有 shell 操作的底层基础。
      *
-     * @param command shell 命令（必须以白名单前缀开头，否则抛 [SecurityException]）
+     * 执行路径：
+     *  1. 优先使用 Shizuku.newProcess() → 在 shizuku_server 进程（shell UID 2000）中执行，
+     *     拥有 INJECT_EVENTS / READ_FRAME_BUFFER / 跨用户访问等完整 shell 权限
+     *  2. 回退到 Runtime.exec() → 在 app 进程以 app UID 执行，权限受限
+     *
+     * @param command shell 命令（必须以白名单前缀开头，否则返回 blocked 结果）
      * @return ShellResult 包含 exitCode 和 stdout/stderr，Shizuku 不可用时返回 null
-     * @throws SecurityException 当命令前缀不在白名单时
      */
     fun exec(command: String): ShellResult? {
         if (!ShizukuManager.isAvailable()) {
@@ -162,7 +177,6 @@ object ShizukuShellService {
             return null
         }
 
-        // 安全检查 1：命令必须以白名单前缀开头
         if (!isCommandAllowed(command)) {
             Log.w(TAG, "Blocked non-whitelisted command: $command")
             return ShellResult(
@@ -172,7 +186,6 @@ object ShizukuShellService {
             )
         }
 
-        // 安全检查 2：检测命令注入模式
         if (hasInjectionPattern(command)) {
             Log.w(TAG, "Blocked injection pattern: $command")
             return ShellResult(
@@ -183,65 +196,95 @@ object ShizukuShellService {
         }
 
         return try {
-            // Shizuku.newProcess 在 API 13.1.5 已 @hide，
-            // 回退到 Runtime.exec()（在 app 进程执行，部分命令需 shell 权限时会受限）
-            val process = Runtime.getRuntime().exec(arrayOf("sh", "-c", command))
-            val stdout = ByteArrayOutputStream()
-            val stderr = ByteArrayOutputStream()
-
-            val stdoutThread = Thread {
-                try {
-                    process.inputStream.use { input ->
-                        val buffer = ByteArray(4096)
-                        var len: Int
-                        while (input.read(buffer).also { len = it } != -1) {
-                            stdout.write(buffer, 0, len)
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.w(TAG, "stdout read failed", e)
-                }
-            }
-
-            val stderrThread = Thread {
-                try {
-                    process.errorStream.use { error ->
-                        val buffer = ByteArray(4096)
-                        var len: Int
-                        while (error.read(buffer).also { len = it } != -1) {
-                            stderr.write(buffer, 0, len)
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.w(TAG, "stderr read failed", e)
-                }
-            }
-
-            stdoutThread.start()
-            stderrThread.start()
-
-            val finished = process.waitFor(SHELL_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
-            if (!finished) {
-                process.destroyForcibly()
-                // 销毁后让 reader 线程随流关闭收尾,避免泄漏挂起的读线程
-                stdoutThread.join(500)
-                stderrThread.join(500)
-                Log.w(TAG, "Command timed out: $command")
-                return ShellResult(-1, "", "Command timed out after ${SHELL_TIMEOUT_MS}ms")
-            }
-
-            stdoutThread.join(1000)
-            stderrThread.join(1000)
-
-            ShellResult(
-                exitCode = process.exitValue(),
-                stdout = stdout.toString(Charsets.UTF_8.name()),
-                stderr = stderr.toString(Charsets.UTF_8.name())
-            )
+            val process = createProcess(arrayOf("sh", "-c", command))
+            readProcessOutput(process, command)
         } catch (e: Exception) {
             Log.e(TAG, "exec failed: $command", e)
             null
         }
+    }
+
+    /**
+     * 创建子进程执行命令。
+     * 优先使用 Shizuku.newProcess()（shell UID），失败时回退到 Runtime.exec()（app UID）。
+     * newProcess() 在 Shizuku API 13 中被标记为 hidden，但仍可通过反射调用。
+     */
+    private fun createProcess(cmd: Array<String>): Process {
+        return try {
+            val method = rikka.shizuku.Shizuku::class.java.getDeclaredMethod(
+                "newProcess", Array<String>::class.java, Array<String>::class.java, String::class.java
+            )
+            method.isAccessible = true
+            method.invoke(null, cmd, null, null) as Process
+        } catch (e: Exception) {
+            try {
+                val method = rikka.shizuku.Shizuku::class.java.getDeclaredMethod(
+                    "newProcess", Array<String>::class.java, Array<String>::class.java, String::class.java, Array<String>::class.java
+                )
+                method.isAccessible = true
+                method.invoke(null, cmd, null, null, null) as Process
+            } catch (e2: Exception) {
+                Log.w(TAG, "Shizuku.newProcess unavailable, falling back to Runtime.exec: ${e2.message}")
+                Runtime.getRuntime().exec(cmd)
+            }
+        }
+    }
+
+    /**
+     * 读取进程输出流/错误流，等待进程完成（带超时），返回 ShellResult。
+     */
+    private fun readProcessOutput(process: Process, command: String): ShellResult {
+        val stdout = ByteArrayOutputStream()
+        val stderr = ByteArrayOutputStream()
+
+        val stdoutThread = Thread {
+            try {
+                process.inputStream.use { input ->
+                    val buffer = ByteArray(4096)
+                    var len: Int
+                    while (input.read(buffer).also { len = it } != -1) {
+                        stdout.write(buffer, 0, len)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "stdout read failed", e)
+            }
+        }
+
+        val stderrThread = Thread {
+            try {
+                process.errorStream.use { error ->
+                    val buffer = ByteArray(4096)
+                    var len: Int
+                    while (error.read(buffer).also { len = it } != -1) {
+                        stderr.write(buffer, 0, len)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "stderr read failed", e)
+            }
+        }
+
+        stdoutThread.start()
+        stderrThread.start()
+
+        val finished = process.waitFor(SHELL_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+        if (!finished) {
+            process.destroyForcibly()
+            stdoutThread.join(500)
+            stderrThread.join(500)
+            Log.w(TAG, "Command timed out: $command")
+            return ShellResult(-1, "", "Command timed out after ${SHELL_TIMEOUT_MS}ms")
+        }
+
+        stdoutThread.join(1000)
+        stderrThread.join(1000)
+
+        return ShellResult(
+            exitCode = process.exitValue(),
+            stdout = stdout.toString(Charsets.UTF_8.name()),
+            stderr = stderr.toString(Charsets.UTF_8.name())
+        )
     }
 
     // ======================== 触控操作 ========================
@@ -291,42 +334,81 @@ object ShizukuShellService {
     // ======================== 屏幕截图 ========================
 
     /**
-     * Shell 级截屏 —— 通过 `screencap` 命令截取屏幕。
+     * Shell 级截屏 —— 通过 `screencap -p` 命令截取屏幕，直接读取 stdout 二进制。
      * 相比 AccessibilityService.takeScreenshot()：
      *  - Android 9/10 也能使用
      *  - 安全窗口（FLAG_SECURE）能截到真实内容
+     *  - 以 shell UID 执行，无 app 进程权限限制
      *
      * @return 截图 Bitmap，Shizuku 不可用或截屏失败时返回 null
      */
     fun screenshot(): Bitmap? {
-        val tempName = "octopus_screenshot_${System.currentTimeMillis()}.png"
-        val tempPath = "/sdcard/$tempName"
-        try {
-            // 1. screencap 到临时文件
-            val capResult = exec("screencap -p $tempPath") ?: return null
-            if (capResult.exitCode != 0) {
-                Log.e(TAG, "screencap failed: ${capResult.stderr}")
-                return null
-            }
-
-            // 2. 读取文件内容到内存
-            //    因 App 可能没有 /sdcard 读权限，尝试通过 shell 中转
-            val safeTempPath = sanitizeShellArg(tempPath)
-            val process = Runtime.getRuntime().exec(
-                arrayOf("sh", "-c", "cat $safeTempPath && rm -f $safeTempPath")
-            )
-            val bytes = process.inputStream.readBytes()
-            process.waitFor(SHELL_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
-
+        return try {
+            val bytes = execBinary("screencap -p") ?: return null
             if (bytes.isEmpty()) {
                 Log.e(TAG, "screencap returned empty bytes")
                 return null
             }
-
-            return BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
         } catch (e: Exception) {
             Log.e(TAG, "screenshot failed", e)
+            null
+        }
+    }
+
+    /**
+     * 执行命令并将 stdout 作为原始字节返回（用于截屏等二进制输出场景）。
+     * 命令安全检查与 [exec] 一致。
+     */
+    private fun execBinary(command: String): ByteArray? {
+        if (!ShizukuManager.isAvailable()) {
+            Log.d(TAG, "Shizuku not available, cannot execBinary: $command")
             return null
+        }
+        if (!isCommandAllowed(command)) {
+            Log.w(TAG, "Blocked non-whitelisted command: $command")
+            return null
+        }
+        if (hasInjectionPattern(command)) {
+            Log.w(TAG, "Blocked injection pattern: $command")
+            return null
+        }
+
+        return try {
+            val process = createProcess(arrayOf("sh", "-c", command))
+            val stdout = java.util.concurrent.ArrayBlockingQueue<ByteArray?>(1)
+
+            val readerThread = Thread {
+                try {
+                    val raw = process.inputStream.use { it.readBytes() }
+                    stdout.offer(raw)
+                } catch (e: Exception) {
+                    Log.w(TAG, "binary stdout read failed", e)
+                    stdout.offer(null)
+                }
+                // drain stderr to prevent process blocking
+                try { process.errorStream.use { it.copyTo(ByteArrayOutputStream()) } } catch (_: Exception) {}
+            }
+            readerThread.start()
+
+            val finished = process.waitFor(SHELL_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+            if (!finished) {
+                process.destroyForcibly()
+                readerThread.join(500)
+                Log.w(TAG, "Binary command timed out: $command")
+                return null
+            }
+            readerThread.join(1000)
+
+            val exitCode = process.exitValue()
+            if (exitCode != 0) {
+                Log.w(TAG, "Binary command exited with $exitCode: $command")
+                return null
+            }
+            stdout.poll()
+        } catch (e: Exception) {
+            Log.e(TAG, "execBinary failed: $command", e)
+            null
         }
     }
 
@@ -435,12 +517,9 @@ object ShizukuShellService {
             if (dumpResult.exitCode != 0) return null
 
             val safeTempPath = sanitizeShellArg(tempPath)
-            val process = Runtime.getRuntime().exec(
-                arrayOf("sh", "-c", "cat $safeTempPath && rm -f $safeTempPath")
-            )
-            val xml = process.inputStream.bufferedReader().readText()
-            process.waitFor(SHELL_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
-            return xml.ifEmpty { null }
+            val readResult = exec("cat $safeTempPath")
+            exec("rm -f $safeTempPath")
+            return readResult?.stdout?.ifEmpty { null }
         } catch (e: Exception) {
             Log.e(TAG, "uiAutomatorDump failed", e)
             return null
@@ -522,7 +601,7 @@ object ShizukuShellService {
         }
 
         // 等待窗口创建，然后调整大小和位置
-        Thread.sleep(500)
+        if (!sleepInterruptible(500)) return false
         resizeTopTask(x, y, width, height)
         return true
     }
@@ -576,7 +655,7 @@ object ShizukuShellService {
             return false
         }
 
-        Thread.sleep(500)
+        if (!sleepInterruptible(500)) return false
         resizeTopTask(x, y, width, height)
         return true
     }

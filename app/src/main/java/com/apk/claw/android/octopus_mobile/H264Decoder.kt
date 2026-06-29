@@ -15,7 +15,7 @@ import java.util.concurrent.TimeUnit
  * 首个关键帧里解析出 SPS/PPS 作为 csd 配置解码器,然后逐帧喂入。
  * 解码+渲染在独立线程,不阻塞 WebSocket 读循环。
  */
-class H264Decoder(private val width: Int, private val height: Int) {
+class H264Decoder(width: Int = 0, height: Int = 0) {
     private val tag = "H264Decoder"
     private var codec: MediaCodec? = null
     private var surface: Surface? = null
@@ -23,6 +23,10 @@ class H264Decoder(private val width: Int, private val height: Int) {
     private var worker: Thread? = null
     @Volatile private var running = false
     private var configured = false
+
+    /** 初始默认分辨率，SPS 解析成功后更新为实际值 */
+    @Volatile private var videoWidth: Int = if (width > 0) width else 1280
+    @Volatile private var videoHeight: Int = if (height > 0) height else 720
 
     fun start(surface: Surface) {
         this.surface = surface
@@ -70,8 +74,14 @@ class H264Decoder(private val width: Int, private val height: Int) {
             if (!configured) {
                 if (!isKey) continue
                 val csd = extractSpsPps(data) ?: continue
+                // 从 SPS 中解析实际分辨率，替代硬编码值
+                val parsedRes = parseSpsResolution(csd.first)
+                if (parsedRes != null) {
+                    videoWidth = parsedRes.first
+                    videoHeight = parsedRes.second
+                }
                 try {
-                    val fmt = MediaFormat.createVideoFormat("video/avc", width, height)
+                    val fmt = MediaFormat.createVideoFormat("video/avc", videoWidth, videoHeight)
                     fmt.setByteBuffer("csd-0", ByteBuffer.wrap(csd.first))
                     fmt.setByteBuffer("csd-1", ByteBuffer.wrap(csd.second))
                     val c = MediaCodec.createDecoderByType("video/avc")
@@ -79,7 +89,7 @@ class H264Decoder(private val width: Int, private val height: Int) {
                     c.start()
                     codec = c
                     configured = true
-                    Log.i(tag, "decoder configured ${width}x$height (sps=${csd.first.size}B pps=${csd.second.size}B)")
+                    Log.i(tag, "decoder configured ${videoWidth}x${videoHeight} (sps=${csd.first.size}B pps=${csd.second.size}B)")
                 } catch (e: Exception) {
                     Log.w(tag, "configure failed: ${e.message}")
                     continue
@@ -126,6 +136,87 @@ class H264Decoder(private val width: Int, private val height: Int) {
             }
         }
         return if (sps != null && pps != null) sps to pps else null
+    }
+
+    /**
+     * 从 SPS NAL 单元解析视频分辨率（width, height）。
+     * SPS 格式参考 ITU-T H.264 7.3.2.1。
+     * 返回 null 表示解析失败，调用方将使用默认分辨率。
+     */
+    private fun parseSpsResolution(spsWithSc: ByteArray): Pair<Int, Int>? {
+        return try {
+            // 跳过 4 字节起始码 + 1 字节 NAL 头
+            val sps = spsWithSc.copyOfRange(5, spsWithSc.size)
+            val reader = BitReader(sps)
+            reader.readBits(8)  // profile_idc
+            reader.readBits(8)  // constraint flags
+            reader.readBits(8)  // level_idc
+            reader.readUe()     // seq_parameter_set_id
+
+            val profileIdc = sps[0].toInt() and 0xFF
+            if (profileIdc in 100..110 || profileIdc == 122 || profileIdc == 244 || profileIdc == 44 || profileIdc == 83 || profileIdc == 86 || profileIdc == 118 || profileIdc == 128) {
+                val chromaFormat = reader.readUe()
+                if (chromaFormat == 3) reader.readBits(1)  // separate_colour_plane_flag
+                reader.readUe()  // bit_depth_luma_minus8
+                reader.readUe()  // bit_depth_chroma_minus8
+                reader.readBits(1)  // qpprime_y_zero_transform_bypass_flag
+                val seqScalingMatrixPresent = reader.readBits(1)
+                if (seqScalingMatrixPresent == 1) {
+                    val count = if (chromaFormat != 3) 8 else 12
+                    for (i in 0 until count) {
+                        if (reader.readBits(1) == 1) skipScalingList(reader, if (i < 6) 16 else 64)
+                    }
+                }
+            }
+
+            reader.readUe()  // log2_max_frame_num_minus4
+            val picOrderCntType = reader.readUe()
+            when (picOrderCntType) {
+                0 -> reader.readUe()  // log2_max_pic_order_cnt_lsb_minus4
+                1 -> {
+                    reader.readBits(1)  // delta_pic_order_always_zero_flag
+                    reader.readSe()     // offset_for_non_ref_pic
+                    reader.readSe()     // offset_for_top_to_bottom_field
+                    val numRefFramesInPicOrderCntCycle = reader.readUe()
+                    for (i in 0 until numRefFramesInPicOrderCntCycle) reader.readSe()
+                }
+            }
+            reader.readUe()  // max_num_ref_frames
+            reader.readBits(1)  // gaps_in_frame_num_value_allowed_flag
+            val picWidthInMbsMinus1 = reader.readUe()
+            val picHeightInMapUnitsMinus1 = reader.readUe()
+            val frameMbsOnlyFlag = reader.readBits(1)
+            if (frameMbsOnlyFlag == 0) reader.readBits(1)  // mb_adaptive_frame_field_flag
+
+            reader.readBits(1)  // direct_8x8_inference_flag
+            val frameCroppingFlag = reader.readBits(1)
+            var cropLeft = 0; var cropRight = 0; var cropTop = 0; var cropBottom = 0
+            if (frameCroppingFlag == 1) {
+                cropLeft = reader.readUe()
+                cropRight = reader.readUe()
+                cropTop = reader.readUe()
+                cropBottom = reader.readUe()
+            }
+
+            val width = (picWidthInMbsMinus1 + 1) * 16 - (cropLeft + cropRight) * 2
+            val height = (2 - frameMbsOnlyFlag) * (picHeightInMapUnitsMinus1 + 1) * 16 - (cropTop + cropBottom) * 2
+            Pair(width, height)
+        } catch (e: Exception) {
+            Log.w(tag, "SPS resolution parse failed: ${e.message}")
+            null
+        }
+    }
+
+    private fun skipScalingList(reader: BitReader, size: Int) {
+        var lastScale = 8
+        var nextScale = 8
+        for (j in 0 until size) {
+            if (nextScale != 0) {
+                val deltaScale = reader.readSe()
+                nextScale = (lastScale + deltaScale + 256) % 256
+            }
+            if (nextScale != 0) lastScale = nextScale
+        }
     }
 
     /** 返回每个 NAL 的 [payloadStart, payloadEnd)（不含起始码）。支持 3/4 字节起始码。 */

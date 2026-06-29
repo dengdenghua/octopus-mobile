@@ -187,12 +187,15 @@ class TaskOrchestrator(
      * 调用方需持有 scheduleLock。
      */
     private fun startNextTask() {
-        val next = taskQueue.dequeue()
+        var next = taskQueue.dequeue()
+        if (next == null) {
+            taskQueue.resumePausedTasksWhenIdle()
+            next = taskQueue.dequeue()
+        }
         if (next != null) {
             currentTask = next
             next.status = TaskQueue.TaskStatus.RUNNING
             XLog.i(TAG, "Starting next task: id=${next.id}, priority=${next.priority}, remainingQueue=${taskQueue.size()}")
-            // 执行任务（在锁外执行以避免死锁）
         } else {
             currentTask = null
             XLog.d(TAG, "No more tasks in queue")
@@ -209,8 +212,15 @@ class TaskOrchestrator(
             val ch = cur?.channel
             val id = cur?.messageId ?: ""
             currentTask = null
-            // 自动调度下一个任务
-            val next = taskQueue.dequeue()
+            // 自动调度下一个任务：先看主队列，空闲时恢复暂停任务
+            var next = taskQueue.dequeue()
+            if (next == null) {
+                val resumed = taskQueue.resumePausedTasksWhenIdle()
+                if (resumed > 0) {
+                    XLog.i(TAG, "Queue idle, auto-resumed $resumed paused task(s)")
+                    next = taskQueue.dequeue()
+                }
+            }
             if (next != null) {
                 currentTask = next
                 next.status = TaskQueue.TaskStatus.RUNNING
@@ -267,7 +277,11 @@ class TaskOrchestrator(
             ChannelManager.sendMessage(cur.channel, ClawApplication.instance.getString(R.string.channel_msg_task_cancelled), cur.messageId)
             FloatingCircleManager.setErrorState()
             // 自动调度下一个任务
-            val next = taskQueue.dequeue()
+            var next = taskQueue.dequeue()
+            if (next == null) {
+                taskQueue.resumePausedTasksWhenIdle()
+                next = taskQueue.dequeue()
+            }
             if (next != null) {
                 currentTask = next
                 next.status = TaskQueue.TaskStatus.RUNNING

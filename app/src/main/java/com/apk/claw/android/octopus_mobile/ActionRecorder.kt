@@ -64,37 +64,47 @@ class ActionRecorder {
         var id = ""
         runCatching {
             val root = ClawAccessibilityService.getInstance()?.rootInActiveWindow
-            val node = root?.let { smallestNodeAt(it, x, y) }
-            if (node != null) {
-                text = (node.text?.toString() ?: node.contentDescription?.toString() ?: "").trim()
-                id = node.viewIdResourceName?.toString() ?: ""
+            if (root != null) {
+                try {
+                    val label = findLabelAt(root, x, y)
+                    text = label.first
+                    id = label.second
+                } finally {
+                    root.recycle()
+                }
             }
         }
         return ActionCache.Step(tool = tool, argsJson = argsJson, anchorText = text, anchorId = id, ox = x, oy = y)
     }
 
-    /** 在树里找「包含点 (x,y)、且自身带文字/描述/id」的**最小**节点（最贴近用户真正点的元素）。 */
-    private fun smallestNodeAt(root: AccessibilityNodeInfo, x: Int, y: Int): AccessibilityNodeInfo? {
-        var best: AccessibilityNodeInfo? = null
+    /** 在树里找「包含点 (x,y)、且自身带文字/描述/id」的**最小**节点，返回 (text, id)。 */
+    private fun findLabelAt(root: AccessibilityNodeInfo, x: Int, y: Int): Pair<String, String> {
+        var bestText = ""
+        var bestId = ""
         var bestArea = Int.MAX_VALUE
         val rect = Rect()
         fun walk(n: AccessibilityNodeInfo?) {
             if (n == null) return
             n.getBoundsInScreen(rect)
             if (rect.contains(x, y)) {
-                val hasLabel = !n.text.isNullOrBlank() ||
-                    !n.contentDescription.isNullOrBlank() ||
-                    !n.viewIdResourceName.isNullOrBlank()
+                val t = (n.text?.toString() ?: n.contentDescription?.toString() ?: "").trim()
+                val vid = n.viewIdResourceName?.toString() ?: ""
+                val hasLabel = t.isNotEmpty() || vid.isNotEmpty()
                 val area = rect.width() * rect.height()
                 if (hasLabel && area in 1 until bestArea) {
-                    best = n
+                    bestText = t
+                    bestId = vid
                     bestArea = area
                 }
             }
-            for (i in 0 until n.childCount) walk(n.getChild(i))
+            for (i in 0 until n.childCount) {
+                val child = n.getChild(i)
+                walk(child)
+                child?.recycle()
+            }
         }
         walk(root)
-        return best
+        return bestText to bestId
     }
 
     private fun parse(json: String): Map<String, Any> = try {

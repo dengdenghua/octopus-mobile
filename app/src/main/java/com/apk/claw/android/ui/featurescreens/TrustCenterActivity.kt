@@ -41,6 +41,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.apk.claw.android.R
 import com.apk.claw.android.octopus_mobile.ControlTarget
+import com.apk.claw.android.octopus_mobile.SetupReadiness
 import com.apk.claw.android.server.ConfigServerManager
 import com.apk.claw.android.service.ClawAccessibilityService
 import com.apk.claw.android.shizuku.ShizukuManager
@@ -116,6 +117,9 @@ fun TrustCenterScreen(onBack: () -> Unit) {
                 color = FMuted, fontSize = 12.sp, lineHeight = 17.sp,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             )
+
+            val readiness = remember(tick) { SetupReadiness.check(ctx) }
+            ReadinessCard(readiness)
 
             FSectionTitle(stringResource(R.string.device_this_device))
             val batteryLevel = remember(tick) { batteryPct(ctx) }
@@ -227,6 +231,16 @@ fun TrustCenterScreen(onBack: () -> Unit) {
                 }
             }
 
+            FSectionTitle("访问与审计")
+            NavRow(
+                title = "通道访问控制（ACL）",
+                desc = "管理各聊天通道的授权发送者名单，开关访问控制与远程高危工具放行",
+            ) { ctx.startActivity(Intent(ctx, ChannelAclActivity::class.java)) }
+            NavRow(
+                title = "操作审计日志",
+                desc = "查看 Agent 最近的中/高危工具调用记录与拦截决策",
+            ) { ctx.startActivity(Intent(ctx, AuditLogActivity::class.java)) }
+
             FSectionTitle(stringResource(R.string.trustcenter_section_target))
             FCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -279,6 +293,51 @@ private fun CapabilityRow(icon: ImageVector, name: String, desc: String, granted
             }
             Spacer(Modifier.width(8.dp))
             FPill(if (granted) stringResource(R.string.trust_center_granted) else stringResource(R.string.trust_center_not_granted), if (granted) FSuccess else FMuted)
+            Text("›", color = FMuted, fontSize = 18.sp, modifier = Modifier.padding(start = 6.dp))
+        }
+    }
+}
+
+@Composable
+private fun ReadinessCard(r: SetupReadiness.Result) {
+    FCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("准备就绪度", color = FText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                Text("${r.readyCount}/${r.total} 项已就绪", color = FMuted, fontSize = 10.sp)
+            }
+            val pctColor = when {
+                !r.isReady -> FWarning
+                r.percent == 100 -> FSuccess
+                else -> FPrimary
+            }
+            FPill("${r.percent}%", pctColor)
+        }
+        if (r.missingCritical.isNotEmpty()) {
+            Text(
+                "⚠️ 核心前置缺失：" + r.missingCritical.joinToString("、") { it.label } +
+                    "。补齐后 Agent 才能正常工作。",
+                color = FWarning, fontSize = 10.sp, lineHeight = 14.sp,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        } else {
+            Text(
+                "核心前置已齐备，可以开始使用。",
+                color = FSuccess, fontSize = 10.sp,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun NavRow(title: String, desc: String, onClick: () -> Unit) {
+    FCard {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(title, color = FText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                Text(desc, color = FMuted, fontSize = 10.sp, lineHeight = 14.sp)
+            }
             Text("›", color = FMuted, fontSize = 18.sp, modifier = Modifier.padding(start = 6.dp))
         }
     }

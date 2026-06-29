@@ -285,6 +285,7 @@ class BrowserActivity : BaseActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        engine.destroy()
         browserContainer.removeAllViews()
         ToolRegistry.clearBrowserEngine()
         runCatching { tts?.stop(); tts?.shutdown() }

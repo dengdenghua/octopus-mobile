@@ -96,6 +96,12 @@ interface BrowserEngine {
      * 截图（返回 Base64 PNG）.
      */
     fun screenshot(): String?
+
+    /**
+     * 销毁引擎，释放所有资源（Session、WebView、Handler回调等）.
+     * Activity/Fragment 销毁时必须调用以避免内存泄漏。
+     */
+    fun destroy() {}
 }
 
 /**

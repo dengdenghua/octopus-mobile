@@ -80,6 +80,10 @@ open class OctopusMobileClient(
     @Volatile
     var onConfigChange: ((String) -> Unit)? = null
 
+    /** 心跳 ACK 回调：母体确认收到心跳，表明母体存活 */
+    @Volatile
+    var onHeartbeatAck: (() -> Unit)? = null
+
     /** 等待远程任务结果的 future：task_id → CompletableDeferred */
     private val pendingTasks = ConcurrentHashMap<String, CompletableDeferred<RemoteTaskResult>>()
 
@@ -144,15 +148,22 @@ open class OctopusMobileClient(
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 Log.i(tag, "websocket closed code=$code reason=$reason")
                 this@OctopusMobileClient.webSocket = null
-                setState(ConnectionState.OFFLINE)
+                // code 1000 = 正常关闭（用户主动 disconnect），不重连
+                if (code == 1000) {
+                    setState(ConnectionState.OFFLINE)
+                } else {
+                    setState(ConnectionState.DISCONNECTED)
+                }
+                diagnostics.onDisconnected(if (code == 1000) null else "closed code=$code", System.currentTimeMillis())
                 failPendingTasks("Connection closed (code=$code)")
-                scheduleReconnect()
+                if (code != 1000) scheduleReconnect()
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 Log.w(tag, "websocket failure: ${t.message}")
                 this@OctopusMobileClient.webSocket = null
-                setState(ConnectionState.OFFLINE)
+                setState(ConnectionState.DISCONNECTED)
+                diagnostics.onDisconnected("failed: ${t.message}", System.currentTimeMillis())
                 failPendingTasks("Connection failed: ${t.message}")
                 scheduleReconnect()
             }
@@ -161,6 +172,9 @@ open class OctopusMobileClient(
         httpClient.newWebSocket(request, listener)
     }
 
+    /** 连接诊断（重连历史/失败原因/离线时长），供 UI/控制台观测断线状态。 */
+    val diagnostics = ConnectionDiagnostics()
+
     /** 指数退避重连（基础 2s，最大 30s） */
     private val reconnectAttempts = AtomicInteger(0)
     @Volatile
@@ -168,22 +182,25 @@ open class OctopusMobileClient(
 
     private fun scheduleReconnect() {
         val attempts = reconnectAttempts.incrementAndGet()
-        if (state == ConnectionState.OFFLINE && attempts <= 10) {
+        // 无限重试：不限制最大次数，仅限制单次退避上限。
+        // 重连条件：非用户主动离线（OFFLINE）时均触发重连。
+        if (state != ConnectionState.OFFLINE) {
             val baseDelay = 2000L
             val maxDelay = 30_000L
-            val delay = minOf(baseDelay * (1L shl (attempts - 1).coerceAtLeast(0)), maxDelay)
-            val jitter = (Math.random() * 1000).toLong()
-            Log.i(tag, "Reconnecting in ${delay + jitter}ms (attempt $attempts)")
+            // Full Jitter: delay = min(base * 2^(n-1), max) + random(0, base)
+            val expDelay = minOf(baseDelay * (1L shl (attempts - 1).coerceAtLeast(0)), maxDelay)
+            val jitter = (Math.random() * baseDelay).toLong()
+            val totalDelay = (expDelay + jitter).coerceAtMost(maxDelay + baseDelay)
+            Log.i(tag, "Reconnecting in ${totalDelay}ms (attempt $attempts, state=$state)")
+            diagnostics.onReconnectAttempt()
             reconnectJob?.cancel()
             reconnectJob = scope.launch {
-                kotlinx.coroutines.delay(delay + jitter)
-                if (state == ConnectionState.OFFLINE) {
+                kotlinx.coroutines.delay(totalDelay)
+                if (state != ConnectionState.OFFLINE) {
                     setState(ConnectionState.CONNECTING)
                     connect()
                 }
             }
-        } else {
-            reconnectAttempts.decrementAndGet()
         }
     }
 
@@ -240,6 +257,10 @@ open class OctopusMobileClient(
                 // 配置同步响应（母体推来的配置变更）
                 "config/sync_pull_response" -> {
                     onConfigChange?.invoke(text)
+                }
+                // 心跳 ACK（母体确认收到心跳，表明母体存活）
+                "heartbeat/ack" -> {
+                    onHeartbeatAck?.invoke()
                 }
             }
         } catch (e: Exception) {
@@ -346,13 +367,22 @@ open class OctopusMobileClient(
         ws.send(Envelope.Request(method = "tool/result", params = params).toJson())
     }
 
+    /**
+     * 是否处于"已订阅母体 PC 屏幕流"状态。母体侧订阅是有状态的，断连即失效——
+     * 记录意图，以便重连到达 ONLINE 时自动重订阅（见 [setState]）。
+     */
+    @Volatile
+    private var pcScreenSubscribed = false
+
     /** 订阅母体 PC 屏幕流（远程桌面：母体随后通过 push_pc_frame 推 JPEG 帧）。 */
     fun subscribePcScreen() {
+        pcScreenSubscribed = true
         send(Envelope.Request(method = "pc_screen/subscribe", params = mapOf("tentacle_id" to tentacleId)))
     }
 
     /** 取消订阅母体 PC 屏幕流。 */
     fun unsubscribePcScreen() {
+        pcScreenSubscribed = false
         send(Envelope.Request(method = "pc_screen/unsubscribe", params = mapOf("tentacle_id" to tentacleId)))
     }
 
@@ -391,12 +421,36 @@ open class OctopusMobileClient(
         webSocket?.close(1000, "client disconnect")
         webSocket = null
         setState(ConnectionState.OFFLINE)
+        diagnostics.onDisconnected(null, System.currentTimeMillis())
+    }
+
+    /**
+     * 强制重连：主动断开当前连接并立即重连（用于心跳检测到母体僵死时）。
+     * 与 [disconnect] 不同，不设为 OFFLINE，而是走 DISCONNECTED → 重连流程。
+     */
+    fun forceReconnect() {
+        Log.i(tag, "forceReconnect: closing current connection")
+        reconnectAttempts.set(0)
+        webSocket?.close(1001, "force reconnect")
+        webSocket = null
+        setState(ConnectionState.DISCONNECTED)
+        diagnostics.onDisconnected("force reconnect", System.currentTimeMillis())
+        scheduleReconnect()
     }
 
     private fun setState(newState: ConnectionState) {
         if (state != newState) {
             state = newState
             onStateChanged?.invoke(newState)
+            if (newState == ConnectionState.ONLINE) {
+                diagnostics.onConnected(System.currentTimeMillis())
+                // 重连恢复：到达 ONLINE 时，若此前订阅过母体 PC 屏幕流则自动重订阅。
+                // 否则远程桌面在一次网络抖动后掉线，便永远等不到新帧（母体侧订阅已随旧连接失效）。
+                if (pcScreenSubscribed) {
+                    Log.i(tag, "reconnected ONLINE, restoring pc_screen subscription")
+                    send(Envelope.Request(method = "pc_screen/subscribe", params = mapOf("tentacle_id" to tentacleId)))
+                }
+            }
         }
     }
 

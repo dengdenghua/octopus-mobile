@@ -1,6 +1,8 @@
 package com.apk.claw.android.channel.discord
 import com.apk.claw.android.utils.OctoHttp
 
+import android.os.Handler
+import android.os.Looper
 import com.apk.claw.android.utils.XLog
 import com.google.gson.Gson
 import com.google.gson.JsonObject
@@ -35,6 +37,7 @@ class DiscordApiClient private constructor() {
         }
     }
 
+    private val retryHandler = Handler(Looper.getMainLooper())
     private val httpClient = OctoHttp.shared.newBuilder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
@@ -122,8 +125,9 @@ class DiscordApiClient private constructor() {
                 if (attempt < MAX_RETRIES) {
                     val delay = (attempt + 1) * 1000L
                     XLog.w(TAG, "请求失败(${attempt + 1}/$MAX_RETRIES): ${e.message}，${delay}ms 后重试")
-                    try { Thread.sleep(delay) } catch (_: InterruptedException) {}
-                    executeRequestWithRetry(request, callback, attempt + 1)
+                    retryHandler.postDelayed({
+                        executeRequestWithRetry(request, callback, attempt + 1)
+                    }, delay)
                 } else {
                     XLog.e(TAG, "请求失败(已达最大重试): ${e.message}")
                     callback?.onFailure(e.message ?: "请求失败")

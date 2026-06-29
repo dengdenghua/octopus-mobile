@@ -134,7 +134,11 @@ class ScreenStreamer(
         } catch (e: Exception) {
             null
         }
-        val currentApp = root?.packageName?.toString() ?: ""
+        val currentApp = try {
+            root?.packageName?.toString() ?: ""
+        } finally {
+            root?.recycle()
+        }
         val treeDelta = buildTreeDelta(tree)
 
         val envelope = EnvelopeFactory.screenChanged(

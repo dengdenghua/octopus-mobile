@@ -32,14 +32,14 @@ class BrowserToolsTest {
 
     @Test
     fun `NavigateTool name and display name`() {
-        val tool = NavigateTool(stubEngine)
+        val tool = BrowserNavigateTool(stubEngine)
         assertEquals("browser_navigate", tool.getName())
         assertEquals("浏览器导航", tool.getDisplayName())
     }
 
     @Test
     fun `NavigateTool requires url parameter`() {
-        val tool = NavigateTool(stubEngine)
+        val tool = BrowserNavigateTool(stubEngine)
         val params = tool.getParameters()
         assertEquals(1, params.size)
         assertEquals("url", params[0].name)
@@ -48,7 +48,7 @@ class BrowserToolsTest {
 
     @Test
     fun `NavigateTool executes successfully`() {
-        val tool = NavigateTool(stubEngine)
+        val tool = BrowserNavigateTool(stubEngine)
         val result = tool.execute(mapOf("url" to "https://example.com"))
         assertTrue(result.isSuccess)
         assertTrue(result.data!!.contains("Navigated to"))
@@ -57,7 +57,7 @@ class BrowserToolsTest {
 
     @Test
     fun `NavigateTool fails without url`() {
-        val tool = NavigateTool(stubEngine)
+        val tool = BrowserNavigateTool(stubEngine)
         assertThrows(IllegalArgumentException::class.java) {
             tool.execute(emptyMap())
         }

@@ -184,7 +184,7 @@ object ToolRegistry {
 
     private fun registerBrowserTools() {
         val engine = browserEngine ?: return  // 没有 engine 就不注册 browser tools
-        register(com.apk.claw.android.tool.impl.browser.NavigateTool(engine))
+        register(com.apk.claw.android.tool.impl.browser.BrowserNavigateTool(engine))
         register(GetDomTool(engine))
         register(BrowserClickTool(engine))
         register(BrowserTypeTool(engine))
@@ -230,6 +230,10 @@ object ToolRegistry {
         name !in com.apk.claw.android.utils.KVUtils.getDisabledTools()
 
     fun executeTool(name: String, params: Map<String, Any>): ToolResult {
+        return executeTool(name, params, null)
+    }
+
+    fun executeTool(name: String, params: Map<String, Any>, cancellationToken: com.apk.claw.android.agent.CancellationToken?): ToolResult {
         val tool = tools[name] ?: return ToolResult.error("Unknown tool: $name")
         val auditStartMs = System.currentTimeMillis()
         val auditRisk = ToolRiskPolicy.riskOf(name)
@@ -300,9 +304,17 @@ object ToolRegistry {
                     )
                 }
                 PermissionPolicy.RiskAction.CONFIRM -> {
-                    // 弹窗审批（阻塞当前线程，等待用户确认）
+                    // 确认优先级（与 [highRiskConfirmer] 文档契约一致）：
+                    //  1) 若注册了 UI 确认回调（逐次人工确认）→ 用它；
+                    //  2) 否则若用户在设置里显式打开"允许远程来源执行高危工具"→ 放行（适合无人值守的母体/局域网/群控机）；
+                    //  3) 否则弹本地审批窗（默认，阻塞等待设备前用户确认）。
                     val riskDesc = "高危工具 · 不可信来源(${if (isUntrustedSource()) "远程/自动" else "本地"})"
-                    val approved = ApprovalFlow.requestApproval(appContext, name, params, riskDesc)
+                    val approved = highRiskConfirmer?.invoke(name, params)
+                        ?: if (com.apk.claw.android.utils.KVUtils.isRemoteHighRiskAllowed()) {
+                            true
+                        } else {
+                            ApprovalFlow.requestApproval(appContext, name, params, riskDesc)
+                        }
                     if (!approved) {
                         eventBus?.publish(EventBus.ToolBlockedEvent(name, "approval_denied", "policy"))
                         return audited(
@@ -338,7 +350,7 @@ object ToolRegistry {
 
         // ── 执行工具 ──
         val result = try {
-            tool.executeWithWaitAfter(params)
+            tool.executeWithWaitAfter(params, cancellationToken)
         } catch (e: Exception) {
             breaker?.record(success = false)
             ToolResult.error("Tool execution failed: ${e.message}")

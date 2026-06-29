@@ -1,10 +1,15 @@
 package com.apk.claw.android.ui.compose.screen
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -65,6 +70,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -186,13 +192,20 @@ fun ChatScreen() {
     val thinkingText = stringResource(R.string.chat_thinking)
     val newChatTitle = stringResource(R.string.chat_new)
     var lastScrollTs by remember { mutableLongStateOf(0L) }
+    val showScrollToBottom by remember {
+        derivedStateOf {
+            val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+            val total = listState.layoutInfo.totalItemsCount
+            lastVisible < total - 2
+        }
+    }
     val scrollEnd = {
         val now = System.currentTimeMillis()
         if (now - lastScrollTs > CHAT_SCROLL_THROTTLE_MS) {
             lastScrollTs = now
             scope.launch {
                 val target = (listState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0)
-                listState.scrollToItem(target)
+                listState.animateScrollToItem(target)
             }
         }
         Unit
@@ -585,35 +598,43 @@ fun ChatScreen() {
                 },
             )
         } else {
-        val rows by remember { derivedStateOf { buildChatRows(messages) } }
-        LazyColumn(
-            state = listState,
-            modifier = Modifier.weight(1f).padding(horizontal = OctopusSpacing.lg),
-            verticalArrangement = Arrangement.spacedBy(OctopusSpacing.md),
-        ) {
-            items(rows, key = { it.key }) { row ->
-                when (row) {
-                    is ChatRow.Single -> when (val msg = row.msg) {
-                        is ChatMessage.UserMessage -> UserBubble(msg.text)
-                        is ChatMessage.AgentMessage -> AgentBubble(msg.text)
-                        is ChatMessage.ToolCall -> ToolCallItem(msg)
-                        is ChatMessage.Thinking -> ThinkingItem(msg.text)
+            Box(modifier = Modifier.weight(1f)) {
+                val rows by remember { derivedStateOf { buildChatRows(messages) } }
+                SelectionContainer {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize().padding(horizontal = OctopusSpacing.lg),
+                        verticalArrangement = Arrangement.spacedBy(OctopusSpacing.md),
+                    ) {
+                        items(rows, key = { it.key }) { row ->
+                            when (row) {
+                                is ChatRow.Single -> when (val msg = row.msg) {
+                                    is ChatMessage.UserMessage -> UserBubble(msg.text)
+                                    is ChatMessage.AgentMessage -> AgentBubble(msg.text)
+                                    is ChatMessage.ToolCall -> ToolCallItem(msg)
+                                    is ChatMessage.Thinking -> ThinkingItem(msg.text)
+                                }
+                                is ChatRow.ToolGroup -> ToolGroupItem(
+                                    tools = row.tools,
+                                    expanded = expandedGroups[row.tools.first().id] == true,
+                                    onToggle = { id -> expandedGroups[id] = expandedGroups[id] != true },
+                                )
+                            }
+                        }
+                        item { Spacer(modifier = Modifier.height(OctopusSpacing.sm)) }
                     }
-                    is ChatRow.ToolGroup -> ToolGroupItem(
-                        tools = row.tools,
-                        expanded = expandedGroups[row.tools.first().id] == true,
-                        onToggle = { id -> expandedGroups[id] = expandedGroups[id] != true },
-                    )
+                }
+                Box(modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = OctopusSpacing.sm)) {
+                    ScrollToBottomButton(visible = showScrollToBottom, onClick = { scrollEnd() })
                 }
             }
-            item { Spacer(modifier = Modifier.height(OctopusSpacing.sm)) }
-        }
         }
 
-        // 输入框
+        // 输入框（imePadding 让键盘弹起时输入框自动上移，不被键盘遮挡）
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
+                .imePadding()
                 .padding(horizontal = OctopusSpacing.lg, vertical = OctopusSpacing.sm),
             shape = OctopusShape.xl,
             color = OctopusBackground.glassSurface,
@@ -1337,6 +1358,8 @@ private fun DevicePreviewPanel(device: DeviceInfo, onEnter: () -> Unit, onClose:
 private fun UserBubble(text: String) {
     val context = LocalContext.current
     var menu by remember { mutableStateOf(false) }
+    val config = LocalConfiguration.current
+    val maxBubbleWidth = (config.screenWidthDp.dp * 0.78f)
     Box(
         modifier = Modifier.fillMaxWidth(),
         contentAlignment = Alignment.CenterEnd
@@ -1346,8 +1369,9 @@ private fun UserBubble(text: String) {
                 shape = OctopusShape.userBubble,
                 color = UserBubbleColor,
                 shadowElevation = 1.dp,
-                // 长按一条指令 → 存为可复用例程
-                modifier = Modifier.combinedClickable(onClick = {}, onLongClick = { menu = true }),
+                modifier = Modifier
+                    .widthIn(max = maxBubbleWidth)
+                    .combinedClickable(onClick = {}, onLongClick = { menu = true }),
             ) {
                 Text(
                     text,
@@ -1384,11 +1408,14 @@ private fun UserBubble(text: String) {
 
 @Composable
 private fun AgentBubble(text: String) {
+    val config = LocalConfiguration.current
+    val maxBubbleWidth = (config.screenWidthDp.dp * 0.82f)
     Box(
         modifier = Modifier.fillMaxWidth(),
         contentAlignment = Alignment.CenterStart
     ) {
         Surface(
+            modifier = Modifier.widthIn(max = maxBubbleWidth),
             shape = OctopusShape.agentBubble,
             color = AgentBubbleColor,
             border = BorderStroke(1.dp, BorderColor),
@@ -1673,6 +1700,44 @@ private fun ThinkingItem(text: String) {
                 fontWeight = FontWeight.Bold,
                 color = PrimaryColor.copy(alpha = alpha),
             )
+        }
+    }
+}
+
+@Composable
+private fun ScrollToBottomButton(visible: Boolean, onClick: () -> Unit) {
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(tween(180)) + scaleIn(initialScale = 0.8f, animationSpec = tween(180)),
+        exit = fadeOut(tween(120)) + scaleOut(targetScale = 0.8f, animationSpec = tween(120)),
+    ) {
+        Surface(
+            modifier = Modifier
+                .clip(OctopusShape.capsule)
+                .clickable(onClick = onClick),
+            shape = OctopusShape.capsule,
+            color = OctopusBackground.glassSurface,
+            border = BorderStroke(1.dp, OctopusBackground.glassBorder),
+            shadowElevation = 8.dp,
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = OctopusSpacing.md, vertical = OctopusSpacing.sm),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Filled.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = PrimaryColor,
+                    modifier = Modifier.size(OctopusIconSize.small),
+                )
+                Spacer(Modifier.width(OctopusSpacing.xs))
+                Text(
+                    stringResource(R.string.chat_scroll_bottom),
+                    color = PrimaryColor,
+                    fontSize = OctopusType.label,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
         }
     }
 }
