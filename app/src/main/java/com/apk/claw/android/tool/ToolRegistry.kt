@@ -123,6 +123,12 @@ object ToolRegistry {
         register(ClipboardTool())
         register(SendFileTool())
         register(FinishTool())
+        // 生图(Agnes 增值;会员免费/非会员扣积分由服务端处理)
+        register(com.apk.claw.android.tool.impl.GenerateImageTool())
+        // 生视频先禁用:Agnes 免费账号视频不交付(任务永远 queued,实测 3.4h 零进展)。
+        // 等视频能出活,取消下面两行注释即可恢复(GenerateVideoTool/CheckVideoTool 类已就位)。
+        // register(com.apk.claw.android.tool.impl.GenerateVideoTool())
+        // register(com.apk.claw.android.tool.impl.CheckVideoTool())
         // 企业版 PM 编程接入(D①):未配置 octopus.pm.url 时工具会返回错误而非崩溃。
         register(CreatePmTaskTool())
         register(ListPmProjectsTool())

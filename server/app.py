@@ -2,7 +2,7 @@
 Octopus 账号 + 计费 + 会员 + 大模型中转 —— 服务端骨架(FastAPI + SQLite)。
 
 设计要点:
-  - 后台统一持有平台的 **小米 MiMo API key**(只在服务端,App 永远看不到),
+  - 后台统一持有平台的 **通义千问 API key**(只在服务端,App 永远看不到),
     用户走 /v1/chat/completions 中转 → 按 token 用量扣 **积分**(付费体系,默认路径)。
   - **会员(BYO 解锁)**:购买"会员"商品后当月可在 App 里接自己的大模型(BYO 走客户端直连、
     不经本中转、不扣积分)。本服务只负责"是否会员"这个权益位 + 账号 + 积分。
@@ -64,18 +64,23 @@ PENDING_ORDER_LIMIT = int(os.environ.get("PENDING_ORDER_LIMIT", "5"))
 PENDING_ORDER_WINDOW_MS = int(os.environ.get("PENDING_ORDER_WINDOW_MS", str(30 * 60 * 1000)))
 
 # 平台大模型上游(key 只在服务端)。支持多上游:每个模型按 provider 路由到不同 base/key。
-MIMO_API_KEY = os.environ.get("MIMO_API_KEY", "")
-MIMO_BASE_URL = os.environ.get("MIMO_BASE_URL", "").rstrip("/")  # OpenAI 兼容 base, 例 https://.../v1
-# 第二上游:Agnes(永久免费额度),作免费默认档。OpenAI 兼容。
+# 主上游:通义千问(阿里云百炼,国内北京端点),唯一启用的聊天模型。OpenAI 兼容。
+QWEN_API_KEY = os.environ.get("QWEN_API_KEY", "")
+QWEN_BASE_URL = os.environ.get("QWEN_BASE_URL", "").rstrip("/")  # OpenAI 兼容 base, 例 https://.../v1
+# 备用上游:Agnes(永久免费额度)。OpenAI 兼容。注:Agnes 并发弱,不做文本主力,
+# 留作生图/生视频等低频增值用途。
 AGNES_API_KEY = os.environ.get("AGNES_API_KEY", "")
 AGNES_BASE_URL = os.environ.get("AGNES_BASE_URL", "").rstrip("/")
-# provider 注册:模型 spec 里的 "provider" 决定走哪个上游(base + key)。
+# provider 注册:模型 spec 里的 "provider" 决定走哪个上游(base + key)。(mimo 已移除)
 PROVIDERS = {
-    "mimo": {"base_url": MIMO_BASE_URL, "api_key": MIMO_API_KEY},
+    "qwen": {"base_url": QWEN_BASE_URL, "api_key": QWEN_API_KEY},
     "agnes": {"base_url": AGNES_BASE_URL, "api_key": AGNES_API_KEY},
 }
-# 默认模型(请求未指定 model 或指定了目录外模型时回退);默认走免费的 agnes。
-DEFAULT_MODEL = os.environ.get("DEFAULT_MODEL", "agnes-2.0-flash")
+# 默认模型(请求未指定 model 或指定了目录外模型时回退);主力 qwen3.5-flash(阿里百炼)。
+DEFAULT_MODEL = os.environ.get("DEFAULT_MODEL", "qwen3.5-flash")
+# 运营硬锁:非空时忽略客户端请求的 model,一律用它(防前端/直连 API 切到贵的模型)。
+# 解锁恢复多档:清空/删除 .env 里的 FORCE_MODEL 再重启即可。
+FORCE_MODEL = os.environ.get("FORCE_MODEL", "").strip()
 
 # 计费:多少积分/1k tokens(输入+输出合计),再乘模型 multiplier。
 # 校准(不亏成本):CREDITS_PER_1K_TOKENS ≥ 模型每1k_token的¥成本 ÷ (multiplier × 每积分售价¥)。
@@ -85,6 +90,13 @@ CREDITS_PER_1K_TOKENS = float(os.environ.get("CREDITS_PER_1K_TOKENS", "0.1"))
 # 单次输出 token 上限(成本 + 防跑飞双保险)。请求里更大的 max_tokens 会被压到此值;未指定也设成它。
 # 思考型模型别设太小(否则正文被 reasoning 吃光),默认 8192。
 MAX_OUTPUT_TOKENS = int(os.environ.get("MAX_OUTPUT_TOKENS", "8192"))
+# 生图/生视频(Agnes 增值,key 走 agnes provider):会员/白名单免费,非会员扣固定积分。
+# Agnes 对平台免费 → 扣多少都是高毛利。视频 Agnes 全账号限流 1/min,故再加每用户每日配额防独占。
+IMAGE_CREDITS = int(os.environ.get("IMAGE_CREDITS", "8"))            # 非会员每张图扣
+VIDEO_CREDITS = int(os.environ.get("VIDEO_CREDITS", "40"))           # 非会员每个视频扣(稀缺,贵)
+VIDEO_DAILY_QUOTA = int(os.environ.get("VIDEO_DAILY_QUOTA", "3"))    # 每用户每日视频次数上限
+IMAGE_MODEL = os.environ.get("IMAGE_MODEL", "agnes-image-2.1-flash")
+VIDEO_MODEL = os.environ.get("VIDEO_MODEL", "agnes-video-v2.0")
 # 无限额度白名单(管理员/内部账号邮箱):走中转不预扣、不扣费、不被余额拦,仍记 usage_log(credits=0)。
 # 逗号分隔、大小写不敏感。
 UNLIMITED_EMAILS = {s.strip().lower() for s in os.environ.get("UNLIMITED_EMAILS", "").split(",") if s.strip()}
@@ -226,28 +238,25 @@ SQUARE_DISCOVERY: dict[str, Any] = {
     ]
 }
 
-# 模型目录 = 用户可见的「三个档位」(display_name 是档位名,不暴露底层模型名)。
-# 极速档:agnes,0.2×;标准档:mimo flash,0.45×;高级档:mimo pro,1.2×。
-# 三档照常按 multiplier 扣用户积分。可用 MODELS_JSON 覆盖。
+# 模型目录:现在只有一档(mimo 已移除)= qwen3.5-flash(阿里百炼,原生多模态/便宜),0.5× 扣积分。
+# (multiplier 0.2→0.5,2026-06-29:qwen3.5-flash 输出 ¥2/M,0.2 在长输出请求会亏;0.5 保证任何输出占比都不亏。)
+# FORCE_MODEL 再兜底硬锁;App 的极速/标准/高级三个 tier 按钮发什么都落到这一档。可用 MODELS_JSON 覆盖。
+# (Agnes 并发弱,已退出聊天主力,改作生图/生视频增值用途。)
 _DEFAULT_MODELS = [
-    {"id": "agnes-2.0-flash", "display_name": "极速", "tier": "fast", "multiplier": 0.2,
-     "provider": "agnes", "recommended": True},
-    {"id": "mimo-v2-flash", "display_name": "标准", "tier": "flash", "multiplier": 0.45,
-     "provider": "mimo", "recommended": True},
-    {"id": "mimo-v2.5-pro", "display_name": "高级", "tier": "premium", "multiplier": 1.2,
-     "provider": "mimo", "recommended": True},
+    {"id": "qwen3.5-flash", "display_name": "极速", "tier": "fast", "multiplier": 0.5,
+     "provider": "qwen", "recommended": True},
 ]
-# 模型 id -> 完整 spec(provider/multiplier/...);MODELS_JSON 里没写 provider 的默认归到 mimo(向后兼容)。
+# 模型 id -> 完整 spec(provider/multiplier/...);MODELS_JSON 里没写 provider 的默认归到 qwen。
 # 坏配置(非 list / item 缺 id / 解析失败)整体回退默认,不让服务起不来。
 try:
     MODELS = json.loads(os.environ["MODELS_JSON"]) if os.environ.get("MODELS_JSON") else _DEFAULT_MODELS
-    MODEL_SPEC = {m["id"]: {**m, "provider": m.get("provider", "mimo")}
+    MODEL_SPEC = {m["id"]: {**m, "provider": m.get("provider", "qwen")}
                   for m in MODELS if isinstance(m, dict) and m.get("id")}
     if not MODEL_SPEC:
         raise ValueError("MODELS_JSON 无有效模型")
 except Exception:  # noqa: BLE001 — 配置坏了就回退默认
     MODELS = _DEFAULT_MODELS
-    MODEL_SPEC = {m["id"]: {**m, "provider": m.get("provider", "mimo")} for m in MODELS}
+    MODEL_SPEC = {m["id"]: {**m, "provider": m.get("provider", "qwen")} for m in MODELS}
 
 app = FastAPI(title="octopus-account-relay", version="0.2.0")
 
@@ -1726,12 +1735,15 @@ def download_shizuku_apk() -> FileResponse:
 
 # ─────────────────── 模型目录 + 中转(多上游路由,按模型倍率扣积分,0=免费) ───────────────────
 def _resolve_model(requested: str | None) -> tuple[str, dict[str, Any]]:
-    """请求的 model → (规整后 model_id, spec)。目录外/未指定 → 回退 DEFAULT_MODEL(防拿 key 乱调)。"""
+    """请求的 model → (规整后 model_id, spec)。目录外/未指定 → 回退 DEFAULT_MODEL(防拿 key 乱调)。
+    FORCE_MODEL 非空时为运营硬锁:忽略客户端请求的 model,一律用 FORCE_MODEL(防前端切到贵的模型)。"""
+    if FORCE_MODEL:
+        requested = FORCE_MODEL
     model = requested or DEFAULT_MODEL
     spec = MODEL_SPEC.get(model)
     if spec is None:
         model = DEFAULT_MODEL
-        spec = MODEL_SPEC.get(DEFAULT_MODEL) or {"multiplier": 1.0, "provider": "mimo"}
+        spec = MODEL_SPEC.get(DEFAULT_MODEL) or {"multiplier": 0.2, "provider": "qwen"}
     return model, spec
 
 
@@ -1933,7 +1945,7 @@ async def chat_completions(body: dict[str, Any], request: Request, u: sqlite3.Ro
     # ── 模型 → 上游路由:目录外回退 DEFAULT_MODEL;按 spec.provider 选 base/key ──
     model, spec = _resolve_model(body.get("model"))
     mult = float(spec.get("multiplier", 1.0))
-    prov = PROVIDERS.get(spec.get("provider", "mimo"), {})
+    prov = PROVIDERS.get(spec.get("provider", "qwen"), {})
     base, key = prov.get("base_url") or "", prov.get("api_key") or ""
     if not base or not key:
         raise HTTPException(status_code=503, detail=f"模型 {model} 的上游未配置")
@@ -2042,6 +2054,117 @@ async def chat_completions(body: dict[str, Any], request: Request, u: sqlite3.Ro
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
     )
+
+
+# ─────────────── 生图 / 生视频(Agnes 增值:会员免费,非会员扣积分) ───────────────
+def _agnes_upstream() -> tuple[str, str]:
+    """取 agnes 上游 base+key(生图/生视频专用,key 只在服务端)。未配置 → 503。"""
+    prov = PROVIDERS.get("agnes", {})
+    base, key = (prov.get("base_url") or "").rstrip("/"), prov.get("api_key") or ""
+    if not base or not key:
+        raise HTTPException(status_code=503, detail="生图/生视频上游未配置")
+    return base, key
+
+
+def _charge_media(u: sqlite3.Row, cost: int, source: str, ref_id: str) -> int:
+    """会员/白名单免费(返回 0);否则原子扣 cost 积分,不足 → 402。返回实际扣的积分(供失败退款)。"""
+    unlimited = (u["email"] or "").strip().lower() in UNLIMITED_EMAILS
+    is_member = u["member_expire_at"] > now_ms()
+    if unlimited or is_member or cost <= 0:
+        return 0
+    if not _reserve_credits(u["user_id"], cost, source=source, ref_id=ref_id):
+        raise HTTPException(status_code=402, detail="积分不足,请充值或开通会员")
+    return cost
+
+
+def _refund_media(user_id: str, charged: int, ref_id: str) -> None:
+    """上游失败时退还已扣积分(charged=0 即会员/白名单,无需退)。"""
+    if charged <= 0:
+        return
+    with closing(db()) as c:
+        c.execute("UPDATE users SET credits = credits + ? WHERE user_id = ?", (charged, user_id))
+        _record_credit_txn(c, user_id, charged, source="media_refund", detail="生成失败退款", ref_id=ref_id)
+        c.commit()
+
+
+@app.post("/v1/images/generations")
+async def images_generations(body: dict[str, Any], u: sqlite3.Row = Depends(actor)) -> Any:
+    """生图(同步):会员/白名单免费,非会员扣 IMAGE_CREDITS。透传 Agnes /images/generations。"""
+    rate_limit(f"image:{u['user_id']}", 20, 60)  # 每用户每分钟 20 张
+    base, key = _agnes_upstream()
+    ref_id = "img_" + secrets.token_hex(8)
+    charged = _charge_media(u, IMAGE_CREDITS, "image_gen", ref_id)
+    payload = {
+        "model": str(body.get("model") or IMAGE_MODEL),
+        "prompt": str(body.get("prompt") or "")[:4000],
+        "n": 1,
+        "size": str(body.get("size") or "1024x1024"),
+    }
+    import httpx  # 惰性 import
+    try:
+        async with httpx.AsyncClient(timeout=120) as client:
+            resp = await client.post(
+                f"{base}/images/generations",
+                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                json=payload,
+            )
+    except Exception:  # noqa: BLE001 — 上游异常,退款
+        _refund_media(u["user_id"], charged, ref_id)
+        raise HTTPException(status_code=502, detail="生图上游请求失败")
+    if resp.status_code >= 400:
+        _refund_media(u["user_id"], charged, ref_id)
+        return JSONResponse(status_code=resp.status_code,
+                            content={"error": {"message": "生图失败", "status": resp.status_code}})
+    return JSONResponse(content=resp.json())
+
+
+@app.post("/v1/video/generations")
+async def video_generations(body: dict[str, Any], u: sqlite3.Row = Depends(actor)) -> Any:
+    """生视频(异步提交):会员/白名单免费,非会员扣 VIDEO_CREDITS。每用户每日 VIDEO_DAILY_QUOTA
+    个、每分钟 1 个(呼应 Agnes 全账号 1/min)。返回 task_id 供轮询 GET /v1/video/generations/{id}。"""
+    rate_limit(f"videoday:{u['user_id']}", VIDEO_DAILY_QUOTA, 86400)  # 每用户每日配额
+    rate_limit(f"videomin:{u['user_id']}", 1, 60)                     # 每用户每分钟 1 个
+    base, key = _agnes_upstream()
+    ref_id = "vid_" + secrets.token_hex(8)
+    charged = _charge_media(u, VIDEO_CREDITS, "video_gen", ref_id)
+    payload = {"model": str(body.get("model") or VIDEO_MODEL), "prompt": str(body.get("prompt") or "")[:4000]}
+    import httpx  # 惰性 import
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            resp = await client.post(
+                f"{base}/video/generations",
+                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                json=payload,
+            )
+    except Exception:  # noqa: BLE001
+        _refund_media(u["user_id"], charged, ref_id)
+        raise HTTPException(status_code=502, detail="生视频上游请求失败")
+    data = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
+    if resp.status_code >= 400:
+        _refund_media(u["user_id"], charged, ref_id)
+        busy = resp.status_code == 429 or "rate_limit" in json.dumps(data)
+        msg = "视频生成繁忙(每分钟限 1 个),请稍后再试" if busy else "生视频失败"
+        return JSONResponse(status_code=resp.status_code,
+                            content={"error": {"message": msg, "status": resp.status_code}})
+    return JSONResponse(content=data)
+
+
+@app.get("/v1/video/generations/{task_id}")
+async def video_poll(task_id: str, u: sqlite3.Row = Depends(actor)) -> Any:
+    """轮询视频任务状态/结果(透传 Agnes GET /videos/{task_id},OpenAI-Sora 风格)。"""
+    rate_limit(f"videopoll:{u['user_id']}", 120, 60)
+    base, key = _agnes_upstream()
+    import httpx  # 惰性 import
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.get(f"{base}/videos/{task_id}",
+                                    headers={"Authorization": f"Bearer {key}"})
+    except Exception:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail="查询视频状态失败")
+    if resp.status_code >= 400:
+        return JSONResponse(status_code=resp.status_code,
+                            content={"error": {"message": "查询失败", "status": resp.status_code}})
+    return JSONResponse(content=resp.json())
 
 
 # ─────────────────────────── 管理后台(/admin) ───────────────────────────

@@ -89,7 +89,7 @@
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 
-            <!-- 对话档位(不暴露模型名,只给两个档位) -->
+            <!-- 对话档位:单档 qwen3.5-flash 后整段隐藏(服务端 FORCE_MODEL 锁定,UI 无需让用户选档) -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -99,12 +99,14 @@
                 android:text="@string/account_tier_title"
                 android:textColor="@color/colorTextPrimary"
                 android:textSize="14pt"
-                android:textStyle="bold" />
+                android:textStyle="bold"
+                android:visibility="gone" />
 
             <androidx.cardview.widget.CardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8pt"
+                android:visibility="gone"
                 app:cardBackgroundColor="@color/colorContainerBrighten"
                 app:cardCornerRadius="16pt"
                 app:cardElevation="1pt">
