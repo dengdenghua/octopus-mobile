@@ -69,10 +69,13 @@ class AppViewModel : ViewModel() {
 
     private var connectionManager: OctopusConnectionManager? = null
 
+    /** connectionManager 就绪前的占位连接状态：缓存单例，避免每次 get 都新建 Flow（致 UI 重订阅/多余分配）。 */
+    private val disconnectedState =
+        kotlinx.coroutines.flow.MutableStateFlow(ConnectionState.DISCONNECTED)
+
     /** 连接状态（供 UI 观察，委托给 ConnectionManager） */
     val connectionState: StateFlow<ConnectionState>
-        get() = connectionManager?.connectionState
-            ?: kotlinx.coroutines.flow.MutableStateFlow(ConnectionState.DISCONNECTED)
+        get() = connectionManager?.connectionState ?: disconnectedState
 
     val taskOrchestrator = TaskOrchestrator(
         agentConfigProvider = { getAgentConfig() },
