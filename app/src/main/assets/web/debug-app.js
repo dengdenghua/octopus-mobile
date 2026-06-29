@@ -51,18 +51,60 @@
   }
 
   // --- Tool List Rendering ---
+  const CATEGORY_LABELS = {
+    screen: '屏幕',
+    input: '输入',
+    app: '应用',
+    file: '文件',
+    network: '网络',
+    system: '系统',
+    workflow: '工作流',
+    other: '其他'
+  };
+  const CATEGORY_ORDER = ['screen', 'input', 'app', 'file', 'network', 'system', 'workflow', 'other'];
+
   function renderToolList() {
     const container = $('toolList');
     container.innerHTML = '';
+
+    // Group tools by category (fallback to 'other')
+    const groups = {};
     tools.forEach(function (t) {
-      const btn = document.createElement('button');
-      btn.className = 'tool-btn';
-      btn.textContent = t.name;
-      btn.title = t.description;
-      btn.dataset.toolName = t.name;
-      btn.onclick = function () { selectTool(t.name); };
-      container.appendChild(btn);
+      const cat = t.category || 'other';
+      if (!groups[cat]) groups[cat] = [];
+      groups[cat].push(t);
     });
+
+    CATEGORY_ORDER.forEach(function (cat) {
+      if (!groups[cat] || groups[cat].length === 0) return;
+
+      const details = document.createElement('details');
+      details.className = 'tool-group';
+      details.open = true;
+      details.dataset.category = cat;
+
+      const summary = document.createElement('summary');
+      summary.className = 'tool-group-title';
+      summary.textContent = CATEGORY_LABELS[cat] || cat;
+      details.appendChild(summary);
+
+      const body = document.createElement('div');
+      body.className = 'tool-group-body';
+
+      groups[cat].forEach(function (t) {
+        const btn = document.createElement('button');
+        btn.className = 'tool-btn';
+        btn.textContent = t.name;
+        btn.title = t.description;
+        btn.dataset.toolName = t.name;
+        btn.onclick = function () { selectTool(t.name); };
+        body.appendChild(btn);
+      });
+
+      details.appendChild(body);
+      container.appendChild(details);
+    });
+
     // Re-apply current filter
     filterTools($('searchInput').value);
   }
@@ -70,7 +112,8 @@
   // --- Tool Search / Filter ---
   function filterTools(query) {
     const q = (query || '').trim().toLowerCase();
-    const buttons = $('toolList').querySelectorAll('.tool-btn');
+    const container = $('toolList');
+    const buttons = container.querySelectorAll('.tool-btn');
     buttons.forEach(function (btn) {
       const name = (btn.dataset.toolName || '').toLowerCase();
       if (!q || name.indexOf(q) !== -1) {
@@ -78,6 +121,11 @@
       } else {
         btn.classList.add('hidden');
       }
+    });
+    // Auto-hide groups with no visible tools
+    container.querySelectorAll('.tool-group').forEach(function (group) {
+      const visible = group.querySelectorAll('.tool-btn:not(.hidden)').length;
+      group.classList.toggle('hidden', visible === 0);
     });
   }
 

@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════════════════
-   Octopus 网页遥控台 — 样式表
-   基于 tokens.css 设计令牌
+   Octopus 网页遥控台 — Obsidian 极简暗色风格
+   基于 tokens.css；去阴影、细直边、低饱和、扁平
    ═══════════════════════════════════════════════════════ */
 
 * { box-sizing: border-box; }
@@ -21,124 +21,159 @@ html, body {
   gap: var(--oct-sp-3);
 }
 
-/* ── 左: 手机镜像 ── */
-#left {
+/* ── 左右面板：细边框、无阴影、小圆角 ── */
+#left, #right {
   display: flex;
   flex-direction: column;
-  flex: 1 1 360px;
-  min-width: 0;
   background: var(--oct-surface);
   border: 1px solid var(--oct-border);
-  border-radius: var(--oct-radius-lg);
-  box-shadow: var(--oct-shadow-md);
+  border-radius: var(--oct-radius-sm);
   overflow: hidden;
 }
 
-/* ── 右: 对话 ── */
+#left {
+  flex: 1 1 360px;
+  min-width: 0;
+}
+
 #right {
   flex: 1 1 380px;
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  background: var(--oct-surface);
-  border: 1px solid var(--oct-border);
-  border-radius: var(--oct-radius-lg);
-  box-shadow: var(--oct-shadow-md);
-  overflow: hidden;
 }
 
-/* backdrop-filter 仅在暗色下有意义（浅色为不透明卡片） */
-@media (prefers-color-scheme: dark) {
-  #left, #right { backdrop-filter: blur(20px); }
-}
-
-/* ── 左顶栏 ── */
-.ltbar {
-  min-height: 48px;
+/* ── 顶栏：扁平、细底边、无渐变 ── */
+.ltbar, .rtbar {
   display: flex;
   align-items: center;
   gap: var(--oct-sp-2);
-  padding: 7px 10px;
-  background: var(--oct-surface-2);
+  padding: 0 var(--oct-sp-3);
+  height: 44px;
+  background: var(--oct-surface);
   border-bottom: 1px solid var(--oct-border);
-  white-space: nowrap;
-}
-
-.ltbar-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  background: var(--oct-surface-2);
-  color: var(--oct-text);
-  border: 1px solid var(--oct-border);
-  border-radius: var(--oct-radius-pill);
-  padding: 7px 12px;
   font-size: var(--oct-fs-sm);
-  font-family: inherit;
-  cursor: pointer;
-  transition: all var(--oct-dur-fast) var(--oct-ease);
 }
 
-.ltbar-btn:hover {
-  background: var(--oct-brand-soft);
-  border-color: var(--oct-brand);
-}
-
-.ltbar-btn:active {
-  background: var(--oct-brand-soft);
-  border-color: var(--oct-brand);
-}
-
-.ltbar-btn svg {
-  width: 16px;
-  height: 16px;
+.ltbar {
   flex-shrink: 0;
 }
 
+.rtbar {
+  font-weight: var(--oct-fw-medium);
+}
+
 .ltbar-title {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: var(--oct-sp-2);
-  font-size: var(--oct-fs-sm);
-  font-weight: var(--oct-fw-semibold);
+  color: var(--oct-text-2);
+  font-weight: var(--oct-fw-medium);
 }
 
 .ltbar-title svg {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
+  color: var(--oct-text-3);
+}
+
+/* ── 工具栏按钮：小、方、细边、无 pill ── */
+.ltbar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 10px;
+  background: transparent;
   color: var(--oct-text-2);
+  border: 1px solid var(--oct-border);
+  border-radius: var(--oct-radius-sm);
+  font-size: var(--oct-fs-xs);
+  font-family: inherit;
+  cursor: pointer;
+  transition: color var(--oct-dur-fast) var(--oct-ease),
+              border-color var(--oct-dur-fast) var(--oct-ease),
+              background var(--oct-dur-fast) var(--oct-ease);
+}
+
+.ltbar-btn:hover {
+  color: var(--oct-text);
+  background: var(--oct-surface-2);
+  border-color: var(--oct-border-strong);
+}
+
+.ltbar-btn:active {
+  background: var(--oct-surface-2);
+}
+
+.ltbar-btn svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
 }
 
 #st {
   font-size: var(--oct-fs-xs);
-  color: var(--oct-text-2);
+  color: var(--oct-text-3);
   margin-left: var(--oct-sp-1);
 }
 
-/* 延迟指示器 */
 #latency {
-  font-size: var(--oct-fs-xs);
-  color: var(--oct-success);
   margin-left: auto;
-  padding: 3px var(--oct-sp-2);
-  background: var(--oct-brand-soft);
-  border-radius: var(--oct-radius-pill);
+  font-size: var(--oct-fs-xs);
+  font-family: var(--oct-font-mono);
+  color: var(--oct-text-3);
   white-space: nowrap;
-  transition: color var(--oct-dur-base) var(--oct-ease),
-              background var(--oct-dur-base) var(--oct-ease);
 }
 
-#latency.warn {
-  color: var(--oct-warning);
-  background: rgba(255, 159, 10, .14);
+#latency.warn { color: var(--oct-warning); }
+#latency.bad  { color: var(--oct-danger); }
+
+/* ── 折叠菜单（窄屏）── */
+.ltbar-menu {
+  position: relative;
+  display: none;
 }
 
-#latency.bad {
-  color: var(--oct-danger);
-  background: rgba(255, 59, 48, .14);
+.ltbar-menu summary {
+  list-style: none;
+  cursor: pointer;
+}
+.ltbar-menu summary::-webkit-details-marker { display: none; }
+.ltbar-menu summary::marker { display: none; content: ''; }
+
+.ltbar-menu-btn {
+  padding: 0 8px;
 }
 
-/* ── 视频舞台 ── */
+.ltbar-menu-popup {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 120px;
+  background: var(--oct-bg-elevated);
+  border: 1px solid var(--oct-border);
+  border-radius: var(--oct-radius-sm);
+  padding: var(--oct-sp-1);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: var(--oct-z-overlay);
+}
+
+.ltbar-menu-item {
+  background: transparent;
+  border: none;
+  color: var(--oct-text);
+  padding: 8px 12px;
+  border-radius: var(--oct-radius-sm);
+  font-size: var(--oct-fs-sm);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--oct-dur-fast) var(--oct-ease);
+}
+.ltbar-menu-item:hover { background: var(--oct-surface-2); }
+
+/* ── 视频舞台：深底、细边框屏幕 ── */
 #stage {
   position: relative;
   flex: 1;
@@ -146,7 +181,7 @@ html, body {
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  background: #050608;
+  background: var(--oct-bg);
   min-height: 0;
 }
 
@@ -157,45 +192,37 @@ html, body {
   cursor: crosshair;
   user-select: none;
   -webkit-user-drag: none;
+  border: 1px solid var(--oct-border);
+  border-radius: var(--oct-radius-sm);
 }
 
 #msg2 {
   position: absolute;
   bottom: var(--oct-sp-2);
   left: var(--oct-sp-2);
-  color: rgba(255, 255, 255, .82);
+  color: var(--oct-text-2);
   font-size: var(--oct-fs-xs);
+  font-family: var(--oct-font-mono);
   max-width: 70%;
-  background: var(--oct-overlay);
-  border-radius: var(--oct-radius-pill);
-  padding: 5px var(--oct-sp-2);
+  background: var(--oct-surface);
+  border: 1px solid var(--oct-border);
+  border-radius: var(--oct-radius-sm);
+  padding: 4px var(--oct-sp-2);
 }
 
-/* ── 右顶栏 ── */
-.rtbar {
-  height: 48px;
-  display: flex;
-  align-items: center;
-  gap: var(--oct-sp-2);
-  padding: 0 var(--oct-sp-4);
-  background: var(--oct-surface-2);
-  border-bottom: 1px solid var(--oct-border);
-  font-size: var(--oct-fs-base);
-  font-weight: var(--oct-fw-semibold);
+.rtbar-icon {
+  color: var(--oct-text-3);
+  flex-shrink: 0;
 }
 
 .rtbar #run {
   font-size: var(--oct-fs-xs);
   color: var(--oct-warning);
-  font-weight: var(--oct-fw-semibold);
+  font-weight: var(--oct-fw-medium);
+  margin-left: var(--oct-sp-2);
 }
 
-.rtbar-icon {
-  color: var(--oct-text-2);
-  flex-shrink: 0;
-}
-
-/* ── 对话区 ── */
+/* ── 对话区：扁平气泡、细边/左边框区分 ── */
 #chat {
   flex: 1;
   overflow: auto;
@@ -206,83 +233,84 @@ html, body {
 }
 
 .b {
-  max-width: 80%;
-  padding: 9px var(--oct-sp-3);
-  border-radius: var(--oct-radius-md);
+  max-width: 82%;
+  padding: 8px var(--oct-sp-3);
+  border-radius: var(--oct-radius-sm);
   font-size: var(--oct-fs-base);
-  line-height: 1.5;
+  line-height: 1.55;
   white-space: pre-wrap;
   word-break: break-word;
   border: 1px solid var(--oct-border);
+  background: var(--oct-surface);
+  color: var(--oct-text);
 }
 
 .user {
   align-self: flex-end;
-  background: linear-gradient(135deg, var(--oct-brand), var(--oct-brand-strong));
-  color: #fff;
-  border-color: transparent;
-  border-bottom-right-radius: 5px;
+  background: var(--oct-surface-2);
+  border-color: var(--oct-border-strong);
+  border-right: 2px solid var(--oct-brand);
 }
 
 .asst {
   align-self: flex-start;
-  background: var(--oct-surface-2);
-  color: var(--oct-text);
-  border-bottom-left-radius: 5px;
+  background: var(--oct-surface);
+  border-color: var(--oct-border);
+  border-left: 2px solid var(--oct-border-strong);
 }
 
 .tool {
   align-self: flex-start;
   font-size: var(--oct-fs-xs);
+  font-family: var(--oct-font-mono);
   color: var(--oct-success);
-  background: rgba(52, 199, 111, .14);
-  border: 1px solid rgba(52, 199, 111, .18);
-  padding: 5px 10px;
-  border-radius: var(--oct-radius-pill);
+  background: transparent;
+  border: 1px solid rgba(52, 199, 111, .22);
+  padding: 4px 10px;
+  border-radius: var(--oct-radius-sm);
 }
 
 .err {
   align-self: flex-start;
   color: var(--oct-danger);
-  background: rgba(255, 59, 48, .14);
-  border: 1px solid rgba(255, 59, 48, .18);
+  background: transparent;
+  border: 1px solid rgba(255, 59, 48, .22);
+  border-left: 2px solid var(--oct-danger);
   padding: 7px 11px;
-  border-radius: var(--oct-radius-md);
   font-size: var(--oct-fs-sm);
 }
 
-/* 重连状态气泡 */
 .reconnecting {
   align-self: center;
   color: var(--oct-warning);
-  background: rgba(255, 159, 10, .12);
-  border: 1px solid rgba(255, 159, 10, .18);
-  padding: 5px 12px;
-  border-radius: var(--oct-radius-pill);
-  font-size: var(--oct-fs-sm);
-  animation: pulse-reconnect 1.5s ease-in-out infinite;
+  font-size: var(--oct-fs-xs);
+  font-family: var(--oct-font-mono);
+  padding: 3px 10px;
+  border: 1px solid rgba(255, 159, 10, .22);
+  border-radius: var(--oct-radius-sm);
+  animation: pulse-reconnect 1.6s ease-in-out infinite;
 }
 
 @keyframes pulse-reconnect {
   0%, 100% { opacity: 1; }
-  50% { opacity: .5; }
+  50% { opacity: .45; }
 }
 
-/* ── 输入区 ── */
+/* ── 输入区：仅顶部分隔，扁平 ── */
 #inputrow {
   display: flex;
   gap: var(--oct-sp-2);
   padding: var(--oct-sp-3);
   border-top: 1px solid var(--oct-border);
-  background: var(--oct-surface-2);
+  background: var(--oct-surface);
 }
 
 #ta {
   flex: 1;
-  background: var(--oct-surface-2);
+  background: var(--oct-bg);
   color: var(--oct-text);
   border: 1px solid var(--oct-border);
-  border-radius: var(--oct-radius-md);
+  border-radius: var(--oct-radius-sm);
   padding: 10px var(--oct-sp-3);
   font-size: var(--oct-fs-base);
   font-family: inherit;
@@ -299,41 +327,48 @@ html, body {
   background: var(--oct-surface);
 }
 
+#ta::placeholder { color: var(--oct-text-3); }
+
 #send {
   background: var(--oct-brand);
   color: #fff;
   border: none;
-  border-radius: var(--oct-radius-md);
-  padding: 0 var(--oct-sp-5);
+  border-radius: var(--oct-radius-sm);
+  padding: 0 var(--oct-sp-4);
   font-size: var(--oct-fs-base);
   font-weight: var(--oct-fw-semibold);
   font-family: inherit;
   cursor: pointer;
-  transition: background var(--oct-dur-fast) var(--oct-ease);
+  height: 44px;
+  min-width: 64px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--oct-dur-fast) var(--oct-ease),
+              transform var(--oct-dur-fast) var(--oct-ease);
 }
 
-#send:hover:not(:disabled) {
-  background: var(--oct-brand-strong);
-}
-
+#send:hover { background: var(--oct-brand-strong); }
+#send:active { transform: scale(0.97); }
 #send:disabled {
   background: var(--oct-surface-2);
   color: var(--oct-text-3);
-  cursor: default;
+  cursor: not-allowed;
+  transform: none;
 }
 
-/* ── 快捷键帮助面板 ── */
+/* ── 快捷键帮助面板：扁平细边 ── */
 #help-panel {
   position: fixed;
   bottom: var(--oct-sp-4);
   right: var(--oct-sp-4);
   background: var(--oct-bg-elevated);
   border: 1px solid var(--oct-border);
-  border-radius: var(--oct-radius-md);
+  border-radius: var(--oct-radius-sm);
   padding: var(--oct-sp-4) var(--oct-sp-5);
-  min-width: 240px;
-  box-shadow: var(--oct-shadow-lg);
-  backdrop-filter: blur(20px);
+  min-width: 220px;
+  box-shadow: none;
   z-index: var(--oct-z-overlay);
   font-size: var(--oct-fs-sm);
   display: none;
@@ -344,7 +379,11 @@ html, body {
 #help-panel h3 {
   margin: 0 0 var(--oct-sp-3);
   font-size: var(--oct-fs-base);
-  color: var(--oct-brand);
+  font-weight: var(--oct-fw-semibold);
+  color: var(--oct-text);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--oct-sp-2);
 }
 
 #help-panel .row {
@@ -357,7 +396,7 @@ html, body {
 #help-panel .row:last-child { border-bottom: none; }
 
 #help-panel kbd {
-  background: var(--oct-surface-2);
+  background: var(--oct-surface);
   border: 1px solid var(--oct-border-strong);
   border-radius: var(--oct-radius-sm);
   padding: 2px 7px;
@@ -376,7 +415,7 @@ html, body {
   right: var(--oct-sp-2);
   background: transparent;
   border: none;
-  font-size: 20px;
+  font-size: 18px;
   line-height: 1;
   color: var(--oct-text-3);
   cursor: pointer;
@@ -385,11 +424,48 @@ html, body {
   transition: color var(--oct-dur-fast) var(--oct-ease);
 }
 
-.help-close:hover {
-  color: var(--oct-text);
+.help-close:hover { color: var(--oct-text); }
+
+.help-links {
+  display: flex;
+  gap: var(--oct-sp-2);
+  margin-top: var(--oct-sp-4);
+  padding-top: var(--oct-sp-3);
+  border-top: 1px solid var(--oct-border);
 }
 
-/* ── 响应式: 窄屏上下堆叠 ── */
+.help-link {
+  flex: 1;
+  text-align: center;
+  padding: 6px var(--oct-sp-2);
+  border-radius: var(--oct-radius-sm);
+  background: var(--oct-surface-2);
+  color: var(--oct-text-2);
+  font-size: var(--oct-fs-sm);
+  text-decoration: none;
+  transition: var(--oct-transition-colors);
+}
+.help-link:hover {
+  background: var(--oct-brand-soft);
+  color: var(--oct-brand);
+}
+
+/* ── 滚动条：极窄、暗色 ── */
+#chat::-webkit-scrollbar,
+#help-panel::-webkit-scrollbar {
+  width: 6px;
+}
+#chat::-webkit-scrollbar-thumb,
+#help-panel::-webkit-scrollbar-thumb {
+  background: var(--oct-border-strong);
+  border-radius: 3px;
+}
+#chat::-webkit-scrollbar-track,
+#help-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ── 响应式：窄屏上下堆叠 ── */
 @media (max-width: 820px) {
   #app {
     flex-direction: column;
@@ -403,16 +479,19 @@ html, body {
   .ltbar {
     flex-wrap: wrap;
     height: auto;
-    min-height: 44px;
+    min-height: 40px;
     padding: 6px var(--oct-sp-2);
+    gap: 4px;
   }
+  .ltbar-menu { display: block; }
+  .ltbar > [data-action] { display: none; }
   #right { flex: 1; min-height: 0; }
   .b { max-width: 92%; }
-  #latency { font-size: 10px; padding: 2px 6px; }
+  #latency { font-size: 10px; }
   #help-panel {
     bottom: var(--oct-sp-2);
     right: var(--oct-sp-2);
-    min-width: 200px;
+    min-width: 190px;
     padding: var(--oct-sp-3) var(--oct-sp-4);
     font-size: var(--oct-fs-xs);
   }

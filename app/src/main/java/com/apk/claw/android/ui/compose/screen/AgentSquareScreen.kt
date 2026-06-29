@@ -147,7 +147,8 @@ private fun CategoryTabs() {
             val isSelected = index == selected
             Surface(
                 shape = OctopusShape.capsule,
-                color = if (isSelected) OctopusColors.Primary else OctopusColors.Surface,
+                color = if (isSelected) OctopusColors.Primary else OctopusColors.SurfaceDeep.copy(alpha = 0.5f),
+                border = if (isSelected) null else androidx.compose.foundation.BorderStroke(1.dp, OctopusColors.Border.copy(alpha = 0.6f)),
                 modifier = Modifier.clickable { selected = index },
             ) {
                 Text(

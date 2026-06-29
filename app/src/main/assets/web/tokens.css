@@ -69,6 +69,14 @@
   --oct-dur-base:  .25s;
   --oct-dur-slow:  .4s;
 
+  /* 复合 transition 预设（避免在多处重复书写） */
+  --oct-transition-colors:   background var(--oct-dur-fast) var(--oct-ease),
+                             border-color var(--oct-dur-fast) var(--oct-ease),
+                             color var(--oct-dur-fast) var(--oct-ease);
+  --oct-transition-transform: transform var(--oct-dur-fast) var(--oct-ease);
+  --oct-transition-shadow:    box-shadow var(--oct-dur-base) var(--oct-ease);
+  --oct-transition-all:       all var(--oct-dur-fast) var(--oct-ease);
+
   /* ── 字体 ── */
   --oct-font-ui:   -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   --oct-font-mono: 'SF Mono', Monaco, Menlo, Consolas, monospace;

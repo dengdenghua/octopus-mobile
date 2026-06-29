@@ -214,7 +214,7 @@ private fun BrowserHomeTopBar() {
                 Text(
                     calendar.get(Calendar.DAY_OF_MONTH).toString(),
                     color = Color.White,
-                    fontSize = 28.sp,
+                    fontSize = 24.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 0.sp,
                 )
@@ -226,7 +226,7 @@ private fun BrowserHomeTopBar() {
             Text(
                 stringResource(R.string.browser_home_title),
                 color = Color.White,
-                fontSize = 22.sp,
+                fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 0.sp,
             )

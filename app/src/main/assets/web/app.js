@@ -23,6 +23,9 @@ const i18n = {
     save_success: '配置已保存，通道将自动重连',
     save_failed: '保存失败', unknown_error: '未知错误',
     err_required: '此字段不能为空', err_url: '请输入有效的 URL',
+    nav_title: '快速入口', nav_console: '网页遥控台', nav_debug: '调试控制台',
+    nav_remote: '远程桌面', nav_tip: '提示：远程访问需携带 token，URL 形如 .../console.html#token=xxx',
+    open_console: '打开控制台',
   },
   en: {
     title: 'Octopus Mobile Config',
@@ -47,6 +50,9 @@ const i18n = {
     save_success: 'Saved. Channels will reconnect automatically.',
     save_failed: 'Save failed', unknown_error: 'Unknown error',
     err_required: 'This field is required', err_url: 'Please enter a valid URL',
+    nav_title: 'Quick Access', nav_console: 'Web Console', nav_debug: 'Debug Console',
+    nav_remote: 'Remote Desktop', nav_tip: 'Tip: Remote access requires a token, URL like .../console.html#token=xxx',
+    open_console: 'Open Console',
   },
   ja: {
     title: 'Octopus Mobile 設定',
@@ -71,6 +77,9 @@ const i18n = {
     save_success: '設定を保存しました。チャネルは自動的に再接続されます。',
     save_failed: '保存に失敗しました', unknown_error: '不明なエラー',
     err_required: 'この項目は必須です', err_url: '有効な URL を入力してください',
+    nav_title: 'クイックアクセス', nav_console: 'ウェブコンソール', nav_debug: 'デバッグコンソール',
+    nav_remote: 'リモートデスクトップ', nav_tip: 'ヒント：リモートアクセスにはトークンが必要、URL は .../console.html#token=xxx',
+    open_console: 'コンソールを開く',
   },
 };
 
@@ -198,6 +207,13 @@ function renderCards() {
     `;
     container.appendChild(div);
   });
+  // 重排：把 saveBtn 移到末尾，再把 nav-card 移到 saveBtn 之前
+  // 静态 HTML 顺序是 nav-card → saveBtn，appendChild 会把 cards 追加到末尾，
+  // 这样最终 DOM 顺序就是 cards → nav-card → saveBtn，符合视觉预期。
+  const saveBtn = document.getElementById('saveBtn');
+  const navCard = container.querySelector('.nav-card');
+  if (saveBtn) container.appendChild(saveBtn);
+  if (navCard && saveBtn) container.insertBefore(navCard, saveBtn);
 }
 
 // ====== Skeleton Loading ======
@@ -361,7 +377,7 @@ async function save() {
     const chanJson = await chanRes.json();
     const llmJson = await llmRes.json();
     if (chanJson.code === 0 && llmJson.code === 0) {
-      showToast(t('save_success'), 'success');
+      showToast(t('save_success') + ' · <a class="toast-link" href="console.html" target="_blank" rel="noopener">' + t('open_console') + ' →</a>', 'success', 5000);
       setTimeout(load, 500);
     } else {
       const msg = chanJson.code !== 0 ? chanJson.message : llmJson.message;
@@ -376,12 +392,12 @@ async function save() {
   }
 }
 
-function showToast(msg, type) {
+function showToast(msg, type, duration) {
   const el = document.getElementById('toast');
-  el.textContent = msg;
+  el.innerHTML = msg;
   el.className = 'toast ' + type;
   requestAnimationFrame(() => { el.classList.add('show'); });
-  setTimeout(() => { el.classList.remove('show'); }, 2500);
+  setTimeout(() => { el.classList.remove('show'); }, duration || 2500);
 }
 
 // ====== Init ======

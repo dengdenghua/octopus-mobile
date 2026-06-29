@@ -621,11 +621,7 @@ private fun PermissionSummaryRow(readyCount: Int, perms: List<PermissionUi>) {
 @Composable
 private fun HeroMetric(label: String, value: String, ok: Boolean, modifier: Modifier = Modifier) {
     val shape = OctopusShape.medium
-    val borderColor = when {
-        ok -> SuccessColor.copy(alpha = 0.16f)
-        value.contains(stringResource(R.string.status_not_configured)) -> WarningColor.copy(alpha = 0.25f)
-        else -> OctopusBackground.glassBorder
-    }
+    val borderColor = OctopusBackground.glassBorder
     Box(
         modifier = modifier
             .clip(shape)

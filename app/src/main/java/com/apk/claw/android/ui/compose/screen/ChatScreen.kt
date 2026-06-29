@@ -465,30 +465,30 @@ fun ChatScreen() {
                 Spacer(Modifier.width(OctopusSpacing.sm))
                 val ready = llmOk && a11yOk
                 Surface(
-                    shape = OctopusShape.capsule,
-                    color = OctopusBackground.glassSurface,
-                    border = BorderStroke(1.dp, OctopusBackground.glassBorder),
-                    shadowElevation = 6.dp,
+                shape = OctopusShape.capsule,
+                color = OctopusBackground.glassSurface,
+                border = BorderStroke(1.dp, OctopusBackground.glassBorder),
+                shadowElevation = 2.dp,
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = OctopusSpacing.sm, vertical = OctopusSpacing.xs),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = OctopusSpacing.md, vertical = OctopusSpacing.xs),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(6.dp)
-                                .background(if (ready) SuccessColor else WarningColor, CircleShape)
-                        )
-                        Spacer(modifier = Modifier.width(OctopusSpacing.xs))
-                        Text(
-                            stringResource(if (ready) R.string.chat_agent_ready else R.string.chat_agent_setup_needed),
-                            fontSize = OctopusType.caption,
-                            color = TextMuted,
-                        )
-                    }
+                    Box(
+                        modifier = Modifier
+                            .size(5.dp)
+                            .background(if (ready) SuccessColor else WarningColor, CircleShape)
+                    )
+                    Spacer(modifier = Modifier.width(OctopusSpacing.xs))
+                    Text(
+                        stringResource(if (ready) R.string.chat_agent_ready else R.string.chat_agent_setup_needed),
+                        fontSize = OctopusType.tag,
+                        color = TextMuted,
+                    )
                 }
             }
-            // 录制示范技能按钮：顶栏 REC 胶囊，录制中红色闪烁
+        }
+        // 录制示范技能按钮：顶栏 REC 胶囊，录制中红色闪烁
             val isRecording = remember { com.apk.claw.android.octopus_mobile.DemoRecorder.isRecording() }
             val recPulse by rememberInfiniteTransition(label = "rec").animateFloat(
                 initialValue = 0.4f,
@@ -499,7 +499,7 @@ fun ChatScreen() {
             Surface(
                 shape = OctopusShape.capsule,
                 color = if (isRecording) ErrorColor.copy(alpha = recPulse * 0.85f) else Color.Transparent,
-                border = BorderStroke(1.dp, if (isRecording) ErrorColor else TextMuted.copy(alpha = 0.5f)),
+                border = BorderStroke(1.dp, if (isRecording) ErrorColor else TextMuted.copy(alpha = 0.35f)),
                 modifier = Modifier.clickable { com.apk.claw.android.octopus_mobile.DemoRecorder.toggle() },
             ) {
                 Row(
@@ -508,14 +508,14 @@ fun ChatScreen() {
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(6.dp)
+                            .size(5.dp)
                             .background(if (isRecording) Color.White else ErrorColor, CircleShape)
                     )
                     Spacer(Modifier.width(OctopusSpacing.xs))
                     Text(
                         "REC",
                         color = if (isRecording) Color.White else ErrorColor,
-                        fontSize = OctopusType.tag,
+                        fontSize = OctopusType.micro,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 0.5.sp,
                     )
@@ -640,7 +640,7 @@ fun ChatScreen() {
             shape = OctopusShape.xl,
             color = OctopusBackground.glassSurface,
             border = BorderStroke(1.dp, OctopusBackground.glassBorder),
-            shadowElevation = 10.dp,
+            shadowElevation = 6.dp,
         ) {
             Column(modifier = Modifier.padding(horizontal = OctopusSpacing.lg, vertical = OctopusSpacing.sm)) {
             if (voiceMode) {

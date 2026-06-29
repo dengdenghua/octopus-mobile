@@ -141,7 +141,7 @@ private fun CompactBottomBar(
             shape = OctopusShape.capsule,
             color = NavGlassSurfaceColor.copy(alpha = if (OctopusColors.isLight) 0.72f else 0.68f),
             border = BorderStroke(OctopusLayout.bottomNavBorder, NavGlassBorderColor.copy(alpha = if (OctopusColors.isLight) 0.82f else 1f)),
-            shadowElevation = OctopusLayout.bottomNavElevation,
+            shadowElevation = 10.dp,
         ) {
             Box(
                 modifier = Modifier
