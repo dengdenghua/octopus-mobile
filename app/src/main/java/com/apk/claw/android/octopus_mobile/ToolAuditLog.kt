@@ -50,6 +50,27 @@ object ToolAuditLog {
         }
     }
 
+    /**
+     * 记录一次高影响安全设置变更（如"允许远程来源执行高危工具""完全权限模式"开关）。
+     * 复用同一审计日志的 HMAC 签名与 AuditLogActivity 展示，使这些开关的开/关形成
+     * 可追溯、防篡改的痕迹（谁/何时翻动）。
+     */
+    fun recordSecuritySetting(settingName: String, enabled: Boolean) {
+        record(
+            Entry(
+                id = java.util.UUID.randomUUID().toString(),
+                ts = System.currentTimeMillis(),
+                toolName = "设置 · $settingName",
+                risk = "high",
+                params = "enabled=$enabled",
+                success = true,
+                result = if (enabled) "已开启" else "已关闭",
+                blockedBy = null,
+                durationMs = 0,
+            )
+        )
+    }
+
     fun all(): List<Entry> {
         return runCatching {
             val json = KVUtils.getString(KEY, "")
