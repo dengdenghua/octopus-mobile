@@ -109,7 +109,6 @@ public class OpenAppTool extends BaseTool {
                             boolean clicked = service.clickNode(node);
                             XLog.i(TAG, "链式启动弹窗: 点击\"" + text + "\" " + (clicked ? "成功" : "失败"));
                             if (clicked) {
-                                ClawAccessibilityService.recycleNodes(nodes);
                                 return;
                             }
                         }

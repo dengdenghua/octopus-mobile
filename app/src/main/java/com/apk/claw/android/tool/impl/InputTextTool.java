@@ -76,67 +76,79 @@ public class InputTextTool extends BaseTool {
             return ToolResult.error("Accessibility service is not running");
         }
 
-        AccessibilityNodeInfo targetNode = service.getRootInActiveWindow() != null
-                ? findFocusedEditText(service.getRootInActiveWindow())
-                : null;
+        AccessibilityNodeInfo root = service.getRootInActiveWindow();
+        if (root == null) {
+            return ToolResult.error("No active window found");
+        }
+
+        AccessibilityNodeInfo targetNode = findFocusedEditText(root);
+        // If the returned node IS root itself, root will be recycled when we recycle targetNode.
+        // Otherwise, recycle root now.
+        if (targetNode != root) {
+            root.recycle();
+        }
 
         if (targetNode == null) {
             return ToolResult.error("No target text field found");
         }
 
-        // 先尝试点击获取焦点
-        targetNode.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
-        targetNode.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+        ToolResult result;
+        try {
+            // 先尝试点击获取焦点
+            targetNode.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
+            targetNode.performAction(AccessibilityNodeInfo.ACTION_CLICK);
 
-        // 如果需要清空，先全选+删除
-        if (clearFirst) {
-            clearNodeText(targetNode);
-        }
-
-        // 策略1: 先尝试 ACTION_SET_TEXT（标准方式）
-        // 注意：ACTION_SET_TEXT 本身是覆盖式的，append 模式下需要拼接原有文本
-        if (clearFirst) {
-            Bundle args = new Bundle();
-            args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text);
-            if (targetNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)) {
-                return ToolResult.success("Input text: " + text);
+            // 如果需要清空，先全选+删除
+            if (clearFirst) {
+                clearNodeText(targetNode);
             }
-        } else {
-            // append 模式：读取已有文本 + 新文本
-            CharSequence existing = targetNode.getText();
-            String newText = (existing != null ? existing.toString() : "") + text;
-            Bundle args = new Bundle();
-            args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, newText);
-            if (targetNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)) {
-                return ToolResult.success("Appended text: " + text);
+
+            // 策略1: 先尝试 ACTION_SET_TEXT（标准方式）
+            if (clearFirst) {
+                Bundle args = new Bundle();
+                args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text);
+                if (targetNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)) {
+                    result = ToolResult.success("Input text: " + text);
+                    return result;
+                }
+            } else {
+                CharSequence existing = targetNode.getText();
+                String newText = (existing != null ? existing.toString() : "") + text;
+                Bundle args = new Bundle();
+                args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, newText);
+                if (targetNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)) {
+                    result = ToolResult.success("Appended text: " + text);
+                    return result;
+                }
             }
-        }
 
-        // 策略2: 通过剪贴板粘贴（兼容性更好）
-        boolean clipboardSet = setClipboardText(service, text);
-        if (!clipboardSet) {
-            return ToolResult.error("Failed to set clipboard text");
-        }
+            // 策略2: 通过剪贴板粘贴（兼容性更好）
+            boolean clipboardSet = setClipboardText(service, text);
+            if (!clipboardSet) {
+                result = ToolResult.error("Failed to set clipboard text");
+                return result;
+            }
 
-        if (clearFirst) {
-            // 再次确保清空（有些 App 策略1失败后可能没清干净）
-            clearNodeText(targetNode);
-        } else {
-            // append 模式：光标移到末尾
-            CharSequence existing = targetNode.getText();
-            int end = existing != null ? existing.length() : 0;
-            Bundle cursorArgs = new Bundle();
-            cursorArgs.putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, end);
-            cursorArgs.putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, end);
-            targetNode.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, cursorArgs);
-        }
+            if (clearFirst) {
+                clearNodeText(targetNode);
+            } else {
+                CharSequence existing = targetNode.getText();
+                int end = existing != null ? existing.length() : 0;
+                Bundle cursorArgs = new Bundle();
+                cursorArgs.putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, end);
+                cursorArgs.putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, end);
+                targetNode.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, cursorArgs);
+            }
 
-        // 执行粘贴
-        if (targetNode.performAction(AccessibilityNodeInfo.ACTION_PASTE)) {
-            return ToolResult.success(clearFirst ? "Input text (via paste): " + text : "Appended text (via paste): " + text);
+            if (targetNode.performAction(AccessibilityNodeInfo.ACTION_PASTE)) {
+                result = ToolResult.success(clearFirst ? "Input text (via paste): " + text : "Appended text (via paste): " + text);
+            } else {
+                result = ToolResult.error("Failed to input text, both ACTION_SET_TEXT and clipboard paste failed");
+            }
+        } finally {
+            targetNode.recycle();
         }
-
-        return ToolResult.error("Failed to input text, both ACTION_SET_TEXT and clipboard paste failed");
+        return result;
     }
 
     /**
@@ -181,10 +193,12 @@ public class InputTextTool extends BaseTool {
     private AccessibilityNodeInfo findFocusedEditText(AccessibilityNodeInfo root) {
         if (root == null) return null;
         AccessibilityNodeInfo focused = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT);
-        if (focused != null && focused.isEditable()) {
-            return focused;
+        if (focused != null) {
+            if (focused.isEditable()) {
+                return focused;
+            }
+            focused.recycle();
         }
-        // Fallback: find first editable node
         return findFirstEditable(root);
     }
 

@@ -78,6 +78,7 @@ private fun RoutinesScreen(onBack: () -> Unit) {
                         onForgetFastPath = { forgetFastPath(ctx, r) { refresh() } },
                         onSchedule = { openSchedule(ctx, r) { refresh() } },
                         onParameterize = { openParameterize(ctx, r) { refresh() } },
+                        onViewSteps = { showRoutineSteps(ctx, r) },
                         onRun = { runRoutine(ctx, r) { refresh() } },
                         onDelete = {
                             RoutineScheduler.cancel(ctx, r.id)
@@ -133,6 +134,7 @@ private fun RoutineCard(
     onForgetFastPath: () -> Unit,
     onSchedule: () -> Unit,
     onParameterize: () -> Unit,
+    onViewSteps: () -> Unit,
     onRun: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -169,7 +171,11 @@ private fun RoutineCard(
                     if (routine.isScheduled) {
                         FPill("%02d:%02d".format(routine.scheduleHour, routine.scheduleMinute), OctopusTints.Hot)
                     }
-                    cached?.let { FPill("快路径 ${it.steps.size} 步", FPrimary) }
+                    cached?.let {
+                        Box(modifier = Modifier.clickable(onClick = onViewSteps)) {
+                            FPill("快路径 ${it.steps.size} 步 ›", FPrimary)
+                        }
+                    }
                     if (routine.isParameterized) FPill("参数化 ${routine.variables.joinToString("/") { "{$it}" }}", OctopusTints.Skill)
                 }
             }
@@ -247,6 +253,45 @@ private fun forgetFastPath(ctx: Context, r: RoutineStore.Routine, onChanged: () 
         }
         .setNegativeButton(ctx.getString(R.string.common_cancel), null)
         .show()
+}
+
+/**
+ * 👁 步骤查看器 —— 展示该例程快路径录制的动作序列（tool + 锚点 + 关键参数）。
+ * 这是"手机上的 n8n"可视化编排的第一块 UI 原语：先让用户看清例程到底会重放什么。
+ */
+private fun showRoutineSteps(ctx: Context, r: RoutineStore.Routine) {
+    val seq = ActionCache.get(r.id, r.prompt)
+    val body = if (seq == null || seq.steps.isEmpty()) {
+        "该例程暂无快路径步骤（尚未成功跑过一次，或指令已改使缓存失效）。\n\n语义重放例程不录死步骤，运行时由 Agent 当场看屏规划。"
+    } else {
+        seq.steps.mapIndexed { i, s -> "${i + 1}. ${describeStep(s)}" }.joinToString("\n")
+    }
+    AlertDialog.Builder(ctx)
+        .setTitle("快路径步骤 · ${r.name}")
+        .setMessage(body)
+        .setPositiveButton(ctx.getString(R.string.common_confirm), null)
+        .show()
+}
+
+/** 把一个录制步骤渲染成一行人类可读描述：工具 + 定位锚点 + 关键参数。 */
+private fun describeStep(s: ActionCache.Step): String {
+    val target = when {
+        s.anchorText.isNotBlank() -> "「${s.anchorText}」"
+        s.anchorId.isNotBlank() -> "#${s.anchorId}"
+        s.ox != 0 || s.oy != 0 -> "(${s.ox}, ${s.oy})"
+        else -> ""
+    }
+    val extra = runCatching {
+        val o = org.json.JSONObject(s.argsJson)
+        when {
+            o.has("text") -> "输入「${o.getString("text").take(30)}」"
+            o.has("package") -> o.getString("package")
+            o.has("key") -> "按键 ${o.getString("key")}"
+            o.has("query") -> "找「${o.getString("query").take(20)}」"
+            else -> ""
+        }
+    }.getOrDefault("")
+    return listOf(s.tool, target, extra).filter { it.isNotBlank() }.joinToString("  ")
 }
 
 /** ⏰ 选时间 → 选「每天 / 仅一次 / 取消定时」→ 写库 + 注册/取消闹钟。 */

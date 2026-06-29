@@ -207,7 +207,11 @@ class ProactiveRuleEngine(
                         message = "⚠ ${rule.name}: 高危工具「${rule.action.toolName}」不允许由主动规则自动执行"
                     )
                 } else {
-                    val result = toolRegistry.executeTool(rule.action.toolName, rule.action.toolParams)
+                    // 主动规则由不可信触发源(通知/短信/屏幕文本)自动触发，
+                    // 必须经 ToolRegistry 不可信来源闸门：中危工具走确认流程，高危已在上行拦截。
+                    val result = ToolRegistry.withUntrustedSource {
+                        toolRegistry.executeTool(rule.action.toolName, rule.action.toolParams)
+                    }
                     TriggerResult(
                         ruleId = rule.id,
                         ruleName = rule.name,
