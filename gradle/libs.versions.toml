@@ -27,6 +27,7 @@ adapter = "4.3.0"
 glide = "5.0.5"
 transformations = "4.3.0"
 coil = "2.7.0"
+markwon = "4.6.2"
 easyfloat = "2.0.4"
 zxing = "3.5.3"
 oapi = "2.5.3"
@@ -65,6 +66,8 @@ adapter = { module = "com.drakeet.multitype:multitype", version.ref = "adapter" 
 glide = { module = "com.github.bumptech.glide:glide", version.ref = "glide" }
 glide-transformations = { module = "jp.wasabeef:glide-transformations", version.ref = "transformations" }
 coil-compose = { module = "io.coil-kt:coil-compose", version.ref = "coil" }
+markwon-core = { module = "io.noties.markwon:core", version.ref = "markwon" }
+markwon-image = { module = "io.noties.markwon:image", version.ref = "markwon" }
 easyfloat = { module = "com.github.princekin-f:EasyFloat", version.ref = "easyfloat" }
 zxing = { module = "com.google.zxing:core", version.ref = "zxing" }
 oapi-sdk = { module = "com.larksuite.oapi:oapi-sdk", version.ref = "oapi" }

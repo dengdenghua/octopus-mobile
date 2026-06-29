@@ -63,6 +63,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -1410,6 +1411,8 @@ private fun UserBubble(text: String) {
 private fun AgentBubble(text: String) {
     val config = LocalConfiguration.current
     val maxBubbleWidth = (config.screenWidthDp.dp * 0.82f)
+    val media = remember(text) { extractChatMedia(text) }
+    val displayText = remember(text, media) { stripMediaUrls(text, media.images + media.videos) }
     Box(
         modifier = Modifier.fillMaxWidth(),
         contentAlignment = Alignment.CenterStart
@@ -1421,15 +1424,96 @@ private fun AgentBubble(text: String) {
             border = BorderStroke(1.dp, BorderColor),
             shadowElevation = 1.dp,
         ) {
-            Text(
-                text,
+            Column(
                 modifier = Modifier.padding(horizontal = OctopusSpacing.lg, vertical = OctopusSpacing.md),
-                fontSize = OctopusType.bodyStrong,
-                color = TextPrimary,
-                lineHeight = 21.sp,
-            )
+            ) {
+                MarkdownText(displayText)
+                media.images.forEach { url ->
+                    coil.compose.AsyncImage(
+                        model = url,
+                        contentDescription = "生成的图片",
+                        contentScale = androidx.compose.ui.layout.ContentScale.FillWidth,
+                        modifier = Modifier
+                            .padding(top = OctopusSpacing.sm)
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp)),
+                    )
+                }
+                media.videos.forEach { url ->
+                    InlineVideo(url)
+                }
+            }
         }
     }
+}
+
+/** Markwon 渲染 markdown(粗体/列表/代码/链接 + ![](url) 内嵌图片)到原生 TextView,样式对齐气泡。 */
+@Composable
+private fun MarkdownText(text: String) {
+    val context = LocalContext.current
+    val markwon = remember(context) {
+        io.noties.markwon.Markwon.builder(context)
+            .usePlugin(io.noties.markwon.image.ImagesPlugin.create())
+            .build()
+    }
+    val textColor = TextPrimary.toArgb()
+    val linkColor = PrimaryColor.toArgb()
+    AndroidView(
+        modifier = Modifier.fillMaxWidth(),
+        factory = { ctx ->
+            android.widget.TextView(ctx).apply {
+                setTextColor(textColor)
+                setLinkTextColor(linkColor)
+                textSize = 15f
+                setLineSpacing(0f, 1.35f)
+            }
+        },
+        update = { tv -> markwon.setMarkdown(tv, text) },
+    )
+}
+
+/** 从 agent 文本抽出生成的图片/视频 URL。agent 常给"纯 URL"而非 ![](url),Markwon 渲不了图,
+ *  故图片也按裸 URL 检测后用 AsyncImage 内嵌(只认 agnes 输出域,避免误渲普通链接)。 */
+private data class ChatMedia(val images: List<String>, val videos: List<String>)
+
+private fun extractChatMedia(text: String): ChatMedia {
+    val urls = Regex("""https?://\S+""").findAll(text)
+        .map { it.value.trimEnd('.', ',', '。', ')', ']', '"', '\'') }
+        .filter { it.contains("agnes-ai.space") }
+        .distinct().toList()
+    val videos = urls.filter { it.contains("/videos/") || it.endsWith(".mp4") }
+    val images = urls.filter { it !in videos }
+    return ChatMedia(images, videos)
+}
+
+/** 展示文本去掉已内嵌的媒体 URL + 残留的"图片链接/视频链接:"标签行(只露内嵌图,不露图片来源 URL)。 */
+private fun stripMediaUrls(text: String, urls: List<String>): String {
+    var s = text
+    for (u in urls) s = s.replace(u, "")
+    s = s.lineSequence()
+        .filterNot { it.trim().matches(Regex("""(图片|视频)?(链接|地址)\s*[:：]?""")) }
+        .joinToString("\n")
+    return s.replace(Regex("""\n{3,}"""), "\n\n").trim()
+}
+
+/** 内嵌视频播放:系统 VideoView + 控件条(无需额外依赖)。 */
+@Composable
+private fun InlineVideo(url: String) {
+    AndroidView(
+        modifier = Modifier
+            .padding(top = OctopusSpacing.sm)
+            .fillMaxWidth()
+            .height(200.dp)
+            .clip(RoundedCornerShape(8.dp)),
+        factory = { ctx ->
+            android.widget.VideoView(ctx).apply {
+                setVideoURI(android.net.Uri.parse(url))
+                val controller = android.widget.MediaController(ctx)
+                controller.setAnchorView(this)
+                setMediaController(controller)
+            }
+        },
+    )
 }
 
 // ── 设置指引 ──────────────────────────────────────────
