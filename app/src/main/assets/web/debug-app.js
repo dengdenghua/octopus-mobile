@@ -33,20 +33,44 @@
   const $ = (id) => document.getElementById(id);
 
   // --- Tool Loading ---
+  // --- Tool List State UI ---
+  function showToolState(state, title, desc, showRetry) {
+    const el = $('toolState');
+    if (!el) return;
+    el.dataset.state = state;
+    $('toolStateTitle').textContent = title || '';
+    $('toolStateDesc').textContent = desc || '';
+    $('toolStateRetry').hidden = !showRetry;
+    el.hidden = false;
+  }
+  function hideToolState() {
+    const el = $('toolState');
+    if (el) { el.hidden = true; el.dataset.state = 'hidden'; }
+  }
+
   async function loadTools() {
     if (!TOKEN) {
-      $('toolList').textContent = '缺少访问令牌，请使用 /debug.html?token=<token> 打开';
+      showToolState('error', '缺少访问令牌', '请使用 /debug.html?token=<token> 打开', false);
       return;
     }
+    showToolState('loading', '正在加载工具…', '', false);
     try {
       const res = await fetch('/api/debug/tools', { headers: authHeaders() });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
       const json = await res.json();
       if (json.code === 0) {
-        tools = json.data;
-        renderToolList();
+        tools = json.data || [];
+        if (tools.length === 0) {
+          showToolState('empty', '暂无可用工具', '服务器未注册任何工具', false);
+        } else {
+          hideToolState();
+          renderToolList();
+        }
+      } else {
+        throw new Error(json.msg || '服务器返回错误');
       }
     } catch (e) {
-      $('toolList').textContent = 'Failed to load tools: ' + e.message;
+      showToolState('error', '加载失败', e.message || '网络请求失败', true);
     }
   }
 
@@ -437,6 +461,12 @@
     var execBtn = $('execBtn');
     if (execBtn) {
       execBtn.addEventListener('click', executeTool);
+    }
+
+    // Tool list state retry
+    var stateRetry = $('toolStateRetry');
+    if (stateRetry) {
+      stateRetry.addEventListener('click', function () { loadTools(); });
     }
 
     // Load tools

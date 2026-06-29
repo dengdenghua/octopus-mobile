@@ -122,22 +122,77 @@ html, body {
   min-width: var(--oct-sp-2);
 }
 
-#st {
-  font-size: var(--oct-fs-xs);
-  color: var(--oct-text-3);
+/* ── 状态点 + #st：色盲友好，靠形状/动效而非仅靠颜色 ── */
+.ltbar-status {
+  display: inline-flex;
+  align-items: center;
   margin-left: var(--oct-sp-1);
+  flex-shrink: 0;
+}
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--oct-text-3);
+  flex-shrink: 0;
+}
+.status-dot[data-state="online"] {
+  background: var(--oct-success);
+  box-shadow: 0 0 0 2px rgba(52, 199, 111, .22);
+}
+.status-dot[data-state="connecting"] {
+  background: var(--oct-warning);
+  animation: pulse-dot 1.4s ease-in-out infinite;
+}
+.status-dot[data-state="offline"] {
+  background: var(--oct-danger);
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .4; }
 }
 
-#latency {
+#st {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--oct-fs-xs);
+  color: var(--oct-text-3);
+}
+#st.online { color: var(--oct-success); }
+#st.offline { color: var(--oct-danger); }
+
+/* ── latency 胶囊：固定"延迟"前缀 + #latency 数值，状态靠色 + 字重区分 ── */
+.latency-label {
+  color: var(--oct-text-3);
+  font-size: var(--oct-fs-xs);
   margin-left: auto;
+  font-family: var(--oct-font-ui);
+}
+#latency {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border: 1px solid var(--oct-border);
+  border-radius: var(--oct-radius-pill);
+  background: var(--oct-surface-2);
+  color: var(--oct-text-2);
   font-size: var(--oct-fs-xs);
   font-family: var(--oct-font-mono);
-  color: var(--oct-text-3);
+  font-weight: var(--oct-fw-semibold);
   white-space: nowrap;
+  transition: var(--oct-transition-colors);
 }
-
-#latency.warn { color: var(--oct-warning); }
-#latency.bad  { color: var(--oct-danger); }
+#latency.warn {
+  border-color: var(--oct-warning);
+  color: var(--oct-warning);
+  background: rgba(255, 159, 10, .10);
+}
+#latency.bad {
+  border-color: var(--oct-danger);
+  color: var(--oct-danger);
+  background: rgba(255, 59, 48, .10);
+}
 
 /* ── 折叠菜单（窄屏）── */
 .ltbar-menu {
@@ -211,14 +266,15 @@ html, body {
   position: absolute;
   bottom: var(--oct-sp-2);
   left: var(--oct-sp-2);
-  color: var(--oct-text-2);
+  color: var(--oct-text);
   font-size: var(--oct-fs-xs);
   font-family: var(--oct-font-mono);
   max-width: 70%;
-  background: var(--oct-surface);
-  border: 1px solid var(--oct-border);
+  background: var(--oct-bg-elevated);
+  border: 1px solid var(--oct-border-strong);
   border-radius: var(--oct-radius-sm);
-  padding: 4px var(--oct-sp-2);
+  padding: 5px var(--oct-sp-2);
+  box-shadow: 0 2px 8px var(--oct-shadow-sm);
 }
 
 .rtbar-icon {
@@ -228,7 +284,7 @@ html, body {
 
 .rtbar #run {
   font-size: var(--oct-fs-xs);
-  color: var(--oct-warning);
+  color: var(--oct-info);
   font-weight: var(--oct-fw-medium);
   margin-left: var(--oct-sp-2);
 }
