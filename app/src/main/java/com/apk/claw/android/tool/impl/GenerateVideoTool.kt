@@ -17,6 +17,13 @@ class GenerateVideoTool : BaseTool() {
 
     override fun getDisplayName(): String = if (useChineseDescription) "生成视频" else "Generate Video"
 
+    override fun getDescriptionEN(): String =
+        "Generate a short (~5s) video from a text prompt (text-to-video). Submits the job and returns a " +
+            "task_id; generation takes 1-3 min, then use check_video to poll the result."
+
+    override fun getDescriptionCN(): String =
+        "根据文字描述生成短视频(约5秒,文生视频)。提交任务返回 task_id(生成需1-3分钟),之后用 check_video 查询结果。"
+
     override fun getParameters(): List<ToolParameter> = listOf(
         ToolParameter(
             "prompt",

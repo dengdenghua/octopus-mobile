@@ -16,6 +16,13 @@ class CheckVideoTool : BaseTool() {
 
     override fun getDisplayName(): String = if (useChineseDescription) "查询视频" else "Check Video"
 
+    override fun getDescriptionEN(): String =
+        "Check the status/result of a text-to-video task by its task_id (from generate_video). " +
+            "Returns the video URL when completed."
+
+    override fun getDescriptionCN(): String =
+        "根据 task_id(来自 generate_video)查询视频生成任务的状态/结果,完成时返回视频链接。"
+
     override fun getParameters(): List<ToolParameter> = listOf(
         ToolParameter(
             "task_id",

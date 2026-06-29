@@ -16,6 +16,13 @@ class GenerateImageTool : BaseTool() {
 
     override fun getDisplayName(): String = if (useChineseDescription) "生成图片" else "Generate Image"
 
+    override fun getDescriptionEN(): String =
+        "Generate an image from a text prompt (text-to-image). Use when the user asks to draw, paint, or " +
+            "generate a picture / image / illustration / poster / avatar. Returns an image URL."
+
+    override fun getDescriptionCN(): String =
+        "根据文字描述生成图片(文生图)。当用户要求画/生成/做一张图片、插画、海报、头像等时使用。返回图片链接。"
+
     override fun getParameters(): List<ToolParameter> = listOf(
         ToolParameter(
             "prompt",
