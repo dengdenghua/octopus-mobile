@@ -41,10 +41,14 @@ class GeckoViewEngine : BrowserEngine {
     private var activeView: GeckoView? = null
     private var currentUrlValue: String = ""
 
-    @Volatile private var evalResult: String? = null
-    @Volatile private var evalPending = false
     @Volatile private var destroyed = false
-    private var evalCheckTask: Runnable? = null
+
+    /** 每次 evaluateJs 一个独立结果占位,按随机 nonce 索引:并发调用互不串线,页面无法伪造结果。 */
+    private class EvalHolder {
+        @Volatile var result: String? = null
+        @Volatile var done = false
+    }
+    private val pendingEvals = java.util.concurrent.ConcurrentHashMap<String, EvalHolder>()
 
     override fun isAvailable(): Boolean {
         return try {
@@ -91,84 +95,85 @@ class GeckoViewEngine : BrowserEngine {
             return
         }
 
-        // GeckoView 151 removed evaluateJavascript(). We use a javascript: URI
-        // that calls alert() with a unique prefix, and intercept via PromptDelegate.
-        // void() wrapper prevents page navigation (replaces content).
+        // GeckoView 151 removed evaluateJavascript()。改用 javascript: URI 让脚本 alert() 一个带
+        // 唯一前缀的结果,经 PromptDelegate 拦截;void() 包裹避免页面被导航替换。
+        // 前缀含每次调用的随机 nonce:① 页面无法伪造结果(不知道 nonce);② 并发调用互不串线。
+        val nonce = java.util.UUID.randomUUID().toString().replace("-", "")
+        val holder = EvalHolder()
+        pendingEvals[nonce] = holder
+        // 用 JSONObject.quote 生成合法的 JS 字符串字面量(带引号+转义)——
+        // 旧实现直接拼裸前缀,产出的是非法 JS(alert(__OCTOPUS...: + ...)),会语法错误致 eval 恒超时。
+        val markerJs = org.json.JSONObject.quote(JS_RESULT_PREFIX + nonce + ":")
         val wrappedScript = """
             (function(){
                 try {
                     var r = ($script);
-                    void(alert($JS_RESULT_PREFIX + JSON.stringify({"v": r === undefined ? null : r})));
+                    void(alert($markerJs + JSON.stringify({"v": r === undefined ? null : r})));
                 } catch(e) {
-                    void(alert($JS_RESULT_PREFIX + JSON.stringify({"e": String(e && e.message || e)})));
+                    void(alert($markerJs + JSON.stringify({"e": String(e && e.message || e)})));
                 }
             })();
         """.trimIndent()
-
-        evalResult = null
-        evalPending = true
 
         try {
             val jsUri = "javascript:" + Uri.encode(wrappedScript)
             session.load(GeckoSession.Loader().uri(jsUri))
         } catch (e: Exception) {
             Log.e(TAG, "evaluateJs failed to load script", e)
-            evalPending = false
+            pendingEvals.remove(nonce)
             callback?.invoke(null)
             return
         }
 
-        val startMs = System.currentTimeMillis()
+        val startMs = SystemClock.elapsedRealtime()
         val timeoutMs = 5000L
-
-        evalCheckTask?.let { mainHandler.removeCallbacks(it) }
         val checkTask = object : Runnable {
             override fun run() {
                 if (destroyed) {
-                    evalPending = false
+                    pendingEvals.remove(nonce)
                     callback?.invoke(null)
                     return
                 }
-                if (!evalPending) {
-                    callback?.invoke(evalResult)
-                    evalCheckTask = null
+                val h = pendingEvals[nonce]
+                if (h == null || h.done) {
+                    pendingEvals.remove(nonce)
+                    callback?.invoke(h?.result)
                     return
                 }
-                if (System.currentTimeMillis() - startMs > timeoutMs) {
-                    evalPending = false
+                if (SystemClock.elapsedRealtime() - startMs > timeoutMs) {
+                    pendingEvals.remove(nonce)
                     Log.w(TAG, "evaluateJs timed out for: ${script.take(80)}")
                     callback?.invoke(null)
-                    evalCheckTask = null
                     return
                 }
                 mainHandler.postDelayed(this, 50)
             }
         }
-        evalCheckTask = checkTask
         mainHandler.postDelayed(checkTask, 50)
     }
 
     private fun handleJsAlert(message: String): Boolean {
-        if (message.startsWith(JS_RESULT_PREFIX)) {
-            val json = message.substring(JS_RESULT_PREFIX.length)
-            try {
-                val obj = org.json.JSONObject(json)
-                if (obj.has("e")) {
-                    Log.w(TAG, "JS eval error: ${obj.getString("e")}")
-                    evalResult = null
-                } else if (obj.isNull("v")) {
-                    evalResult = null
-                } else {
-                    evalResult = obj.getString("v")
-                }
-            } catch (e: Exception) {
-                val raw = message.substring(JS_RESULT_PREFIX.length)
-                evalResult = raw
+        if (!message.startsWith(JS_RESULT_PREFIX)) return false
+        // 解析 nonce:PREFIX + nonce + ":" + json(nonce 为十六进制,不含冒号,故第一个冒号即分隔符)
+        val afterPrefix = message.substring(JS_RESULT_PREFIX.length)
+        val sep = afterPrefix.indexOf(':')
+        if (sep <= 0) return false
+        val nonce = afterPrefix.substring(0, sep)
+        // 防伪造:nonce 必须是本次发起的;页面无法猜中随机 nonce → 命中不到 holder,按普通 alert 处理(不注入结果)。
+        val holder = pendingEvals[nonce] ?: return false
+        val json = afterPrefix.substring(sep + 1)
+        holder.result = try {
+            val obj = org.json.JSONObject(json)
+            when {
+                obj.has("e") -> { Log.w(TAG, "JS eval error: ${obj.getString("e")}"); null }
+                obj.isNull("v") -> null
+                else -> obj.getString("v")
             }
-            evalPending = false
-            return true
+        } catch (e: Exception) {
+            json
         }
-        return false
+        holder.done = true
+        return true
     }
 
     override fun screenshot(): String? {
@@ -455,9 +460,8 @@ class GeckoViewEngine : BrowserEngine {
 
     override fun destroy() {
         destroyed = true
-        evalCheckTask?.let { mainHandler.removeCallbacks(it) }
-        evalCheckTask = null
-        evalPending = false
+        // 各 per-call checkTask 会在下次 run 检测到 destroyed 后自行结束并清理。
+        pendingEvals.clear()
         try {
             activeSession?.close()
         } catch (e: Exception) {

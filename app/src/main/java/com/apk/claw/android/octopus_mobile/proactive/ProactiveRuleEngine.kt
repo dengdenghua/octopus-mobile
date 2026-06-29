@@ -130,8 +130,20 @@ class ProactiveRuleEngine(
             if (!matchPattern(rule.trigger.pattern, combined)) continue
             if (!checkCooldown(rule)) continue
 
-            val result = executeRule(rule)
-            results.add(result)
+            // 验证码复制规则：从短信正文动态提取验证码，注入 clipboard 的 text 参数（静态规则参数无法做到）。
+            val overrides: Map<String, Any>? = if (rule.id == "sms_code_copy") {
+                val code = extractVerificationCode(body)
+                if (code == null) {
+                    results.add(TriggerResult(
+                        ruleId = rule.id, ruleName = rule.name, actionTaken = false,
+                        toolResult = null, message = "ℹ ${rule.name}: 未从短信中识别到验证码",
+                    ))
+                    continue
+                }
+                mapOf("action" to "set", "text" to code)
+            } else null
+
+            results.add(executeRule(rule, overrides))
         }
         return results
     }
@@ -184,7 +196,7 @@ class ProactiveRuleEngine(
 
     // ── 内部方法 ──
 
-    private fun executeRule(rule: ProactiveRule): TriggerResult {
+    private fun executeRule(rule: ProactiveRule, paramOverrides: Map<String, Any>? = null): TriggerResult {
         // 更新冷却时间
         val idx = rules.indexOfFirst { it.id == rule.id }
         if (idx >= 0) {
@@ -207,10 +219,12 @@ class ProactiveRuleEngine(
                         message = "⚠ ${rule.name}: 高危工具「${rule.action.toolName}」不允许由主动规则自动执行"
                     )
                 } else {
-                    // 主动规则由不可信触发源(通知/短信/屏幕文本)自动触发，
-                    // 必须经 ToolRegistry 不可信来源闸门：中危工具走确认流程，高危已在上行拦截。
+                    // 主动规则由不可信触发源(通知/短信/屏幕文本)自动触发，必须经 ToolRegistry 不可信来源闸门。
+                    // 注：中危工具在不可信来源下仅被「审计」，不拦截/确认（仅 HIGH 走来源闸门，已在上行拦截）；
+                    // paramOverrides 用于把运行时提取的值（如短信验证码）注入静态规则参数。
+                    val params = if (paramOverrides != null) rule.action.toolParams + paramOverrides else rule.action.toolParams
                     val result = ToolRegistry.withUntrustedSource {
-                        toolRegistry.executeTool(rule.action.toolName, rule.action.toolParams)
+                        toolRegistry.executeTool(rule.action.toolName, params)
                     }
                     TriggerResult(
                         ruleId = rule.id,
@@ -246,6 +260,16 @@ class ProactiveRuleEngine(
         }
     }
 
+    /**
+     * 从短信正文提取验证码:优先取"验证码/code/otp"等上下文附近的 4-8 位数字,
+     * 退化为正文中第一个独立的 4-8 位纯数字串;识别不到返回 null。
+     */
+    internal fun extractVerificationCode(body: String): String? {
+        Regex("(?:验证码|校验码|动态码|verification\\s*code|code|otp)\\D{0,8}(\\d{4,8})", RegexOption.IGNORE_CASE)
+            .find(body)?.groupValues?.getOrNull(1)?.let { return it }
+        return Regex("(?<![0-9])(\\d{4,8})(?![0-9])").find(body)?.groupValues?.getOrNull(1)
+    }
+
     private fun addBuiltinRules() {
         // 验证码短信自动复制
         if (rules.none { it.id == "sms_code_copy" }) {
@@ -253,8 +277,8 @@ class ProactiveRuleEngine(
                 id = "sms_code_copy",
                 name = "验证码短信自动复制",
                 trigger = Trigger(TriggerType.SMS_RECEIVED, "验证码|验证码|code|Code|COD"),
-                action = Action(ActionType.EXECUTE_AND_NOTIFY, "set_clipboard",
-                    mapOf("text" to ""), notifyUser = true),
+                action = Action(ActionType.EXECUTE_AND_NOTIFY, "clipboard",
+                    mapOf("action" to "set", "text" to ""), notifyUser = true),
                 cooldownMs = 30_000,
             ))
         }

@@ -200,7 +200,14 @@ class H264Decoder(width: Int = 0, height: Int = 0) {
 
             val width = (picWidthInMbsMinus1 + 1) * 16 - (cropLeft + cropRight) * 2
             val height = (2 - frameMbsOnlyFlag) * (picHeightInMapUnitsMinus1 + 1) * 16 - (cropTop + cropBottom) * 2
-            Pair(width, height)
+            // 合理性校验:SPS 异常或解析错位可能算出负数/畸大尺寸,此时返回 null,
+            // 让上层退回默认尺寸 + csd-0 由 MediaCodec 自行推导,避免用坏值 configure。
+            if (width !in 1..8192 || height !in 1..8192) {
+                Log.w(tag, "SPS resolution out of range: ${width}x${height}, ignoring")
+                null
+            } else {
+                Pair(width, height)
+            }
         } catch (e: Exception) {
             Log.w(tag, "SPS resolution parse failed: ${e.message}")
             null
