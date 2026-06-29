@@ -105,6 +105,9 @@
             android:name=".ui.settings.RuntimeConfigActivity"
             android:exported="false" />
         <activity
+            android:name=".ui.settings.GlassSettingsActivity"
+            android:exported="false" />
+        <activity
             android:name=".ui.device.DeviceListActivity"
             android:exported="false" />
         <activity

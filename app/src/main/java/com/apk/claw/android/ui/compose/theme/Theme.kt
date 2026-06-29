@@ -41,6 +41,7 @@ fun OctopusTheme(
             OctopusColors.isLight = light
         }
         val prefs = com.apk.claw.android.utils.KVUtils
+        OctopusThemeStyle.style = UiStyle.fromStorage(prefs.getUiStyle())
         val blurRadius = prefs.getGlassBlurRadius().dp
         if (OctopusGlass.blurRadius != blurRadius) {
             OctopusGlass.blurRadius = blurRadius

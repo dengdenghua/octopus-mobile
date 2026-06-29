@@ -31,6 +31,17 @@ enum class OctopusGlassMaterial {
     Sheet;
 }
 
+enum class UiStyle {
+    Glass,
+    Standard;
+    companion object {
+        fun fromStorage(value: String): UiStyle = when (value.lowercase()) {
+            "standard", "solid", "flat" -> Standard
+            else -> Glass
+        }
+    }
+}
+
 /**
  * 全局配色 —— 与 XML colors.xml 保持视觉一致的单一调色板。
  *
@@ -228,8 +239,21 @@ object OctopusLayout {
  * 浏览器首页先完成了暖色液态玻璃方向，这里把同一套背景/玻璃面板语义提升为
  * App 级别 token，避免一级页面各自散落一套颜色。
  */
+object OctopusThemeStyle {
+    private val _style = mutableStateOf(UiStyle.Glass)
+
+    var style: UiStyle
+        get() = _style.value
+        set(value) { _style.value = value }
+
+    val isGlass: Boolean get() = _style.value == UiStyle.Glass
+    val isStandard: Boolean get() = _style.value == UiStyle.Standard
+}
+
 object OctopusBackground {
-    fun pageBrush(): Brush = if (OctopusColors.isLight) {
+    fun pageBrush(): Brush = if (OctopusThemeStyle.isStandard) {
+        Brush.linearGradient(listOf(OctopusColors.Background, OctopusColors.Background))
+    } else if (OctopusColors.isLight) {
         Brush.linearGradient(
             listOf(
                 Color(0xFF91A3B7),
@@ -247,11 +271,23 @@ object OctopusBackground {
         )
     }
 
-    val glassSurface: Color
-        get() = if (OctopusColors.isLight) Color.White.copy(alpha = 0.82f) else Color(0xFF222225).copy(alpha = 0.72f)
+    val cardSurface: Color
+        get() = if (OctopusThemeStyle.isGlass) {
+            if (OctopusColors.isLight) Color.White.copy(alpha = 0.82f) else Color(0xFF222225).copy(alpha = 0.72f)
+        } else {
+            if (OctopusColors.isLight) Color.White else Color(0xFF272729)
+        }
 
-    val glassBorder: Color
-        get() = if (OctopusColors.isLight) Color.White.copy(alpha = 0.82f) else Color.White.copy(alpha = 0.14f)
+    val cardBorder: Color
+        get() = if (OctopusThemeStyle.isGlass) {
+            if (OctopusColors.isLight) Color.White.copy(alpha = 0.82f) else Color.White.copy(alpha = 0.14f)
+        } else {
+            if (OctopusColors.isLight) Color(0x14000000) else Color(0x1AFFFFFF)
+        }
+
+    val glassSurface: Color get() = cardSurface
+
+    val glassBorder: Color get() = cardBorder
 }
 
 /**

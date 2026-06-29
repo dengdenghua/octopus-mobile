@@ -563,6 +563,7 @@ Shizuku 是安全、开源的本地辅助工具。</string>
     <string name="chat_voice_stop_agent">■  停止任务</string>
     <string name="chat_voice_listening_release">正在听… 松开发送</string>
     <string name="chat_voice_hold_to_speak">按住说话</string>
+    <string name="chat_scroll_bottom">回到底部</string>
     <string name="chat_target_local_device">本机</string>
     <string name="chat_demo_open_wechat">打开微信，给小明发一条消息</string>
     <string name="chat_demo_main_screen">✓ 主屏幕</string>
@@ -897,8 +898,14 @@ Shizuku 是安全、开源的本地辅助工具。</string>
     <string name="settings_theme_follow_system">跟随系统</string>
     <string name="settings_theme_light">浅色</string>
     <string name="settings_theme_dark">深色</string>
+    <string name="settings_ui_style">界面风格</string>
+    <string name="settings_ui_style_glass">玻璃主题</string>
+    <string name="settings_ui_style_standard">标准主题</string>
     <string name="settings_glass_blur">玻璃模糊强度</string>
     <string name="settings_glass_blur_hint">调低是毛玻璃，调高更接近液态玻璃</string>
+    <string name="remote_control_notif_viewing">正在被远程查看</string>
+    <string name="remote_control_notif_controlling">正在被远程控制</string>
+    <string name="remote_control_notif_text">查看 %1$d 人 · 控制 %2$d 人 · 来源: %3$s</string>
     <string name="settings_glass_refraction">折射强度</string>
     <string name="settings_glass_highlight">高光强度</string>
     <string name="settings_glass_noise">噪声纹理</string>

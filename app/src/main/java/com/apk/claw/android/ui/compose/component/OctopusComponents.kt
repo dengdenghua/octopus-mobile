@@ -65,6 +65,7 @@ import com.apk.claw.android.ui.compose.theme.OctopusGlassQuality
 import com.apk.claw.android.ui.compose.theme.OctopusIconSize
 import com.apk.claw.android.ui.compose.theme.OctopusShape
 import com.apk.claw.android.ui.compose.theme.OctopusSpacing
+import com.apk.claw.android.ui.compose.theme.OctopusThemeStyle
 import com.apk.claw.android.ui.compose.theme.OctopusType
 
 // OctopusShapes 已统一到 OctopusShape（见 OctopusDesign.kt），以下为向后兼容别名
@@ -117,6 +118,14 @@ fun LiquidGlassLayer(
     focalY: Float = 0.18f,
     material: OctopusGlassMaterial = OctopusGlassMaterial.Card,
 ) {
+    if (OctopusThemeStyle.isStandard) {
+        Box(
+            modifier = modifier
+                .clip(shape)
+                .background(OctopusBackground.cardSurface, shape),
+        )
+        return
+    }
     val transition = rememberInfiniteTransition(label = "liquid-glass")
     val shimmer by transition.animateFloat(
         initialValue = -0.35f,

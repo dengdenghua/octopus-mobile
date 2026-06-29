@@ -335,6 +335,14 @@ object KVUtils {
     private const val KEY_GLASS_HIGHLIGHT = "KEY_GLASS_HIGHLIGHT"
     private const val KEY_GLASS_NOISE = "KEY_GLASS_NOISE"
     private const val KEY_GLASS_ANIMATION = "KEY_GLASS_ANIMATION"
+    private const val KEY_UI_STYLE = "KEY_UI_STYLE"
+
+    const val UI_STYLE_GLASS = "glass"
+    const val UI_STYLE_STANDARD = "standard"
+
+    fun getUiStyle(): String = getString(KEY_UI_STYLE, UI_STYLE_GLASS)
+
+    fun setUiStyle(style: String) = putString(KEY_UI_STYLE, style)
 
     fun getGlassBlurRadius(): Float = getFloat(KEY_GLASS_BLUR_RADIUS, 18f)
 
