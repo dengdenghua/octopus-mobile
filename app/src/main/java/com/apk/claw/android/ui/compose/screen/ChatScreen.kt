@@ -1313,7 +1313,7 @@ private fun DevicePreviewPanel(device: DeviceInfo, onEnter: () -> Unit, onClose:
                         scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
                         setBackgroundColor(android.graphics.Color.BLACK)
                         val token = URLEncoder.encode(device.authToken, "UTF-8")
-                        start("${device.getBaseUrl()}/api/screen/stream?quality=45&maxWidth=600&fps=10&token=$token")
+                        start("${device.getBaseUrl()}/api/screen/stream?quality=60&maxWidth=720&fps=20&token=$token")
                     }
                 },
                 onRelease = { it.stop() },

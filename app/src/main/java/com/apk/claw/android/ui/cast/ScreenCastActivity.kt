@@ -160,7 +160,7 @@ class ScreenCastActivity : BaseActivity() {
             layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = dp12 }
         }
         etStreamUrl = EditText(this).apply {
-            hint = "http://192.168.x.x:8080/api/screen/stream?quality=40&fps=5"
+            hint = "http://192.168.x.x:8080/api/screen/stream?quality=65&maxWidth=900&fps=20"
             textSize = 12f
             layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f)
             setSingleLine(true)

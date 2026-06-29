@@ -72,7 +72,7 @@ class RemoteControlActivity : BaseActivity() {
     override fun onStart() {
         super.onStart()
         val token = URLEncoder.encode(device.authToken, "UTF-8")
-        mjpeg.start("${device.getBaseUrl()}/api/screen/stream?quality=55&maxWidth=900&fps=15&token=$token")
+        mjpeg.start("${device.getBaseUrl()}/api/screen/stream?quality=65&maxWidth=900&fps=20&token=$token")
     }
 
     override fun onStop() {

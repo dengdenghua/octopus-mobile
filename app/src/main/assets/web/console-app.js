@@ -78,7 +78,8 @@
   let streamWasActive = false;
 
   function reloadStream() {
-    img.src = streamUrl('/api/screen/stream?maxWidth=720&fps=12&quality=50&_=' + Date.now());
+    // 默认 900p / 65 JPEG / 20fps; 服务端 ScreenCaptureManager 节流 33ms 兜底上限 30fps
+    img.src = streamUrl('/api/screen/stream?maxWidth=900&fps=20&quality=65&_=' + Date.now());
   }
 
   img.addEventListener('load', function () {

@@ -38,7 +38,7 @@ class MjpegImageView @JvmOverloads constructor(
     /**
      * 开始播放 MJPEG 流
      *
-     * @param url MJPEG 流地址，如 `http://192.168.1.100:8080/api/screen/stream?quality=40&maxWidth=480&fps=5`
+     * @param url MJPEG 流地址，如 `http://192.168.1.100:8080/api/screen/stream?quality=65&maxWidth=900&fps=20`
      */
     fun start(url: String) {
         stop()

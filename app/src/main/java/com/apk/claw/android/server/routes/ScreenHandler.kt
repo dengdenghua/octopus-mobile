@@ -80,7 +80,7 @@ class ScreenHandler : RouteHandler {
     }
 
     /**
-     * GET /api/screen/stream?quality=50&maxWidth=720&fps=10
+     * GET /api/screen/stream?quality=65&maxWidth=900&fps=20
      * MJPEG 实时流（限制 2 路并发）。
      */
     private fun handleScreenStream(session: NanoHTTPD.IHTTPSession, ctx: RouteContext): NanoHTTPD.Response {
@@ -95,9 +95,10 @@ class ScreenHandler : RouteHandler {
             )
         }
 
-        val quality = session.parms["quality"]?.toIntOrNull() ?: 50
-        val maxWidth = session.parms["maxWidth"]?.toIntOrNull() ?: 720
-        val fps = session.parms["fps"]?.toIntOrNull()?.coerceIn(1, 15) ?: 10
+        val quality = session.parms["quality"]?.toIntOrNull() ?: 65
+        val maxWidth = session.parms["maxWidth"]?.toIntOrNull() ?: 900
+        // fps 上限 30,默认 20; 节流由 ScreenCaptureManager.THROTTLE_MS=33 兜底
+        val fps = session.parms["fps"]?.toIntOrNull()?.coerceIn(1, 30) ?: 20
         val frameIntervalMs = (1000L / fps)
 
         val boundary = "octopus_mjpeg_boundary"

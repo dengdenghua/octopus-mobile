@@ -19,7 +19,9 @@ class ScreenCaptureManager {
 
     companion object {
         private const val TAG = "ScreenCaptureManager"
-        private const val THROTTLE_MS = 100L
+        // 节流 33ms ≈ 30fps 上限,匹配客户端请求 fps=20~30 时的实际表现
+        // 旧值 100ms 限制了 MJPEG 流到 10fps,结合 AccessibilityService.takeScreenshot 200-500ms 延迟,实际只有 2-5fps
+        private const val THROTTLE_MS = 33L
     }
 
     @Volatile
