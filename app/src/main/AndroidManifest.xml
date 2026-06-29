@@ -29,6 +29,8 @@
     <!-- Path A: 个人上下文能力（短信 / 日历 / 使用统计）-->
     <uses-permission android:name="android.permission.READ_SMS" />
     <uses-permission android:name="android.permission.SEND_SMS" />
+    <!-- 接收短信(验证码自动复制等主动规则);需运行时授予,默认功能关闭 -->
+    <uses-permission android:name="android.permission.RECEIVE_SMS" />
     <uses-permission android:name="android.permission.READ_CALENDAR" />
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions" />
@@ -226,6 +228,17 @@
             android:name=".service.RoutineAlarmReceiver"
             android:enabled="true"
             android:exported="false" />
+
+        <!-- 短信接收（验证码自动复制等主动规则）；android:permission 限定仅系统可投递此广播 -->
+        <receiver
+            android:name=".octopus_mobile.proactive.SmsReceiver"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.BROADCAST_SMS">
+            <intent-filter android:priority="999">
+                <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+            </intent-filter>
+        </receiver>
 
         <!-- 通知监听服务（主动 Agent） -->
         <service

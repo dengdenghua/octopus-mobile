@@ -34,9 +34,13 @@
 
 ## 4. 待决策项(非代码缺陷,需产品/运营拍板)
 
-### 4.1 短信验证码自动复制 —— 端到端触发需 `RECEIVE_SMS`
-规则逻辑已修正确(`5693c7e`),但**没有任何 SMS 接收器调用 `onSmsReceived`**。端到端工作需新增监听 `SMS_RECEIVED` 的 `BroadcastReceiver` + `RECEIVE_SMS` 危险权限。
-**为何不擅自实现**:`RECEIVE_SMS` 有隐私/应用分发(Play 政策)影响,且"自动把 OTP 复制到剪贴板"本身是隐私敏感的自动动作。需产品决策后再实现。
+### 4.1 短信验证码自动复制 —— ✅ 已实现(opt-in,经产品决策后)
+规则逻辑已修正确(`5693c7e`);本次进一步实现端到端:
+- 新增 `SmsReceiver`(`octopus_mobile/proactive/`),manifest 注册并以 `android:permission="android.permission.BROADCAST_SMS"` 限定仅系统可投递,解析短信后调用 `onSmsReceived`。
+- 新增 `RECEIVE_SMS` 权限(运行时授予)。
+- TrustCenter 加「验证码短信自动复制」开关:引导授予 `RECEIVE_SMS` + 启用主动引擎。
+- **三重前提默认关闭**:权限未授予 / 引擎未启用 / 规则未启用,任一不满足都不触发。
+- 隐私提示已在开关处明示:验证码会进入系统剪贴板,可能被其他应用读取。
 
 ### 4.2 `isRemoteHighRiskAllowed` —— 远程高危工具免确认
 默认 `false`、TrustCenter 有明确警告的 opt-in。开启后远程/LAN 不可信源可**无人工确认**执行高危工具(短信/文件/装应用等),直接扩大信任边界。
