@@ -104,6 +104,11 @@ private fun FilterChip(label: String, selected: Boolean, onClick: () -> Unit) {
 @Composable
 private fun AuditEntryCard(entry: ToolAuditLog.Entry) {
     FCard {
+        // 签名校验失败:HMAC 不匹配,条目可能被篡改或伪造。显著标红提醒。
+        if (entry.tampered) {
+            FPill("⚠ 签名校验失败 · 可能被篡改/伪造", Color(0xFFE53935))
+            Spacer(Modifier.height(6.dp))
+        }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(entry.toolName, color = FText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
             val riskColor = when (entry.risk) {

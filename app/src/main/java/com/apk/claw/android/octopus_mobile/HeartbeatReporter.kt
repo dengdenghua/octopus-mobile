@@ -6,6 +6,7 @@ import android.content.IntentFilter
 import android.os.BatteryManager
 import android.util.Log
 import com.apk.claw.android.service.ClawAccessibilityService
+import com.apk.claw.android.utils.KVUtils
 import kotlinx.coroutines.*
 
 /**
@@ -71,18 +72,24 @@ class HeartbeatReporter(
             sendOnce()
             while (isActive) {
                 delay(intervalMs)
-                // 检查 ACK 超时
-                val timeSinceAck = System.currentTimeMillis() - lastAckReceivedAt
-                if (timeSinceAck > ackTimeoutMs) {
-                    missedAcks++
-                    Log.w(tag, "heartbeat ACK timeout ($missedAcks/$maxMissedAcks), ${timeSinceAck}ms since last ACK")
-                    if (missedAcks >= maxMissedAcks) {
-                        Log.e(tag, "Parent runtime appears unresponsive ($maxMissedAcks missed ACKs), forcing reconnect")
-                        missedAcks = 0
-                        // 主动断开触发重连（OctopusMobileClient 的 onFailure/onClosed 会处理重连）
-                        client.forceReconnect()
-                        lastAckReceivedAt = System.currentTimeMillis()
-                        continue
+                // 检查 ACK 超时 → 强制重连。
+                // 跨仓协议依赖:仅当母体 octopus-agent runtime 确实回 {"method":"heartbeat/ack"} 时才有意义。
+                // 本仓只消费 ack(OctopusMobileClient.onHeartbeatAck),不产生 ack;若母体不回 ack 而开启此逻辑,
+                // missedAcks 会每窗口累计到上限并 forceReconnect,导致每台设备每 ~90s 强制重连一次的自我风暴。
+                // 故默认关闭(KVUtils.isHeartbeatAckReconnectEnabled),确认母体支持后再开启。关闭时仍正常发心跳。
+                if (KVUtils.isHeartbeatAckReconnectEnabled()) {
+                    val timeSinceAck = System.currentTimeMillis() - lastAckReceivedAt
+                    if (timeSinceAck > ackTimeoutMs) {
+                        missedAcks++
+                        Log.w(tag, "heartbeat ACK timeout ($missedAcks/$maxMissedAcks), ${timeSinceAck}ms since last ACK")
+                        if (missedAcks >= maxMissedAcks) {
+                            Log.e(tag, "Parent runtime appears unresponsive ($maxMissedAcks missed ACKs), forcing reconnect")
+                            missedAcks = 0
+                            // 主动断开触发重连（OctopusMobileClient 的 onFailure/onClosed 会处理重连）
+                            client.forceReconnect()
+                            lastAckReceivedAt = System.currentTimeMillis()
+                            continue
+                        }
                     }
                 }
                 sendOnce()

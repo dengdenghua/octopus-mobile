@@ -1,5 +1,7 @@
 package com.apk.claw.android.octopus_mobile.safety
 
+import com.apk.claw.android.utils.SecretRedactor
+
 /**
  * Central policy for tool risk labels and audit-safe summaries.
  *
@@ -98,14 +100,21 @@ object ToolRiskPolicy {
         return params.entries
             .sortedBy { it.key }
             .joinToString(prefix = "{", postfix = "}") { (key, value) ->
-                val redacted = if (isSensitiveKey(key)) "<redacted>" else value.toString()
-                "$key=${redacted.take(maxValueChars)}"
+                // 敏感键名整体打码；其余值再过一遍 SecretRedactor，
+                // 防止无害键名的 value 里夹带密钥/验证码等明文。
+                val shown = if (isSensitiveKey(key)) "<redacted>"
+                    else SecretRedactor.redact(value.toString()) ?: ""
+                "$key=${shown.take(maxValueChars)}"
             }
             .take(1000)
     }
 
-    fun summarizeResult(result: String?, maxChars: Int = 240): String =
-        result?.replace('\n', ' ')?.take(maxChars).orEmpty()
+    fun summarizeResult(result: String?, maxChars: Int = 240): String {
+        // 工具结果(如 read_sms / clipboard / browser_evaluate 的返回)可能含验证码/token/cookie，
+        // 先脱敏再截断,避免明文持久化进审计日志并在 AuditLogActivity 原样展示。
+        val cleaned = (result ?: return "").replace('\n', ' ')
+        return (SecretRedactor.redact(cleaned) ?: cleaned).take(maxChars)
+    }
 
     fun isSensitiveKey(key: String): Boolean {
         val lower = key.lowercase()
