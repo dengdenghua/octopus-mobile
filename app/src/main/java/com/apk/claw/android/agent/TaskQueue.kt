@@ -113,6 +113,27 @@ class TaskQueue {
         return true
     }
 
+    /**
+     * 当主队列空闲时，将暂停的任务批量恢复到队列中。
+     * 返回恢复的任务数量（0 表示没有暂停任务）。
+     */
+    fun resumePausedTasksWhenIdle(): Int {
+        if (queue.isNotEmpty() || pausedTasks.isEmpty()) return 0
+        var count = 0
+        val iter = pausedTasks.entries.iterator()
+        while (iter.hasNext()) {
+            val (_, task) = iter.next()
+            iter.remove()
+            queue.add(task.copy(status = TaskStatus.QUEUED))
+            count++
+            Log.i(TAG, "Auto-resumed paused task: ${task.id}")
+        }
+        return count
+    }
+
+    /** 是否有暂停任务等待恢复 */
+    fun hasPausedTasks(): Boolean = pausedTasks.isNotEmpty()
+
     /** 取消一个任务 */
     fun cancelTask(taskId: String): Boolean {
         val removed = queue.removeIf { it.id == taskId }

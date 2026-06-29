@@ -7,6 +7,7 @@ import com.apk.claw.android.R
 import com.apk.claw.android.agent.AgentCallback
 import com.apk.claw.android.agent.AgentConfig
 import com.apk.claw.android.agent.DefaultAgentService
+import com.apk.claw.android.agent.TaskCheckpoint
 import com.apk.claw.android.floating.LiveControlOverlay
 import com.apk.claw.android.octopus_mobile.ActionRecorder
 import com.apk.claw.android.octopus_mobile.ActivityLog
@@ -37,6 +38,99 @@ object ChatAgentBridge {
 
     /** 是否正在执行任务(网页端 / App 端共享判断)。 */
     fun isBusy(): Boolean = busy.get()
+
+    /** 是否有崩溃前未完成的任务可恢复。 */
+    fun hasPendingCheckpoint(): Boolean = TaskCheckpoint.hasPending()
+
+    /** 获取待恢复任务的目标摘要（用于 UI 提示）。 */
+    fun pendingCheckpointSummary(): String? {
+        val cp = TaskCheckpoint.load() ?: return null
+        return "「${cp.goal.take(40)}${if (cp.goal.length > 40) "..." else ""}」" +
+            "（已执行 ${cp.iterations} 轮）"
+    }
+
+    /**
+     * 恢复崩溃前未完成的任务。回调与 [run] 一致。
+     * @return true 如果成功开始恢复
+     */
+    fun resumePendingTask(
+        onTool: (icon: String, name: String, args: String, result: String?) -> Unit,
+        onText: (String) -> Unit,
+        onDone: (String) -> Unit,
+        onError: (String) -> Unit,
+    ): Boolean {
+        if (!TaskCheckpoint.hasPending()) return false
+        if (!busy.compareAndSet(false, true)) {
+            onError(ClawApplication.instance.getString(R.string.chat_agent_bridge_busy_error))
+            return false
+        }
+        val cp = TaskCheckpoint.load() ?: run {
+            busy.set(false)
+            return false
+        }
+        service.updateConfig(buildConfig())
+        curTask = cp.goal
+        curTarget = ControlTarget.label()
+        curSteps = 0
+        curStart = System.currentTimeMillis()
+        LiveControlOverlay.show("恢复任务中…") { cancel() }
+        val resumed = service.resumeTask(object : AgentCallback {
+            override fun onLoopStart(round: Int) {
+                LiveControlOverlay.updateStep(ClawApplication.instance.getString(R.string.chat_agent_bridge_thinking))
+            }
+
+            override fun onContent(round: Int, content: String) {
+                if (content.isNotEmpty()) main.post { onText(content) }
+            }
+
+            override fun onToolCall(round: Int, toolId: String, toolName: String, parameters: String) {}
+
+            override fun onToolResult(
+                round: Int, toolId: String, toolName: String, parameters: String, result: ToolResult
+            ) {
+                curSteps++
+                val summary = if (result.isSuccess) "✓ " + (result.data ?: "") else "✗ " + (result.error ?: "")
+                main.post { onTool(toolId, toolName, parameters, summary.take(48)) }
+            }
+
+            override fun onComplete(round: Int, finalAnswer: String, totalTokens: Int) {
+                main.post {
+                    onDone(finalAnswer)
+                    LiveControlOverlay.hide()
+                    finalize("completed", finalAnswer.take(120))
+                    busy.set(false)
+                }
+            }
+
+            override fun onError(round: Int, error: Exception, totalTokens: Int) {
+                main.post {
+                    onError(error.message ?: "Unknown error")
+                    LiveControlOverlay.hide()
+                    finalize("error", error.message?.take(120) ?: "unknown")
+                    busy.set(false)
+                }
+            }
+
+            override fun onSystemDialogBlocked(round: Int, totalTokens: Int) {
+                main.post {
+                    onError(ClawApplication.instance.getString(R.string.chat_agent_bridge_dialog_detected_full))
+                    LiveControlOverlay.hide()
+                    finalize("blocked", "system dialog")
+                    busy.set(false)
+                }
+            }
+        })
+        if (!resumed) {
+            busy.set(false)
+            LiveControlOverlay.hide()
+        }
+        return resumed
+    }
+
+    /** 丢弃待恢复的检查点。 */
+    fun discardPendingCheckpoint() {
+        TaskCheckpoint.clear()
+    }
 
     // 当前任务的审计采集
     private var curTask: String? = null

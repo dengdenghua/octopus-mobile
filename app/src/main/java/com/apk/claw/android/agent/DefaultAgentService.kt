@@ -14,6 +14,10 @@ import com.apk.claw.android.agent.llm.LlmResponse
 import com.apk.claw.android.agent.llm.StreamingListener
 import com.apk.claw.android.octopus_mobile.memory.ContextCompressor
 import com.apk.claw.android.service.ClawAccessibilityService
+import com.apk.claw.android.octopus_mobile.GoalVerifier
+import com.apk.claw.android.octopus_mobile.VisionAnalyzer
+import com.apk.claw.android.octopus_mobile.safety.ErrorClassifier
+import kotlinx.coroutines.runBlocking
 import com.apk.claw.android.tool.ToolRegistry
 import com.apk.claw.android.tool.impl.GetScreenInfoTool
 import com.apk.claw.android.tool.ToolResult
@@ -47,6 +51,8 @@ class DefaultAgentService : AgentService {
         private const val LOOP_DETECT_WINDOW = 4
         /** 死循环检测：连续触发 N 次后强制 finish，避免无限消耗迭代 */
         private const val MAX_LOOP_WARNINGS = 3
+        // 目标自校验：LLM 宣称完成后，用 VLM 看屏确认是否真达成；未达成时最多再修复几轮。
+        private const val MAX_GOAL_REPAIRS = 2
 
         /** base64 图片最大宽度，超过则等比缩放 */
         private const val VISION_MAX_WIDTH = 720
@@ -65,7 +71,8 @@ class DefaultAgentService : AgentService {
     private lateinit var toolSpecs: List<dev.langchain4j.agent.tool.ToolSpecification>
     private var executor: ExecutorService? = null
     private val running = AtomicBoolean(false)
-    private val cancelled = AtomicBoolean(false)
+    @Volatile
+    private var cancelToken: CancellationToken = CancellationToken()
 
     override fun initialize(config: AgentConfig) {
         this.config = config
@@ -92,8 +99,11 @@ class DefaultAgentService : AgentService {
     /** 不可信来源运行时，把工具调用包进来源闸门：高危工具默认拦截，满血/远程放行时通过。 */
     private fun execTool(toolName: String, params: Map<String, Any>): com.apk.claw.android.tool.ToolResult {
         val reg = ToolRegistry.getInstance()
-        return if (untrustedRun) ToolRegistry.withUntrustedSource { reg.executeTool(toolName, params) }
-        else reg.executeTool(toolName, params)
+        return if (untrustedRun) {
+            ToolRegistry.withUntrustedSource { reg.executeTool(toolName, params, cancelToken) }
+        } else {
+            reg.executeTool(toolName, params, cancelToken)
+        }
     }
 
     override fun executeTask(userPrompt: String, callback: AgentCallback, untrusted: Boolean) {
@@ -110,7 +120,7 @@ class DefaultAgentService : AgentService {
         }
 
         running.set(true)
-        cancelled.set(false)
+        cancelToken = CancellationToken()
         untrustedRun = untrusted
 
         try {
@@ -129,6 +139,38 @@ class DefaultAgentService : AgentService {
             running.set(false)
             callback.onError(0, e, 0)
         }
+    }
+
+    override fun resumeTask(callback: AgentCallback): Boolean {
+        val checkpoint = TaskCheckpoint.load() ?: return false
+        if (running.get()) {
+            XLog.w(TAG, "Cannot resume: agent is already running")
+            return false
+        }
+        val exec = executor
+        if (exec == null) {
+            XLog.w(TAG, "Cannot resume: agent not initialized")
+            return false
+        }
+
+        running.set(true)
+        cancelToken = CancellationToken()
+        untrustedRun = checkpoint.untrusted
+
+        XLog.i(TAG, "Resuming task from checkpoint: goal='${checkpoint.goal.take(40)}...', " +
+            "iterations=${checkpoint.iterations}, messages=${checkpoint.messages.size}")
+
+        exec.submit {
+            try {
+                runAgentLoopFromCheckpoint(checkpoint, callback)
+            } catch (e: Exception) {
+                XLog.e(TAG, "Agent resume error", e)
+                callback.onError(0, e, 0)
+            } finally {
+                running.set(false)
+            }
+        }
+        return true
     }
 
     // ==================== VLM 视觉理解 ====================
@@ -214,7 +256,7 @@ class DefaultAgentService : AgentService {
                 XLog.i(TAG, "VLM decided to handle the dialog with tool calls")
                 // 执行 LLM 决定的工具调用
                 for (toolRequest in llmResponse.toolExecutionRequests) {
-                    if (cancelled.get()) return false
+                    if (cancelToken.isCancelled()) return false
 
                     val toolName = toolRequest.name() ?: ""
                     val displayName = ToolRegistry.getInstance().getDisplayName(toolName)
@@ -315,7 +357,7 @@ class DefaultAgentService : AgentService {
     private fun chatWithRetry(messages: List<ChatMessage>, callback: AgentCallback, iteration: Int): LlmResponse {
         var lastException: Exception? = null
         for (attempt in 0 until MAX_API_RETRIES) {
-            if (cancelled.get()) throw RuntimeException(ClawApplication.instance.getString(R.string.agent_task_cancelled))
+            if (cancelToken.isCancelled()) throw RuntimeException(ClawApplication.instance.getString(R.string.agent_task_cancelled))
             try {
                 val response = if (config.streaming) {
                     llmClient.chatStreaming(messages, toolSpecs, object : StreamingListener {
@@ -329,30 +371,61 @@ class DefaultAgentService : AgentService {
                     llmClient.chat(messages, toolSpecs)
                 }
                 // 网关上游 5xx 常表现为 HTTP 200、但流式 body 是 {"error":...}，被解析层吞成"空回复"
-                // （无正文、无工具调用）。把它当作可重试的瞬时错误，复用下方指数退避，而不是误判为"任务已完成"。
+                // （无正文、无工具调用）。把它当作可重试的瞬时错误，复用下方分类重试，而不是误判为"任务已完成"。
                 if (response.text.isNullOrEmpty() && !response.hasToolExecutionRequests()) {
                     throw RuntimeException(ClawApplication.instance.getString(R.string.agent_empty_response))
                 }
                 return response
             } catch (e: Exception) {
                 lastException = e
-                // 认证失败 / 额度不足 / 权限拒绝：不重试，立即抛出
-                if (isAuthOrQuotaError(e)) {
+                if (cancelToken.isCancelled()) {
+                    throw RuntimeException(ClawApplication.instance.getString(R.string.agent_task_cancelled))
+                }
+
+                // ── ErrorClassifier 智能重试 ──
+                // 按错误类型决定退避策略，替代旧的硬编码指数退避。
+                val statusCode = extractStatusCode(e)
+                val classification = ErrorClassifier.classify(e, statusCode, config.provider.name)
+                XLog.w(TAG, "LLM API error: ${classification.category} (action=${classification.action}), " +
+                    "attempt ${attempt + 1}/$MAX_API_RETRIES: ${e.message}")
+
+                // 不可重试的错误：认证失败/额度不足、内容过滤、未知错误
+                if (!classification.isRetryable) {
                     throw e
                 }
-                val delay = (Math.pow(2.0, attempt.toDouble()) * 1000).toLong()
-                // 加入 jitter，避免多客户端同步重试触发服务端限流雪崩
-                val jitter = (Math.random() * 300).toLong()
-                XLog.w(TAG, "LLM API call failed (attempt ${attempt + 1}/$MAX_API_RETRIES), retrying in ${delay + jitter}ms: ${e.message}")
-                try {
-                    Thread.sleep(delay + jitter)
-                } catch (ie: InterruptedException) {
-                    Thread.currentThread().interrupt()
+                // SWITCH_KEY：移动端无多凭证轮换能力，直接抛出
+                if (classification.action == ErrorClassifier.RecoveryAction.SWITCH_KEY) {
                     throw e
+                }
+                // CONTEXT_LENGTH：压缩上下文后立即重试（backoff=0）
+                if (classification.action == ErrorClassifier.RecoveryAction.REDUCE_CONTEXT) {
+                    XLog.i(TAG, "Context too long, aggressive compression before retry")
+                    // compressHistoryForSend 已在 callLlm 每轮调用前执行；
+                    // 此处额外触发一次更激进的截断，丢弃更早的历史。
+                    runCatching {
+                        @Suppress("UNCHECKED_CAST")
+                        compressHistoryForSend(messages as MutableList<ChatMessage>)
+                    }
+                }
+
+                val delayMs = (classification.backoffSec * 1000).toLong()
+                    .coerceAtLeast(500) // 至少 500ms，避免立即重试打满 API
+                val jitter = (Math.random() * 500).toLong()
+                XLog.w(TAG, "Retrying in ${delayMs + jitter}ms (${classification.message})")
+                if (!cancelToken.sleepInterruptible(delayMs + jitter)) {
+                    throw RuntimeException(ClawApplication.instance.getString(R.string.agent_task_cancelled))
                 }
             }
         }
-        throw lastException!!
+        throw lastException ?: RuntimeException("LLM call failed after $MAX_API_RETRIES retries")
+    }
+
+    /** 从异常中提取 HTTP 状态码（LangChain4j HttpException 或消息中的状态码）。 */
+    private fun extractStatusCode(e: Throwable): Int? {
+        if (e is dev.langchain4j.exception.HttpException) {
+            return e.statusCode()
+        }
+        return null
     }
 
     /**
@@ -557,19 +630,23 @@ class DefaultAgentService : AgentService {
     private class AgentLoopState(
         val messages: MutableList<ChatMessage>,
         val maxIterations: Int,
+        /** 本次任务的自然语言目标，供完成时做 VLM 目标自校验。 */
+        val goal: String,
     ) {
         var iterations = 0
         var totalTokens = 0
         var loopWarningCount = 0
         val loopHistory = LinkedList<RoundFingerprint>()
         var lastScreenHash = 0
+        /** 剩余目标修复轮数（VLM 判未达成时消耗）。 */
+        var goalRepairsLeft = MAX_GOAL_REPAIRS
     }
 
     private enum class IterationOutcome { CONTINUE, TERMINATE }
     private enum class ToolHandleResult { CONTINUE, SKIP_REMAINING, TERMINATE }
 
     private fun AgentLoopState.shouldContinue(): Boolean =
-        iterations < maxIterations && !cancelled.get()
+        iterations < maxIterations && !cancelToken.isCancelled()
 
     private fun runAgentLoop(userPrompt: String, callback: AgentCallback) {
         preCheck()?.let {
@@ -577,13 +654,45 @@ class DefaultAgentService : AgentService {
             return
         }
 
-        val state = AgentLoopState(buildInitialMessages(userPrompt), config.maxIterations)
+        val state = AgentLoopState(buildInitialMessages(userPrompt), config.maxIterations, userPrompt)
+        saveCheckpoint(state)
         while (state.shouldContinue()) {
             state.iterations++
             callback.onLoopStart(state.iterations)
             if (state.runSingleIteration(callback) == IterationOutcome.TERMINATE) break
+            saveCheckpoint(state)
         }
         finishLoop(state, callback)
+    }
+
+    private fun runAgentLoopFromCheckpoint(checkpoint: TaskCheckpoint.CheckpointData, callback: AgentCallback) {
+        preCheck()?.let {
+            callback.onError(0, RuntimeException(it), 0)
+            return
+        }
+
+        val state = AgentLoopState(checkpoint.messages.toMutableList(), config.maxIterations, checkpoint.goal)
+        state.iterations = checkpoint.iterations
+        state.goalRepairsLeft = checkpoint.goalRepairsLeft
+        XLog.i(TAG, "Resumed from checkpoint at iteration ${state.iterations}, ${state.messages.size} messages")
+        while (state.shouldContinue()) {
+            state.iterations++
+            callback.onLoopStart(state.iterations)
+            if (state.runSingleIteration(callback) == IterationOutcome.TERMINATE) break
+            saveCheckpoint(state)
+        }
+        finishLoop(state, callback)
+    }
+
+    /** 保存检查点到持久化存储，供崩溃恢复。 */
+    private fun saveCheckpoint(state: AgentLoopState) {
+        TaskCheckpoint.save(
+            goal = state.goal,
+            iterations = state.iterations,
+            goalRepairsLeft = state.goalRepairsLeft,
+            untrusted = untrustedRun,
+            messages = state.messages,
+        )
     }
 
     private fun buildInitialMessages(userPrompt: String): MutableList<ChatMessage> {
@@ -600,7 +709,7 @@ class DefaultAgentService : AgentService {
 
         var skipRemaining = false
         for (toolRequest in llmResponse.toolExecutionRequests) {
-            if (cancelled.get()) {
+            if (cancelToken.isCancelled()) {
                 callback.onComplete(iterations, ClawApplication.instance.getString(R.string.agent_task_cancel), totalTokens)
                 return IterationOutcome.TERMINATE
             }
@@ -649,6 +758,13 @@ class DefaultAgentService : AgentService {
         }
 
         if (!llmResponse.hasToolExecutionRequests()) {
+            // 目标自校验：LLM 不再调工具即判 Done 是 ReAct 的盲点——可能点错/被弹窗挡住。
+            // 完成前用 VLM 看屏确认；未达成则注入修复提示并继续循环（fail-open，永不弱于现状）。
+            val repair = shouldRepairForGoal(callback)
+            if (repair != null) {
+                messages.add(UserMessage.from(repair))
+                return false
+            }
             callback.onComplete(iterations, llmResponse.text ?: ClawApplication.instance.getString(R.string.agent_task_completed), totalTokens)
             return true
         }
@@ -668,30 +784,52 @@ class DefaultAgentService : AgentService {
             return ToolHandleResult.CONTINUE
         }
 
-        // ③ 任务执行中清掉噪声插屏（广告/"跳过"/"以后再说"类），让后续动作落在真页面上。
-        //    只关明确的噪声按钮、不碰权限/确认框，不影响用户正常用机。
+        if (cancelToken.isCancelled()) {
+            callback.onComplete(iterations, ClawApplication.instance.getString(R.string.agent_task_cancel), totalTokens)
+            return ToolHandleResult.TERMINATE
+        }
+
         runCatching { com.apk.claw.android.octopus_mobile.PopupDetector.tryDismiss() }
 
-        // ② UI 动作前后看屏：动作若没改变屏幕，多半是空操作（点错/被弹窗遮挡/目标不存在）。
-        //    给观察追加一句提示，逼 Agent 换招而不是重复同一无效动作。廉价（纯无障碍指纹，无 VLM）。
-        val uiAction = toolName in setOf("tap", "long_press", "swipe", "input_text")
+        val uiAction = toolName in setOf(
+            "tap", "long_press", "swipe", "input_text", "system_key",
+            "dpad_center", "dpad_up", "dpad_down", "dpad_left", "dpad_right",
+            "press_menu", "press_power", "volume_up", "volume_down",
+            "browser_click", "browser_type", "browser_submit", "browser_scroll"
+        )
         val beforeState = if (uiAction) {
             runCatching { com.apk.claw.android.navigation.StateDetector.detectCurrentState() }.getOrNull()
         } else null
 
         val rawResult = execTool(toolName, params)
-        val result = if (uiAction && rawResult.isSuccess && beforeState != null) {
+
+        var result = rawResult
+
+        if (!rawResult.isSuccess) {
+            val tool = ToolRegistry.getInstance().getTool(toolName)
+            if (tool != null && !tool.isIdempotent()) {
+                result = ToolResult.error(
+                    (rawResult.error ?: "unknown error") +
+                        "\n[警告] 此操作（$toolName）会改变设备状态，执行可能已产生副作用。" +
+                        "切勿盲目重复同样的操作——请先确认当前状态（如 get_screen_info / look_at_screen / browser_get_dom），" +
+                        "再决定下一步动作，避免重复点击/发送/提交。"
+                )
+            }
+        }
+
+        if (uiAction && rawResult.isSuccess && beforeState != null) {
             val after = runCatching { com.apk.claw.android.navigation.StateDetector.detectCurrentState() }.getOrNull()
             val unchanged = after != null &&
                 com.apk.claw.android.navigation.StateDetector.similarity(beforeState, after) >= 0.97
             if (unchanged) {
-                ToolResult.success(
+                result = ToolResult.success(
                     (rawResult.data ?: "") +
                         "\n[校验] 屏幕未发生变化——此操作可能没生效（目标不存在 / 被弹窗遮挡 / 点到空白）。" +
-                        "请先 get_screen_info 或 look_at_screen 确认目标，再换一种方式（如 tap_by_vision / scroll_to_find）重试，不要重复同一动作。",
+                        "请先 get_screen_info 或 look_at_screen 确认目标，再换一种方式（如 tap_by_vision / scroll_to_find）重试，不要重复同一动作。"
                 )
-            } else rawResult
-        } else rawResult
+            }
+        }
+
         val paramsString = if (params.isEmpty()) "" else params.toString()
         callback.onToolResult(iterations, toolName, displayName, paramsString, result)
 
@@ -702,6 +840,14 @@ class DefaultAgentService : AgentService {
         }
 
         if (toolName == "finish" && result.isSuccess) {
+            // 目标自校验：finish 是 Agent 显式宣称完成的主路径，同样在结束前用 VLM 看屏确认。
+            // 未达成则把 finish 的工具结果补回历史（保持对话合法）+ 注入修复提示，继续循环。
+            val repair = shouldRepairForGoal(callback)
+            if (repair != null) {
+                appendToolResult(toolRequest, result)
+                messages.add(UserMessage.from(repair))
+                return ToolHandleResult.CONTINUE
+            }
             callback.onComplete(iterations, result.data ?: ClawApplication.instance.getString(R.string.agent_task_completed), totalTokens)
             return ToolHandleResult.TERMINATE
         }
@@ -792,9 +938,45 @@ class DefaultAgentService : AgentService {
         return false
     }
 
+    /**
+     * 目标自校验（verdict-repair）：LLM 宣称完成后，用 VLM 看当前屏幕判断目标是否真达成。
+     *
+     * 返回非 null 的修复提示串 = 未达成且仍有修复机会（调用方应注入该提示并继续循环）；
+     * 返回 null = 达成 / 无法校验 / 修复轮数耗尽（调用方应正常结束）。
+     *
+     * 全程 fail-open：未开启视觉、未配置 VLM、截图失败、校验异常一律返回 null，绝不拦正常完成——
+     * 这样接进去永不弱于现状，价值只在 VLM 明确判"未达成"时兑现。外层 maxIterations 仍兜底防失控。
+     */
+    private fun AgentLoopState.shouldRepairForGoal(callback: AgentCallback): String? {
+        if (goalRepairsLeft <= 0) return null
+        if (!config.enableVision || goal.isBlank() || !VisionAnalyzer.isConfigured()) return null
+
+        val bitmap = runCatching {
+            ClawAccessibilityService.getInstance()?.takeScreenshot(5000)
+        }.getOrNull() ?: return null
+
+        val verdict = try {
+            runBlocking { GoalVerifier.verify(goal, bitmap) }
+        } catch (e: Exception) {
+            XLog.w(TAG, "goal verify failed, fail-open: ${e.message}")
+            null
+        } finally {
+            if (!bitmap.isRecycled) bitmap.recycle()
+        }
+
+        if (verdict == null || verdict.achieved) return null
+
+        goalRepairsLeft--
+        XLog.i(TAG, "Goal not achieved (repairs left=$goalRepairsLeft): ${verdict.reason}")
+        callback.onContent(iterations, "[目标校验] 目标尚未达成：${verdict.reason}")
+        return "[目标校验] 经看屏确认，目标尚未达成：${verdict.reason}。" +
+            "请继续操作直到真正完成；若确实无法完成，再调用 finish 说明原因。"
+    }
+
     private fun finishLoop(state: AgentLoopState, callback: AgentCallback) {
+        TaskCheckpoint.clear()
         when {
-            cancelled.get() ->
+            cancelToken.isCancelled() ->
                 callback.onComplete(state.iterations, ClawApplication.instance.getString(R.string.agent_task_cancel), state.totalTokens)
             // 仅在真正耗尽迭代次数时才报"已达最大迭代次数"。
             // 正常结束（onComplete）或调用失败（onError）已在循环内发出对应消息，
@@ -809,7 +991,8 @@ class DefaultAgentService : AgentService {
     }
 
     override fun cancel() {
-        cancelled.set(true)
+        cancelToken.cancel(ClawApplication.instance.getString(R.string.agent_task_cancel))
+        TaskCheckpoint.clear()
     }
 
     override fun shutdown() {
