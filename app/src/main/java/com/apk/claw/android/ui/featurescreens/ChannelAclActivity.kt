@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.apk.claw.android.channel.Channel
+import com.apk.claw.android.octopus_mobile.ToolAuditLog
 import com.apk.claw.android.utils.KVUtils
 
 /**
@@ -90,7 +91,12 @@ fun ChannelAclScreen(onBack: () -> Unit) {
                     Spacer(Modifier.width(8.dp))
                     Switch(
                         checked = remoteHighRisk,
-                        onCheckedChange = { remoteHighRisk = it; KVUtils.setRemoteHighRiskAllowed(it) },
+                        onCheckedChange = {
+                            remoteHighRisk = it
+                            KVUtils.setRemoteHighRiskAllowed(it)
+                            // 高影响开关:写入审计日志,留可追溯、防篡改的开/关痕迹。
+                            ToolAuditLog.recordSecuritySetting("允许远程来源执行高危工具", it)
+                        },
                         colors = SwitchDefaults.colors(checkedTrackColor = FWarning, checkedThumbColor = Color.White),
                     )
                 }
