@@ -34,6 +34,9 @@ dist
 dist-ssr
 *.local
 
+# ─────────────── Runtime data ───────────────
+.uploads/
+
 # ─────────────── Logs ───────────────
 logs
 *.log

@@ -73,6 +73,9 @@
   let streamBackoff = 1000;          // 初始退避 1s
   const STREAM_BACKOFF_MAX = 30000;  // 最大退避 30s
   let streamRetryTimer = null;
+  let pollTimer = null;
+  let pingTimer = null;
+  let streamWasActive = false;
 
   function reloadStream() {
     img.src = streamUrl('/api/screen/stream?maxWidth=720&fps=12&quality=50&_=' + Date.now());
@@ -120,7 +123,7 @@
       });
   }
 
-  setInterval(pingLatency, 5000);
+  pingTimer = setInterval(pingLatency, 5000);
 
   /* ═══════════════════════════════════════════════════
      3. 手机镜像初始化 + 触控处理
@@ -142,9 +145,18 @@
 
   function toDev(cx, cy) {
     var r = img.getBoundingClientRect();
+    var nw = img.naturalWidth || r.width;
+    var nh = img.naturalHeight || r.height;
+    var scale = Math.min(r.width / nw, r.height / nh);
+    var cw = nw * scale;
+    var ch = nh * scale;
+    var offX = (r.width - cw) / 2;
+    var offY = (r.height - ch) / 2;
+    var sx = (cx - r.left - offX) / cw;
+    var sy = (cy - r.top - offY) / ch;
     return {
-      x: Math.round(Math.min(1, Math.max(0, (cx - r.left) / r.width)) * DW),
-      y: Math.round(Math.min(1, Math.max(0, (cy - r.top) / r.height)) * DH)
+      x: Math.round(Math.min(1, Math.max(0, sx)) * DW),
+      y: Math.round(Math.min(1, Math.max(0, sy)) * DH)
     };
   }
 
@@ -252,6 +264,7 @@
 
   function poll() {
     if (!TOKEN) return;
+    pollTimer = null;
     fetch(api('/api/agent/events?since=' + cursor), { headers: authHeaders() })
       .then(function (r) { return r.json(); })
       .then(function (j) {
@@ -266,14 +279,19 @@
         var running = j && j.running;
         sendBtn.disabled = !!running;
         runEl.textContent = running ? '任务执行中\u2026' : '';
-        setTimeout(poll, 800);
+        schedulePoll(800);
       })
       .catch(function () {
         showReconnecting();
         runEl.textContent = '连接中断';
         pollBackoff = Math.min(pollBackoff * 2, 15000);
-        setTimeout(poll, pollBackoff);
+        schedulePoll(pollBackoff);
       });
+  }
+
+  function schedulePoll(delay) {
+    if (document.visibilityState === 'hidden') return;
+    pollTimer = setTimeout(poll, delay);
   }
 
   /* ═══════════════════════════════════════════════════
@@ -324,6 +342,39 @@
       e.preventDefault();
       toggleHelp();
     }
+  });
+
+  /* ═══════════════════════════════════════════════════
+     7. 工具栏事件 + 页面生命周期
+     ═══════════════════════════════════════════════════ */
+  document.querySelectorAll('.ltbar [data-action]').forEach(function (btn) {
+    btn.addEventListener('click', function () { act(btn.dataset.action); });
+  });
+  document.querySelectorAll('.ltbar [data-key]').forEach(function (btn) {
+    btn.addEventListener('click', function () { key(Number(btn.dataset.key)); });
+  });
+  document.getElementById('reloadBtn').addEventListener('click', reload);
+  sendBtn.addEventListener('click', send);
+
+  img.addEventListener('load', function () { streamWasActive = true; });
+
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'hidden') {
+      if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+      streamWasActive = streamWasActive || !!img.src;
+      img.src = '';
+      if (streamRetryTimer) { clearTimeout(streamRetryTimer); streamRetryTimer = null; }
+    } else {
+      if (!pollTimer) poll();
+      if (streamWasActive) reloadStream();
+    }
+  });
+
+  window.addEventListener('beforeunload', function () {
+    if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+    if (pingTimer) { clearInterval(pingTimer); pingTimer = null; }
+    if (streamRetryTimer) { clearTimeout(streamRetryTimer); streamRetryTimer = null; }
+    img.src = '';
   });
 
   /* ═══════════════════════════════════════════════════

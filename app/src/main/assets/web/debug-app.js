@@ -11,13 +11,35 @@
   let history = [];
   const MAX_HISTORY = 10;
 
+  // --- Token (from URL fragment or query) ---
+  const h = new URLSearchParams(location.hash.replace(/^#/, ''));
+  const q = new URLSearchParams(location.search);
+  const TOKEN = h.get('token') || q.get('token') || '';
+  if (q.get('token')) {
+    history.replaceState(null, '', location.pathname + (TOKEN ? '#token=' + encodeURIComponent(TOKEN) : ''));
+  } else if (h.get('token')) {
+    history.replaceState(null, '', location.pathname);
+  }
+
+  function authHeaders(extra) {
+    return Object.assign({ 'Authorization': 'Bearer ' + TOKEN }, extra || {});
+  }
+
+  function streamUrl(p) {
+    return p + (p.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(TOKEN);
+  }
+
   // --- DOM References ---
   const $ = (id) => document.getElementById(id);
 
   // --- Tool Loading ---
   async function loadTools() {
+    if (!TOKEN) {
+      $('toolList').textContent = '缺少访问令牌，请使用 /debug.html?token=<token> 打开';
+      return;
+    }
     try {
-      const res = await fetch('/api/debug/tools');
+      const res = await fetch('/api/debug/tools', { headers: authHeaders() });
       const json = await res.json();
       if (json.code === 0) {
         tools = json.data;
@@ -84,13 +106,33 @@
       selectedTool.parameters.forEach(function (p) {
         var row = document.createElement('div');
         row.className = 'param-row';
-        row.innerHTML =
-          '<div class="param-label">' +
-            '<span>' + escapeHtml(p.name) + '</span>' +
-            '<span class="type">' + escapeHtml(p.type) + '</span>' +
-            (p.required ? '<span class="required">required</span>' : '') +
-          '</div>' +
-          '<input class="param-input" id="param_' + p.name + '" placeholder="' + escapeHtml(p.description || '') + '">';
+
+        var paramLabel = document.createElement('div');
+        paramLabel.className = 'param-label';
+
+        var nameSpan = document.createElement('span');
+        nameSpan.textContent = p.name;
+        paramLabel.appendChild(nameSpan);
+
+        var typeSpan = document.createElement('span');
+        typeSpan.className = 'type';
+        typeSpan.textContent = p.type;
+        paramLabel.appendChild(typeSpan);
+
+        if (p.required) {
+          var requiredSpan = document.createElement('span');
+          requiredSpan.className = 'required';
+          requiredSpan.textContent = 'required';
+          paramLabel.appendChild(requiredSpan);
+        }
+
+        var input = document.createElement('input');
+        input.className = 'param-input';
+        input.id = 'param_' + p.name;
+        input.placeholder = p.description || '';
+
+        row.appendChild(paramLabel);
+        row.appendChild(input);
         fields.appendChild(row);
       });
     }
@@ -132,7 +174,7 @@
     try {
       var res = await fetch('/api/debug/execute', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ tool: selectedTool.name, params: params })
       });
       var json = await res.json();
@@ -183,7 +225,7 @@
     // Show image if file path
     if (data.success && data.data && /\.(png|jpg|jpeg|webp)$/i.test(data.data.trim())) {
       var filePath = data.data.trim();
-      img.src = '/api/debug/file?path=' + encodeURIComponent(filePath);
+      img.src = streamUrl('/api/debug/file?path=' + encodeURIComponent(filePath));
       img.style.display = 'block';
     }
 
@@ -307,9 +349,9 @@
 
   // --- Utilities ---
   function escapeHtml(str) {
-    var div = document.createElement('div');
-    div.textContent = str || '';
-    return div.innerHTML;
+    return String(str || '').replace(/[&<>"']/g, function (m) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m];
+    });
   }
 
   function formatTime(ts) {
@@ -336,8 +378,12 @@
       clearBtn.addEventListener('click', clearHistory);
     }
 
-    // Expose quickExec globally for onclick handlers in HTML
-    window.quickExec = quickExec;
+    // Attach quick-action buttons (declarative data-tool, no inline onclick)
+    document.querySelectorAll('.quick-btn[data-tool]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        quickExec(btn.dataset.tool);
+      });
+    });
 
     // Execute button
     var execBtn = $('execBtn');
