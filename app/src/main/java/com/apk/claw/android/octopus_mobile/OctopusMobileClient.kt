@@ -188,7 +188,9 @@ open class OctopusMobileClient(
             val baseDelay = 2000L
             val maxDelay = 30_000L
             // Full Jitter: delay = min(base * 2^(n-1), max) + random(0, base)
-            val expDelay = minOf(baseDelay * (1L shl (attempts - 1).coerceAtLeast(0)), maxDelay)
+            // 指数封顶 30:无界重连时 attempts 可能很大,(1L shl 63+) 会移位溢出成负/乱值;
+            // 30 已远超 maxDelay 所需(2^30 * 2s 远大于 30s),minOf 再 clamp,故安全。
+            val expDelay = minOf(baseDelay * (1L shl (attempts - 1).coerceIn(0, 30)), maxDelay)
             val jitter = (Math.random() * baseDelay).toLong()
             val totalDelay = (expDelay + jitter).coerceAtMost(maxDelay + baseDelay)
             Log.i(tag, "Reconnecting in ${totalDelay}ms (attempt $attempts, state=$state)")

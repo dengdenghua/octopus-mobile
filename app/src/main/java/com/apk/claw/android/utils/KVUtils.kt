@@ -441,6 +441,14 @@ object KVUtils {
     fun isAdvancedAutomationMode(): Boolean = getBoolean(KEY_ADVANCED_AUTOMATION, false)
     fun setAdvancedAutomationMode(enabled: Boolean) = putBoolean(KEY_ADVANCED_AUTOMATION, enabled)
 
+    // ── 心跳 ACK 超时是否触发强制重连 ──
+    // 仅当母体 octopus-agent runtime 确实回 {"method":"heartbeat/ack"} 时才应开启。
+    // 默认 false:母体若不回 ack,开启会让每台设备每 ~90s 强制重连一次、自我制造重连风暴。
+    // 关闭时仍正常发送心跳,只是不再因"缺 ack"判定母体僵死。
+    private const val KEY_HEARTBEAT_ACK_RECONNECT = "KEY_HEARTBEAT_ACK_RECONNECT"
+    fun isHeartbeatAckReconnectEnabled(): Boolean = getBoolean(KEY_HEARTBEAT_ACK_RECONNECT, false)
+    fun setHeartbeatAckReconnectEnabled(enabled: Boolean) = putBoolean(KEY_HEARTBEAT_ACK_RECONNECT, enabled)
+
     // ==================== 技能(工具)启停 ====================
     private const val KEY_DISABLED_TOOLS = "KEY_DISABLED_TOOLS"
     fun getDisabledTools(): Set<String> {
