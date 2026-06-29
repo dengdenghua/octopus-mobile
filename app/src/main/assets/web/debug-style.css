@@ -204,8 +204,13 @@ h1 {
 .tool-state-icon {
   color: var(--oct-text-3);
   flex-shrink: 0;
+  display: none;
 }
-.tool-state[data-state="loading"] .tool-state-icon { animation: spin 1.4s linear infinite; }
+/* 按状态显示对应语义图标:loading=时钟、error=锁(缺少令牌)、empty=收件箱 */
+.tool-state[data-state="loading"] .tsi-loading,
+.tool-state[data-state="error"]   .tsi-error,
+.tool-state[data-state="empty"]   .tsi-empty { display: block; }
+.tool-state[data-state="loading"] .tsi-loading { animation: spin 1.4s linear infinite; }
 .tool-state[data-state="error"] .tool-state-icon { color: var(--oct-danger); }
 .tool-state[data-state="empty"] .tool-state-icon { color: var(--oct-text-3); }
 
