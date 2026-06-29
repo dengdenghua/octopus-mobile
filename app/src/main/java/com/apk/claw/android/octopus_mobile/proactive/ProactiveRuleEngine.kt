@@ -33,6 +33,10 @@ class ProactiveRuleEngine(
         private const val TAG = "ProactiveEngine"
         private const val KEY_RULES = "proactive_rules"
         private const val KEY_ENABLED = "proactive_enabled"
+
+        /** 全局开关的静态读写,供 UI(无引擎实例)切换主动规则引擎启用状态。 */
+        fun isGloballyEnabled(): Boolean = KVUtils.getBoolean(KEY_ENABLED, false)
+        fun setGloballyEnabled(enabled: Boolean) = KVUtils.putBoolean(KEY_ENABLED, enabled)
         private val GSON = Gson()
     }
 

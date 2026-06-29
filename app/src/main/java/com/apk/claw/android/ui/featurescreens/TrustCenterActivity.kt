@@ -48,6 +48,7 @@ import com.apk.claw.android.shizuku.ShizukuManager
 import com.apk.claw.android.utils.KVUtils
 import com.apk.claw.android.octopus_mobile.safety.PermissionMode
 import com.apk.claw.android.octopus_mobile.safety.PermissionModeManager
+import com.apk.claw.android.octopus_mobile.proactive.ProactiveRuleEngine
 
 class TrustCenterActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -107,6 +108,15 @@ fun TrustCenterScreen(onBack: () -> Unit) {
     }
     val lanAddr = remember(tick) { runCatching { ConfigServerManager.getAddress() }.getOrNull() }
     val targetLabel = remember(tick) { ControlTarget.label() }
+    val hasReceiveSms = remember(tick) {
+        androidx.core.content.ContextCompat.checkSelfPermission(ctx, android.Manifest.permission.RECEIVE_SMS) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    }
+    var smsOtpOn by remember(tick) { mutableStateOf(ProactiveRuleEngine.isGloballyEnabled() && hasReceiveSms) }
+    val smsPermLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) { ProactiveRuleEngine.setGloballyEnabled(true); smsOtpOn = true }
+    }
     var lanOn by remember(tick) { mutableStateOf(KVUtils.isLanControlEnabled()) }
     var advOn by remember(tick) { mutableStateOf(KVUtils.isAdvancedAutomationMode()) }
 
@@ -227,6 +237,37 @@ fun TrustCenterScreen(onBack: () -> Unit) {
                         checked = advOn,
                         onCheckedChange = { if (it) { PermissionModeManager.switchMode(PermissionMode.FULL_POWER, "user_switch_trustcenter"); advOn = true } },
                         colors = SwitchDefaults.colors(checkedTrackColor = FWarning, checkedThumbColor = Color.White),
+                    )
+                }
+            }
+
+            // 验证码短信自动复制
+            FCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("验证码短信自动复制", color = FText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "收到验证码短信时自动提取并复制到剪贴板。开启需授予「接收短信」权限，" +
+                                "并会启用主动规则引擎（内建规则仅做剪贴板/通知，高危工具在主动路径已被拦截）。" +
+                                "⚠️ 验证码会进入系统剪贴板，可能被其他应用读取——按需开启。",
+                            color = FMuted, fontSize = 10.sp, lineHeight = 14.sp,
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Switch(
+                        checked = smsOtpOn,
+                        onCheckedChange = { want ->
+                            if (want) {
+                                if (hasReceiveSms) {
+                                    ProactiveRuleEngine.setGloballyEnabled(true); smsOtpOn = true
+                                } else {
+                                    smsPermLauncher.launch(android.Manifest.permission.RECEIVE_SMS)
+                                }
+                            } else {
+                                ProactiveRuleEngine.setGloballyEnabled(false); smsOtpOn = false
+                            }
+                        },
+                        colors = SwitchDefaults.colors(checkedTrackColor = FPrimary, checkedThumbColor = Color.White),
                     )
                 }
             }
