@@ -22,6 +22,7 @@ import com.apk.claw.android.utils.XLog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.StateFlow
 
 class AppViewModel : ViewModel() {
@@ -141,11 +142,12 @@ class AppViewModel : ViewModel() {
             val tentacleId = "${android.os.Build.BRAND}_${android.os.Build.MODEL}"
                 .replace(" ", "_").lowercase()
 
-            octopusClient = OctopusMobileClient(
+            val client = OctopusMobileClient(
                 runtimeUrl = runtimeUrl,
                 tentacleId = tentacleId,
                 authToken = KVUtils.getOctopusAuthToken()
             )
+            octopusClient = client
 
             val llmConfig = if (KVUtils.hasLlmConfig()) {
                 LlmConfig(
@@ -157,26 +159,28 @@ class AppViewModel : ViewModel() {
                 )
             } else null
 
-            brainSelector = BrainModeSelector(
+            val selector = BrainModeSelector(
                 context = ClawApplication.instance,
-                rpcClient = octopusClient!!,
+                rpcClient = client,
                 toolRegistry = ToolRegistry.getInstance(),
                 llmConfig = llmConfig
             )
-            brainSelector!!.onModeChanged = { mode ->
+            brainSelector = selector
+            selector.onModeChanged = { mode ->
                 XLog.i(TAG, "BrainMode switched: $mode")
             }
-            brainSelector!!.start(octopusScope, checkIntervalMs = 30_000)
+            selector.start(octopusScope, checkIntervalMs = 30_000)
 
-            toolDispatcher = ToolCallDispatcher(octopusClient!!)
-            heartbeatReporter = HeartbeatReporter(ClawApplication.instance, octopusClient!!, intervalMs = 30_000L)
+            toolDispatcher = ToolCallDispatcher(client)
+            val reporter = HeartbeatReporter(ClawApplication.instance, client, intervalMs = 30_000L)
+            heartbeatReporter = reporter
 
             // ── 主动规则引擎初始化 ──
             proactiveEngine = ProactiveRuleEngine()
             NotificationRelayService.proactiveEngine = proactiveEngine
 
-            screenStreamer = ScreenStreamer(octopusClient!!, heartbeatReporter!!, proactiveEngine = proactiveEngine)
-            dualConfigWriter = DualConfigWriter(ClawApplication.instance, octopusClient!!, tentacleId)
+            screenStreamer = ScreenStreamer(client, reporter, proactiveEngine = proactiveEngine)
+            dualConfigWriter = DualConfigWriter(ClawApplication.instance, client, tentacleId)
 
             // ── 安全子系统初始化（接入 ToolRegistry 执行路径）──
             val safetyGate = SafetyGate()
@@ -227,15 +231,16 @@ class AppViewModel : ViewModel() {
             taskOrchestrator.evolutionEngine = evolutionEngine
             taskOrchestrator.lessonStore = lessonStore
             // 初始化 MemoryStore 并传给 TaskOrchestrator
-            memoryStore = MemoryStore(ClawApplication.instance)
-            taskOrchestrator.memoryStore = memoryStore
+            val memStore = MemoryStore(ClawApplication.instance)
+            memoryStore = memStore
+            taskOrchestrator.memoryStore = memStore
             XLog.i(TAG, "EvolutionEngine initialized: B1=active, B2=${if (evoLlmCall != null) "active" else "degraded"}, B3=${if (evoLlmCall != null) "available" else "unavailable"}, LessonStore=active")
-            XLog.i(TAG, "MemoryStore initialized: memories=${memoryStore!!.getMemories().size}")
+            XLog.i(TAG, "MemoryStore initialized: memories=${memStore.getMemories().size}")
 
             // ── 创建委托管理器 ──
             lifecycleManager = OctopusLifecycleManager(ClawApplication.instance)
             connectionManager = OctopusConnectionManager(
-                octopusClient = octopusClient!!,
+                octopusClient = client,
                 toolDispatcher = toolDispatcher,
                 heartbeatReporter = heartbeatReporter,
                 screenStreamer = screenStreamer,
@@ -296,5 +301,10 @@ class AppViewModel : ViewModel() {
         } catch (e: Exception) {
             XLog.e(TAG, "发送截图失败", e)
         }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        octopusScope.cancel()
     }
 }
