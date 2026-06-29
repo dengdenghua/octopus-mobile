@@ -108,11 +108,8 @@ object AccountConfig {
             KVUtils.putString(KEY_MODEL_TIER, normalized)
         }
 
-    /** 档位 → 实际平台模型 id(仅内部用,UI 永不暴露)。服务端目录若调整模型,只需改这里映射。 */
+    /** 平台模型 id(仅内部用,UI 永不暴露)。单档:服务端只剩 qwen3.5-flash 且 FORCE_MODEL 兜底锁,
+     *  档位 UI 已隐藏,这里直接返回唯一模型。服务端目录若调整模型,只需改这一行。 */
     val platformModel: String
-        get() = when (modelTier) {
-            TIER_FLASH -> "mimo-v2-flash"
-            TIER_PREMIUM -> "mimo-v2.5-pro"
-            else -> "agnes-2.0-flash"
-        }
+        get() = "qwen3.5-flash"
 }
