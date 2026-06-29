@@ -157,6 +157,8 @@ dependencies {
     implementation(libs.glide)
     implementation(libs.glide.transformations)
     implementation(libs.coil.compose)
+    implementation(libs.markwon.core)
+    implementation(libs.markwon.image)
     implementation(libs.easyfloat)
 
 
