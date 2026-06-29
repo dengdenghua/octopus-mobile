@@ -2,6 +2,7 @@ package com.apk.claw.android.server.routes
 
 import com.apk.claw.android.ClawApplication
 import com.apk.claw.android.octopus_mobile.safety.ToolRiskPolicy
+import com.apk.claw.android.server.RemoteControlIndicator
 import com.apk.claw.android.tool.ToolRegistry
 import com.apk.claw.android.tool.ToolResult
 import fi.iki.elonen.NanoHTTPD
@@ -155,6 +156,8 @@ class DeviceRouteHandler : RouteHandler {
         ))
         val safeParams = ToolRiskPolicy.summarizeParams(ctx.jsonToSafeMap(params, setOf("text")))
         ctx.recordRemoteAccess(session, "control_input", success, "action=$action,params=$safeParams", startMs)
+        // 远程控制指示器：通知被控方有人正在操作
+        RemoteControlIndicator.onControlInput(ctx.sourceOf(session))
         return ctx.corsResponse(NanoHTTPD.newFixedLengthResponse(NanoHTTPD.Response.Status.OK, MIME_JSON, json))
     }
 

@@ -9,28 +9,33 @@ public class XLog {
         DEBUG = debug;
     }
 
+    private static String redact(String msg) {
+        if (msg == null) return null;
+        return SecretRedactor.redact(msg);
+    }
+
     public static void i(String tag, String msg) {
-        if (DEBUG && msg != null) Log.i(tag, msg);
+        if (DEBUG && msg != null) Log.i(tag, redact(msg));
     }
 
     public static void i(String tag, String msg, Throwable tr) {
-        if (DEBUG) Log.i(tag, msg, tr);
+        if (DEBUG) Log.i(tag, redact(msg), tr);
     }
 
     public static void d(String tag, String msg) {
-        if (DEBUG && msg != null) Log.d(tag, msg);
+        if (DEBUG && msg != null) Log.d(tag, redact(msg));
     }
 
     public static void d(String tag, String msg, Throwable tr) {
-        if (DEBUG) Log.d(tag, msg, tr);
+        if (DEBUG) Log.d(tag, redact(msg), tr);
     }
 
     public static void e(String tag, String msg) {
-        if (msg != null) Log.e(tag, msg);
+        if (msg != null) Log.e(tag, redact(msg));
     }
 
     public static void e(String tag, String msg, Throwable tr) {
-        Log.e(tag, msg, tr);
+        Log.e(tag, redact(msg), tr);
     }
 
     public static void e(String tag, Throwable tr) {
@@ -38,11 +43,11 @@ public class XLog {
     }
 
     public static void w(String tag, String msg) {
-        if (DEBUG && msg != null) Log.w(tag, msg);
+        if (DEBUG && msg != null) Log.w(tag, redact(msg));
     }
 
     public static void w(String tag, String msg, Throwable tr) {
-        if (DEBUG) Log.w(tag, msg, tr);
+        if (DEBUG) Log.w(tag, redact(msg), tr);
     }
 
     public static void w(String tag, Throwable tr) {
@@ -50,19 +55,19 @@ public class XLog {
     }
 
     public static void v(String tag, String msg) {
-        if (DEBUG && msg != null) Log.v(tag, msg);
+        if (DEBUG && msg != null) Log.v(tag, redact(msg));
     }
 
     public static void v(String tag, String msg, Throwable tr) {
-        if (DEBUG) Log.v(tag, msg, tr);
+        if (DEBUG) Log.v(tag, redact(msg), tr);
     }
 
     public static void wtf(String tag, String msg) {
-        if (DEBUG) Log.wtf(tag, msg);
+        if (DEBUG) Log.wtf(tag, redact(msg));
     }
 
     public static void wtf(String tag, String msg, Throwable tr) {
-        if (DEBUG) Log.wtf(tag, msg, tr);
+        if (DEBUG) Log.wtf(tag, redact(msg), tr);
     }
 
     public static void wtf(String tag, Throwable tr) {
