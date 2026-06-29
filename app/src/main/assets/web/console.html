@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html>
 <head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; connect-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none';">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Octopus 网页遥控台</title>
 <link rel="stylesheet" href="console-style.css">
@@ -11,11 +13,11 @@
     <div class="ltbar">
       <b style="font-size:13px">🖥 手机</b><span id="st">连接中…</span>
       <span id="latency">-- ms</span>
-      <button onclick="act('back')">返回</button>
-      <button onclick="act('home')">主屏</button>
-      <button onclick="act('recent')">最近</button>
-      <button onclick="key(67)">⌫</button>
-      <button onclick="reload()">刷新</button>
+      <button data-action="back">返回</button>
+      <button data-action="home">主屏</button>
+      <button data-action="recent">最近</button>
+      <button data-key="67">⌫</button>
+      <button id="reloadBtn">刷新</button>
     </div>
     <div id="stage"><img id="screen" draggable="false"><div id="msg2"></div></div>
   </div>
@@ -24,7 +26,7 @@
     <div id="chat"></div>
     <div id="inputrow">
       <textarea id="ta" placeholder="对任务助手说…（Enter 发送，Shift+Enter 换行）"></textarea>
-      <button id="send" onclick="send()">发送</button>
+      <button id="send">发送</button>
     </div>
   </div>
 </div>

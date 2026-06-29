@@ -185,7 +185,7 @@ function renderCards() {
             <div class="input-wrap">
               <input type="${f.type}" id="${f.id}" data-i18n-placeholder="${f.placeholderKey}" autocomplete="off"
                      ${f.validate === 'url' ? 'data-validate="url"' : ''}>
-              <button class="toggle-eye" onclick="togglePassword('${f.id}', this)" data-i18n-title="toggle_visibility">${eyeClosed}</button>
+              <button class="toggle-eye" data-target="${f.id}" data-i18n-title="toggle_visibility">${eyeClosed}</button>
             </div>
           ` : `
             <input type="${f.type}" id="${f.id}" data-i18n-placeholder="${f.placeholderKey}" autocomplete="off"
@@ -277,6 +277,41 @@ function validateForm() {
 // ====== API ======
 const channelFieldIds = ['dingtalkAppKey', 'dingtalkAppSecret', 'feishuAppId', 'feishuAppSecret', 'qqAppId', 'qqAppSecret', 'discordBotToken', 'telegramBotToken'];
 const llmFieldIds = ['llmApiKey', 'llmBaseUrl', 'llmModelName'];
+const sensitiveFieldIds = cardConfigs
+  .flatMap(c => c.fields)
+  .filter(f => f.type === 'password')
+  .map(f => f.id);
+let isSaving = false;
+
+function maskLast4(value) {
+  const v = String(value || '');
+  if (v.length <= 4) return v;
+  return '*'.repeat(v.length - 4) + v.slice(-4);
+}
+
+function applyMask() {
+  sensitiveFieldIds.forEach(id => {
+    const el = document.getElementById(id);
+    if (el && el.value) {
+      el.dataset.original = el.value;
+      el.value = maskLast4(el.value);
+    }
+  });
+}
+
+function getFieldValue(id) {
+  const el = document.getElementById(id);
+  if (!el) return '';
+  const trimmed = el.value.trim();
+  if (!trimmed) {
+    // 留空表示不修改：敏感字段保留原始值
+    return el.dataset.original || '';
+  }
+  if (sensitiveFieldIds.includes(id) && el.dataset.original && trimmed === maskLast4(el.dataset.original)) {
+    return el.dataset.original;
+  }
+  return trimmed;
+}
 
 async function load() {
   try {
@@ -295,6 +330,7 @@ async function load() {
         if (el && llmJson.data[f] !== undefined) el.value = llmJson.data[f] || '';
       });
     }
+    applyMask();
     document.getElementById('loading').style.display = 'none';
     document.getElementById('content').style.display = 'block';
   } catch (e) {
@@ -303,7 +339,8 @@ async function load() {
 }
 
 async function save() {
-  if (!validateForm()) return;
+  if (isSaving || !validateForm()) return;
+  isSaving = true;
 
   const btn = document.getElementById('saveBtn');
   btn.disabled = true;
@@ -311,13 +348,11 @@ async function save() {
   try {
     const chanBody = {};
     channelFieldIds.forEach(f => {
-      const el = document.getElementById(f);
-      if (el) chanBody[f] = el.value.trim();
+      chanBody[f] = getFieldValue(f);
     });
     const llmBody = {};
     llmFieldIds.forEach(f => {
-      const el = document.getElementById(f);
-      if (el) llmBody[f] = el.value.trim();
+      llmBody[f] = getFieldValue(f);
     });
     const [chanRes, llmRes] = await Promise.all([
       fetch('/api/channels', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(chanBody) }),
@@ -335,6 +370,7 @@ async function save() {
   } catch (e) {
     showToast(t('save_failed') + ': ' + e.message, 'error');
   } finally {
+    isSaving = false;
     btn.disabled = false;
     btn.textContent = t('save_btn');
   }
@@ -352,4 +388,16 @@ function showToast(msg, type) {
 renderSkeleton();
 renderCards();
 applyI18n();
+
+// 绑定保存按钮（避免 HTML 内联 onclick，兼容 CSP）
+document.getElementById('saveBtn').addEventListener('click', save);
+
+// 绑定密码显隐切换（事件委托，避免内联 onclick）
+document.getElementById('content').addEventListener('click', function (e) {
+  const btn = e.target.closest('.toggle-eye');
+  if (!btn) return;
+  const inputId = btn.dataset.target;
+  if (inputId) togglePassword(inputId, btn);
+});
+
 load();
