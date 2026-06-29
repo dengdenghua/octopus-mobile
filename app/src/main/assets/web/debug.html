@@ -1,32 +1,33 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; connect-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none';">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Octopus Mobile Debug Console</title>
+<title>Octopus 调试控制台</title>
+<link rel="stylesheet" href="tokens.css">
 <link rel="stylesheet" href="debug-style.css">
 </head>
 <body>
 
-<h1>Debug Console</h1>
-<p class="subtitle">Test tool capabilities remotely</p>
+<h1>调试控制台</h1>
+<p class="subtitle">远程测试工具能力</p>
 
 <div class="layout">
   <!-- Main Content -->
   <div class="main-content">
     <div class="quick-actions">
-      <button class="quick-btn" data-tool="get_screen_info">Screen Info</button>
-      <button class="quick-btn" data-tool="find_node_info">Node Tree</button>
-      <button class="quick-btn" data-tool="take_screenshot">Screenshot</button>
-      <button class="quick-btn" data-tool="get_installed_apps">App List</button>
+      <button class="quick-btn" data-tool="get_screen_info">屏幕信息</button>
+      <button class="quick-btn" data-tool="find_node_info">节点树</button>
+      <button class="quick-btn" data-tool="take_screenshot">截图</button>
+      <button class="quick-btn" data-tool="get_installed_apps">应用列表</button>
     </div>
 
     <div class="search-box">
       <input class="search-input" id="searchInput" type="text" placeholder="Search tools..." autocomplete="off">
     </div>
 
-    <div class="tool-list" id="toolList">Loading tools...</div>
+    <div class="tool-list" id="toolList" aria-label="工具列表">Loading tools...</div>
 
     <div class="panel" id="toolPanel" style="display:none">
       <div class="panel-title" id="toolName"></div>
@@ -50,7 +51,7 @@
   </div>
 
   <!-- History Sidebar -->
-  <div class="history-sidebar">
+  <div class="history-sidebar" aria-label="执行历史">
     <div class="history-panel">
       <div class="history-title">
         <span>History</span>

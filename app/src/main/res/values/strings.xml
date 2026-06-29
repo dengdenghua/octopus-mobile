@@ -1113,4 +1113,12 @@ Shizuku 是安全、开源的本地辅助工具。</string>
     <string name="browser_open_in_system">Open in System Browser</string>
     <string name="browser_new_tab">New Tab</string>
     <string name="browser_windows_count">Windows (%1$d)</string>
+    <!-- Cast approval gate -->
+    <string name="cast_approval_channel_name">投屏确认</string>
+    <string name="cast_approval_channel_desc">远程请求开始投屏或在外接屏启动应用时显示确认通知</string>
+    <string name="cast_approval_title">远程投屏请求</string>
+    <string name="cast_approval_text">来源 %1$s 请求控制外接屏幕，是否允许？</string>
+    <string name="cast_approval_allow">允许</string>
+    <string name="cast_approval_deny">拒绝</string>
+
 </resources>

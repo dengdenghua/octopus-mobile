@@ -1,5 +1,6 @@
 package com.apk.claw.android.server.routes
 
+import com.apk.claw.android.cast.CastApprovalManager
 import com.apk.claw.android.cast.ScreenCastService
 import fi.iki.elonen.NanoHTTPD
 
@@ -25,7 +26,7 @@ class CastRouteHandler(
     override fun handle(session: NanoHTTPD.IHTTPSession, ctx: RouteContext): NanoHTTPD.Response {
         return when {
             session.uri == "/api/cast" && session.method == NanoHTTPD.Method.GET -> handleGetCast(ctx)
-            session.uri == "/api/cast/start" && session.method == NanoHTTPD.Method.POST -> handleStartCast(ctx)
+            session.uri == "/api/cast/start" && session.method == NanoHTTPD.Method.POST -> handleStartCast(session, ctx)
             session.uri == "/api/cast/stop" && session.method == NanoHTTPD.Method.POST -> handleStopCast(ctx)
             session.uri == "/api/cast/launch" && session.method == NanoHTTPD.Method.POST -> handleCastLaunch(session, ctx)
             else -> ctx.corsResponse(
@@ -49,8 +50,17 @@ class CastRouteHandler(
 
     /**
      * POST /api/cast/start —— 启动投屏。
+     *
+     * 需要设备端用户通过通知显式确认，防止同网段持 token 者静默开始投屏。
      */
-    private fun handleStartCast(ctx: RouteContext): NanoHTTPD.Response {
+    private fun handleStartCast(session: NanoHTTPD.IHTTPSession, ctx: RouteContext): NanoHTTPD.Response {
+        val source = ctx.sourceOf(session)
+        if (!CastApprovalManager.requestApproval(context, source)) {
+            return ctx.corsResponse(NanoHTTPD.newFixedLengthResponse(
+                NanoHTTPD.Response.Status.FORBIDDEN, MIME_JSON,
+                """{"code":-1,"message":"设备端未确认投屏请求"}"""
+            ))
+        }
         val castService = ScreenCastService.getInstance(context)
         castService.start()
         val json = ctx.gson.toJson(mapOf(
@@ -84,6 +94,14 @@ class CastRouteHandler(
                 NanoHTTPD.Response.Status.BAD_REQUEST, MIME_JSON,
                 """{"code":-1,"message":"缺少 package_name"}"""
             ))
+
+        val source = ctx.sourceOf(session)
+        if (!CastApprovalManager.requestApproval(context, source)) {
+            return ctx.corsResponse(NanoHTTPD.newFixedLengthResponse(
+                NanoHTTPD.Response.Status.FORBIDDEN, MIME_JSON,
+                """{"code":-1,"message":"设备端未确认投屏请求"}"""
+            ))
+        }
 
         val x = params.get("x")?.asInt ?: 100
         val y = params.get("y")?.asInt ?: 100

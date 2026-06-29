@@ -132,10 +132,9 @@ class RouteContext(
     )
 
     fun sourceOf(session: NanoHTTPD.IHTTPSession): String {
-        return session.headers["x-forwarded-for"]?.substringBefore(",")?.trim()?.takeIf { it.isNotEmpty() }
-            ?: session.headers["x-real-ip"]?.trim()?.takeIf { it.isNotEmpty() }
+        // 优先使用真实 socket 对端 IP，避免攻击者通过转发头伪造审计源。
+        return session.remoteIpAddress?.takeIf { it.isNotBlank() }
             ?: session.headers["remote-addr"]?.trim()?.takeIf { it.isNotEmpty() }
-            ?: session.headers["http-client-ip"]?.trim()?.takeIf { it.isNotEmpty() }
             ?: "unknown"
     }
 }

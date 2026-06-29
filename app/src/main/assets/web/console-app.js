@@ -356,6 +356,12 @@
   document.getElementById('reloadBtn').addEventListener('click', reload);
   sendBtn.addEventListener('click', send);
 
+  // 帮助面板：顶栏按钮打开、面板内关闭按钮关闭
+  var helpBtn = document.getElementById('helpBtn');
+  if (helpBtn) helpBtn.addEventListener('click', toggleHelp);
+  var helpClose = document.querySelector('.help-close');
+  if (helpClose) helpClose.addEventListener('click', function () { helpPanel.classList.remove('show'); });
+
   img.addEventListener('load', function () { streamWasActive = true; });
 
   document.addEventListener('visibilitychange', function () {

@@ -5,25 +5,28 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; connect-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none';">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Octopus 网页遥控台</title>
+<link rel="stylesheet" href="tokens.css">
 <link rel="stylesheet" href="console-style.css">
 </head>
 <body>
 <div id="app">
   <div id="left">
     <div class="ltbar">
-      <b style="font-size:13px">🖥 手机</b><span id="st">连接中…</span>
-      <span id="latency">-- ms</span>
-      <button data-action="back">返回</button>
-      <button data-action="home">主屏</button>
-      <button data-action="recent">最近</button>
-      <button data-key="67">⌫</button>
-      <button id="reloadBtn">刷新</button>
+      <span class="ltbar-title"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12" y2="18"/></svg>手机</span>
+      <span id="st" aria-live="polite">连接中…</span>
+      <span id="latency" aria-live="polite" role="status">-- ms</span>
+      <button data-action="back" class="ltbar-btn">返回</button>
+      <button data-action="home" class="ltbar-btn">主屏</button>
+      <button data-action="recent" class="ltbar-btn">最近</button>
+      <button data-key="67" class="ltbar-btn" title="退格" aria-label="退格"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/><line x1="18" y1="9" x2="12" y2="15"/><line x1="12" y1="9" x2="18" y2="15"/></svg></button>
+      <button id="reloadBtn" class="ltbar-btn"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>刷新</button>
+      <button type="button" id="helpBtn" class="ltbar-btn" title="快捷键帮助" aria-label="快捷键帮助"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12" y2="17"/></svg></button>
     </div>
-    <div id="stage"><img id="screen" draggable="false"><div id="msg2"></div></div>
+    <div id="stage"><img id="screen" draggable="false"><div id="msg2" aria-live="polite"></div></div>
   </div>
   <div id="right">
-    <div class="rtbar">💬 与任务助手对话（控制手机）<span id="run"></span></div>
-    <div id="chat"></div>
+    <div class="rtbar"><svg class="rtbar-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>与任务助手对话（控制手机）<span id="run"></span></div>
+    <div id="chat" aria-live="polite"></div>
     <div id="inputrow">
       <textarea id="ta" placeholder="对任务助手说…（Enter 发送，Shift+Enter 换行）"></textarea>
       <button id="send">发送</button>
@@ -33,7 +36,8 @@
 
 <!-- 快捷键帮助面板 -->
 <div id="help-panel">
-  <h3>⌨ 快捷键</h3>
+  <button type="button" class="help-close" aria-label="关闭">×</button>
+  <h3><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;margin-right:4px"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8"/></svg>快捷键</h3>
   <div class="row"><span class="desc">显示/隐藏帮助</span><kbd>?</kbd></div>
   <div class="row"><span class="desc">发送消息</span><kbd>Enter</kbd></div>
   <div class="row"><span class="desc">换行</span><kbd>Shift+Enter</kbd></div>

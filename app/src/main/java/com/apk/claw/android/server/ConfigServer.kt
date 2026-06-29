@@ -57,15 +57,13 @@ class ConfigServer(
 
     /**
      * 校验请求的 token。
-     * 接受两种方式：
-     *   - HTTP 头: Authorization: Bearer <token>
-     *   - 查询参数: ?token=<token>
+     * 仅接受 HTTP 头: Authorization: Bearer <token>
+     * 查询参数 ?token=<token> 已禁用，防止 token 泄漏到浏览器历史 / 代理日志 / Referer。
      * 防止同 WiFi 邻居未授权访问配网页面。
      */
     private fun validateAuth(session: IHTTPSession): Boolean {
         val provided = session.headers["authorization"]
             ?.removePrefix("Bearer ")?.trim()
-            ?: session.parms["token"]?.trim()
             ?: return false
         // 恒定时间比较，避免 token 时序泄露
         return constantTimeEquals(provided, authToken)
@@ -81,7 +79,7 @@ class ConfigServer(
     private fun unauthorizedResponse(): Response = routeContext.corsResponse(
         newFixedLengthResponse(
             Response.Status.UNAUTHORIZED, MIME_JSON,
-            """{"code":401,"message":"未授权,请通过 Authorization: Bearer <token> 或 ?token=<token> 传入访问令牌"}"""
+            """{"code":401,"message":"未授权,请通过 Authorization: Bearer <token> 传入访问令牌"}"""
         )
     )
 

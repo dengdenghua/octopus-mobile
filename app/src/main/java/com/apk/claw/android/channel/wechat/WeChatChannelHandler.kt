@@ -382,21 +382,14 @@ class WeChatChannelHandler(
      */
     private fun resolveToUserId(messageID: String): String? {
         // messageID 在 dispatchMessage 时传入的是 msg.contextToken
-        // 从 contextTokenStore 反查 userId
+        // 从 contextTokenStore 反查 userId；不再回退到全局 lastFromUserId，
+        // 防止多用户场景下将回复投递给错误对象。
         if (messageID.isNotEmpty()) {
             val userId = WeChatInbound.findUserIdByContextToken(accountId, messageID)
             if (userId != null) return userId
         }
 
-        // fallback: APP 重启后 contextTokenStore 为空，使用 lastFromUserId
-        // （定时任务触发前通过 restoreRoutingContext 设置）
-        val fallback = lastFromUserId
-        if (fallback != null) {
-            XLog.d(TAG, "resolveToUserId: contextToken 反查失败，使用 lastFromUserId")
-            return fallback
-        }
-
-        XLog.w(TAG, "resolveToUserId: 无法找到目标用户")
+        XLog.w(TAG, "resolveToUserId: contextToken 反查失败，丢弃回复")
         return null
     }
 

@@ -1,5 +1,7 @@
 package com.apk.claw.android
 
+import android.os.Handler
+import android.os.Looper
 import com.apk.claw.android.agent.AgentCallback
 import com.apk.claw.android.agent.AgentConfig
 import com.apk.claw.android.agent.AgentService
@@ -50,6 +52,9 @@ class TaskOrchestrator(
 
     /** 同步锁，保护 currentTask 和队列调度的原子性 */
     private val scheduleLock = Any()
+
+    /** 调度 Handler，避免回调内直接递归调用 executeCurrentTask() 导致栈增长 */
+    private val scheduleHandler = Handler(Looper.getMainLooper())
 
     /** 反射路由器（关键词 → 直接执行工具，跳过 LLM） */
     private val reflexRouter = ReflexRouter().apply {
@@ -497,8 +502,8 @@ class TaskOrchestrator(
                 }
                 onTaskFinished()
                 triggerPostTaskReflect(success = true)
-                // 任务完成后，如果有下一个任务，继续执行
-                executeCurrentTask()
+                // 任务完成后，如果有下一个任务，通过 Handler 延迟调度，避免回调递归
+                scheduleHandler.post { executeCurrentTask() }
             }
 
             override fun onError(round: Int, error: Exception, totalTokens: Int) {
@@ -517,8 +522,8 @@ class TaskOrchestrator(
                 FloatingCircleManager.setErrorState()
                 onTaskFinished()
                 triggerPostTaskReflect(success = false)
-                // 任务失败后，如果有下一个任务，继续执行
-                executeCurrentTask()
+                // 任务失败后，如果有下一个任务，通过 Handler 延迟调度，避免回调递归
+                scheduleHandler.post { executeCurrentTask() }
             }
 
             override fun onSystemDialogBlocked(round: Int, totalTokens: Int) {
@@ -548,8 +553,8 @@ class TaskOrchestrator(
                 FloatingCircleManager.setErrorState()
                 onTaskFinished()
                 triggerPostTaskReflect(success = false)
-                // 任务失败后，如果有下一个任务，继续执行
-                executeCurrentTask()
+                // 任务失败后，如果有下一个任务，通过 Handler 延迟调度，避免回调递归
+                scheduleHandler.post { executeCurrentTask() }
             }
         }, untrusted = true)   // 聊天渠道来源：高危工具走来源闸门（默认拦截，满血/远程放行）
     }

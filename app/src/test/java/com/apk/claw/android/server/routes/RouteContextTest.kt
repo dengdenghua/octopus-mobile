@@ -137,32 +137,25 @@ class RouteContextTest {
     // ==================== 来源提取 ====================
 
     @Test
-    fun `sourceOf prefers x-forwarded-for`() {
+    fun `sourceOf prefers real remoteIpAddress`() {
         val session = mock(NanoHTTPD.IHTTPSession::class.java)
-        `when`(session.headers).thenReturn(mapOf(
-            "x-forwarded-for" to "203.0.113.1, 198.51.100.2",
-            "x-real-ip" to "198.51.100.3"
-        ))
-        assertEquals("203.0.113.1", routeContext.sourceOf(session))
+        `when`(session.remoteIpAddress).thenReturn("192.168.1.5")
+        `when`(session.headers).thenReturn(mapOf("x-forwarded-for" to "203.0.113.1"))
+        assertEquals("192.168.1.5", routeContext.sourceOf(session))
     }
 
     @Test
-    fun `sourceOf falls back to x-real-ip`() {
+    fun `sourceOf falls back to remote-addr header`() {
         val session = mock(NanoHTTPD.IHTTPSession::class.java)
-        `when`(session.headers).thenReturn(mapOf("x-real-ip" to "198.51.100.3"))
-        assertEquals("198.51.100.3", routeContext.sourceOf(session))
-    }
-
-    @Test
-    fun `sourceOf falls back to remote-addr`() {
-        val session = mock(NanoHTTPD.IHTTPSession::class.java)
+        `when`(session.remoteIpAddress).thenReturn(null)
         `when`(session.headers).thenReturn(mapOf("remote-addr" to "192.168.1.5"))
         assertEquals("192.168.1.5", routeContext.sourceOf(session))
     }
 
     @Test
-    fun `sourceOf returns unknown when no headers`() {
+    fun `sourceOf returns unknown when no remote ip available`() {
         val session = mock(NanoHTTPD.IHTTPSession::class.java)
+        `when`(session.remoteIpAddress).thenReturn(null)
         `when`(session.headers).thenReturn(emptyMap())
         assertEquals("unknown", routeContext.sourceOf(session))
     }

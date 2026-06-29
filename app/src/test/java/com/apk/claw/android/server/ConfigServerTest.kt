@@ -85,13 +85,13 @@ class ConfigServerTest {
     }
 
     @Test
-    fun `validateAuth returns true with correct token query parameter`() {
+    fun `validateAuth returns false with token query parameter`() {
         val token = server.authToken
         val session = mock(NanoHTTPD.IHTTPSession::class.java)
         `when`(session.headers).thenReturn(emptyMap())
         `when`(session.parms).thenReturn(mapOf("token" to token))
 
-        assertTrue(invokeValidateAuth(server, session))
+        assertFalse(invokeValidateAuth(server, session))
     }
 
     @Test

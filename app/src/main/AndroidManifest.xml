@@ -240,6 +240,12 @@
             </intent-filter>
         </receiver>
 
+        <!-- 投屏确认通知操作接收器（显式 Intent，exported=false） -->
+        <receiver
+            android:name=".cast.CastApprovalReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
         <!-- 通知监听服务（主动 Agent） -->
         <service
             android:name=".octopus_mobile.proactive.NotificationRelayService"

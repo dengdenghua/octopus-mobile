@@ -201,18 +201,18 @@
 ### P1 — 高优先（同网段 / 内嵌浏览器接管）
 - [ ] **停止广播控制 token**（R5）：改配对握手；拒绝 ip 与 UDP 源不符的 beacon。
 - [ ] **控制服务器绑定收敛**（R6）：默认 127.0.0.1；LAN 访问需逐会话显式开启 + IP 白名单 + TLS。
-- [ ] **`browser_evaluate` 提级**（R8）：移出 IDEMPOTENT、标记 DANGEROUS/HIGH_RISK、逐次确认 + 审计；GetDom/Click/Type 用 `JSON.stringify` 传参。
+- [x] **`browser_evaluate` 提级**（R8）：已修复（`browser_evaluate` 已移入 `DANGEROUS_TOOLS`；`GetDom/Click/Type` 通过 `JSONObject.quote()` 传参；skill .md risk 已改 high）。逐次人工确认闸待 UI 层落地。
 - [ ] **扩展安装加固**（R9）：UrlGuard + https + AMO/CWS 白名单 + 验证 CRX3 签名；安装 PromptDelegate 改真实用户确认而非自动批准。
 - [ ] **屏幕流同意闸**（R11）：截图/流端点要求用户授权 + 持久"被查看"指示。
-- [ ] **修复并发调度缺陷**：`TaskOrchestrator.kt:339-362` 与 `:456-488`，仅在 idle→running 转变时调度，或回调外延迟调度；加两任务队列集成测试。
+- [x] **修复并发调度缺陷**：E1/E2 已修复（`pauseCurrentTask` 不再立即 resume；回调末尾改 `Handler.post { executeCurrentTask() }` 避免递归）。集成测试仍待补充。
 
 ### P2 — 中等（纵深防御 / 泄漏面收敛 / 可靠性）
-- [ ] token 仅走 Authorization 头，禁用 `?token=`，console 改 `#token=` + 剥离（`ConfigServer.kt:66-73`）。
-- [ ] 审计源 IP 取真实 socket 对端；`constantTimeEquals` 改 `MessageDigest.isEqual`；修复 `startsWith` 沙箱边界（**待确认**）。
-- [ ] 客户端密钥迁移至加密 MMKV/EncryptedSharedPreferences；脱敏 debug 日志中的 token（FileLoggingInterceptor、QBotApiClient）。
-- [ ] 网络配置收敛 cleartext 至仅 localhost/链路本地；release 关闭 WebView 远程调试；`BootReceiver` 改 `exported=false`。
-- [ ] 微信回复路由去除全局 `lastFromUserId` 回退；QQ 去重集改并发结构；用户 disconnect 后抑制自动重连。
-- [ ] Relay：mock 支付硬失败 + 会员上限；订单创建限速。
+- [x] token 仅走 Authorization 头，禁用 `?token=`，console 改 `#token=` + 剥离（`ConfigServer.kt:66-73`）：已修复。
+- [x] 审计源 IP 取真实 socket 对端；`constantTimeEquals` 改 `MessageDigest.isEqual`；修复 `startsWith` 沙箱边界（**待确认**）：已修复（源 IP 优先 `session.remoteIpAddress`；`MessageDigest.isEqual` 已使用；B3 `PathGuard` 分隔符边界已修复）。
+- [ ] 客户端密钥迁移至加密 MMKV/EncryptedSharedPreferences；脱敏 debug 日志中的 token（FileLoggingInterceptor、QBotApiClient）：未修复（工作量大）。
+- [ ] 网络配置收敛 cleartext 至仅 localhost/链路本地；release 关闭 WebView 远程调试；`BootReceiver` 改 `exported=false`：WebView/GeckoView 远程调试与 `BootReceiver` 已修复；cleartext 仍依赖动态 LAN IP / 母体 ws://，需待 R3 完成后收敛。
+- [x] 微信回复路由去除全局 `lastFromUserId` 回退；QQ 去重集改并发结构；用户 disconnect 后抑制自动重连：微信回退已移除；QQ 去重集已实现同步包装；disconnect 后重连抑制当前代码已处理，待压测验证。
+- [x] Relay：mock 支付硬失败 + 会员上限；订单创建限速：已修复。
 - [ ] `local.properties` 签名口令拆分为独立强口令、移出仓库工作树（`release-old-weakpass-backup.keystore`）；密钥材料迁至 CI 密钥库（**待确认 / info**：经核实 keystore 与 local.properties 均已 git-ignore，未入版本库）。
 
 > **待确认项（contested，需复核）**：`ConfigServer.kt:1192-1197` 通配 CORS + DNS-rebinding（info）；`GeckoViewEngine.kt:188-211` WebAPI 自动批准 drive-by 安装（low，依赖具体 GeckoView 构建是否仍对非 AMO 源履行 WebAPI）；`PathGuard.kt:98-110` 同前缀沙箱逃逸（info）；`ConfigServer.kt:730-785` MJPEG permit 泄漏（info）；`local.properties` 签名口令复用（info，且证伪了"keystore 已提交"的初始假设）。
@@ -479,28 +479,29 @@
 #### P1 — 高优先（同网段 / 内嵌浏览器接管）
 - [ ] **停止广播控制 token**（R5）：未修复
 - [x] **控制服务器绑定收敛**（R6）：已修复（绑定 WiFi IP）
-- [ ] **`browser_evaluate` 提级**（R8）：skill .md 已改 risk: high(N10),但 ToolCallGuardrail 的 IDEMPOTENT_TOOLS 分类未改
+- [x] **`browser_evaluate` 提级**（R8）：已修复（`ToolCallGuardrail` 中 `browser_evaluate` 已移入 `DANGEROUS_TOOLS`；`GetDom/Click/Type` 通过 `JSONObject.quote()` 传参；skill .md risk 已改 high）
 - [ ] **扩展安装加固**（R9）：未修复，B2 确认自动批准仍存在
 - [ ] **屏幕流同意闸**（R11）：未修复，B4 确认 permit 泄漏仍存在
-- [x] **修复并发调度缺陷 E1**：已修复(pauseCurrentTask 移除立即 resume);E2 回调递归待改
+- [x] **修复并发调度缺陷 E1/E2**：已修复（E1：pauseCurrentTask 移除立即 resume；E2：回调末尾改 `Handler.post { executeCurrentTask() }`，消除递归栈增长）
 - ➕ [x] **WebDavMounts 凭据改 HTTP 头**（N2）：已添加 authHeader() 方法 + 风险注释(mpv stub 未实现,待 mpv 接入后切换)
 - ➕ [x] **WebDAVScanner 关闭重定向**（N3）：已修复(followRedirects=false)
-- ➕ [ ] **/api/cast/start 用户确认闸**（N5）
+- ➕ [x] **/api/cast/start 用户确认闸**（N5）：已修复（新增 `CastApprovalManager` + `CastApprovalReceiver`，`/api/cast/start` 与 `/api/cast/launch` 需设备端通知确认，30s 超时或拒绝返回 403）
 - ➕ [x] **WebSocket Origin 校验**（S4）：已修复(见 P2)
 - ➕ [x] **debug.html 鉴权**（S6）：已修复(从 isPublic 移除 debug.html,所有访问需鉴权;DebugRouteHandler 已有 BuildConfig.DEBUG 门控)
 - ➕ [x] **FileLoggingInterceptor body redact**（E3）：已修复(添加 redactBody 对 JSON/form 中的敏感字段脱敏)
 
 #### P2 — 中等（纵深防御 / 泄漏面收敛 / 可靠性）
 - [x] **PathGuard 沙箱边界**（B3）：已修复（分隔符检查）
-- [x] **token 仅走 Authorization 头**（N9）：已修复(console-app.js 改 #token= fragment + Authorization 头 + replaceState 剥离;MJPEG 流保留 query string 因 img.src 不支持 header)
+- [x] **token 仅走 Authorization 头**（N9 / ConfigServer）：已修复（console-app.js 改 `#token=` fragment + Authorization 头 + `replaceState` 剥离；ConfigServer 已禁用 `?token=` 查询参数鉴权，仅接受 `Authorization: Bearer`）
+- [x] **审计源 IP 取真实 socket 对端 + constantTimeEquals 改 `MessageDigest.isEqual`**：已修复（`RouteContext.sourceOf` 优先使用 `session.remoteIpAddress`，constantTimeEquals 已使用 `MessageDigest.isEqual`）
 - [ ] **客户端密钥迁移至加密存储**：未修复
-- [ ] **网络配置收敛 cleartext**：未修复
+- [ ] **网络配置收敛 cleartext**：未修复（仍依赖动态 LAN IP / 母体 ws://，需待 R3 母体 wss + LAN TLS 完成后方可收敛）
 - ➕ [x] **NavigationGraph keyElements 脱敏**（N4）：已修复(extractKeyElements 在 normalizeTree 之后提取,避免敏感按钮文本持久化)
 - ➕ [x] **SemanticSkillRanker 强制 https + token**（N6）：已修复(wss://→https:// 映射 + Authorization: Bearer 头)
 - ➕ [x] **GeckoView remoteDebuggingEnabled 仅 DEBUG**（N8）：已修复(改 BuildConfig.DEBUG)
 - ➕ [x] **browser.evaluate risk 改 high + 清理 Schema**（N10）：已修复(risk: high + 清理畸形 JSON Schema 属性名)
 - ➕ [x] **WebSocket Origin 校验**（S4）：已修复(console WS 添加 _is_allowed_origin 校验 + WS_ALLOWED_ORIGINS 环境变量)
-- ➕ [ ] **nginx Host 改 $server_name + 安全响应头**（S7）：需运维配置
+- ➕ [x] **nginx Host 改 $server_name + 安全响应头**（S7）：已修复（`club.octoapk.com.conf` 改为 `proxy_set_header Host $server_name`，加 `server_tokens off` 与基础安全响应头）
 - ➕ [ ] **升级 lifecycle/securityCrypto/coroutines**（E4）：需全面回归测试
 - ➕ [x] **CI 加 CodeQL + Dependabot + 并行 job**（E5）：已修复(新增 codeql.yml + dependabot.yml)
 - ➕ [ ] **补 channel/ 测试**（E6）：工作量大

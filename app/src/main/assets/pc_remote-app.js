@@ -147,14 +147,16 @@
   function showGuide(reason) {
     var g = document.getElementById('guide');
     g.innerHTML =
-      '<h3>\u8fde\u4e0d\u4e0a\u6bcd\u4f53\uff08' + reason + '\uff0c\u5df2\u91cd\u8bd5 ' + attempt + ' \u6b21\uff09\u2014 \u6309\u4e0b\u9762\u8bbe\u7f6e</h3>' +
-      '<div class="step"><b>\u2460 \u6bcd\u4f53\u5728\u8dd1\u5417\uff1f</b><br>Mac \u4e0a(\u540c\u673a/\u56de\u73af\u5373\u53ef)\uff1a<br><code>.venv/bin/python scripts/pc_remote_webrtc.py</code></div>' +
-      '<div class="step"><b>\u2461 \u540c\u4e00\u5c40\u57df\u7f51</b>(\u624b\u673a\u548c Mac \u540c WiFi)\uff1a<br>\u6bcd\u4f53\u7ed1\u5168\u7f51\u5361 + \u8bbe\u5bc6\u7801\uff1a<br><code>OCTOPUS_TENTACLE_HOST=0.0.0.0 OCTOPUS_TENTACLE_TOKEN=\u4f60\u7684\u5bc6\u7801 .venv/bin/python scripts/pc_remote_webrtc.py</code><br>\u624b\u673a \u8bbe\u7f6e\u2192\u6bcd\u4f53\u8fde\u63a5\uff1a\u5730\u5740 <code>ws://Mac\u5185\u7f51IP:8765</code>\uff0cAuth Token \u586b\u540c\u4e00\u5bc6\u7801</div>' +
-      '<div class="step"><b>\u2462 \u8de8\u7f51\uff08\u63a8\u8350 Tailscale\uff0c\u514d\u8d39 / \u96f6 TURN\uff09</b>\uff1a<br>\u00b7 \u624b\u673a\u88c5 Tailscale\uff0c\u767b\u548c Mac \u540c\u4e00\u8d26\u53f7<br>\u00b7 \u6bcd\u4f53\u540c \u2461 \u90a3\u6837 <code>0.0.0.0</code> + token \u8d77<br>\u00b7 \u624b\u673a \u8bbe\u7f6e\u2192\u6bcd\u4f53\u8fde\u63a5\uff1a\u5730\u5740 <code>ws://100.106.228.62:8765</code>\uff08Mac \u7684 Tailscale IP\uff1bMac \u4e0a <code>tailscale ip -4</code> \u53ef\u67e5\uff09\uff0ctoken \u540c\u4e0a</div>' +
-      '<div class="step"><b>\u2463 \u4ecd\u8fde\u4e0d\u4e0a = \u5bf9\u79f0 NAT</b>(STUN \u6253\u6d1e\u5931\u8d25)\uff1a<br>\u7528 \u2462 \u7684 Tailscale(\u81ea\u5e26\u514d\u8d39\u4e2d\u7ee7)\uff1b\u6216\u5728\u4e24\u7aef iceServers \u52a0 <code>turn:</code>(coturn / \u6258\u7ba1\uff0c\u6309\u6d41\u91cf\u8ba1\u8d39)</div>' +
-      '<button onclick="retryNow()">\u91cd\u8bd5</button>';
+      '<h3>连不上主机（' + reason + '，已重试 ' + attempt + ' 次）— 按下面设置</h3>' +
+      '<div class="step"><b>① 主机在跑吗？</b><br>Mac 上(同机/回环即可)：<br><code>.venv/bin/python scripts/pc_remote_webrtc.py</code></div>' +
+      '<div class="step"><b>② 同一局域网</b>(手机和 Mac 同 WiFi)：<br>主机绑全网卡 + 设密码：<br><code>OCTOPUS_TENTACLE_HOST=0.0.0.0 OCTOPUS_TENTACLE_TOKEN=你的密码 .venv/bin/python scripts/pc_remote_webrtc.py</code><br>手机 设置→主机连接：地址 <code>ws://Mac内网IP:8765</code>，Auth Token 填同一密码</div>' +
+      '<div class="step"><b>③ 跨网（推荐 Tailscale，免费 / 零 TURN）</b>：<br>· 手机装 Tailscale，登和 Mac 同一账号<br>· 主机同 ② 那样 <code>0.0.0.0</code> + token 起<br>· 手机 设置→主机连接：地址 <code>ws://100.106.228.62:8765</code>（Mac 的 Tailscale IP；Mac 上 <code>tailscale ip -4</code> 可查），token 同上</div>' +
+      '<div class="step"><b>④ 仍连不上 = 对称 NAT</b>(STUN 打洞失败)：<br>用 ③ 的 Tailscale(自带免费中继)；或在两端 iceServers 加 <code>turn:</code>(coturn / 托管，按流量计费)</div>' +
+      '<button type="button" id="guide-retry">重试</button>';
     g.style.display = 'block';
     statusEl.style.display = 'none';
+    var retryBtn = g.querySelector('#guide-retry');
+    if (retryBtn) retryBtn.addEventListener('click', retryNow);
   }
 
   /* ========== Offer callback (called by native) ========== */
@@ -335,6 +337,22 @@
       lastTapTime = now;
     }, { passive: true });
   })();
+
+  /* ========== Top bar / keyboard button bindings ========== */
+  function bind(id, handler) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener('click', handler);
+  }
+  bind('btn-back',      function () { Android.back(); });
+  bind('btn-backspace', function () { key('backspace'); });
+  bind('btn-esc',       function () { key('esc'); });
+  bind('btn-kb',        function () { window.toggleKb(); });
+  bind('btn-send-type', function () { window.sendType(); });
+  bind('btn-enter',     function () { key('enter'); });
+  bind('btn-help',      function () {
+    var g = document.getElementById('guide');
+    g.style.display = (g.style.display === 'block') ? 'none' : 'block';
+  });
 
   /* ========== Boot ========== */
   start();
