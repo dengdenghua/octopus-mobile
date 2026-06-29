@@ -1,6 +1,7 @@
 package com.apk.claw.android.server.routes
 
 import com.apk.claw.android.BuildConfig
+import com.apk.claw.android.server.RemoteControlIndicator
 import com.apk.claw.android.server.ScreenCaptureManager
 import com.apk.claw.android.service.ClawAccessibilityService
 import com.google.gson.JsonObject
@@ -106,6 +107,8 @@ class ScreenHandler : RouteHandler {
         val pipeOut = PipedOutputStream(pipe)
 
         // 后台线程写帧
+        val viewerSource = ctx.sourceOf(session)
+        RemoteControlIndicator.onViewerStarted(viewerSource)
         Thread({
             try {
                 while (!Thread.currentThread().isInterrupted) {
@@ -127,6 +130,7 @@ class ScreenHandler : RouteHandler {
             } finally {
                 try { pipeOut.close() } catch (_: Exception) {}
                 mjpegStreamLock.release()
+                RemoteControlIndicator.onViewerEnded(viewerSource)
             }
         }, "MJPEG-Stream").apply {
             isDaemon = true

@@ -154,13 +154,21 @@ class ClawAccessibilityService : AccessibilityService() {
     /** Finds all nodes matching the given text. */
     fun findNodesByText(text: String): List<AccessibilityNodeInfo> {
         val root = rootInActiveWindow ?: return emptyList()
-        return root.findAccessibilityNodeInfosByText(text) ?: emptyList()
+        return try {
+            root.findAccessibilityNodeInfosByText(text) ?: emptyList()
+        } finally {
+            root.recycle()
+        }
     }
 
     /** Finds all nodes matching the given view ID (e.g. "com.example:id/button"). */
     fun findNodesById(viewId: String): List<AccessibilityNodeInfo> {
         val root = rootInActiveWindow ?: return emptyList()
-        return root.findAccessibilityNodeInfosByViewId(viewId) ?: emptyList()
+        return try {
+            root.findAccessibilityNodeInfosByViewId(viewId) ?: emptyList()
+        } finally {
+            root.recycle()
+        }
     }
 
     /** Clicks on a node. */
@@ -169,15 +177,21 @@ class ClawAccessibilityService : AccessibilityService() {
         if (node.isClickable) {
             return node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
         }
-        // Try clicking the parent if the node itself is not clickable
         var parent = node.parent
+        var result = false
+        var found = false
         while (parent != null) {
             if (parent.isClickable) {
-                return parent.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                result = parent.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                parent.recycle()
+                found = true
+                break
             }
-            parent = parent.parent
+            val next = parent.parent
+            parent.recycle()
+            parent = next
         }
-        // Fallback: tap at center of node bounds
+        if (found) return result
         val bounds = Rect()
         node.getBoundsInScreen(bounds)
         return performTap(bounds.centerX(), bounds.centerY())
@@ -200,7 +214,11 @@ class ClawAccessibilityService : AccessibilityService() {
     val screenTree: String?
         get() {
             val root = rootInActiveWindow ?: return null
-            return buildString { buildNodeTree(root, this, 0) }
+            return try {
+                buildString { buildNodeTree(root, this, 0) }
+            } finally {
+                root.recycle()
+            }
         }
 
     /**
@@ -210,7 +228,11 @@ class ClawAccessibilityService : AccessibilityService() {
     val screenTreeFull: String?
         get() {
             val root = rootInActiveWindow ?: return null
-            return buildString { buildNodeTreeFull(root, this, 0) }
+            return try {
+                buildString { buildNodeTreeFull(root, this, 0) }
+            } finally {
+                root.recycle()
+            }
         }
 
     private fun buildNodeTree(node: AccessibilityNodeInfo, sb: StringBuilder, depth: Int) {
@@ -246,11 +268,13 @@ class ClawAccessibilityService : AccessibilityService() {
             }
 
             if (hasText) {
-                val text = node.text!!
-                if (text.length > 100) {
-                    sb.append(" text=\"").append(text.subSequence(0, 100)).append("...\"")
-                } else {
-                    sb.append(" text=\"").append(text).append("\"")
+                val text = node.text
+                if (text != null) {
+                    if (text.length > 100) {
+                        sb.append(" text=\"").append(text.subSequence(0, 100)).append("...\"")
+                    } else {
+                        sb.append(" text=\"").append(text).append("\"")
+                    }
                 }
             }
             if (hasDesc) {
@@ -296,11 +320,13 @@ class ClawAccessibilityService : AccessibilityService() {
 
         // text
         if (!node.text.isNullOrEmpty()) {
-            val text = node.text!!
-            if (text.length > 200) {
-                sb.append(" text=\"").append(text.subSequence(0, 200)).append("...\"")
-            } else {
-                sb.append(" text=\"").append(text).append("\"")
+            val text = node.text
+            if (text != null) {
+                if (text.length > 200) {
+                    sb.append(" text=\"").append(text.subSequence(0, 200)).append("...\"")
+                } else {
+                    sb.append(" text=\"").append(text).append("\"")
+                }
             }
         }
 

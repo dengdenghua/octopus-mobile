@@ -114,8 +114,13 @@ class ScreenCaptureManager {
      */
     fun getScreenInfo(): Map<String, Any>? {
         val service = ClawAccessibilityService.getInstance() ?: return null
+        val root = try {
+            service.getRootInActiveWindow() ?: return null
+        } catch (e: Exception) {
+            XLog.e(TAG, "getScreenInfo failed: ${e.message}")
+            return null
+        }
         return try {
-            val root = service.getRootInActiveWindow() ?: return null
             val rect = Rect()
             root.getBoundsInScreen(rect)
             mapOf(
@@ -126,6 +131,8 @@ class ScreenCaptureManager {
         } catch (e: Exception) {
             XLog.e(TAG, "getScreenInfo failed: ${e.message}")
             null
+        } finally {
+            root.recycle()
         }
     }
 }

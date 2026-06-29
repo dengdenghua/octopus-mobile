@@ -53,7 +53,7 @@ class PcRemoteActivity : ComponentActivity() {
 @Composable
 private fun PcRemoteScreen(onBack: () -> Unit) {
     val client = appViewModel.octopusClient
-    val decoder = remember { H264Decoder(1280, 720) }
+    val decoder = remember { H264Decoder() }  // 分辨率从 SPS 自动解析
     var frames by remember { mutableStateOf(0) }
     var showKeyboard by remember { mutableStateOf(false) }
     val connected = client?.currentState() == ConnectionState.ONLINE ||
