@@ -48,6 +48,7 @@ import com.apk.claw.android.shizuku.ShizukuManager
 import com.apk.claw.android.utils.KVUtils
 import com.apk.claw.android.octopus_mobile.safety.PermissionMode
 import com.apk.claw.android.octopus_mobile.safety.PermissionModeManager
+import com.apk.claw.android.octopus_mobile.ToolAuditLog
 import com.apk.claw.android.octopus_mobile.proactive.ProactiveRuleEngine
 
 class TrustCenterActivity : ComponentActivity() {
@@ -119,6 +120,7 @@ fun TrustCenterScreen(onBack: () -> Unit) {
     }
     var lanOn by remember(tick) { mutableStateOf(KVUtils.isLanControlEnabled()) }
     var advOn by remember(tick) { mutableStateOf(KVUtils.isAdvancedAutomationMode()) }
+    var remoteHi by remember(tick) { mutableStateOf(KVUtils.isRemoteHighRiskAllowed()) }
 
     FeatureScaffold(title = stringResource(R.string.trustcenter_title), onBack = onBack) {
         Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
@@ -236,6 +238,31 @@ fun TrustCenterScreen(onBack: () -> Unit) {
                     Switch(
                         checked = advOn,
                         onCheckedChange = { if (it) { PermissionModeManager.switchMode(PermissionMode.FULL_POWER, "user_switch_trustcenter"); advOn = true } },
+                        colors = SwitchDefaults.colors(checkedTrackColor = FWarning, checkedThumbColor = Color.White),
+                    )
+                }
+            }
+
+            // 允许远程来源执行高危工具(提到首屏便于发现;ChannelAclActivity 也有同一开关)
+            FCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("允许远程来源执行高危工具", color = FText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "⚠️ 开启后，母体 WebSocket / 局域网 HTTP / 主动规则可无需确认执行" +
+                                "发短信/装应用/文件读写删等高危工具。默认关闭（拦截），仅在你完全掌控的受控环境开启。",
+                            color = if (remoteHi) FWarning else FMuted, fontSize = 10.sp, lineHeight = 14.sp,
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Switch(
+                        checked = remoteHi,
+                        onCheckedChange = {
+                            remoteHi = it
+                            KVUtils.setRemoteHighRiskAllowed(it)
+                            // 高影响开关:写审计,留可追溯痕迹(与 ChannelAclActivity 一致)。
+                            ToolAuditLog.recordSecuritySetting("允许远程来源执行高危工具", it)
+                        },
                         colors = SwitchDefaults.colors(checkedTrackColor = FWarning, checkedThumbColor = Color.White),
                     )
                 }
