@@ -314,8 +314,8 @@ html, body {
 
 .user {
   align-self: flex-end;
-  background: var(--oct-surface-2);
-  border-color: var(--oct-border-strong);
+  background: var(--oct-brand-soft);
+  border-color: transparent;
   border-right: 2px solid var(--oct-brand);
 }
 
