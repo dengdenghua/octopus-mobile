@@ -6,6 +6,7 @@ import android.graphics.Canvas
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import com.apk.claw.android.BuildConfig
 import android.util.Base64
 import android.util.Log
@@ -271,11 +272,13 @@ class GeckoViewEngine : BrowserEngine {
         val rt = runtime ?: throw IllegalStateException("GeckoRuntime not initialized")
         val tmpFile = java.io.File.createTempFile("ext_$extensionId", ".xpi")
         tmpFile.writeBytes(xpiBytes)
+        markAppInitiatedInstall()
         return rt.webExtensionController.install("file://${tmpFile.absolutePath}")
     }
 
     fun installExtensionFromUrl(url: String): GeckoResult<WebExtension> {
         val rt = runtime ?: throw IllegalStateException("GeckoRuntime not initialized")
+        markAppInitiatedInstall()
         return rt.webExtensionController.install(url)
     }
 
@@ -306,7 +309,10 @@ class GeckoViewEngine : BrowserEngine {
     private fun configureRuntime(runtime: GeckoRuntime) {
         val settings = runtime.settings
         settings.remoteDebuggingEnabled = BuildConfig.DEBUG
-        runCatching { settings.extensionsWebAPIEnabled = true }
+        // 关闭网页可触发的扩展安装 Web API:防止任意访问的页面静默触发扩展安装(drive-by)。
+        // App 自己的安装走 webExtensionController.install() 直接调用,不依赖此开关,
+        // 且受 browser_install_extension 高危工具闸门约束。
+        runCatching { settings.extensionsWebAPIEnabled = false }
 
         runCatching {
             runtime.webExtensionController.promptDelegate = object : WebExtensionController.PromptDelegate {
@@ -316,8 +322,16 @@ class GeckoViewEngine : BrowserEngine {
                     origins: Array<out String>,
                     dataCollectionPermissions: Array<out String>,
                 ): GeckoResult<WebExtension.PermissionPromptResponse> {
-                    Log.i(TAG, "Install prompt: ${extension.metaData?.name ?: "unknown"} -> ALLOW")
-                    _events.tryEmit(EngineEvent.ConsoleMessage("info", "Installing extension: ${extension.metaData?.name ?: "unknown"}"))
+                    val name = extension.metaData?.name ?: "unknown"
+                    // 纵深防御:仅放行 App 主动发起的安装。即便将来有人重新打开 Web API,
+                    // 非 App 发起的安装提示(drive-by)也一律拒绝。
+                    if (!isAppInitiatedInstall()) {
+                        Log.w(TAG, "Rejected unsolicited extension install prompt: $name")
+                        _events.tryEmit(EngineEvent.ConsoleMessage("warn", "Blocked unsolicited extension install: $name"))
+                        return GeckoResult.fromValue(WebExtension.PermissionPromptResponse(false, false, false))
+                    }
+                    Log.i(TAG, "Install prompt (app-initiated): $name -> ALLOW")
+                    _events.tryEmit(EngineEvent.ConsoleMessage("info", "Installing extension: $name"))
                     return GeckoResult.fromValue(WebExtension.PermissionPromptResponse(true, false, false))
                 }
             }
@@ -464,5 +478,15 @@ class GeckoViewEngine : BrowserEngine {
         private const val TAG = "GeckoViewEngine"
         private val mainHandler = Handler(Looper.getMainLooper())
         private const val JS_RESULT_PREFIX = "__OCTOPUS_JS_RESULT__:"
+
+        // 扩展安装防 drive-by:仅在 App 主动发起安装后的短窗口内,才放行 onInstallPromptRequest。
+        // GeckoRuntime 是进程单例,故用静态窗口(任一引擎实例的安装与 delegate 共享一份)。
+        private const val APP_INSTALL_WINDOW_MS = 120_000L
+        @Volatile private var appInstallWindowUntil = 0L
+        private fun markAppInitiatedInstall() {
+            appInstallWindowUntil = SystemClock.elapsedRealtime() + APP_INSTALL_WINDOW_MS
+        }
+        private fun isAppInitiatedInstall(): Boolean =
+            SystemClock.elapsedRealtime() <= appInstallWindowUntil
     }
 }
