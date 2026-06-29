@@ -107,19 +107,20 @@ class DefaultAgentService : AgentService {
     }
 
     override fun executeTask(userPrompt: String, callback: AgentCallback, untrusted: Boolean) {
-        if (running.get()) {
-            callback.onError(0, IllegalStateException("Agent is already running a task"), 0)
-            return
-        }
         // 未 initialize() 就调用会让 executor 为 null；用 ?.submit 会静默吞掉任务，
-        // 导致 running 永远卡 true。这里显式拦截并回报错误。
+        // 导致 running 永远卡 true。这里显式拦截并回报错误（在抢占 running 之前）。
         val exec = executor
         if (exec == null) {
             callback.onError(0, IllegalStateException("Agent not initialized — call initialize() first"), 0)
             return
         }
+        // CAS 抢占 running：get 再 set 存在 TOCTOU，两个并发调用（或与 resumeTask 竞争）
+        // 可同时通过检查并各自 submit，导致同一任务被重复执行。
+        if (!running.compareAndSet(false, true)) {
+            callback.onError(0, IllegalStateException("Agent is already running a task"), 0)
+            return
+        }
 
-        running.set(true)
         cancelToken = CancellationToken()
         untrustedRun = untrusted
 
@@ -143,17 +144,18 @@ class DefaultAgentService : AgentService {
 
     override fun resumeTask(callback: AgentCallback): Boolean {
         val checkpoint = TaskCheckpoint.load() ?: return false
-        if (running.get()) {
-            XLog.w(TAG, "Cannot resume: agent is already running")
-            return false
-        }
         val exec = executor
         if (exec == null) {
             XLog.w(TAG, "Cannot resume: agent not initialized")
             return false
         }
+        // CAS 抢占 running：与 executeTask 共享同一标志，get 再 set 存在 TOCTOU，
+        // 两个并发 resume（或 resume 与 executeTask）可同时通过并重复执行同一任务。
+        if (!running.compareAndSet(false, true)) {
+            XLog.w(TAG, "Cannot resume: agent is already running")
+            return false
+        }
 
-        running.set(true)
         cancelToken = CancellationToken()
         untrustedRun = checkpoint.untrusted
 

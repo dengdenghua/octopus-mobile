@@ -76,7 +76,7 @@ object TaskCheckpoint {
             val raw = KVUtils.getString(KEY_CHECKPOINT)
             if (raw.isEmpty()) return null
             val json = JsonParser.parseString(raw).asJsonObject
-            val messages = deserializeMessages(json.getAsJsonArray("messages"))
+            val messages = repairDanglingToolCalls(deserializeMessages(json.getAsJsonArray("messages")))
             return CheckpointData(
                 goal = json.get("goal")?.asString ?: return null,
                 iterations = json.get("iterations")?.asInt ?: 0,
@@ -179,5 +179,49 @@ object TaskCheckpoint {
             }
         }
         return result
+    }
+
+    /**
+     * 修复"悬空 tool_call":崩溃可能发生在 LLM 产出带 toolExecutionRequests 的 AiMessage 之后、
+     * 对应 ToolExecutionResultMessage 持久化之前。恢复时若把这种历史直接发给 LLM,多数 provider
+     * (OpenAI / Anthropic 风格)会拒绝"assistant 的 tool_call 后没有 tool result"的请求,
+     * 导致第一次 chatWithRetry 抛不可重试错误、恢复的任务一上来就死。
+     *
+     * 这里为每个没有匹配结果的 tool 请求,紧跟其 AiMessage 之后补一个占位 ToolExecutionResultMessage,
+     * 使消息序列对 provider 合法,循环可从占位结果之后正常继续。结果按 toolRequestId 唯一匹配,
+     * 已有结果的请求不会被重复补。
+     */
+    internal fun repairDanglingToolCalls(messages: List<ChatMessage>): List<ChatMessage> {
+        val existingResultIds = messages.asSequence()
+            .filterIsInstance<ToolExecutionResultMessage>()
+            .mapNotNull { it.id() }
+            .filter { it.isNotEmpty() }
+            .toHashSet()
+
+        var repaired = 0
+        val out = ArrayList<ChatMessage>(messages.size)
+        for (msg in messages) {
+            out.add(msg)
+            if (msg is AiMessage && msg.hasToolExecutionRequests()) {
+                for (req in msg.toolExecutionRequests()) {
+                    val id = req.id()
+                    val matched = !id.isNullOrEmpty() && id in existingResultIds
+                    if (!matched) {
+                        out.add(
+                            ToolExecutionResultMessage.from(
+                                id ?: "",
+                                req.name() ?: "",
+                                "[interrupted: tool result was not persisted before the app was killed]"
+                            )
+                        )
+                        repaired++
+                    }
+                }
+            }
+        }
+        if (repaired > 0) {
+            XLog.w(TAG, "Repaired $repaired dangling tool-call(s) in resumed checkpoint")
+        }
+        return out
     }
 }
