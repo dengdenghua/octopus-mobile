@@ -70,13 +70,34 @@ object MediaRepository {
             GenImage(url)
         }
 
-    /** 生视频:仅提交,返回 task(异步)。 */
+    /** 生视频:仅提交,返回 task(异步)。轮询键 = video_id(Agnes 用它查 /agnesapi)。 */
     suspend fun submitVideo(prompt: String): Result<VideoTask> =
-        runCatching { parseVideo(postJson("/v1/video/generations", mapOf("prompt" to prompt))) }
+        runCatching {
+            val o = postJson("/v1/video/generations", mapOf("prompt" to prompt))
+            val videoId = strField(o, "video_id", "task_id", "id") ?: ""
+            VideoTask(
+                taskId = videoId,
+                status = strField(o, "status") ?: "queued",
+                progress = intField(o),
+                videoId = videoId,
+                url = videoUrl(o),
+                error = strField(o, "error", "fail_reason"),
+            )
+        }
 
-    /** 轮询单个视频任务。 */
-    suspend fun pollVideo(taskId: String): Result<VideoTask> =
-        runCatching { parseVideo(getJson("/v1/video/generations/$taskId")) }
+    /** 轮询单个视频任务(传 submitVideo 返回的 video_id)。响应来自 Agnes /agnesapi。 */
+    suspend fun pollVideo(videoId: String): Result<VideoTask> =
+        runCatching {
+            val o = getJson("/v1/video/generations/$videoId")
+            VideoTask(
+                taskId = videoId, // 响应里没有 video_id,保留传入的作轮询键
+                status = strField(o, "status") ?: "queued",
+                progress = intField(o),
+                videoId = videoId,
+                url = videoUrl(o),
+                error = strField(o, "error", "fail_reason"),
+            )
+        }
 
     /**
      * 生视频一站式:提交 → 每 3s 轮询直到完成/失败/超时(默认 ~3 分钟)。
@@ -96,22 +117,19 @@ object MediaRepository {
         else Result.failure(RuntimeException("视频生成超时,请稍后再查"))
     }
 
-    // ── 解析视频任务 JSON(兼容 Sora 风格 + Agnes 内部字段)──
-    private fun parseVideo(o: JsonObject): VideoTask {
-        fun str(vararg keys: String): String? {
-            for (k in keys) o.get(k)?.takeIf { it.isJsonPrimitive }?.let { return it.asString }
-            return null
-        }
-        val progress = o.get("progress")?.takeIf { it.isJsonPrimitive }
-            ?.runCatching { asInt }?.getOrNull() ?: 0
-        return VideoTask(
-            taskId = str("task_id", "id") ?: "",
-            status = str("status") ?: "queued",
-            progress = progress,
-            videoId = str("video_id"),
-            url = str("url", "video_url", "download_url", "output_url"),
-            error = str("error", "fail_reason"),
-        )
+    // ── 字段解析助手 ──
+    private fun strField(o: JsonObject, vararg keys: String): String? {
+        for (k in keys) o.get(k)?.takeIf { it.isJsonPrimitive }?.let { return it.asString }
+        return null
+    }
+
+    private fun intField(o: JsonObject, key: String = "progress"): Int =
+        o.get(key)?.takeIf { it.isJsonPrimitive }?.runCatching { asInt }?.getOrNull() ?: 0
+
+    /** 完成后的视频地址:Agnes 放在 remixed_from_video_id(其次兼容常见字段);仅取 http 链接。 */
+    private fun videoUrl(o: JsonObject): String? {
+        val u = strField(o, "remixed_from_video_id", "url", "video_url", "download_url", "output_url")
+        return if (u != null && u.startsWith("http")) u else null
     }
 
     // ── HTTP(镜像 HttpAccountGateway:Bearer token + FastAPI detail/error.message 错误透传)──

@@ -2149,15 +2149,17 @@ async def video_generations(body: dict[str, Any], u: sqlite3.Row = Depends(actor
     return JSONResponse(content=data)
 
 
-@app.get("/v1/video/generations/{task_id}")
-async def video_poll(task_id: str, u: sqlite3.Row = Depends(actor)) -> Any:
-    """轮询视频任务状态/结果(透传 Agnes GET /videos/{task_id},OpenAI-Sora 风格)。"""
+@app.get("/v1/video/generations/{video_id}")
+async def video_poll(video_id: str, u: sqlite3.Row = Depends(actor)) -> Any:
+    """轮询视频结果。透传 Agnes `GET /agnesapi?video_id=...`(注意在根路径、不在 /v1 下;
+    完成后视频 URL 在响应的 `remixed_from_video_id` 字段)。video_id 取提交时返回的那个。"""
     rate_limit(f"videopoll:{u['user_id']}", 120, 60)
     base, key = _agnes_upstream()
+    root = base[:-3] if base.endswith("/v1") else base  # /agnesapi 在根路径,不在 /v1 下
     import httpx  # 惰性 import
     try:
         async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.get(f"{base}/videos/{task_id}",
+            resp = await client.get(f"{root}/agnesapi", params={"video_id": video_id},
                                     headers={"Authorization": f"Bearer {key}"})
     except Exception:  # noqa: BLE001
         raise HTTPException(status_code=502, detail="查询视频状态失败")
