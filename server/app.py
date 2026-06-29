@@ -90,6 +90,13 @@ CREDITS_PER_1K_TOKENS = float(os.environ.get("CREDITS_PER_1K_TOKENS", "0.1"))
 # 单次输出 token 上限(成本 + 防跑飞双保险)。请求里更大的 max_tokens 会被压到此值;未指定也设成它。
 # 思考型模型别设太小(否则正文被 reasoning 吃光),默认 8192。
 MAX_OUTPUT_TOKENS = int(os.environ.get("MAX_OUTPUT_TOKENS", "8192"))
+# 生图/生视频(Agnes 增值,key 走 agnes provider):会员/白名单免费,非会员扣固定积分。
+# Agnes 对平台免费 → 扣多少都是高毛利。视频 Agnes 全账号限流 1/min,故再加每用户每日配额防独占。
+IMAGE_CREDITS = int(os.environ.get("IMAGE_CREDITS", "8"))            # 非会员每张图扣
+VIDEO_CREDITS = int(os.environ.get("VIDEO_CREDITS", "40"))           # 非会员每个视频扣(稀缺,贵)
+VIDEO_DAILY_QUOTA = int(os.environ.get("VIDEO_DAILY_QUOTA", "3"))    # 每用户每日视频次数上限
+IMAGE_MODEL = os.environ.get("IMAGE_MODEL", "agnes-image-2.1-flash")
+VIDEO_MODEL = os.environ.get("VIDEO_MODEL", "agnes-video-v2.0")
 # 无限额度白名单(管理员/内部账号邮箱):走中转不预扣、不扣费、不被余额拦,仍记 usage_log(credits=0)。
 # 逗号分隔、大小写不敏感。
 UNLIMITED_EMAILS = {s.strip().lower() for s in os.environ.get("UNLIMITED_EMAILS", "").split(",") if s.strip()}
@@ -2047,6 +2054,117 @@ async def chat_completions(body: dict[str, Any], request: Request, u: sqlite3.Ro
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
     )
+
+
+# ─────────────── 生图 / 生视频(Agnes 增值:会员免费,非会员扣积分) ───────────────
+def _agnes_upstream() -> tuple[str, str]:
+    """取 agnes 上游 base+key(生图/生视频专用,key 只在服务端)。未配置 → 503。"""
+    prov = PROVIDERS.get("agnes", {})
+    base, key = (prov.get("base_url") or "").rstrip("/"), prov.get("api_key") or ""
+    if not base or not key:
+        raise HTTPException(status_code=503, detail="生图/生视频上游未配置")
+    return base, key
+
+
+def _charge_media(u: sqlite3.Row, cost: int, source: str, ref_id: str) -> int:
+    """会员/白名单免费(返回 0);否则原子扣 cost 积分,不足 → 402。返回实际扣的积分(供失败退款)。"""
+    unlimited = (u["email"] or "").strip().lower() in UNLIMITED_EMAILS
+    is_member = u["member_expire_at"] > now_ms()
+    if unlimited or is_member or cost <= 0:
+        return 0
+    if not _reserve_credits(u["user_id"], cost, source=source, ref_id=ref_id):
+        raise HTTPException(status_code=402, detail="积分不足,请充值或开通会员")
+    return cost
+
+
+def _refund_media(user_id: str, charged: int, ref_id: str) -> None:
+    """上游失败时退还已扣积分(charged=0 即会员/白名单,无需退)。"""
+    if charged <= 0:
+        return
+    with closing(db()) as c:
+        c.execute("UPDATE users SET credits = credits + ? WHERE user_id = ?", (charged, user_id))
+        _record_credit_txn(c, user_id, charged, source="media_refund", detail="生成失败退款", ref_id=ref_id)
+        c.commit()
+
+
+@app.post("/v1/images/generations")
+async def images_generations(body: dict[str, Any], u: sqlite3.Row = Depends(actor)) -> Any:
+    """生图(同步):会员/白名单免费,非会员扣 IMAGE_CREDITS。透传 Agnes /images/generations。"""
+    rate_limit(f"image:{u['user_id']}", 20, 60)  # 每用户每分钟 20 张
+    base, key = _agnes_upstream()
+    ref_id = "img_" + secrets.token_hex(8)
+    charged = _charge_media(u, IMAGE_CREDITS, "image_gen", ref_id)
+    payload = {
+        "model": str(body.get("model") or IMAGE_MODEL),
+        "prompt": str(body.get("prompt") or "")[:4000],
+        "n": 1,
+        "size": str(body.get("size") or "1024x1024"),
+    }
+    import httpx  # 惰性 import
+    try:
+        async with httpx.AsyncClient(timeout=120) as client:
+            resp = await client.post(
+                f"{base}/images/generations",
+                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                json=payload,
+            )
+    except Exception:  # noqa: BLE001 — 上游异常,退款
+        _refund_media(u["user_id"], charged, ref_id)
+        raise HTTPException(status_code=502, detail="生图上游请求失败")
+    if resp.status_code >= 400:
+        _refund_media(u["user_id"], charged, ref_id)
+        return JSONResponse(status_code=resp.status_code,
+                            content={"error": {"message": "生图失败", "status": resp.status_code}})
+    return JSONResponse(content=resp.json())
+
+
+@app.post("/v1/video/generations")
+async def video_generations(body: dict[str, Any], u: sqlite3.Row = Depends(actor)) -> Any:
+    """生视频(异步提交):会员/白名单免费,非会员扣 VIDEO_CREDITS。每用户每日 VIDEO_DAILY_QUOTA
+    个、每分钟 1 个(呼应 Agnes 全账号 1/min)。返回 task_id 供轮询 GET /v1/video/generations/{id}。"""
+    rate_limit(f"videoday:{u['user_id']}", VIDEO_DAILY_QUOTA, 86400)  # 每用户每日配额
+    rate_limit(f"videomin:{u['user_id']}", 1, 60)                     # 每用户每分钟 1 个
+    base, key = _agnes_upstream()
+    ref_id = "vid_" + secrets.token_hex(8)
+    charged = _charge_media(u, VIDEO_CREDITS, "video_gen", ref_id)
+    payload = {"model": str(body.get("model") or VIDEO_MODEL), "prompt": str(body.get("prompt") or "")[:4000]}
+    import httpx  # 惰性 import
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            resp = await client.post(
+                f"{base}/video/generations",
+                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                json=payload,
+            )
+    except Exception:  # noqa: BLE001
+        _refund_media(u["user_id"], charged, ref_id)
+        raise HTTPException(status_code=502, detail="生视频上游请求失败")
+    data = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
+    if resp.status_code >= 400:
+        _refund_media(u["user_id"], charged, ref_id)
+        busy = resp.status_code == 429 or "rate_limit" in json.dumps(data)
+        msg = "视频生成繁忙(每分钟限 1 个),请稍后再试" if busy else "生视频失败"
+        return JSONResponse(status_code=resp.status_code,
+                            content={"error": {"message": msg, "status": resp.status_code}})
+    return JSONResponse(content=data)
+
+
+@app.get("/v1/video/generations/{task_id}")
+async def video_poll(task_id: str, u: sqlite3.Row = Depends(actor)) -> Any:
+    """轮询视频任务状态/结果(透传 Agnes GET /videos/{task_id},OpenAI-Sora 风格)。"""
+    rate_limit(f"videopoll:{u['user_id']}", 120, 60)
+    base, key = _agnes_upstream()
+    import httpx  # 惰性 import
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.get(f"{base}/videos/{task_id}",
+                                    headers={"Authorization": f"Bearer {key}"})
+    except Exception:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail="查询视频状态失败")
+    if resp.status_code >= 400:
+        return JSONResponse(status_code=resp.status_code,
+                            content={"error": {"message": "查询失败", "status": resp.status_code}})
+    return JSONResponse(content=resp.json())
 
 
 # ─────────────────────────── 管理后台(/admin) ───────────────────────────
