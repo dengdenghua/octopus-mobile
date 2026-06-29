@@ -2,7 +2,7 @@
 Octopus 账号 + 计费 + 会员 + 大模型中转 —— 服务端骨架(FastAPI + SQLite)。
 
 设计要点:
-  - 后台统一持有平台的 **小米 MiMo API key**(只在服务端,App 永远看不到),
+  - 后台统一持有平台的 **通义千问 API key**(只在服务端,App 永远看不到),
     用户走 /v1/chat/completions 中转 → 按 token 用量扣 **积分**(付费体系,默认路径)。
   - **会员(BYO 解锁)**:购买"会员"商品后当月可在 App 里接自己的大模型(BYO 走客户端直连、
     不经本中转、不扣积分)。本服务只负责"是否会员"这个权益位 + 账号 + 积分。
@@ -64,18 +64,23 @@ PENDING_ORDER_LIMIT = int(os.environ.get("PENDING_ORDER_LIMIT", "5"))
 PENDING_ORDER_WINDOW_MS = int(os.environ.get("PENDING_ORDER_WINDOW_MS", str(30 * 60 * 1000)))
 
 # 平台大模型上游(key 只在服务端)。支持多上游:每个模型按 provider 路由到不同 base/key。
-MIMO_API_KEY = os.environ.get("MIMO_API_KEY", "")
-MIMO_BASE_URL = os.environ.get("MIMO_BASE_URL", "").rstrip("/")  # OpenAI 兼容 base, 例 https://.../v1
-# 第二上游:Agnes(永久免费额度),作免费默认档。OpenAI 兼容。
+# 主上游:通义千问(阿里云百炼,国内北京端点),唯一启用的聊天模型。OpenAI 兼容。
+QWEN_API_KEY = os.environ.get("QWEN_API_KEY", "")
+QWEN_BASE_URL = os.environ.get("QWEN_BASE_URL", "").rstrip("/")  # OpenAI 兼容 base, 例 https://.../v1
+# 备用上游:Agnes(永久免费额度)。OpenAI 兼容。注:Agnes 并发弱,不做文本主力,
+# 留作生图/生视频等低频增值用途。
 AGNES_API_KEY = os.environ.get("AGNES_API_KEY", "")
 AGNES_BASE_URL = os.environ.get("AGNES_BASE_URL", "").rstrip("/")
-# provider 注册:模型 spec 里的 "provider" 决定走哪个上游(base + key)。
+# provider 注册:模型 spec 里的 "provider" 决定走哪个上游(base + key)。(mimo 已移除)
 PROVIDERS = {
-    "mimo": {"base_url": MIMO_BASE_URL, "api_key": MIMO_API_KEY},
+    "qwen": {"base_url": QWEN_BASE_URL, "api_key": QWEN_API_KEY},
     "agnes": {"base_url": AGNES_BASE_URL, "api_key": AGNES_API_KEY},
 }
-# 默认模型(请求未指定 model 或指定了目录外模型时回退);默认走免费的 agnes。
-DEFAULT_MODEL = os.environ.get("DEFAULT_MODEL", "agnes-2.0-flash")
+# 默认模型(请求未指定 model 或指定了目录外模型时回退);主力 qwen3.5-flash(阿里百炼)。
+DEFAULT_MODEL = os.environ.get("DEFAULT_MODEL", "qwen3.5-flash")
+# 运营硬锁:非空时忽略客户端请求的 model,一律用它(防前端/直连 API 切到贵的模型)。
+# 解锁恢复多档:清空/删除 .env 里的 FORCE_MODEL 再重启即可。
+FORCE_MODEL = os.environ.get("FORCE_MODEL", "").strip()
 
 # 计费:多少积分/1k tokens(输入+输出合计),再乘模型 multiplier。
 # 校准(不亏成本):CREDITS_PER_1K_TOKENS ≥ 模型每1k_token的¥成本 ÷ (multiplier × 每积分售价¥)。
@@ -226,28 +231,25 @@ SQUARE_DISCOVERY: dict[str, Any] = {
     ]
 }
 
-# 模型目录 = 用户可见的「三个档位」(display_name 是档位名,不暴露底层模型名)。
-# 极速档:agnes,0.2×;标准档:mimo flash,0.45×;高级档:mimo pro,1.2×。
-# 三档照常按 multiplier 扣用户积分。可用 MODELS_JSON 覆盖。
+# 模型目录:现在只有一档(mimo 已移除)= qwen3.5-flash(阿里百炼,原生多模态/便宜),0.5× 扣积分。
+# (multiplier 0.2→0.5,2026-06-29:qwen3.5-flash 输出 ¥2/M,0.2 在长输出请求会亏;0.5 保证任何输出占比都不亏。)
+# FORCE_MODEL 再兜底硬锁;App 的极速/标准/高级三个 tier 按钮发什么都落到这一档。可用 MODELS_JSON 覆盖。
+# (Agnes 并发弱,已退出聊天主力,改作生图/生视频增值用途。)
 _DEFAULT_MODELS = [
-    {"id": "agnes-2.0-flash", "display_name": "极速", "tier": "fast", "multiplier": 0.2,
-     "provider": "agnes", "recommended": True},
-    {"id": "mimo-v2-flash", "display_name": "标准", "tier": "flash", "multiplier": 0.45,
-     "provider": "mimo", "recommended": True},
-    {"id": "mimo-v2.5-pro", "display_name": "高级", "tier": "premium", "multiplier": 1.2,
-     "provider": "mimo", "recommended": True},
+    {"id": "qwen3.5-flash", "display_name": "极速", "tier": "fast", "multiplier": 0.5,
+     "provider": "qwen", "recommended": True},
 ]
-# 模型 id -> 完整 spec(provider/multiplier/...);MODELS_JSON 里没写 provider 的默认归到 mimo(向后兼容)。
+# 模型 id -> 完整 spec(provider/multiplier/...);MODELS_JSON 里没写 provider 的默认归到 qwen。
 # 坏配置(非 list / item 缺 id / 解析失败)整体回退默认,不让服务起不来。
 try:
     MODELS = json.loads(os.environ["MODELS_JSON"]) if os.environ.get("MODELS_JSON") else _DEFAULT_MODELS
-    MODEL_SPEC = {m["id"]: {**m, "provider": m.get("provider", "mimo")}
+    MODEL_SPEC = {m["id"]: {**m, "provider": m.get("provider", "qwen")}
                   for m in MODELS if isinstance(m, dict) and m.get("id")}
     if not MODEL_SPEC:
         raise ValueError("MODELS_JSON 无有效模型")
 except Exception:  # noqa: BLE001 — 配置坏了就回退默认
     MODELS = _DEFAULT_MODELS
-    MODEL_SPEC = {m["id"]: {**m, "provider": m.get("provider", "mimo")} for m in MODELS}
+    MODEL_SPEC = {m["id"]: {**m, "provider": m.get("provider", "qwen")} for m in MODELS}
 
 app = FastAPI(title="octopus-account-relay", version="0.2.0")
 
@@ -1726,12 +1728,15 @@ def download_shizuku_apk() -> FileResponse:
 
 # ─────────────────── 模型目录 + 中转(多上游路由,按模型倍率扣积分,0=免费) ───────────────────
 def _resolve_model(requested: str | None) -> tuple[str, dict[str, Any]]:
-    """请求的 model → (规整后 model_id, spec)。目录外/未指定 → 回退 DEFAULT_MODEL(防拿 key 乱调)。"""
+    """请求的 model → (规整后 model_id, spec)。目录外/未指定 → 回退 DEFAULT_MODEL(防拿 key 乱调)。
+    FORCE_MODEL 非空时为运营硬锁:忽略客户端请求的 model,一律用 FORCE_MODEL(防前端切到贵的模型)。"""
+    if FORCE_MODEL:
+        requested = FORCE_MODEL
     model = requested or DEFAULT_MODEL
     spec = MODEL_SPEC.get(model)
     if spec is None:
         model = DEFAULT_MODEL
-        spec = MODEL_SPEC.get(DEFAULT_MODEL) or {"multiplier": 1.0, "provider": "mimo"}
+        spec = MODEL_SPEC.get(DEFAULT_MODEL) or {"multiplier": 0.2, "provider": "qwen"}
     return model, spec
 
 
@@ -1933,7 +1938,7 @@ async def chat_completions(body: dict[str, Any], request: Request, u: sqlite3.Ro
     # ── 模型 → 上游路由:目录外回退 DEFAULT_MODEL;按 spec.provider 选 base/key ──
     model, spec = _resolve_model(body.get("model"))
     mult = float(spec.get("multiplier", 1.0))
-    prov = PROVIDERS.get(spec.get("provider", "mimo"), {})
+    prov = PROVIDERS.get(spec.get("provider", "qwen"), {})
     base, key = prov.get("base_url") or "", prov.get("api_key") or ""
     if not base or not key:
         raise HTTPException(status_code=503, detail=f"模型 {model} 的上游未配置")
