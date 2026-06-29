@@ -89,6 +89,14 @@
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 
+            <com.apk.claw.android.widget.KButton
+                android:id="@+id/btnMediaStudio"
+                android:layout_width="match_parent"
+                android:layout_height="46pt"
+                android:layout_marginTop="16pt"
+                android:gravity="center"
+                android:textSize="15pt" />
+
             <!-- 对话档位:单档 qwen3.5-flash 后整段隐藏(服务端 FORCE_MODEL 锁定,UI 无需让用户选档) -->
             <TextView
                 android:layout_width="wrap_content"
