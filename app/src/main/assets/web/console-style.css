@@ -138,7 +138,6 @@ html, body {
 }
 .status-dot[data-state="online"] {
   background: var(--oct-success);
-  box-shadow: 0 0 0 2px rgba(52, 199, 111, .22);
 }
 .status-dot[data-state="connecting"] {
   background: var(--oct-warning);
@@ -172,26 +171,24 @@ html, body {
 #latency {
   display: inline-flex;
   align-items: center;
-  padding: 3px 8px;
+  padding: 1px 6px;
   border: 1px solid var(--oct-border);
-  border-radius: var(--oct-radius-pill);
-  background: var(--oct-surface-2);
+  border-radius: var(--oct-radius-sm);
+  background: transparent;
   color: var(--oct-text-2);
   font-size: var(--oct-fs-xs);
   font-family: var(--oct-font-mono);
-  font-weight: var(--oct-fw-semibold);
+  font-weight: var(--oct-fw-regular);
   white-space: nowrap;
   transition: var(--oct-transition-colors);
 }
 #latency.warn {
   border-color: var(--oct-warning);
   color: var(--oct-warning);
-  background: rgba(255, 159, 10, .10);
 }
 #latency.bad {
   border-color: var(--oct-danger);
   color: var(--oct-danger);
-  background: rgba(255, 59, 48, .10);
 }
 
 /* ── 折叠菜单（窄屏）── */
@@ -273,8 +270,8 @@ html, body {
   background: var(--oct-bg-elevated);
   border: 1px solid var(--oct-border-strong);
   border-radius: var(--oct-radius-sm);
-  padding: 5px var(--oct-sp-2);
-  box-shadow: 0 2px 8px var(--oct-shadow-sm);
+  padding: 4px var(--oct-sp-2);
+  box-shadow: none;
 }
 
 .rtbar-icon {
@@ -412,17 +409,15 @@ html, body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: background var(--oct-dur-fast) var(--oct-ease),
-              transform var(--oct-dur-fast) var(--oct-ease);
+  transition: background var(--oct-dur-fast) var(--oct-ease);
 }
 
 #send:hover { background: var(--oct-brand-strong); }
-#send:active { transform: scale(0.97); }
+#send:active { background: var(--oct-brand-strong); }
 #send:disabled {
   background: var(--oct-surface-2);
   color: var(--oct-text-3);
   cursor: not-allowed;
-  transform: none;
 }
 
 /* ── 快捷键帮助面板：扁平细边 ── */

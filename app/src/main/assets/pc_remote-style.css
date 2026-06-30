@@ -91,11 +91,11 @@ html, body {
   flex-shrink: 0;
   transition: background var(--oct-dur-base) var(--oct-ease);
 }
-#conn-badge.connected    { background: var(--oct-success); box-shadow: 0 0 4px var(--oct-success); }
-#conn-badge.checking     { background: var(--oct-warning); box-shadow: 0 0 4px var(--oct-warning); }
-#conn-badge.new          { background: var(--oct-warning); box-shadow: 0 0 4px var(--oct-warning); }
+#conn-badge.connected    { background: var(--oct-success); }
+#conn-badge.checking     { background: var(--oct-warning); }
+#conn-badge.new          { background: var(--oct-warning); }
 #conn-badge.disconnected,
-#conn-badge.failed       { background: var(--oct-danger); box-shadow: 0 0 4px var(--oct-danger); }
+#conn-badge.failed       { background: var(--oct-danger); }
 
 /* --- 状态文字 --- */
 #st {
@@ -207,9 +207,7 @@ video {
   z-index: var(--oct-z-sticky);
   display: none;
   background: var(--oct-overlay);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border-radius: var(--oct-radius-md);
+  border-radius: var(--oct-radius-sm);
   padding: 10px;
   touch-action: none;
   user-select: none;

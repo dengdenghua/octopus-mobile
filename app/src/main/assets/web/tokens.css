@@ -52,16 +52,16 @@
   --oct-sp-6:  24px;
   --oct-sp-8:  32px;
 
-  /* ── 圆角（仅 4 档） ── */
-  --oct-radius-sm:   8px;
-  --oct-radius-md:   12px;
-  --oct-radius-lg:   18px;
+  /* ── 圆角（极简：仅 3 档，小圆角） ── */
+  --oct-radius-sm:   5px;
+  --oct-radius-md:   7px;
+  --oct-radius-lg:   10px;
   --oct-radius-pill: 9999px;
 
-  /* ── 阴影（仅 3 档） ── */
-  --oct-shadow-sm: 0 1px 3px rgba(0, 0, 0, .06);
-  --oct-shadow-md: 0 8px 24px rgba(0, 0, 0, .10);
-  --oct-shadow-lg: 0 20px 56px rgba(0, 0, 0, .22);
+  /* ── 阴影（极简：近零，仅微弱层次） ── */
+  --oct-shadow-sm: 0 1px 2px rgba(0, 0, 0, .04);
+  --oct-shadow-md: 0 1px 4px rgba(0, 0, 0, .06);
+  --oct-shadow-lg: 0 2px 12px rgba(0, 0, 0, .10);
 
   /* ── 动效 ── */
   --oct-ease: cubic-bezier(.2, .8, .2, 1);
@@ -106,9 +106,9 @@
     --oct-text-3:       #7a8294;
     --oct-overlay:      rgba(0, 0, 0, .65);
 
-    --oct-shadow-sm: 0 1px 3px rgba(0, 0, 0, .30);
-    --oct-shadow-md: 0 8px 24px rgba(0, 0, 0, .40);
-    --oct-shadow-lg: 0 20px 56px rgba(0, 0, 0, .55);
+    --oct-shadow-sm: 0 1px 2px rgba(0, 0, 0, .20);
+    --oct-shadow-md: 0 1px 4px rgba(0, 0, 0, .28);
+    --oct-shadow-lg: 0 2px 12px rgba(0, 0, 0, .40);
   }
 }
 

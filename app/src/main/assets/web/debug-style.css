@@ -40,9 +40,9 @@ h1 {
 }
 
 .page-nav-link {
-  padding: 4px var(--oct-sp-3);
-  border-radius: var(--oct-radius-pill);
-  background: var(--oct-surface-2);
+  padding: 3px var(--oct-sp-2);
+  border-radius: var(--oct-radius-sm);
+  background: transparent;
   color: var(--oct-text-2);
   font-size: var(--oct-fs-xs);
   text-decoration: none;
@@ -50,8 +50,7 @@ h1 {
 }
 
 .page-nav-link:hover {
-  background: var(--oct-brand-soft);
-  color: var(--oct-brand);
+  color: var(--oct-text);
 }
 
 /* --- Layout: Main + History Sidebar --- */
@@ -88,9 +87,9 @@ h1 {
 
 .search-input {
   width: 100%;
-  padding: 10px var(--oct-sp-3);
+  padding: 8px var(--oct-sp-3);
   border: 1px solid var(--oct-border);
-  border-radius: var(--oct-radius-pill);
+  border-radius: var(--oct-radius-sm);
   font-size: var(--oct-fs-sm);
   font-family: var(--oct-font-ui);
   background: var(--oct-surface);
@@ -116,20 +115,20 @@ h1 {
 }
 
 .quick-btn {
-  padding: 8px var(--oct-sp-3);
-  border: 1px solid var(--oct-success);
-  border-radius: var(--oct-radius-pill);
-  background: var(--oct-surface);
-  color: var(--oct-success);
+  padding: 6px var(--oct-sp-3);
+  border: 1px solid var(--oct-border);
+  border-radius: var(--oct-radius-sm);
+  background: transparent;
+  color: var(--oct-text-2);
   font-size: var(--oct-fs-sm);
   font-weight: var(--oct-fw-medium);
   cursor: pointer;
-  transition: all var(--oct-dur-base) var(--oct-ease);
+  transition: var(--oct-transition-colors);
 }
 
 .quick-btn:hover {
-  background: var(--oct-success);
-  color: #fff;
+  border-color: var(--oct-border-strong);
+  color: var(--oct-text);
 }
 
 /* --- Tool List --- */
@@ -148,7 +147,7 @@ h1 {
 }
 
 .tool-group[open] {
-  box-shadow: var(--oct-shadow-sm);
+  box-shadow: none;
 }
 
 .tool-group-title {
@@ -246,18 +245,19 @@ h1 {
 .tool-state-retry:hover { background: var(--oct-brand-strong); }
 
 .tool-btn {
-  padding: 8px var(--oct-sp-3);
+  padding: 6px var(--oct-sp-3);
   border: 1px solid var(--oct-border);
-  border-radius: var(--oct-radius-pill);
-  background: var(--oct-surface);
+  border-radius: var(--oct-radius-sm);
+  background: transparent;
   font-size: var(--oct-fs-sm);
-  color: var(--oct-text);
+  color: var(--oct-text-2);
   cursor: pointer;
-  transition: all var(--oct-dur-base) var(--oct-ease);
+  transition: var(--oct-transition-colors);
 }
 
 .tool-btn:hover {
-  background: var(--oct-surface-2);
+  border-color: var(--oct-border-strong);
+  color: var(--oct-text);
 }
 
 .tool-btn.active {
@@ -273,10 +273,11 @@ h1 {
 /* --- Panel --- */
 .panel {
   background: var(--oct-surface);
+  border: 1px solid var(--oct-border);
   border-radius: var(--oct-radius-md);
-  padding: var(--oct-sp-5);
+  padding: var(--oct-sp-4);
   margin-bottom: var(--oct-sp-4);
-  box-shadow: var(--oct-shadow-sm);
+  box-shadow: none;
 }
 
 .panel-title {
@@ -385,18 +386,18 @@ h1 {
 .result-status {
   font-size: var(--oct-fs-sm);
   font-weight: var(--oct-fw-semibold);
-  padding: 2px 10px;
-  border-radius: var(--oct-radius-pill);
+  padding: 0;
+  border-radius: 0;
 }
 
 .result-status.success {
-  background: var(--oct-success);
-  color: #fff;
+  color: var(--oct-success);
+  background: transparent;
 }
 
 .result-status.error {
-  background: var(--oct-danger);
-  color: #fff;
+  color: var(--oct-danger);
+  background: transparent;
 }
 
 .result-time {
@@ -468,9 +469,10 @@ h1 {
 /* --- History Sidebar --- */
 .history-panel {
   background: var(--oct-surface);
+  border: 1px solid var(--oct-border);
   border-radius: var(--oct-radius-md);
-  padding: var(--oct-sp-4);
-  box-shadow: var(--oct-shadow-sm);
+  padding: var(--oct-sp-3);
+  box-shadow: none;
 }
 
 .history-title {
@@ -534,18 +536,18 @@ h1 {
 .history-item-status {
   font-size: var(--oct-fs-xs);
   font-weight: var(--oct-fw-semibold);
-  padding: 1px 6px;
-  border-radius: var(--oct-radius-pill);
+  padding: 0;
+  border-radius: 0;
 }
 
 .history-item-status.success {
-  background: var(--oct-success);
-  color: #fff;
+  color: var(--oct-success);
+  background: transparent;
 }
 
 .history-item-status.error {
-  background: var(--oct-danger);
-  color: #fff;
+  color: var(--oct-danger);
+  background: transparent;
 }
 
 .history-empty {
