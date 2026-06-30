@@ -43,11 +43,8 @@ import androidx.compose.ui.unit.sp
 import com.apk.claw.android.R
 import com.apk.claw.android.octopus_mobile.browser.SearchEngines
 import com.apk.claw.android.ui.browser.BrowserActivity
-import com.apk.claw.android.ui.compose.component.LiquidGlassLayer
 import com.apk.claw.android.ui.compose.theme.OctopusBackground
 import com.apk.claw.android.ui.compose.theme.OctopusColors
-import com.apk.claw.android.ui.compose.theme.OctopusGlass
-import com.apk.claw.android.ui.compose.theme.OctopusGlassMaterial
 import com.apk.claw.android.ui.compose.theme.OctopusIconSize
 import com.apk.claw.android.ui.compose.theme.OctopusLayout
 import com.apk.claw.android.ui.compose.theme.OctopusShape
@@ -490,22 +487,14 @@ private fun GlassPanel(
     modifier: Modifier = Modifier,
     shape: RoundedCornerShape,
     contentPadding: androidx.compose.ui.unit.Dp = OctopusSpacing.md,
-    blurRadius: androidx.compose.ui.unit.Dp = OctopusGlass.blurRadius,
     content: @Composable () -> Unit,
 ) {
     Box(
         modifier = modifier
             .clip(shape)
-            .border(1.dp, Color.White.copy(alpha = 0.54f), shape)
+            .background(OctopusBackground.cardSurface, shape)
+            .border(0.5.dp, OctopusBackground.glassBorder, shape)
     ) {
-        LiquidGlassLayer(
-            shape = shape,
-            blurRadius = blurRadius,
-            tint = Color.White.copy(alpha = if (OctopusColors.isLight) 0.32f else 0.12f),
-            highlightIntensity = OctopusGlass.highlightIntensity * 1.04f,
-            material = OctopusGlassMaterial.Card,
-            modifier = Modifier.matchParentSize(),
-        )
         Box(modifier = Modifier.padding(contentPadding)) {
             content()
         }

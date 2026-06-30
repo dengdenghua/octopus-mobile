@@ -1369,7 +1369,7 @@ private fun UserBubble(text: String) {
             Surface(
                 shape = OctopusShape.userBubble,
                 color = UserBubbleColor,
-                shadowElevation = 1.dp,
+                shadowElevation = 0.dp,
                 modifier = Modifier
                     .widthIn(max = maxBubbleWidth)
                     .combinedClickable(onClick = {}, onLongClick = { menu = true }),
@@ -1421,8 +1421,7 @@ private fun AgentBubble(text: String) {
             modifier = Modifier.widthIn(max = maxBubbleWidth),
             shape = OctopusShape.agentBubble,
             color = AgentBubbleColor,
-            border = BorderStroke(1.dp, BorderColor),
-            shadowElevation = 1.dp,
+            shadowElevation = 0.dp,
         ) {
             Column(
                 modifier = Modifier.padding(horizontal = OctopusSpacing.lg, vertical = OctopusSpacing.md),

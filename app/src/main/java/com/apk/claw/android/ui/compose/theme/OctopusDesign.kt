@@ -182,20 +182,20 @@ object OctopusTints {
  * 注意：原 OctopusShape（裸 Dp）已废弃，请使用本对象的 RoundedCornerShape 字段。
  */
 object OctopusShape {
-    val small = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
-    val medium = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
-    val large = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
-    val xl = androidx.compose.foundation.shape.RoundedCornerShape(20.dp)
+    val small = androidx.compose.foundation.shape.RoundedCornerShape(6.dp)
+    val medium = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+    val large = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
+    val xl = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
     val capsule = androidx.compose.foundation.shape.RoundedCornerShape(50)
 
     /** 向后兼容：原 OctopusShape.Card/Panel/Control 的 Dp 值 */
-    val Card = 16.dp
-    val Panel = 20.dp
-    val Control = 12.dp
+    val Card = 10.dp
+    val Panel = 12.dp
+    val Control = 8.dp
 
-    /** 对话气泡专用：大半圆 + 小尾角 */
-    val agentBubble = androidx.compose.foundation.shape.RoundedCornerShape(16.dp, 16.dp, 16.dp, 4.dp)
-    val userBubble = androidx.compose.foundation.shape.RoundedCornerShape(16.dp, 16.dp, 4.dp, 16.dp)
+    /** 对话气泡：统一圆角，无尾角，扁平化 */
+    val agentBubble = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
+    val userBubble = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
 }
 
 /**
@@ -297,15 +297,15 @@ object OctopusBackground {
  * 普通半透明磨砂。页面组件默认读取这里，也可以在单个组件上传入参数微调。
  */
 object OctopusGlass {
-    // 复用 octopus-agent 液态玻璃参数(--global-glass-blur: 24px),更液态。
-    val defaultBlurRadius: Dp = 24.dp
+    // 扁平化：减小模糊半径，弱化液态玻璃效果
+    val defaultBlurRadius: Dp = 8.dp
 
     private val _blurRadius = mutableStateOf(defaultBlurRadius)
     private val _quality = mutableStateOf(OctopusGlassQuality.High)
     private val _refraction = mutableStateOf(1f)
     private val _highlight = mutableStateOf(1f)
     private val _noise = mutableStateOf(1f)
-    private val _animationEnabled = mutableStateOf(true)
+    private val _animationEnabled = mutableStateOf(false)
 
     var blurRadius: Dp
         get() = _blurRadius.value

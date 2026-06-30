@@ -413,34 +413,19 @@ fun GlassCard(
     content: @Composable BoxScope.() -> Unit,
 ) {
     val shape = OctopusShape.large
-    val press = rememberGlassPressState(enabled = onClick != null)
     Box(
         modifier = modifier
-            .graphicsLayer {
-                scaleX = press.scale
-                scaleY = press.scale
-            }
-            .then(press.touchModifier)
             .clip(shape)
-            .border(1.dp, OctopusBackground.glassBorder, shape)
+            .background(OctopusBackground.cardSurface)
+            .border(0.5.dp, OctopusBackground.glassBorder, shape)
             .then(
                 if (onClick != null) Modifier.clickable(
-                    interactionSource = press.interactionSource,
+                    interactionSource = null,
                     indication = null,
                     onClick = onClick,
                 ) else Modifier
             ),
     ) {
-        LiquidGlassLayer(
-            shape = shape,
-            blurRadius = blurRadius,
-            highlightIntensity = OctopusGlass.highlightIntensity * press.boost,
-            refractionBoost = press.boost,
-            focalX = press.focalX,
-            focalY = press.focalY,
-            material = OctopusGlassMaterial.Card,
-            modifier = Modifier.matchParentSize(),
-        )
         content()
     }
 }
@@ -452,56 +437,33 @@ fun GlassPill(
     tint: Color,
     modifier: Modifier = Modifier,
     selected: Boolean = false,
-    blurRadius: Dp = OctopusGlass.subtleBlurRadius,
     onClick: () -> Unit,
 ) {
-    val press = rememberGlassPressState()
-    Box(
+    Row(
         modifier = modifier
-            .graphicsLayer {
-                scaleX = press.scale
-                scaleY = press.scale
-            }
-            .then(press.touchModifier)
             .clip(OctopusShape.capsule)
+            .background(
+                if (selected) tint.copy(alpha = 0.20f) else tint.copy(alpha = 0.12f),
+            )
             .border(
                 1.dp,
-                if (selected) tint.copy(alpha = 0.42f) else OctopusBackground.glassBorder,
+                if (selected) tint.copy(alpha = 0.55f) else tint.copy(alpha = 0.45f),
                 OctopusShape.capsule,
             )
-            .clickable(
-                interactionSource = press.interactionSource,
-                indication = null,
-                onClick = onClick,
-            ),
+            .clickable(onClick = onClick)
+            .padding(horizontal = OctopusSpacing.md, vertical = OctopusSpacing.sm),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
     ) {
-        LiquidGlassLayer(
-            shape = OctopusShape.capsule,
-            blurRadius = blurRadius,
-            tint = if (selected) tint.copy(alpha = 0.20f)
-            else Color.White.copy(alpha = if (OctopusColors.isLight) 0.46f else 0.10f),
-            highlightIntensity = (if (selected) OctopusGlass.highlightIntensity * 1.1f else OctopusGlass.highlightIntensity) * press.boost,
-            refractionBoost = press.boost,
-            focalX = press.focalX,
-            focalY = press.focalY,
-            material = OctopusGlassMaterial.Thin,
-            modifier = Modifier.matchParentSize(),
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(OctopusIconSize.small))
+        Spacer(Modifier.width(OctopusSpacing.xs))
+        Text(
+            text,
+            color = if (selected) tint else OctopusColors.TextSecondary,
+            fontSize = OctopusType.label,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
         )
-        Row(
-            modifier = Modifier.padding(horizontal = OctopusSpacing.md, vertical = OctopusSpacing.sm),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center,
-        ) {
-            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(OctopusIconSize.small))
-            Spacer(Modifier.width(OctopusSpacing.xs))
-            Text(
-                text,
-                color = if (selected) tint else OctopusColors.TextSecondary,
-                fontSize = OctopusType.label,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-            )
-        }
     }
 }
 
@@ -555,7 +517,6 @@ fun GlassTextPill(
 fun GlassBottomSheet(
     modifier: Modifier = Modifier,
     maxHeight: Dp? = null,
-    blurRadius: Dp = OctopusGlass.liquidBlurRadius,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Box(
@@ -563,16 +524,9 @@ fun GlassBottomSheet(
             .fillMaxWidth()
             .then(if (maxHeight != null) Modifier.heightIn(max = maxHeight) else Modifier)
             .clip(OctopusShape.xl)
+            .background(OctopusBackground.cardSurface)
             .border(1.dp, OctopusBackground.glassBorder, OctopusShape.xl),
     ) {
-        LiquidGlassLayer(
-            shape = OctopusShape.xl,
-            blurRadius = blurRadius,
-            tint = OctopusColors.SurfaceDeep.copy(alpha = if (OctopusColors.isLight) 0.86f else 0.78f),
-            highlightIntensity = OctopusGlass.highlightIntensity * 1.08f,
-            material = OctopusGlassMaterial.Sheet,
-            modifier = Modifier.matchParentSize(),
-        )
         Column(
             modifier = Modifier
                 .fillMaxWidth()
