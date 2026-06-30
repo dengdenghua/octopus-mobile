@@ -145,7 +145,8 @@
         <activity android:name=".ui.featurescreens.AuditLogActivity" android:exported="false" />
         <activity android:name=".ui.featurescreens.ActivityActivity" android:exported="false" />
         <activity android:name=".ui.featurescreens.RoutinesActivity" android:exported="false" />
-        <activity android:name=".ui.featurescreens.ExtensionsActivity" android:exported="false" />
+        <activity android:name=".plugin.MiniAppActivity" android:exported="false" />
+        <activity android:name=".ui.featurescreens.MiniAppListActivity" android:exported="false" />
         <activity android:name=".ui.featurescreens.SkillsActivity" android:exported="false" />
         <activity android:name=".ui.featurescreens.ChannelsActivity" android:exported="false" />
         <activity android:name=".ui.featurescreens.WeChatLoginActivity" android:exported="false" />

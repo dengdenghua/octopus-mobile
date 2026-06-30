@@ -221,6 +221,8 @@ class BrainModeSelector(
                     .getInstance()
                     ?.takeScreenshot(2000L)
             },
+            // 技能商城:已安装(指令型)技能注入系统上下文,与内置工具并存、不进工具列表。
+            extraSystemContext = com.apk.claw.android.registry.RegistrySkillStore.knowledgeBlock(context),
         )
     }
 

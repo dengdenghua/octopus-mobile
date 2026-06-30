@@ -96,6 +96,9 @@ open class ClawApplication : BaseApp() {
         ToolRegistry.getInstance().registerAllTools(deviceType)
         // 注入 Application Context 供审批弹窗使用
         ToolRegistry.getInstance().appContext = this
+        // 加载插件生态:dex 工具(assets 签名)+ 非 dex 的 browser-script/tool/mini-app。
+        // assets-only fail-closed,无插件时为廉价 no-op。详见 PLUGIN_ECOSYSTEM.md。
+        runCatching { pluginManager.loadAll() }.onFailure { XLog.e(TAG, "pluginManager.loadAll failed", it) }
         XLog.e(TAG, "ClawApplication initialized | device=${DeviceUtils.getDeviceDescription(this)} | tools=${ToolRegistry.getInstance().getAllTools().size}")
 
         // Shizuku 增强层初始化（监听 Binder 到达/死亡）

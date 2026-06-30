@@ -1,0 +1,10 @@
+{
+  "id": "demo-clock",
+  "type": "mini-app",
+  "name": "示例小程序·我的 IP",
+  "version": "1.0.0",
+  "description": "mini-app 示例:一个 H5 小程序,通过 octopus.callTool 桥调用 get_my_ip 工具并展示出口 IP。",
+  "author": "Octopus Team",
+  "page": "index.html",
+  "allow_tools": ["get_my_ip"]
+}

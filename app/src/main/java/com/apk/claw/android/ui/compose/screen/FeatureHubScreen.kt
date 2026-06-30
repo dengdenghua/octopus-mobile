@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Close
@@ -88,9 +89,9 @@ import com.apk.claw.android.ui.compose.theme.OctopusType
 import com.apk.claw.android.ui.featurescreens.BrowserSettingsActivity
 import com.apk.claw.android.ui.featurescreens.CloudDriveActivity
 import com.apk.claw.android.ui.featurescreens.EvolutionActivity
-import com.apk.claw.android.ui.featurescreens.ExtensionsActivity
 import com.apk.claw.android.ui.featurescreens.MemoryActivity
 import com.apk.claw.android.ui.featurescreens.MultiWindowActivity
+import com.apk.claw.android.ui.featurescreens.MiniAppListActivity
 import com.apk.claw.android.ui.featurescreens.RoutinesActivity
 import com.apk.claw.android.ui.featurescreens.SkillsActivity
 import com.apk.claw.android.ui.featurescreens.TrustCenterActivity
@@ -144,7 +145,7 @@ private val sampleCircles = listOf(
 private fun featureSections(): List<Pair<Int, List<FeatureItem>>> = listOf(
     R.string.feat_section_automation to listOf(
         FeatureItem(R.string.feat_skills, R.string.feat_skills_desc, Icons.Filled.Bolt, SkillTint, SkillsActivity::class.java),
-        FeatureItem(R.string.feat_extensions, R.string.feat_extensions_desc, Icons.Filled.Extension, PluginTint, ExtensionsActivity::class.java),
+        FeatureItem(R.string.feat_miniapps, R.string.feat_miniapps_desc, Icons.Filled.Apps, PluginTint, MiniAppListActivity::class.java),
         FeatureItem(R.string.feat_routines, R.string.feat_routines_desc, Icons.Filled.Schedule, RoutineTint, RoutinesActivity::class.java),
     ),
     R.string.feat_section_data to listOf(
@@ -164,6 +165,7 @@ private fun featureSections(): List<Pair<Int, List<FeatureItem>>> = listOf(
 fun FeatureHubScreen(
     onNavigateToAgentSquare: () -> Unit = {},
     onNavigateToUniverse: () -> Unit = {},
+    onNavigateToSkillMarketplace: () -> Unit = {},
 ) {
     val ctx = LocalContext.current
     var tab by remember { mutableStateOf(0) }
@@ -190,7 +192,7 @@ fun FeatureHubScreen(
                     onNavigateToUniverse = onNavigateToUniverse,
                     onOpenPost = { selectedPost = it },
                 )
-                else -> ToolboxTab(sections) { ctx.open(it.target) }
+                else -> ToolboxTab(sections, onNavigateToSkillMarketplace) { ctx.open(it.target) }
             }
         }
 
@@ -855,7 +857,11 @@ private fun ExploreEntryCard(icon: ImageVector, tint: Color, title: String, desc
 // ── 工具箱 Tab ──────────────────────────────────────────
 
 @Composable
-private fun ToolboxTab(sections: List<Pair<Int, List<FeatureItem>>>, onClick: (FeatureItem) -> Unit) {
+private fun ToolboxTab(
+    sections: List<Pair<Int, List<FeatureItem>>>,
+    onMarket: () -> Unit,
+    onClick: (FeatureItem) -> Unit,
+) {
     LazyVerticalGrid(
         columns = GridCells.Fixed(2),
         modifier = Modifier.fillMaxSize(),
@@ -868,6 +874,16 @@ private fun ToolboxTab(sections: List<Pair<Int, List<FeatureItem>>>, onClick: (F
         horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.md),
         verticalArrangement = Arrangement.spacedBy(OctopusSpacing.md),
     ) {
+        // 技能商城入口(整行):云端按需下载技能,与内置并存
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            ExploreEntryCard(
+                icon = Icons.Filled.Extension,
+                tint = SkillTint,
+                title = stringResource(R.string.skill_marketplace_title),
+                desc = stringResource(R.string.skill_marketplace_entry_desc),
+                onClick = onMarket,
+            )
+        }
         sections.forEach { (headerRes, items) ->
             item(span = { GridItemSpan(maxLineSpan) }) { SectionHeader(stringResource(headerRes)) }
             items(items, key = { it.labelRes }) { item -> ToolCard(item) { onClick(item) } }

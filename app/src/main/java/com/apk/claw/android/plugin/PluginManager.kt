@@ -2,6 +2,7 @@ package com.apk.claw.android.plugin
 
 import android.content.Context
 import android.util.Log
+import com.apk.claw.android.octopus_mobile.browser.BrowserPluginHost
 import com.apk.claw.android.octopus_mobile.safety.SafetyGate
 import com.apk.claw.android.tool.ToolRegistry
 import java.io.File
@@ -197,13 +198,70 @@ class PluginManager(private val context: Context) {
     }
 
     /**
-     * 自动加载所有发现的插件。
+     * 自动加载所有发现的插件（dex 工具 + 非 dex 的 browser-script/tool/mini-app）。
      */
     fun loadAll() {
         discoverPlugins()
         for (pluginId in discoveredPlugins.keys.toList()) {
             loadAndRegister(pluginId)
         }
+        loadNonDexPlugins()
+    }
+
+    /**
+     * 加载非 dex 类型插件:browser-script / tool / mini-app。
+     *
+     * 安全(与 dex 同口径 fail-closed):**只信任 assets(随签名 APK 打包)的非 dex 插件**。
+     * 外部 files 源的注入脚本/小程序会执行 JS(可碰登录态页面),在签名/校验落地前一律不加载。
+     * registry 下载路径已 sha256 校验,未来可作为"可信 files 源"放开。
+     */
+    private fun loadNonDexPlugins() {
+        val manifests = scanAssetsManifests().filter { it.type != "dex" }
+        if (manifests.isEmpty()) {
+            // 即便没有插件,也清空一次,保证停用即时生效
+            BrowserPluginHost.setPlugins(emptyList())
+            BrowserPluginHost.setBlockRules(emptyList())
+            MiniAppRegistry.set(emptyList())
+            return
+        }
+
+        // browser-script → BrowserPluginHost
+        val scripts = manifests.filter { it.type == "browser-script" }
+        BrowserPluginHost.setPlugins(scripts.map { m ->
+            BrowserPluginHost.InjectPlugin(
+                id = m.id, name = m.name, hostPattern = m.hostPattern, js = m.js, enabled = true
+            )
+        })
+        BrowserPluginHost.setBlockRules(scripts.flatMap { it.blockRules })
+
+        // tool → 声明式工具注册进 ToolRegistry
+        manifests.filter { it.type == "tool" }.forEach { m ->
+            runCatching { ToolRegistry.registerPluginTool(DeclarativePluginTool(m)) }
+                .onFailure { Log.e(TAG, "register declarative tool failed: ${m.id}", it) }
+        }
+
+        // mini-app → 注册表(供宫格启动)
+        MiniAppRegistry.set(manifests.filter { it.type == "mini-app" })
+
+        Log.i(TAG, "Non-dex plugins: ${scripts.size} browser-script, " +
+            "${manifests.count { it.type == "tool" }} tool, ${manifests.count { it.type == "mini-app" }} mini-app")
+    }
+
+    /** 扫描 assets/plugins 下所有 manifest（不要求 dex 文件存在）。 */
+    private fun scanAssetsManifests(): List<PluginManifest> {
+        val out = mutableListOf<PluginManifest>()
+        try {
+            context.assets.list(ASSETS_PLUGIN_DIR)?.forEach { dir ->
+                runCatching {
+                    context.assets.open("$ASSETS_PLUGIN_DIR/$dir/manifest.json").use { s ->
+                        PluginManifest.fromStream(s)?.let { out.add(it) }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.d(TAG, "No assets plugins dir: ${e.message}")
+        }
+        return out
     }
 
     // ── 内部扫描方法 ─────────────────────────────────
@@ -217,6 +275,9 @@ class PluginManager(private val context: Context) {
                     val manifest = context.assets.open(manifestPath).use { stream ->
                         PluginManifest.fromStream(stream)
                     } ?: continue
+
+                    // 非 dex 类型(browser-script/tool/mini-app)不走 dex 加载,由 loadNonDexPlugins 处理
+                    if (manifest.type != "dex") continue
 
                     // assets 中的 dex 需要先复制到 filesDir
                     val pluginDir = File(context.filesDir, "$FILES_PLUGIN_DIR/${manifest.id}")
@@ -249,6 +310,9 @@ class PluginManager(private val context: Context) {
             if (!manifestFile.exists()) return@forEach
 
             val manifest = PluginManifest.fromStream(manifestFile.inputStream()) ?: return@forEach
+
+            // 非 dex 类型由 loadNonDexPlugins 处理(但当前仅信任 assets 源,files 非 dex 不加载)
+            if (manifest.type != "dex") return@forEach
 
             // 不覆盖已发现的 assets 插件
             if (discoveredPlugins.containsKey(manifest.id)) return@forEach
