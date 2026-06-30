@@ -38,11 +38,16 @@ class OctopusBridge(private val manifest: PluginManifest) {
         return err("pay bridge not wired yet")
     }
 
-    /** 设备自动化(受 allowDevice + 用户授予)。扩展点:接无障碍/Shizuku;未接通前显式拒绝。 */
+    /** 设备自动化(受 allowDevice + 用户授予):直接派发到 ToolRegistry(cap 即工具名)。 */
     @JavascriptInterface
     fun deviceAutomate(cap: String, argsJson: String?): String {
         if (!PermissionGate.allowDevice(manifest, cap)) return err("device cap not granted: $cap")
-        return err("device bridge not wired yet")
+        val args: Map<String, Any> = runCatching {
+            val o = org.json.JSONObject(argsJson ?: "{}")
+            o.keys().asSequence().associateWith { o.get(it) }
+        }.getOrElse { emptyMap() }
+        val r = ToolRegistry.executeTool(cap, args)
+        return if (r.isSuccess) ok(r.data ?: "") else err(r.error ?: "device tool failed")
     }
 
     private fun ok(data: String) = JSONObject().put("ok", true).put("data", data).toString()
