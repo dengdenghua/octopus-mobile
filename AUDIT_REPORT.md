@@ -192,11 +192,12 @@
 ## 5. 优先修复清单 (Prioritized Remediation)
 
 ### P0 — 立即（远程接管 / 全账号伪造级）
-- [ ] **聊天渠道发送者白名单**（R1）：`ChannelSetup.onMessageReceived` 强制按渠道身份鉴权，空列表默认拒绝 / 一次性配对绑定。
-- [ ] **高危工具强制闸门**（R2）：`ToolRegistry.executeTool` 对 `DANGEROUS`/`RISK_HIGH` 工具返回 HUMAN_GATE/BLOCK；接入 `PathGuard`（FileOps 等）与 `UrlGuard`（Navigate/InstallExtension）。
+- [x] **聊天渠道发送者白名单**（R1）：已修复（ACL 默认启用 + 空 senderId fail-closed；TOFU 首个发送者绑定 owner，待后续配对码方案）。
+- [x] **高危工具强制闸门**（R2）：已修复（`ToolRegistry.executeTool` 对不可信来源 + HIGH 风险走 BLOCK/CONFIRM/ALLOW；MEDIUM 在 ProactiveRuleEngine 中走 CONFIRM；`PathGuard` 已修分隔符边界）。
 - [x] **Relay JWT_SECRET 启动断言**（R10）：已修复。生产环境未设 JWT_SECRET 时拒绝启动，非生产环境生成随机密钥。
 - [ ] **Shizuku 命令注入**（R7）：`searchByContent`/`findDuplicateFiles`/`putSetting` 改 argv 或 `sanitizeShellArg`，`basePath` 强制 `/sdcard` 校验。
 - [ ] **母体 WS 加固**（R3/R4）：强制 wss + 证书 pin、ONLINE 前服务端身份校验、拒绝握手前 `tool/execute`、config-sync 键白名单。
+- [x] **主动规则引擎闸门**（R12）：已修复。`executeRule` 按风险分层（HIGH 拒绝 / MEDIUM 确认 / LOW 放行）；`sms_code_copy` 改为 `NOTIFY_USER` 消除验证码外泄面。
 
 ### P1 — 高优先（同网段 / 内嵌浏览器接管）
 - [ ] **停止广播控制 token**（R5）：改配对握手；拒绝 ip 与 UDP 源不符的 beacon。
@@ -223,12 +224,16 @@
 
 查漏阶段对 12 维度未覆盖的子系统做了抽查，发现 **1 条被完全漏审的高危路径**，应补入 P0/P1：
 
-### R12 — 主动规则引擎：不可信触发（通知/短信/屏幕文本）→ 无防护直接执行任意工具 ⭐ 补录
+### R12 — 主动规则引擎：不可信触发（通知/短信/屏幕文本）→ 无防护直接执行任意工具 ⭐ 补录 ✅ FIXED
 **严重度：High～Critical（confirmed via spot-check）**
-**受影响文件**：`octopus_mobile/proactive/ProactiveRuleEngine.kt:195`（执行）、`:254`（规则反序列化）、`:235`（内置 `sms_code_copy` 规则）、`octopus_mobile/proactive/NotificationRelayService.kt`（触发源）
-**攻击场景**：`executeRule()` 直接 `toolRegistry.executeTool(rule.action.toolName, rule.action.toolParams)`，**绕过 agent、SafetyGate、人工确认**。规则经 Gson 从 MMKV 反序列化，`toolName/toolParams` 完全可控；触发文本来自**不可信源**——任意 App 推送的通知（`onNotification`）、收到的短信（`onSmsReceived`）、屏幕文本（`onScreenChanged`）。即「攻击者发一条匹配某 regex 的通知/短信 → 自动执行任意已注册工具（`send_sms`/`send_intent`/`file_ops`…）」。这是一条无需任何渠道/网络入口、单条推送即可触发的工具执行链，与 R1/R2 同根（汇聚点缺强制矩阵）但触发面更隐蔽。
-**附带隐患**：内置规则 `sms_code_copy` 把任意验证码短信自动 `set_clipboard`，本身即验证码外泄面（其他读剪贴板的 App 可取）。
-**修复建议**：`ProactiveRuleEngine.executeRule` 走与 R2 相同的强制风险闸门；规则动作工具限定到安全只读白名单；不可信触发源驱动的高危工具必须人工确认；移除/收敛 `sms_code_copy` 自动复制验证码。
+**状态**：已修复。`ProactiveRuleEngine.executeRule` 现在按风险分层闸门：
+- HIGH 风险工具（send_sms / send_intent / file_ops 等）在非高级自动化模式下直接拒绝（已有）
+- MEDIUM 风险工具（tap / swipe / input_text / clipboard / open_app 等）在非高级自动化模式下走 `ApprovalFlow.requestApproval` 人工确认（30s 超时拒绝）
+- LOW 风险工具（只读/观察类）自动放行
+- 高级自动化模式开启时全部放行
+- 所有执行路径仍包在 `ToolRegistry.withUntrustedSource{}` 中走不可信来源闸门
+- 内置规则 `sms_code_copy` 从 `EXECUTE_AND_NOTIFY clipboard set` 改为 `NOTIFY_USER`：不再自动复制验证码到剪贴板（消除验证码外泄面），仅通知用户验证码内容由用户手动复制
+**受影响文件**：`octopus_mobile/proactive/ProactiveRuleEngine.kt:218-287`（executeRule 风险分层）、`:129-168`（onSmsReceived sms_code_copy 特殊处理）、`:327-340`（内置规则定义）
 
 ### 其余抽查结论（需补审 / 基本干净）
 - **`media/CloudDriveManager.kt` + `WebDAVScanner.kt`（部分真实，需补审）**：CD2 密码与 WebDAV basic-auth 凭据明文存 MMKV（secrets 维度只统计了 channel/LLM token，**漏了这两类**）；`WebDAVScanner` `followRedirects(true)` + 配置驱动的 `baseUrl` + 全局 cleartext = 一条未被 `UrlGuard` 覆盖的 SSRF/重定向面，`scanRecursive` 无 host 校验可指向内网。`start()` 的 `cd ... && nohup ... &` 命令受 R7 误杀 filter 影响，提示该路径从未真正执行验证。

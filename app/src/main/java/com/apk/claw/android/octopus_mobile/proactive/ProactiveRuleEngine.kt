@@ -1,6 +1,7 @@
 package com.apk.claw.android.octopus_mobile.proactive
 
 import android.util.Log
+import com.apk.claw.android.octopus_mobile.safety.ApprovalFlow
 import com.apk.claw.android.octopus_mobile.safety.ToolRiskPolicy
 import com.apk.claw.android.tool.ToolRegistry
 import com.apk.claw.android.tool.ToolResult
@@ -134,8 +135,10 @@ class ProactiveRuleEngine(
             if (!matchPattern(rule.trigger.pattern, combined)) continue
             if (!checkCooldown(rule)) continue
 
-            // 验证码复制规则：从短信正文动态提取验证码，注入 clipboard 的 text 参数（静态规则参数无法做到）。
-            val overrides: Map<String, Any>? = if (rule.id == "sms_code_copy") {
+            // 验证码通知规则(R12 安全收敛):
+            // 原行为是自动复制到剪贴板(EXECUTE clipboard set),但其他 App 可读剪贴板 → 验证码外泄面。
+            // 改为仅通知用户验证码内容,由用户手动复制。
+            if (rule.id == "sms_code_copy") {
                 val code = extractVerificationCode(body)
                 if (code == null) {
                     results.add(TriggerResult(
@@ -144,10 +147,22 @@ class ProactiveRuleEngine(
                     ))
                     continue
                 }
-                mapOf("action" to "set", "text" to code)
-            } else null
+                // 更新冷却时间
+                val idx = rules.indexOfFirst { it.id == rule.id }
+                if (idx >= 0) {
+                    rules[idx] = rule.copy(lastTriggeredAt = System.currentTimeMillis())
+                }
+                results.add(TriggerResult(
+                    ruleId = rule.id,
+                    ruleName = rule.name,
+                    actionTaken = false,
+                    toolResult = null,
+                    message = "📋 收到验证码: $code (请手动复制)",
+                ))
+                continue
+            }
 
-            results.add(executeRule(rule, overrides))
+            results.add(executeRule(rule))
         }
         return results
     }
@@ -209,34 +224,69 @@ class ProactiveRuleEngine(
 
         return when (rule.action.type) {
             ActionType.EXECUTE_TOOL, ActionType.EXECUTE_AND_NOTIFY -> {
-                // 安全(R12)：主动规则由不可信触发源(通知/短信/屏幕文本)自动触发，
-                // 禁止自动执行高危工具(send_sms / send_intent / file_ops / install_app 等)。
-                // 「高级自动化模式」开启时放行（专用自动化设备满血）。
-                if (ToolRiskPolicy.riskOf(rule.action.toolName) == ToolRiskPolicy.RISK_HIGH
-                    && !KVUtils.isAdvancedAutomationMode()) {
-                    Log.w(TAG, "[Proactive] 拒绝自动执行高危工具: ${rule.action.toolName} (规则: ${rule.name})")
-                    TriggerResult(
-                        ruleId = rule.id,
-                        ruleName = rule.name,
-                        actionTaken = false,
-                        toolResult = null,
-                        message = "⚠ ${rule.name}: 高危工具「${rule.action.toolName}」不允许由主动规则自动执行"
-                    )
-                } else {
-                    // 主动规则由不可信触发源(通知/短信/屏幕文本)自动触发，必须经 ToolRegistry 不可信来源闸门。
-                    // 注：中危工具在不可信来源下仅被「审计」，不拦截/确认（仅 HIGH 走来源闸门，已在上行拦截）；
-                    // paramOverrides 用于把运行时提取的值（如短信验证码）注入静态规则参数。
-                    val params = if (paramOverrides != null) rule.action.toolParams + paramOverrides else rule.action.toolParams
-                    val result = ToolRegistry.withUntrustedSource {
-                        toolRegistry.executeTool(rule.action.toolName, params)
+                // 安全(R12)：主动规则由不可信触发源(通知/短信/屏幕文本)自动触发。
+                // 风险闸门分层：
+                //  - HIGH 风险：非高级模式直接拒绝（send_sms / send_intent / file_ops 等）
+                //  - MEDIUM 风险：非高级模式走人工确认（tap / swipe / input_text / clipboard 等）
+                //  - LOW 风险：自动放行（只读/观察类）
+                //  「高级自动化模式」开启时全部放行（专用自动化设备满血）。
+                val risk = ToolRiskPolicy.riskOf(rule.action.toolName)
+                val advancedMode = KVUtils.isAdvancedAutomationMode()
+                val params = if (paramOverrides != null) rule.action.toolParams + paramOverrides else rule.action.toolParams
+
+                when {
+                    risk == ToolRiskPolicy.RISK_HIGH && !advancedMode -> {
+                        Log.w(TAG, "[Proactive] 拒绝自动执行高危工具: ${rule.action.toolName} (规则: ${rule.name})")
+                        TriggerResult(
+                            ruleId = rule.id,
+                            ruleName = rule.name,
+                            actionTaken = false,
+                            toolResult = null,
+                            message = "⚠ ${rule.name}: 高危工具「${rule.action.toolName}」不允许由主动规则自动执行"
+                        )
                     }
-                    TriggerResult(
-                        ruleId = rule.id,
-                        ruleName = rule.name,
-                        actionTaken = true,
-                        toolResult = result,
-                        message = if (result.isSuccess) "✓ ${rule.name}" else "✗ ${rule.name}: ${result.error}"
-                    )
+                    risk == ToolRiskPolicy.RISK_MEDIUM && !advancedMode -> {
+                        // 中危工具(tap/swipe/input_text/clipboard/open_app 等)由不可信触发源自动触发时,
+                        // 弹窗让设备前用户确认;无人值守(30s 超时)则拒绝。开启高级自动化模式可跳过。
+                        Log.i(TAG, "[Proactive] 中危工具请求确认: ${rule.action.toolName} (规则: ${rule.name})")
+                        val riskDesc = "中危工具 · 主动规则「${rule.name}」自动触发"
+                        val approved = ApprovalFlow.requestApproval(
+                            ToolRegistry.appContext, rule.action.toolName, params, riskDesc
+                        )
+                        if (!approved) {
+                            TriggerResult(
+                                ruleId = rule.id,
+                                ruleName = rule.name,
+                                actionTaken = false,
+                                toolResult = null,
+                                message = "⚠ ${rule.name}: 中危工具「${rule.action.toolName}」未被确认,已跳过"
+                            )
+                        } else {
+                            val result = ToolRegistry.withUntrustedSource {
+                                toolRegistry.executeTool(rule.action.toolName, params)
+                            }
+                            TriggerResult(
+                                ruleId = rule.id,
+                                ruleName = rule.name,
+                                actionTaken = true,
+                                toolResult = result,
+                                message = if (result.isSuccess) "✓ ${rule.name}" else "✗ ${rule.name}: ${result.error}"
+                            )
+                        }
+                    }
+                    else -> {
+                        // LOW 风险 或 高级自动化模式 → 直接执行(仍走不可信来源闸门审计)
+                        val result = ToolRegistry.withUntrustedSource {
+                            toolRegistry.executeTool(rule.action.toolName, params)
+                        }
+                        TriggerResult(
+                            ruleId = rule.id,
+                            ruleName = rule.name,
+                            actionTaken = true,
+                            toolResult = result,
+                            message = if (result.isSuccess) "✓ ${rule.name}" else "✗ ${rule.name}: ${result.error}"
+                        )
+                    }
                 }
             }
             ActionType.NOTIFY_USER -> {
@@ -275,14 +325,16 @@ class ProactiveRuleEngine(
     }
 
     private fun addBuiltinRules() {
-        // 验证码短信自动复制
+        // 验证码短信通知(R12 安全收敛):
+        // 原行为是自动复制到剪贴板(EXECUTE clipboard set),但其他 App 可读剪贴板 → 验证码外泄面。
+        // 改为仅通知用户验证码内容,由用户手动复制。onSmsReceived 中对此 id 做特殊处理。
         if (rules.none { it.id == "sms_code_copy" }) {
             rules.add(ProactiveRule(
                 id = "sms_code_copy",
-                name = "验证码短信自动复制",
+                name = "验证码短信通知",
                 trigger = Trigger(TriggerType.SMS_RECEIVED, "验证码|验证码|code|Code|COD"),
-                action = Action(ActionType.EXECUTE_AND_NOTIFY, "clipboard",
-                    mapOf("action" to "set", "text" to ""), notifyUser = true),
+                action = Action(ActionType.NOTIFY_USER, "",
+                    emptyMap(), notifyUser = true),
                 cooldownMs = 30_000,
             ))
         }
