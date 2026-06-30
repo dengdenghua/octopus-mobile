@@ -1,6 +1,5 @@
 package com.apk.claw.android.ui.featurescreens
 
-import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
@@ -11,8 +10,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -72,18 +69,6 @@ private fun BrowserSettingsScreen(onBack: () -> Unit) {
                 ) {
                     Text(stringResource(R.string.browser_settings_engine_kernel), color = FText, fontSize = 16.sp, modifier = Modifier.weight(1f))
                     Text(kernel, color = FMuted, fontSize = 14.sp)
-                }
-                RowDivider()
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth().clickable { ctx.startActivity(Intent(ctx, ExtensionsActivity::class.java)) }.padding(horizontal = 14.dp, vertical = 11.dp),
-                ) {
-                    Box(modifier = Modifier.size(34.dp).background(Color(0xFFEAB85C), RoundedCornerShape(9.dp)), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Filled.Extension, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
-                    }
-                    Spacer(Modifier.width(14.dp))
-                    Text(stringResource(R.string.feat_extensions), color = FText, fontSize = 16.sp, modifier = Modifier.weight(1f))
-                    Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = FMuted.copy(alpha = 0.7f), modifier = Modifier.size(20.dp))
                 }
             }
             Spacer(Modifier.height(24.dp))

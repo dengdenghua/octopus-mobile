@@ -14,9 +14,12 @@ import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 
 /**
@@ -89,18 +92,44 @@ class SystemWebViewEngine : BrowserEngine {
         // 仅 DEBUG 构建开启 WebView 远程调试，避免 release 版被 adb chrome://inspect 注入已登录会话。
         WebView.setWebContentsDebuggingEnabled(com.apk.claw.android.BuildConfig.DEBUG)
 
+        // 反检测 stealth 脚本:在「文档开始前」注入(早于页面脚本读取 navigator.webdriver 等)。
+        // 设备 WebView 支持 DOCUMENT_START_SCRIPT 时走 addDocumentStartJavaScript(可靠);
+        // 不支持则退回 onPageStarted 用 evaluateJavascript 注入(稍晚,兜底)。
+        val docStartSupported = WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)
+        if (docStartSupported) {
+            BrowserPluginHost.documentStartScript()?.let { js ->
+                runCatching { WebViewCompat.addDocumentStartJavaScript(webView, js, setOf("*")) }
+                    .onFailure { Log.w("SystemWebViewEngine", "addDocumentStartJavaScript failed: ${it.message}") }
+            }
+        }
+
         webView.webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
                 currentUrlValue = url
+                // doc-start 不支持时的 stealth 兜底注入(尽早,但可能晚于部分 head 脚本)
+                if (!docStartSupported) {
+                    BrowserPluginHost.documentStartScript()?.let { js -> view.evaluateJavascript(js, null) }
+                }
                 _events.tryEmit(EngineEvent.PageStarted)
             }
             override fun onPageFinished(view: WebView, url: String) {
+                // 注入匹配该域名的插件内容脚本(DOM 就绪后);自建插件生态的运行入口。
+                BrowserPluginHost.contentScriptsFor(url).forEach { js -> view.evaluateJavascript(js, null) }
                 _events.tryEmit(EngineEvent.PageFinished(url, view.title ?: ""))
             }
             override fun shouldOverrideUrlLoading(
                 view: WebView,
                 request: android.webkit.WebResourceRequest
             ): Boolean = false
+            override fun shouldInterceptRequest(
+                view: WebView,
+                request: android.webkit.WebResourceRequest
+            ): android.webkit.WebResourceResponse? {
+                // 拦截规则(广告/跟踪):命中则返回空响应丢弃该请求。运行在 WebView 工作线程,需快。
+                return if (BrowserPluginHost.shouldBlock(request.url?.toString())) {
+                    android.webkit.WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))
+                } else null
+            }
             override fun onReceivedError(
                 view: WebView,
                 request: android.webkit.WebResourceRequest,
@@ -201,7 +230,9 @@ class SystemWebViewEngine : BrowserEngine {
 
     override fun isAvailable(): Boolean = true
 
-    override val antiBotScore: Int = 50
+    // 注入 stealth 反检测脚本后,"是否 WebView/headless"类检测基本被打穿,反爬 50→70。
+    // 天花板仍是 TLS/JA3 指纹(JS 够不到),严防站走服务端匿名抓取兜底。
+    override val antiBotScore: Int = 70
 
     override val supportsExtensions: Boolean = false
 
@@ -217,7 +248,8 @@ class SystemWebViewEngine : BrowserEngine {
             userAgent = DESKTOP_CHROME_UA,
             supportsExtensions = false,
             antiBotScore = antiBotScore,
-            notes = "兜底引擎，0 包大。反爬免疫中（UA 已伪装为桌面 Chrome）"
+            notes = "0 包大。已注入 stealth 反检测(webdriver/UA/WebGL/plugins/permissions),反爬中上;" +
+                "TLS/JA3 指纹层走服务端兜底。扩展能力由自建注入式插件生态承载。"
         )
     }
 

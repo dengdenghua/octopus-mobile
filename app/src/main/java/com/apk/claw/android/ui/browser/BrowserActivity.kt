@@ -235,6 +235,8 @@ class BrowserActivity : BaseActivity() {
         useCustomWallpaper = prefs.getBoolean(KEY_USE_CUSTOM_WALLPAPER, false)
         isHomeVisible = prefs.getBoolean(KEY_HOME_VISIBLE, true)
 
+        // 注入式插件 + 拦截规则由 PluginManager 在 App 启动时统一加载进 BrowserPluginHost
+        // (assets 签名源,fail-closed)。stealth 反检测脚本内置,WebView 创建即带上。
         engine = BrowserEngineFactory.selectBest(this)
         Log.i(TAG, "Browser engine: ${engine.name}")
 
@@ -642,7 +644,6 @@ class BrowserActivity : BaseActivity() {
         }
         row(getString(R.string.browser_change_wallpaper)) { showWallpaperPicker() }
         row(getString(R.string.browser_bookmarks_button)) { showBookmarkDialog() }
-        row(getString(R.string.browser_extensions)) { showExtensionDialog() }
         row(getString(R.string.browser_copy_link)) {
             val cm = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
             cm.setPrimaryClip(android.content.ClipData.newPlainText("url", engine.currentUrl()))
@@ -1399,73 +1400,7 @@ class BrowserActivity : BaseActivity() {
             .show()
     }
 
-    // ── 扩展 Dialog ──
-
-    private fun showExtensionDialog() {
-        if (!engine.supportsExtensions) {
-            Toast.makeText(this, getString(R.string.browser_engine_no_extensions, engine.name), Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        val editText = EditText(this).apply {
-            hint = getString(R.string.browser_extension_xpi_hint)
-            setSingleLine(true)
-            setPadding(dp(SPACING_LG), dp(SPACING_MD), dp(SPACING_LG), dp(SPACING_MD))
-        }
-
-        AlertDialog.Builder(this)
-            .setTitle(getString(R.string.device_extensions))
-            .setMessage(getString(R.string.browser_extension_dialog_message))
-            .setView(editText)
-            .setPositiveButton(getString(R.string.browser_install_button)) { _, _ ->
-                val input = editText.text.toString().trim()
-                if (input.isNotEmpty()) installExtension(input)
-            }
-            .setNeutralButton(getString(R.string.browser_browse_amo_button)) { _, _ ->
-                navigateTo("https://addons.mozilla.org/zh-CN/android/")
-            }
-            .setNegativeButton(getString(R.string.common_cancel), null)
-            .show()
-    }
-
-    private fun installExtension(input: String) {
-        Toast.makeText(this, getString(R.string.browser_installing_extension), Toast.LENGTH_SHORT).show()
-        lifecycleScope.launch {
-            try {
-                val installer = com.apk.claw.android.octopus_mobile.browser.ExtensionInstaller(
-                    engine as com.apk.claw.android.octopus_mobile.browser.GeckoViewEngine,
-                    cacheDir
-                )
-                val result = if (input.length == 32 && !input.contains("/") && !input.contains(".")) {
-                    installer.installFromChromeWebStore(input)
-                } else {
-                    installer.installFromUrl(input)
-                }
-                when (result) {
-                    is com.apk.claw.android.octopus_mobile.browser.ExtensionInstaller.InstallResult.Success -> {
-                        Toast.makeText(
-                            this@BrowserActivity,
-                            getString(R.string.browser_install_success, result.extensionName, result.extensionVersion),
-                            Toast.LENGTH_LONG
-                        ).show()
-                    }
-                    is com.apk.claw.android.octopus_mobile.browser.ExtensionInstaller.InstallResult.Failed -> {
-                        Toast.makeText(
-                            this@BrowserActivity,
-                            getString(R.string.browser_install_failed, result.reason),
-                            Toast.LENGTH_LONG
-                        ).show()
-                    }
-                }
-            } catch (e: Exception) {
-                Toast.makeText(
-                    this@BrowserActivity,
-                    getString(R.string.browser_install_error, e.message),
-                    Toast.LENGTH_LONG
-                ).show()
-            }
-        }
-    }
+    // 浏览器扩展(WebExtension)随 GeckoView 一并移除;扩展能力改由自建注入式插件生态承载。
 
     // ── 辅助 ──
 

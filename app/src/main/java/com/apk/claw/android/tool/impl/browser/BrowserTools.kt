@@ -344,64 +344,11 @@ class InstallExtensionTool(
     )
 
     override fun execute(params: Map<String, Any>): ToolResult {
-        if (!engine.supportsExtensions) {
-            return ToolResult.error("Current engine (${engine.name}) does not support extensions. Switch to GeckoView engine.")
-        }
-
-        // 参数校验先于引擎类型检查：source 缺失/格式错误与引擎无关
-        val source = requireString(params, "source")
-        val name = optionalString(params, "name", "")
-        if (!source.startsWith("cws:") && !source.startsWith("url:") && !source.startsWith("amo:")) {
-            return ToolResult.error("Unknown source format. Use 'cws:<id>', 'url:<url>', or 'amo:<url>'")
-        }
-
-        if (engine !is com.apk.claw.android.octopus_mobile.browser.GeckoViewEngine) {
-            return ToolResult.error("Extension installation requires GeckoView engine. Current: ${engine.name}")
-        }
-
-        // 同步调用（BaseTool.execute 是同步的）
-        var installResult: com.apk.claw.android.octopus_mobile.browser.ExtensionInstaller.InstallResult? = null
-        val thread = Thread {
-            val installer = com.apk.claw.android.octopus_mobile.browser.ExtensionInstaller(
-                engine,
-                java.io.File(System.getProperty("java.io.tmpdir") ?: "/tmp")
-            )
-
-            installResult = when {
-                source.startsWith("cws:") -> {
-                    val extId = source.removePrefix("cws:")
-                    kotlinx.coroutines.runBlocking {
-                        installer.installFromChromeWebStore(extId)
-                    }
-                }
-                source.startsWith("url:") -> {
-                    val url = source.removePrefix("url:")
-                    kotlinx.coroutines.runBlocking {
-                        installer.installFromUrl(url)
-                    }
-                }
-                source.startsWith("amo:") -> {
-                    val url = source.removePrefix("amo:")
-                    kotlinx.coroutines.runBlocking {
-                        installer.installFromAmo(url)
-                    }
-                }
-                else -> {
-                    com.apk.claw.android.octopus_mobile.browser.ExtensionInstaller.InstallResult.Failed(
-                        "Unknown source format. Use 'cws:<id>', 'url:<url>', or 'amo:<url>'"
-                    )
-                }
-            }
-        }
-        thread.start()
-        thread.join(60000)  // 最多等 60 秒
-
-        return when (val result = installResult) {
-            is com.apk.claw.android.octopus_mobile.browser.ExtensionInstaller.InstallResult.Success ->
-                ToolResult.success("Extension installed: ${result.extensionName} v${result.extensionVersion} (id: ${result.extensionId})")
-            is com.apk.claw.android.octopus_mobile.browser.ExtensionInstaller.InstallResult.Failed ->
-                ToolResult.error("Extension install failed: ${result.reason}")
-            null -> ToolResult.error("Extension install timeout (60s)")
-        }
+        // WebExtension 安装能力随 GeckoView 一并移除(系统 WebView 无扩展机制)。
+        // 引擎统一不支持扩展,直接返回不支持;扩展类能力请走自建注入式插件生态。
+        return ToolResult.error(
+            "Browser extensions are not supported by the current engine (${engine.name}). " +
+                "WebExtension support was removed with GeckoView to shrink the app."
+        )
     }
 }

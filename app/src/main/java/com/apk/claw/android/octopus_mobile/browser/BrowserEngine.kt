@@ -5,29 +5,18 @@ import android.view.View
 import kotlinx.coroutines.flow.Flow
 
 /**
- * 浏览器引擎抽象 —— 方案 F "反爬免疫" 核心.
+ * 浏览器引擎抽象.
  *
- * 三种实现：
+ * 当前唯一实现：**SystemWebViewEngine**（Android 系统 WebView，基于 Chromium，0 包体）。
+ *   - 反爬免疫度：⚠️ 中（WebView 指纹）。提升路径:WebViewCompat.addDocumentStartJavaScript
+ *     在页面脚本执行前注入反检测脚本(navigator.webdriver / UA / WebGL / plugins …),
+ *     可把分数从 ~50 拉到 ~70;TLS/JA3 这层 JS 够不着,严防站走服务端匿名抓取兜底。
+ *   - 装扩展：❌ WebView 无 WebExtension。扩展能力改由**自建注入式插件生态**承载
+ *     (registry 的 mode=inject/kind=code 资产 = 内容脚本 JS + 拦截规则),宿主用
+ *     evaluateJavascript + shouldInterceptRequest 运行。
  *
- * 1. **GeckoViewEngine**（主力，Maven 一行依赖）
- *    - Mozilla GeckoView（Firefox 内核）
- *    - 反爬免疫度：✅ 高（Firefox 指纹，非 bot）
- *    - 装扩展：✅ WebExtension API（CRX 自动转 XPI）
- *    - 自包含：✅
- *
- * 2. **SystemWebViewEngine**（兜底，0 包大）
- *    - 用 Android System WebView（基于 Chromium）
- *    - 反爬免疫度：⚠️ 中（指纹是 WebView 不是 Chrome）
- *    - 装扩展：❌
- *
- * 3. **ChromiumWebViewEngine**（后备，需编译 AAR）
- *    - 自编译 Chromium WebView AAR
- *    - 反爬免疫度：✅ 高（完整 Chromium）
- *    - 装扩展：✅ CRX 直接 load
- *    - 编译见 runtime/chromium/AGENT_BUILD_BRIEF.md
- *
- * 引擎选择策略：ClawApplication 启动时按优先级探测：
- * 引擎实现可以位于任何模块 —— 不使用 `sealed` 是为了允许测试 / 第三方实现.
+ * 历史:曾有 GeckoViewEngine(Firefox 内核,反爬 90 + 真 WebExtension),因 ~180MB 体积
+ * (libxul.so 144MB)被移除。抽象层保留,便于未来按需下载引擎 / 第三方实现;不用 `sealed`。
  */
 interface BrowserEngine {
 
@@ -135,31 +124,14 @@ sealed class EngineEvent {
 object BrowserEngineFactory {
 
     /**
-     * 按优先级探测可用引擎，返回第一个.
+     * 返回浏览器引擎.
      *
-     * 探测顺序：
-     *  1. GeckoViewEngine（Maven 依赖可用）
-     *  2. SystemWebViewEngine（保底）
+     * 已移除 GeckoView(Firefox 内核)以瘦身 APK(约 -180MB:libxul.so 144MB + omni.ja
+     * 13MB + 一众 mozilla .so)。统一用系统 WebView(Chromium,0 包体)。扩展能力改由
+     * 自建注入式插件生态承载,反爬靠 document-start 注入 + 服务端兜底,见 BrowserEngine 顶注。
      */
-    fun selectBest(context: Context): BrowserEngine {
-        // 1. GeckoView（主力）
-        val gecko = GeckoViewEngine()
-        if (gecko.isAvailable()) {
-            return gecko
-        }
+    fun selectBest(context: Context): BrowserEngine = SystemWebViewEngine()
 
-        // 2. 保底
-        return SystemWebViewEngine()
-    }
-
-    /** 列出所有可用的引擎（用于设置页让用户切换） */
-    fun listAvailable(context: Context): List<BrowserEngine> {
-        val list = mutableListOf<BrowserEngine>()
-        val gecko = GeckoViewEngine()
-        if (gecko.isAvailable()) {
-            list.add(gecko)
-        }
-        list.add(SystemWebViewEngine())  // 永远保底
-        return list
-    }
+    /** 列出所有可用的引擎（用于设置页让用户切换；当前仅系统 WebView 一种） */
+    fun listAvailable(context: Context): List<BrowserEngine> = listOf(SystemWebViewEngine())
 }

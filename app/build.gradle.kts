@@ -47,6 +47,11 @@ android {
         buildConfigField("String", "VERSION_INFO", getVersionGit())
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
+        // 只保留 app 实际支持的语言资源(默认/英文 + 中文 values-zh + 日文 values-ja)。
+        // AndroidX/Material/Compose 等库自带数十种语言的字符串,这里过滤掉未支持的语言,
+        // 缩减 resources.arsc / res。注意必须含 ja,否则会误删 app 自带的日语翻译。
+        resourceConfigurations += setOf("en", "zh", "ja")
+
         // ABI 由下方 splits 块按架构分包(每个 APK 只带自己架构),这里不再用
         // abiFilters 限制,否则会与 splits 冲突、把 32 位过滤掉。
     }
@@ -145,6 +150,9 @@ dependencies {
     }
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
+    // androidx.webkit —— WebViewCompat.addDocumentStartJavaScript(文档开始前注入,做反检测)
+    // + WebViewFeature 能力探测 + ProxyController(浏览器代理)。系统 WebView 增强能力的入口。
+    implementation(libs.androidx.webkit)
     implementation(libs.retrofit)
     implementation(libs.retrofit.gson)
     implementation(libs.utilcode)
@@ -168,10 +176,9 @@ dependencies {
     // NanoHTTPD 嵌入式 HTTP 服务器（局域网配置服务）
     implementation(libs.nanohttpd)
 
-    // GeckoView — Firefox 内核 WebView 替代品（反爬免疫 + WebExtension 扩展支持）
-    // 125.0 was pruned from Mozilla's maven; bumped to a current 151.x release.
-    // 版本在 gradle/libs.versions.toml 的 geckoview 统一管理。
-    implementation(libs.geckoview)
+    // GeckoView(Firefox 内核)已移除以瘦身 APK(约 -180MB:libxul.so 144MB + omni.ja
+    // 13MB + 一众 mozilla .so)。浏览器统一用系统 WebView(SystemWebViewEngine,0 包体)。
+    // 扩展能力改由自建注入式插件生态承载;反爬靠 document-start 注入 + 服务端兜底。
 
     // Shizuku API —— shell 级权限增强（触控注入 / 截屏 / 按键 / 系统设置）
     // 用户需安装 Shizuku App 并通过无线调试授权一次

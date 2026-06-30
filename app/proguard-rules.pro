@@ -33,6 +33,14 @@
 # Tool 注册（反射）
 -keep class com.apk.claw.android.tool.** { *; }
 
+# 插件清单 Gson DTO（PluginManifest/PluginInfo/PluginToolParam/HttpRecipe）：字段名 == JSON 键、
+# 多数无 @SerializedName,release 下 R8 改名会让 type/js/page/http 等解析为默认值 → 插件加载失效
+# (browser-script/tool/mini-app 全部读不出)。整包保留字段名。详见 PLUGIN_ECOSYSTEM.md。
+-keep class com.apk.claw.android.plugin.PluginManifest { *; }
+-keep class com.apk.claw.android.plugin.PluginInfo { *; }
+-keep class com.apk.claw.android.plugin.PluginToolParam { *; }
+-keep class com.apk.claw.android.plugin.HttpRecipe { *; }
+
 # Channel（钉钉/飞书回调，保留泛型签名）
 -keep class com.apk.claw.android.channel.** { *; }
 
@@ -237,9 +245,14 @@
 # ============================================================
 # AndroidX
 # ============================================================
+# 不再整包保活 androidx.**:此前的 `-keep class androidx.** { *; }` 是初始提交
+# 带入的祖传通配规则(非为修某个具体崩溃所加),它把 R8 对整个 AndroidX/Compose
+# 的收缩全部关闭 —— 实测 release 里保留了 9905 个 Material 图标 getter 类,而 app
+# 只用 71 个;未使用的 Compose 代码也无法裁剪。AndroidX 各 AAR 自带 consumer
+# proguard 规则(已覆盖 ViewModel 反射、Compose 运行时等必要 keep),无需再整包保活。
+# 收窄后让 R8 裁掉未用图标/Compose,功能不变、dex 显著变小。
+# 如 release 烟测发现某个 androidx 类被误裁,按需补“精确到类”的 -keep,切勿恢复通配。
 -dontwarn androidx.**
--keep class androidx.** { *; }
--keep interface androidx.** { *; }
 
 # ============================================================
 # glide-transformations (wasabeef)
@@ -266,6 +279,15 @@
 -keepclasseswithmembernames class * {
     native <methods>;
 }
+
+# ============================================================
+# Markwon（Markdown 渲染）
+# ============================================================
+# markwon-image 的 Svg/Gif 解码器引用了可选依赖 androidsvg / android-gif-drawable,
+# 二者本项目未声明(不渲染 SVG/GIF 图,decoder 运行时优雅降级)。收窄 androidx 通配
+# keep 后 R8 全程序分析会把这些悬空引用当“缺失类”错误中断构建,这里按 R8 建议忽略。
+-dontwarn com.caverock.androidsvg.**
+-dontwarn pl.droidsonroids.gif.**
 
 # Coil（图片加载:发现页收藏 favicon / 搜索引擎图标用 coil.compose.AsyncImage）
 # release 下 R8 会裁掉 Coil 的 fetcher/decoder 导致图片不显示,这里保活。

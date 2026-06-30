@@ -43,9 +43,13 @@ class LightweightReAct(
         onStep: ((ReActStep) -> Unit)? = null,
         // 可选:返回当前屏幕,供 VLM 目标自校验。null → 不校验(向后兼容)。
         captureScreen: (suspend () -> android.graphics.Bitmap?)? = null,
+        // 可选:额外系统上下文(如技能商城已安装技能的指令注入)。空 → 行为不变。
+        extraSystemContext: String = "",
     ): TaskResult {
         val history = mutableListOf<ChatMessage>()
-        history += ChatMessage.System(content = systemPrompt)
+        history += ChatMessage.System(
+            content = if (extraSystemContext.isBlank()) systemPrompt else systemPrompt + "\n\n" + extraSystemContext
+        )
         history += ChatMessage.User(content = task)
 
         // 语义检索:按当前任务把技能重排(相关的靠前);命中不了/离线/未配对则原顺序。
