@@ -1,6 +1,7 @@
 package com.apk.claw.android.tool.impl.browser
 
 import com.apk.claw.android.octopus_mobile.browser.BrowserEngine
+import com.apk.claw.android.octopus_mobile.safety.UrlGuard
 import com.apk.claw.android.tool.BaseTool
 import com.apk.claw.android.tool.ToolParameter
 import com.apk.claw.android.tool.ToolResult
@@ -54,6 +55,11 @@ class BrowserNavigateTool(
         )
         if (blockedSchemes.any { lower.startsWith(it) }) {
             return ToolResult.error("Blocked unsafe URL scheme; only http/https are allowed.")
+        }
+        // SSRF 防护：阻止内网 IP / 云元数据端点 / 本地域名
+        val urlVerdict = UrlGuard.check(url)
+        if (!urlVerdict.allow) {
+            return ToolResult.error("URL blocked by SSRF guard: ${urlVerdict.reason}")
         }
         engine.navigate(url)
         return ToolResult.success("Navigated to: $url")

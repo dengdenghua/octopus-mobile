@@ -1,4 +1,4 @@
-﻿# Octopus Mobile
+# Octopus Mobile
 
 [English](README.md)
 
@@ -280,7 +280,7 @@ cd octopus-mobile
 | 自进化 L1 打分（TurnScorer）/ L2 反思（deepReflect） | ✅ 运行中 | 失败教训持久化到 MMKV 并注入系统提示词 |
 | RPC 远控层（octopus_mobile，作为母体"触手"） | ✅ 启动时已全量接线 | `ClawApplication` → `initOctopusMobile()` 自动初始化并按配置连接 Runtime |
 | 无障碍服务（手势/读屏/截图/保活） | ✅ 完整 | 存在节点未 recycle、latch 阻塞等可靠性待优化项 |
-| 浏览器自动化（GeckoView/WebView） | ⚠️ 部分受限 | GeckoView 151 移除了 `evaluateJavascript`，`get_dom/click/type/evaluate` 暂失效，待改用 WebExtension `scripting.executeScript` 转发 |
+| 浏览器自动化（系统 WebView） | ✅ 完整 | 系统 WebView(Chromium 内核),`evaluateJavascript` / `get_dom` / `click` / `type` / `screenshot` 均可用 |
 | Shizuku shell 提权 | ⚠️ 当前受限 | `exec()` 暂回退到 app 进程 `Runtime.exec()`（`Shizuku.newProcess` 在 13.1.5 已 @hide），需绑定 `IUserService` 才能真正以 shell 身份执行；手势有 `dispatchGesture` 回退仍可用 |
 | 投屏 / 外接屏 Agent 工作台（Presentation API） | ⚠️ 可用但不完整 | 外屏检测/渲染/REST 已通；运行窗口跟踪与部分 dock 操作未实现 |
 | 自进化 L3 deepEvolve / CanaryManager 灰度 | 💤 已实现未接线 | 代码完整，暂无调用入口 |

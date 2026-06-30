@@ -57,7 +57,7 @@ Tools extend `BaseTool` and are registered per device type in `ToolRegistry`. Hi
 
 - **Screen / nav**: `get_screen_info`, `find_node_info`, `take_screenshot`, `input_text`, `open_app`, `get_installed_apps`, `press_back` / `press_home`, `open_recent_apps`, notifications, `lock_screen`, `wait`, `repeat_actions`, `send_file`, `finish`.
 - **Phone gestures**: `tap`, `long_press`, `swipe`, `click_by_text`, `click_by_id`.
-- **Browser** (GeckoView / WebView): `browser_navigate/click/type/get_dom/screenshot/evaluate/install_extension`.
+- **Browser** (System WebView / Chromium): `browser_navigate/click/type/get_dom/screenshot/evaluate/install_extension`.
 - **Media**: scan local / WebDAV / cloud-drive media and play.
 
 Every tool call passes through a **safety layer** in `ToolRegistry`: a `SafetyGate` (PII / secret scan) and a `ToolCallGuardrail` (repeated-failure / no-progress detection that can warn, block or halt).
@@ -105,7 +105,7 @@ The core agent pipeline is mature; some peripheral capabilities are still in pro
 | Self-evolution L1 scoring / L2 reflection | ✅ Live | Lessons persisted to MMKV, injected into prompts |
 | RPC remote-control layer (octopus_mobile) | ✅ Wired at startup | `ClawApplication` → `initOctopusMobile()` auto-connects to the Runtime |
 | Accessibility service | ✅ Complete | Some reliability TODOs (node recycling, latch blocking) |
-| Browser automation | ⚠️ Partially limited | GeckoView 151 removed `evaluateJavascript`; `get_dom/click/type/evaluate` need a WebExtension-based port |
+| Browser automation | ✅ Complete | System WebView (Chromium engine); `evaluateJavascript` / `get_dom` / `click` / `type` / `screenshot` all available |
 | Shizuku shell escalation | ⚠️ Limited | `exec()` currently falls back to in-process `Runtime.exec()`; needs `IUserService` binding to run as shell. Gestures still work via `dispatchGesture` fallback |
 | Screen cast / external-display workspace | ⚠️ Usable but incomplete | Detection/render/REST work; window tracking & some dock actions unimplemented |
 | Self-evolution L3 deepEvolve / CanaryManager | 💤 Implemented, not wired | No call site yet |
@@ -116,7 +116,7 @@ Legend: ✅ complete · ⚠️ partial/limited · 💤 implemented but not wired
 
 ## Key dependencies
 
-LangChain4j 1.12.2 (agent/tools/LLM), OkHttp 4.12.0 / Retrofit 2.11.0, NanoHTTPD 2.3.1 (LAN config), MMKV 2.3.0, Gson 2.13.2, GeckoView, Shizuku 13.1.5, Jetpack Compose. See [README_CN.md](README_CN.md) for the full list.
+LangChain4j 1.12.2 (agent/tools/LLM), OkHttp 4.12.0 / Retrofit 2.11.0, NanoHTTPD 2.3.1 (LAN config), MMKV 2.3.0, Gson 2.13.2, Shizuku 13.1.5, Jetpack Compose. See [README_CN.md](README_CN.md) for the full list.
 
 ## License
 

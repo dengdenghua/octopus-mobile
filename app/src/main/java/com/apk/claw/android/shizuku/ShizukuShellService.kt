@@ -901,7 +901,8 @@ object ShizukuShellService {
         if (!INT_REGEX.matches(minSizeMB.toString())) return null
         // 用 sanitizeShellArg 转义 basePath,避免字符串插值(纵深防御)
         val safeBase = sanitizeShellArg(basePath)
-        val cmd = "find $safeBase -type f -size +${minSizeMB}M -exec ls -l {} \\; 2>/dev/null | awk '{print \$5, \$9}' | sort -n | uniq -d -w 20 | head -n 30"
+        // 用 xargs 替代 -exec ... \;，避免分号被自家注入过滤器拦截
+        val cmd = "find $safeBase -type f -size +${minSizeMB}M 2>/dev/null | xargs ls -l 2>/dev/null | awk '{print \$5, \$9}' | sort -n | uniq -d -w 20 | head -n 30"
         val result = exec(cmd) ?: return null
         return result.stdout.trim().ifEmpty { "No duplicate files found." }
     }
@@ -1021,9 +1022,14 @@ object ShizukuShellService {
      * 获取存储使用情况概览。
      */
     fun getStorageOverview(): String? {
-        val result = exec("df -h /sdcard && echo '---' && du -sh /sdcard/* 2>/dev/null | sort -rh | head -n 20")
-            ?: return null
-        return result.stdout.trim()
+        // 拆成两条独立命令，避免 && 被自家注入过滤器拦截
+        val dfResult = exec("df -h /sdcard") ?: return null
+        val duResult = exec("du -sh /sdcard/* 2>/dev/null | sort -rh | head -n 20")
+        val sb = StringBuilder(dfResult.stdout.trim())
+        if (duResult != null) {
+            sb.append("\n---\n").append(duResult.stdout.trim())
+        }
+        return sb.toString()
     }
 
     // ======================== 代码执行(QuickJS 沙箱 runtime)========================

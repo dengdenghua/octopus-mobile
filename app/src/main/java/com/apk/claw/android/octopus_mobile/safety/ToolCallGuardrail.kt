@@ -39,6 +39,7 @@ class ToolCallGuardrailController(
             "open_app", "system_key", "clipboard", "send_file",
             "browser_navigate", "browser_click", "browser_type",
             "install_app", "set_clipboard", "write_file",
+            "preview_html",  // 离屏渲染任意 HTML，副作用限于 WebView 内
         )
 
         /** 危险工具（需要额外审批） */
@@ -130,30 +131,6 @@ class ToolCallGuardrailController(
         // 成功调用 → 清除该签名/工具的历史失败计数（一次成功即打断失败连击）
         exactFailureCounts.remove(sig)
         sameToolFailureCounts.remove(toolName)
-
-        // 预检查：若相同签名已多次失败，本次调用应被阻止（防止死循环重试）
-        val priorExactCount = exactFailureCounts[sig] ?: 0
-        if (config.hardStopEnabled && priorExactCount >= config.exactFailureBlockAfter) {
-            Log.w(TAG, "PRE-BLOCK: $toolName exact same call failed ${priorExactCount}x previously")
-            onBlock?.invoke(toolName, "exact_failure_block: ${priorExactCount}x")
-            return GuardrailDecision(
-                action = GuardrailAction.BLOCK,
-                code = "exact_failure_block",
-                message = "完全相同的调用失败了 ${priorExactCount} 次，已阻止以防止死循环",
-                toolName = toolName, count = priorExactCount, signature = sig,
-            )
-        }
-        val priorSameCount = sameToolFailureCounts[toolName] ?: 0
-        if (config.hardStopEnabled && priorSameCount >= config.sameToolFailureHaltAfter) {
-            Log.w(TAG, "PRE-HALT: $toolName failed ${priorSameCount}x total previously")
-            onBlock?.invoke(toolName, "same_tool_halt: ${priorSameCount}x")
-            return GuardrailDecision(
-                action = GuardrailAction.HALT,
-                code = "same_tool_halt",
-                message = "工具 '$toolName' 已失败 ${priorSameCount} 次，暂停执行",
-                toolName = toolName, count = priorSameCount, signature = sig,
-            )
-        }
 
         val kind = classifyTool(toolName)
         if (kind == ToolKind.IDEMPOTENT) {

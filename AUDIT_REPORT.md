@@ -1,9 +1,16 @@
 # Octopus Mobile 安全与代码质量审计报告
 
+> ⚠️ **部分发现已过时** — GeckoView 已整体移除(-180MB),浏览器改用系统 WebView。
+> 以下涉及 GeckoViewEngine 的发现(R9/B2/N8 等)已不适用,仅保留作历史参考。
+> P0-6(BrowserNavigateTool SSRF)已修复(接入 UrlGuard)。
+> P1-1(LLM 客户端重复)已修复(抽出 BaseLangChain4jLlmClient)。
+> P1-2(短信验证码)已修复(改为 NOTIFY_USER)。
+> P1-3(Shizuku 自伤命令)已修复(xargs + 拆分命令)。
+
 > 范围：`com.apk.claw.android` Android 端 + `server/app.py` Python 中继服务器
 > 方法：12 维度并行审计（166 个智能体）→ 双盲对抗式复核（每条结论经 2 名独立质疑者验证）→ 查漏补审
 > 复核结果：76 条发现 → 70 条通过验证（64 confirmed / 6 contested），6 条被驳回
-> 状态标注：**已确认 (confirmed)** / **待确认 (contested)**
+> 状态标注：**已确认 (confirmed)** / **待确认 (contested)** / **⚠️ 已废弃(GeckoView 已移除)**
 
 ---
 
@@ -89,8 +96,8 @@
 **影响**：远程操作者/同网段 token 持有者/被注入代理可在任意已登录页面执行任意 JS——窃取会话 Cookie/token、读取私有页面内容、代用户执行已认证操作。无取证痕迹。
 **修复建议**：将 `browser_evaluate` 标记 DANGEROUS/HIGH_RISK、移出 IDEMPOTENT_TOOLS、强制逐次人工确认与审计；selector/attribute/text 以 `JSON.stringify` 作数据传入而非拼接；考虑代理浏览自动化使用独立 cookie jar。
 
-### R9 — 代理可调用 browser_install_extension：从任意 URL 安装扩展，丢弃签名、无 URL 校验、明文 HTTP、安装提示自动批准全部权限
-**严重度：High（多条 confirmed 合并）**
+### R9 — ~~代理可调用 browser_install_extension~~ ⚠️ 已废弃(GeckoView 已移除)
+**严重度：~~High~~ → N/A(GeckoView 已移除,WebExtension API 不再可用)**
 **受影响文件**：`tool/impl/browser/BrowserTools.kt:293-369`、`octopus_mobile/browser/ExtensionInstaller.kt:187-219`、`octopus_mobile/browser/CrxToXpiConverter.kt:108-131`、`octopus_mobile/browser/GeckoViewEngine.kt:188-211`
 **攻击场景/前置条件**：`source=url:<任意URL>` → `installFromUrl` → 明文 OkHttp GET（无 UrlGuard、无 pinning、无 scheme/host 校验）→ CRX3 头（含发布者签名）被**切掉丢弃**、重打包为未签名 XPI → `webExtensionController.install`。`configureRuntime` 设 `extensionsWebAPIEnabled=true` 且 `onInstallPromptRequest` **无条件返回 `PermissionPromptResponse(true,…)`**，自动批准所有请求权限。可达母体 WS / LAN agent / 提示注入；且任意被访问网页亦可经 WebAPI 触发自动批准的 drive-by 安装。
 **影响**：远程/LAN/被注入代理可从任意 URL 安装未签名、全权限 WebExtension，对用户在内嵌浏览器所浏览的每个页面持久读写。
@@ -156,8 +163,8 @@
 - `QBotWebSocketManager.java:53-60` — 去重集为非同步 LinkedHashMap，重连期跨线程访问可损坏/放过重复消息 — 用同步包装或并发结构。
 
 **WebView / 浏览器**
-- `BrowserTools.kt:44-48` — `NavigateTool` 无 UrlGuard，可导航 SSRF（169.254.169.254、127.0.0.1:9527、file://）— 调用前过 UrlGuard（已并入 R2/R8）。
-- `SystemWebViewEngine.kt:85` — release 构建无条件 `setWebContentsDebuggingEnabled(true)`，可经 adb chrome://inspect 注入已登录会话 — 用 `BuildConfig.DEBUG` 门控；`GeckoViewEngine.kt:191` 同理。
+- `BrowserTools.kt:44-48` — ~~`NavigateTool` 无 UrlGuard，可导航 SSRF~~ **已修复**:`BrowserNavigateTool` 已接入 `UrlGuard.check()`,阻止内网 IP / 云元数据 / 本地域名。
+- `SystemWebViewEngine.kt:85` — release 构建无条件 `setWebContentsDebuggingEnabled(true)`，可经 adb chrome://inspect 注入已登录会话 — 用 `BuildConfig.DEBUG` 门控；~~`GeckoViewEngine.kt:191` 同理~~ ⚠️ GeckoView 已移除。
 
 **Manifest / IPC**
 - `AndroidManifest.xml:209-217` — `BootReceiver` 无必要 `exported="true"`，同设备恶意 App 可发显式 Intent 唤起前台服务 — 改 `exported="false"`。
@@ -211,12 +218,12 @@
 - [x] token 仅走 Authorization 头，禁用 `?token=`，console 改 `#token=` + 剥离（`ConfigServer.kt:66-73`）：已修复。
 - [x] 审计源 IP 取真实 socket 对端；`constantTimeEquals` 改 `MessageDigest.isEqual`；修复 `startsWith` 沙箱边界（**待确认**）：已修复（源 IP 优先 `session.remoteIpAddress`；`MessageDigest.isEqual` 已使用；B3 `PathGuard` 分隔符边界已修复）。
 - [ ] 客户端密钥迁移至加密 MMKV/EncryptedSharedPreferences；脱敏 debug 日志中的 token（FileLoggingInterceptor、QBotApiClient）：未修复（工作量大）。
-- [ ] 网络配置收敛 cleartext 至仅 localhost/链路本地；release 关闭 WebView 远程调试；`BootReceiver` 改 `exported=false`：WebView/GeckoView 远程调试与 `BootReceiver` 已修复；cleartext 仍依赖动态 LAN IP / 母体 ws://，需待 R3 完成后收敛。
+- [ ] 网络配置收敛 cleartext 至仅 localhost/链路本地；release 关闭 WebView 远程调试；`BootReceiver` 改 `exported=false`：WebView 远程调试与 `BootReceiver` 已修复；~~GeckoView 远程调试~~ 已废弃(GeckoView 已移除);cleartext 仍依赖动态 LAN IP / 母体 ws://，需待 R3 完成后收敛。
 - [x] 微信回复路由去除全局 `lastFromUserId` 回退；QQ 去重集改并发结构；用户 disconnect 后抑制自动重连：微信回退已移除；QQ 去重集已实现同步包装；disconnect 后重连抑制当前代码已处理，待压测验证。
 - [x] Relay：mock 支付硬失败 + 会员上限；订单创建限速：已修复。
 - [ ] `local.properties` 签名口令拆分为独立强口令、移出仓库工作树（`release-old-weakpass-backup.keystore`）；密钥材料迁至 CI 密钥库（**待确认 / info**：经核实 keystore 与 local.properties 均已 git-ignore，未入版本库）。
 
-> **待确认项（contested，需复核）**：`ConfigServer.kt:1192-1197` 通配 CORS + DNS-rebinding（info）；`GeckoViewEngine.kt:188-211` WebAPI 自动批准 drive-by 安装（low，依赖具体 GeckoView 构建是否仍对非 AMO 源履行 WebAPI）；`PathGuard.kt:98-110` 同前缀沙箱逃逸（info）；`ConfigServer.kt:730-785` MJPEG permit 泄漏（info）；`local.properties` 签名口令复用（info，且证伪了"keystore 已提交"的初始假设）。
+> **待确认项（contested，需复核）**：`ConfigServer.kt:1192-1197` 通配 CORS + DNS-rebinding（info）；~~`GeckoViewEngine.kt:188-211` WebAPI 自动批准 drive-by 安装~~ ⚠️ 已废弃(GeckoView 已移除)；`PathGuard.kt:98-110` 同前缀沙箱逃逸（info）；`ConfigServer.kt:730-785` MJPEG permit 泄漏（info）；`local.properties` 签名口令复用（info，且证伪了"keystore 已提交"的初始假设）。
 
 ---
 
@@ -268,7 +275,7 @@
 | 编号 | 项 | 结论 | 说明 |
 |------|-----|------|------|
 | B1 | ConfigServer 通配 CORS + DNS-rebinding | **confirmed（降为低危）** | [RouteContext.kt:22-25](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/java/com/apk/claw/android/server/routes/RouteContext.kt#L22) `Access-Control-Allow-Origin: *` + 无 Host 校验确认；但所有 `/api/*` 强制 token 鉴权，浏览器对 `*` 不发凭证，实际可利用性低 |
-| B2 | GeckoView WebAPI 自动批准 drive-by 安装 | **confirmed** | [GeckoViewEngine.kt:188-211](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/java/com/apk/claw/android/octopus_mobile/browser/GeckoViewEngine.kt#L188) `extensionsWebAPIEnabled=true` 全局开启（非仅 AMO）；`onInstallPromptRequest` 无条件返回 `PermissionPromptResponse(true,…)` |
+| B2 | ~~GeckoView WebAPI 自动批准 drive-by 安装~~ | **⚠️ 已废弃** | GeckoView 已整体移除,WebExtension API 不再可用。此项不再适用。 |
 | B3 | PathGuard 同前缀沙箱逃逸 | **rejected（已修复）** | [PathGuard.kt:104-111](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/java/com/apk/claw/android/octopus_mobile/safety/PathGuard.kt#L104) 已用 `base + File.separator` 做分隔符边界检查；`git blame` 确认在提交 `0c6270f`（2026-06-20）中落地 |
 | B4 | MJPEG permit 泄漏 | **confirmed（低危）** | [ScreenHandler.kt:85-140](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/java/com/apk/claw/android/server/routes/ScreenHandler.kt#L85) `tryAcquire` 与线程 `finally { release() }` 之间无外层 try/finally，异常路径下信号量泄漏可致屏幕流 DoS |
 
@@ -319,11 +326,11 @@
 **发现**：① `senderId.isNullOrBlank()` → `ALLOW` + 告警，不上报发送者的通道可绕过 ACL；② 空白名单时首个发送者自动绑定为 owner（TOFU），攻击者抢在合法用户前发首条消息即获永久控制权（代码注释已承认此局限）。
 **修复建议**：对支持但未上报 senderId 的通道默认 DENY；TOFU 改为配对码/扫码绑定。
 
-#### N8 — GeckoView remoteDebuggingEnabled 全局开启
-**严重度：Medium**
-**受影响文件**：[GeckoViewEngine.kt:191](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/java/com/apk/claw/android/octopus_mobile/browser/GeckoViewEngine.kt#L191)
-**发现**：`settings.remoteDebuggingEnabled = true` 在 runtime 级全局开启，任意能连到设备调试端口的实体可远程调试 WebView（注入已登录会话）。
-**修复建议**：仅 `BuildConfig.DEBUG` 构建开启。
+#### N8 — ~~GeckoView remoteDebuggingEnabled 全局开启~~ ⚠️ 已废弃
+**严重度：~~Medium~~ → N/A**
+**受影响文件**：~~[GeckoViewEngine.kt:191](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/java/com/apk/claw/android/octopus_mobile/browser/GeckoViewEngine.kt#L191)~~
+**发现**：~~`settings.remoteDebuggingEnabled = true`~~ GeckoView 已整体移除,此项不再适用。SystemWebViewEngine 的远程调试已修复(仅 DEBUG 构建)。
+**修复建议**：N/A(GeckoView 已移除)。
 
 #### N9 — console-app.js token 从 URL 查询参数获取（AUDIT_REPORT 建议项未落地）
 **严重度：Medium**
@@ -503,7 +510,7 @@
 - [ ] **网络配置收敛 cleartext**：未修复（仍依赖动态 LAN IP / 母体 ws://，需待 R3 母体 wss + LAN TLS 完成后方可收敛）
 - ➕ [x] **NavigationGraph keyElements 脱敏**（N4）：已修复(extractKeyElements 在 normalizeTree 之后提取,避免敏感按钮文本持久化)
 - ➕ [x] **SemanticSkillRanker 强制 https + token**（N6）：已修复(wss://→https:// 映射 + Authorization: Bearer 头)
-- ➕ [x] **GeckoView remoteDebuggingEnabled 仅 DEBUG**（N8）：已修复(改 BuildConfig.DEBUG)
+- ➕ [x] ~~**GeckoView remoteDebuggingEnabled 仅 DEBUG**（N8）~~ ⚠️ GeckoView 已移除,N/A。SystemWebViewEngine 远程调试已改 BuildConfig.DEBUG。
 - ➕ [x] **browser.evaluate risk 改 high + 清理 Schema**（N10）：已修复(risk: high + 清理畸形 JSON Schema 属性名)
 - ➕ [x] **WebSocket Origin 校验**（S4）：已修复(console WS 添加 _is_allowed_origin 校验 + WS_ALLOWED_ORIGINS 环境变量)
 - ➕ [x] **nginx Host 改 $server_name + 安全响应头**（S7）：已修复（`club.octoapk.com.conf` 改为 `proxy_set_header Host $server_name`，加 `server_tokens off` 与基础安全响应头）

@@ -63,13 +63,14 @@ visual pass, plain-language wording, and APK slimming / 32-bit support**.
   without bloating the 64-bit package:
   - `arm64-v8a` ≈ **237 MB** (most phones / TV boxes)
   - `armeabi-v7a` ≈ **201 MB** (older 32-bit devices)
-  - No combined "universal" APK (that would balloon to ~370 MB because of the
-    bundled GeckoView engine). For store distribution, ship an AAB instead.
+  - No combined "universal" APK. For store distribution, ship an AAB instead.
 
 ### Notes
-- The remaining APK size is dominated by the bundled **GeckoView** engine
-  (`libxul.so` ≈ 144 MB), which powers the in-app browser and Firefox-extension
-  support. Removing it would require switching to the system WebView and losing
-  extension support.
+- ~~The remaining APK size is dominated by the bundled **GeckoView** engine~~
+  **GeckoView has been removed** (saved ~180 MB: `libxul.so` 144 MB + `omni.ja`
+  13 MB + various `.so` files). The browser now uses the system WebView
+  (Chromium engine, 0 APK size impact). Extension support has been replaced
+  with a custom injectable plugin system (`evaluateJavascript` +
+  `shouldInterceptRequest`).
 - Account email/SMS-code login and the hosted model-relay backend landed in the
   same period (separate workstream).

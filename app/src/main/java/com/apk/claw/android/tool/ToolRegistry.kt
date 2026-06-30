@@ -170,6 +170,9 @@ object ToolRegistry {
         register(ResizeWindowTool())
         register(GetWindowInfoTool())
 
+        // HTML 预览工具（离屏 WebView 渲染，截图返回）
+        register(PreviewHtmlTool())
+
         // AI NAS 文件管理工具（需要 Shizuku）
         register(BrowseFilesTool())
         register(SearchFilesTool())
@@ -245,14 +248,14 @@ object ToolRegistry {
         val tool = tools[name] ?: return ToolResult.error("Unknown tool: $name")
         val auditStartMs = System.currentTimeMillis()
         val auditRisk = ToolRiskPolicy.riskOf(name)
-        val auditParams = if (ToolRiskPolicy.shouldAudit(name)) {
+        val auditParams = if (ToolRiskPolicy.shouldAudit(name) && PermissionModeManager.getCurrentPolicy().auditLogEnabled) {
             ToolRiskPolicy.summarizeParams(params)
         } else {
             ""
         }
 
         fun audited(result: ToolResult, blockedBy: String? = null): ToolResult {
-            if (ToolRiskPolicy.shouldAudit(name)) {
+            if (ToolRiskPolicy.shouldAudit(name) && PermissionModeManager.getCurrentPolicy().auditLogEnabled) {
                 val resultText = if (result.isSuccess) result.data else result.error
                 val duration = System.currentTimeMillis() - auditStartMs
                 ToolAuditLog.record(
@@ -278,22 +281,25 @@ object ToolRegistry {
             return audited(ToolResult.error("工具已停用: $name"), blockedBy = "settings")
         }
 
-        // ── 断路器熔断检查（全工具维度，防止持续失败拖垮系统）──
-        val breaker = circuitBreaker
-        if (breaker != null) {
-            try {
-                breaker.check()
-            } catch (e: CircuitBreaker.CircuitOpenException) {
-                eventBus?.publish(EventBus.ToolBlockedEvent(name, e.reason, "circuit_breaker"))
-                return audited(
-                    ToolResult.error("工具调用被熔断: ${e.reason}（冷却 ${e.cooldownSeconds}s）"),
-                    blockedBy = "circuit_breaker",
-                )
-            }
-        }
-
         // ── 权限策略（统一读取 PermissionModeManager）──
         val policy = PermissionModeManager.getCurrentPolicy()
+
+        // ── 断路器熔断检查（全工具维度，防止持续失败拖垮系统）──
+        // 不可关闭项：circuitBreakerEnabled 始终为 true，即使 FULL_POWER 也不关
+        if (policy.circuitBreakerEnabled) {
+            val breaker = circuitBreaker
+            if (breaker != null) {
+                try {
+                    breaker.check()
+                } catch (e: CircuitBreaker.CircuitOpenException) {
+                    eventBus?.publish(EventBus.ToolBlockedEvent(name, e.reason, "circuit_breaker"))
+                    return audited(
+                        ToolResult.error("工具调用被熔断: ${e.reason}（冷却 ${e.cooldownSeconds}s）"),
+                        blockedBy = "circuit_breaker",
+                    )
+                }
+            }
+        }
 
         // ── 高危工具来源闸门 + 审批流程 ──
         // APPROVAL 模式：不可信来源调高危工具 → 弹窗审批
@@ -337,8 +343,11 @@ object ToolRegistry {
             }
         }
 
-        // ── 安全门检查（PII/Secret 扫描）──
-        // FULL_POWER 模式下 safetyGateEnabled=false，跳过宪法法官
+        // ── 安全门检查（PII/Secret 扫描 + LLM 宪法法官）──
+        // safetyGateEnabled 控制完整 SafetyGate（含 LLM 法官层）。
+        // 但 privacyScannerEnabled 是"不可关闭项"：即使 FULL_POWER 下 safetyGateEnabled=false，
+        // 只要 privacyScannerEnabled=true（始终），仍单独跑 PrivacyScanner 规则层（零成本），
+        // 防止 Secret/PII 明文外泄。
         if (policy.safetyGateEnabled) {
             safetyGate?.let { gate ->
                 val verdict = gate.checkToolCall(name, params)
@@ -346,6 +355,17 @@ object ToolRegistry {
                     eventBus?.publish(EventBus.ToolBlockedEvent(name, verdict.reason, "safety"))
                     return audited(ToolResult.error("安全拦截: ${verdict.reason}"), blockedBy = "safety")
                 }
+            }
+        } else if (policy.privacyScannerEnabled) {
+            // FULL_POWER 模式下仍跑规则层（不调 LLM 法官，零成本）
+            val argsText = params.entries.joinToString("; ") { "${it.key}=${it.value}" }
+            val (_, secretHits, _) = com.apk.claw.android.octopus_mobile.safety.PrivacyScanner.fullCheck(
+                "tool:$name args:$argsText"
+            )
+            if (secretHits.isNotEmpty()) {
+                val desc = secretHits.map { it.description }.toSet().joinToString(", ")
+                eventBus?.publish(EventBus.ToolBlockedEvent(name, "secret_detected: $desc", "safety"))
+                return audited(ToolResult.error("安全拦截: 检测到敏感信息: $desc"), blockedBy = "safety")
             }
         }
 
@@ -360,7 +380,7 @@ object ToolRegistry {
         val result = try {
             tool.executeWithWaitAfter(params, cancellationToken)
         } catch (e: Exception) {
-            breaker?.record(success = false)
+            circuitBreaker?.record(success = false)
             ToolResult.error("Tool execution failed: ${e.message}")
         }
 
@@ -379,7 +399,7 @@ object ToolRegistry {
         }
 
         // ── 断路器记录结果 ──
-        breaker?.record(success = finalResult.isSuccess)
+        circuitBreaker?.record(success = finalResult.isSuccess)
 
         // ── 自进化打分（无论是否 WARN 都记录）──
         turnScorer?.record(name, success = finalResult.isSuccess, reason = finalResult.data ?: finalResult.error ?: "")

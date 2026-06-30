@@ -13,7 +13,7 @@
 | 维度 | 现状 |
 |---|---|
 | **规模** | 实测:Kotlin 全量 **56,908 LOC**(main 49,734 + test 7,174)+ Java 遗留 **5,882 LOC** + Python 中转服务端单文件 **2,442 LOC** ≈ 65k 总行 / 573 个 git 跟踪文件 |
-| **技术栈** | Kotlin 2.1.20 / Jetpack Compose(混 ~36 个遗留 Activity)/ LangChain4j over OkHttp / NanoHTTPD / MMKV / Shizuku 13.1.5 / GeckoView 151 / FastAPI + SQLite |
+| **技术栈** | Kotlin 2.1.20 / Jetpack Compose(混 ~36 个遗留 Activity)/ LangChain4j over OkHttp / NanoHTTPD / MMKV / Shizuku 13.1.5 / 系统 WebView(Chromium 内核,0 包体) / FastAPI + SQLite |
 | **工具链** | AGP 9.1.0 + Gradle 9.3.1(前沿大版本)、compileSdk/targetSdk 36、minSdk 28、版本目录、CI + CodeQL + Dependabot |
 | **测试** | 50 个真实 JVM 单测(~571 @Test / ~1,220 断言)+ pytest 116 函数(服务端money-path) |
 | **整体成熟度** | **developing(发展中,偏向成熟)** —— 核心决策层(智能体循环、工具系统、安全闸门、计费)质量高且经过清理;但大量"移植自桌面母体"的子系统是**已实现但未接线(dead/aspirational)**的占位代码,文档叙事与实际接线之间存在系统性落差 |
@@ -127,11 +127,11 @@
 |---|---|---|---|
 | **P0-1** | **FULL_POWER 模式一键全解防护(opt-in,默认关)** | `PermissionPolicy.kt:57-66`、`KVUtils.kt:441` | 单个 `isAdvancedAutomationMode` 布尔(**默认 `false`**,经 TrustCenter 开关或 `PermissionModeManager.reload` 配置翻转)同时关闭:源闸门 + 高危审批 + SafetyGate 秘钥扫描 + /sdcard 沙箱。**校正:这不是默认态** —— 默认是安全的 APPROVAL。但代码注释将其branding为"闲置/群控机,释放最大能力",一旦用户为群控开启,即原样复活审计的"对话=完全控制"姿态,且文档声称的"3 项防护不可关闭"被此证伪。属**可修复的设计缺陷**(应拆分语义,见 P0 建议 1)。 |
 | **P0-2** | **母体 WS 仍为明文 ws://**(默认模式下被来源闸门兜底) | `network_security_config.xml:11`、`OctopusMobileClient.kt:107`、`ToolCallDispatcher.kt:110` | 全局 `cleartextTrafficPermitted=true`;auth token 在 `device/hello` 包体内明文传输,无 TLS/证书固定/重放保护;`HELLO_SENT` 见任意帧即升 ONLINE,链路 MITM 可还原 token 并注入 `tool/execute`。**校正:** 注入的 `tool/execute` 确经 `withUntrustedSource{}` 闸门 —— 默认 APPROVAL 下高危工具被拦/需审批,故本项危害**被安全收口兜底**;仅当叠加 P0-1(FULL_POWER)时 `trustAllSources=true` 才真正失守。token 泄露本身(MITM 还原)仍是独立危害。 |
-| **P0-3** | **SafetyGate 语义层从不运行 + FULL_POWER 下被跳过** | `AppViewModel.kt:183`、`ToolRegistry.kt:334` | `SafetyGate()` 以 judge=null 构造,LLM 宪法判官从不实例化;唯一生效的是秘钥正则阻断,且**在 FULL_POWER 下连这个也被跳过** —— 与"PrivacyScanner 无条件生效"的文档相矛盾。 |
+| **P0-3** | **SafetyGate 语义层从不运行 + FULL_POWER 下被跳过** | `AppViewModel.kt:189`、`ToolRegistry.kt:342` | `SafetyGate()` 以 judge=null 构造,LLM 宪法判官从不实例化;唯一生效的是秘钥正则阻断。**已修复**:FULL_POWER 下仍单独跑 PrivacyScanner 规则层(接入 `privacyScannerEnabled` 不可关闭字段)。 |
 | **P0-4** | **群聊 ACL 按会话授权 + TOCTOU 竞态** | `DiscordChannelHandler.kt:38`、`TelegramChannelHandler.kt:99`、`ChannelManager:239` | Discord/Telegram 按 `lastChannelId/lastChatId`(会话级,非作者级)授权 → 群内任意成员通过 ACL;`dispatchMessage` 不携带 senderId,授权时回读可变实例字段,并发消息下可授权错误主体。TOFU 首发者夺权在公开可加入面上可被抢注。 |
 | **P0-5** | **Shizuku shell-UID 提权是最大风险集中点** | `DeviceRouteHandler.kt:164`、`ShizukuShellService.kt` | 被提示注入的智能体或获得 LAN token 者可经 shell-UID 执行 input/settings/am/pm/文件删改 —— 产品固有,但风险面巨大。 |
-| **P0-6** | **NavigateTool 仍可 SSRF** | `BrowserTools.kt:44` | `UrlGuard` 仅接入 `ExtensionInstaller`;浏览器可被导航到 `http://127.0.0.1:9527`(应用自身 ConfigServer)、`169.254.169.254`、`file://`。 |
-| **P0-7** | **GeckoView 扩展 drive-by 自动批准** | `GeckoViewEngine.kt:309,321` | `extensionsWebAPIEnabled=true` 且 `onInstallPromptRequest` 无条件返回全授权 —— 任意访问页可静默装扩展。 |
+| **P0-6** | ~~NavigateTool 仍可 SSRF~~ **已修复** | `BrowserTools.kt:59` | `BrowserNavigateTool` 已接入 `UrlGuard.check()`,阻止内网 IP / 云元数据 / 本地域名。 |
+| ~~P0-7~~ | ~~GeckoView 扩展 drive-by 自动批准~~ **已废弃** | N/A | GeckoView 已整体移除(瘦 -180MB),浏览器改用系统 WebView。扩展能力改为自建注入式插件(evaluateJavascript + shouldInterceptRequest)。此项不再适用。 |
 
 > **可修复 vs 设计固有(roadmap 须区分):** P0-1/2/3/4/6/7 是**可修复缺陷**(改语义、上 TLS、接 UrlGuard、改 ACL 主体、关扩展自批)。**P0-5(Shizuku shell-UID 提权)是产品固有能力,不可"修复"只能"接受/收窄"** —— 它是这只触手存在的意义本身;治理手段是默认 APPROVAL 闸门 + LAN token + 不开 FULL_POWER,而非移除。下文路线图不把 P0-5 计为"可关闭项"。
 
@@ -139,9 +139,9 @@
 
 | # | 风险 | 位置 |
 |---|---|---|
-| **P1-1** | **流式 LLM `latch.await()` 无超时** → 模型半挂起时单线程执行器永久阻塞,`running` 永真 | `OpenAiLlmClient.kt:91`、`AnthropicLlmClient.kt:91` |
-| **P1-2** | **头条"自动复制短信验证码"双重损坏**:工具名 `set_clipboard`(应为 `clipboard`)+ text="",且 `onSmsReceived()` 无触发 | `ProactiveRuleEngine.kt:251-260` |
-| **P1-3** | **Shizuku 自身命令被自己的注入过滤器永久拒绝**:`getStorageOverview`/`findDuplicateFiles` 含 `&&`/`\;` —— 功能形同虚设(证明过滤器测试不足) | `ShizukuShellService.kt:904,1024` |
+| **P1-1** | ~~流式 LLM `latch.await()` 无超时~~ **已修复**:已抽出 `BaseLangChain4jLlmClient` 基类,`OpenAiLlmClient`/`AnthropicLlmClient` 只剩 `createChatModel/createStreamingChatModel` 差异(~30 行)。 | `BaseLangChain4jLlmClient.kt:78` |
+| **P1-2** | ~~头条"自动复制短信验证码"双重损坏~~ **已修复**:改为 `ActionType.NOTIFY_USER` 提示用户手动复制,避免其他 App 读剪贴板导致验证码外泄。 | `ProactiveRuleEngine.kt:331-338` |
+| **P1-3** | ~~Shizuku 自身命令被自己的注入过滤器永久拒绝~~ **已修复**:`findDuplicateFiles` 改用 `xargs` 替代 `-exec \;`;`getStorageOverview` 拆成两条独立 `exec()` 调用。 | `ShizukuShellService.kt:904,1024` |
 | **P1-4** | **服务端账本不平**:gift/daily 额度消费不写 `credit_transactions`,用户交易记录与管理后台无法对账 | `server/app.py:1756-1805` |
 | **P1-5** | **抢占=取消重跑**:pause 摧毁智能体并发"已取消"文案,resume 从零重启无上下文 | `TaskOrchestrator.kt:164-183` |
 | **P1-6** | **单 worker 进程内态**:限流 `_rl`、远程中继 `RemoteRelayHub` 在内存,multi-worker 静默失效;无 JWT 撤销 | `server/app.py:417-454,496-584` |
@@ -165,7 +165,7 @@
 **构建/发布(中等健康,两处必须先修):**
 - 工具链现代(AGP 9.1 / Gradle 9.3.1 / Kotlin 2.1.20、版本目录、ABI splits、lint ratchet、CI+CodeQL+Dependabot),proguard/R8 功能正确(Coil keep 已处理)。
 - **🔴 高危 1:签名密钥明文口令**在 `local.properties`(已 gitignore 且从未提交,但 `.keystore` 文件躺在仓库根)—— 应外置到 env/CI secret 并视情况轮换。
-- **🔴 高危 2:release APK ~250–310MB/ABI**,根因 GeckoView `libxul.so`(151MB)—— 直接阻断正常 Play 分发。建议 AAB + 动态特性 / 将 Gecko 引擎设为可选(如已对 mpv 所做)。
+- **🔴 高危 2:release APK 体积** ~~根因 GeckoView `libxul.so`(151MB)~~ **已解决**:GeckoView 已移除(-180MB),改用系统 WebView(0 包体)。
 - 次要:无 Gradle 依赖校验 + aliyun/JitPack 镜像(供应链弱点);依赖普遍陈旧(Dependabot 配了但 PR 未合);lint baseline 压了 348 个问题(42 个硬编码 /sdcard、133 个未用资源);`security-crypto` 用 alpha 版做数据加密。
 - **代码质量整体好于旧审计**:标记债近零(4 个真 TODO、无 FIXME/HACK)、异常卫生好(287 catch 仅 3 空且合理)、HTTP 客户端已统一为 `OctoHttp.shared`、无 `GlobalScope`。**最高杠杆的流程缺口:无 detekt/ktlint 静态门禁**。
 
@@ -177,13 +177,11 @@
 1. **重构 FULL_POWER 语义**:不应一个布尔同时关闭 4 道防护且可远程翻转。至少让 PrivacyScanner 秘钥扫描与 /sdcard 沙箱**无条件生效**(兑现文档承诺),FULL_POWER 仅放宽高危审批且需本地物理确认。
 2. **母体 WS 上 TLS + 证书固定 + 握手 nonce/重放保护**;收紧 `network_security_config` 的 cleartext 白名单。
 3. **ACL 改为按消息携带 senderId**(消息与发送者同行穿过 `dispatchMessage`),群聊按"作者"而非"会话"授权,引入配对码/扫码绑定替代 TOFU,并补 Settings UI 管理/清除允许列表。
-4. **把 `UrlGuard` 接入 NavigateTool/BrowserEvaluate**,封堵 SSRF 到本机服务/元数据/`file://`。
-5. **关闭 GeckoView 扩展自动批准**(`onInstallPromptRequest` 改为显式用户确认)。
 
 **P1 —— 可靠性与正确性**
-6. 流式 `latch.await(timeout)` 并将超时作可重试错误;合并两个 95% 重复的 LLM 客户端为一处。
-7. 修复短信验证码规则(工具名 `clipboard` + 真正从短信体提取验证码 + 接线 `onSmsReceived`),或诚实下线该宣传功能。
-8. 修复 Shizuku 自拒命令(`getStorageOverview`/`findDuplicateFiles`)并补过滤器单测。
+6. ~~流式 `latch.await(timeout)` 并将超时作可重试错误;合并两个 95% 重复的 LLM 客户端为一处。~~ **已修复**:已抽出 `BaseLangChain4jLlmClient` 基类。
+7. ~~修复短信验证码规则(工具名 `clipboard` + 真正从短信体提取验证码 + 接线 `onSmsReceived`),或诚实下线该宣传功能。~~ **已修复**:改为 `NOTIFY_USER` 提示手动复制。
+8. ~~修复 Shizuku 自拒命令(`getStorageOverview`/`findDuplicateFiles`)并补过滤器单测。~~ **已修复**:`xargs` 替代 `-exec \;`,拆分 `&&` 命令。
 9. 服务端 gift/daily 消费/退款写入 `credit_transactions` 使账本可对账;明确单/多 worker 部署约束或外置限流/中继状态到 Redis。
 
 **P2 —— 结构与流程**
@@ -191,7 +189,7 @@
 11. **清理死/愿景代码**:或接线或删除 `CanaryManager`/`deepEvolve`/`ConnectionStateMachine`/`BrainModeSelector` 路由/`MpvController`,并同步修正 CODE_WIKI 与 `AUDIT_REPORT.md` 的过时结论。
 12. 把 `BaseTool.execute()` 改为 suspend(消除结构性 `runBlocking` 与 ANR);加固 `AppViewModel` init 去除 `!!`;拆解 `ChatScreen.kt`/`BrowserActivity.kt`。
 13. 用编译期校验把 3 份硬编码工具名单与实际注册集对齐(防"因遗漏而不安全")。
-14. 缩小/模块化 GeckoView;外置并轮换签名密钥。
+14. ~~缩小/模块化 GeckoView;外置并轮换签名密钥。~~ **GeckoView 已移除**;签名密钥仍需外置到 env/CI secret。
 
 ---
 
@@ -201,6 +199,6 @@
 
 Octopus Mobile 是一个**工程野心与实现质量都明显高于普通个人项目**的代码库:智能体循环、工具收口、安全闸门、计费 money-path 这几个承重子系统建得扎实,并且明显经历过多轮清理(共享 HTTP、近零标记债、良好异常卫生、安全 guard 已接线)。旧的 `AUDIT_REPORT.md`"安全层是 security theater"的论断在当前工作树中**已过时约一半** —— PathGuard、CircuitBreaker、高危闸门确已接线生效。
 
-但两条主线削弱了它的成熟度:其一是**文档叙事与实际接线的系统性落差** —— "本地/远程大脑无缝切换""三层自进化 + canary""自动复制验证码"等头条能力,在生产路径上要么是无调用方的愿景代码,要么是确凿的功能 bug;其二是**安全信任边界在默认 APPROVAL 模式下成立,却在 FULL_POWER / 明文 ws / 群聊 ACL / GeckoView 这四处仍然可被攻破** —— 而 FULL_POWER 恰恰是产品主打的群控部署形态,会原样复活"对话即完全控制"的高危姿态。
+但两条主线削弱了它的成熟度:其一是**文档叙事与实际接线的系统性落差** —— "本地/远程大脑无缝切换""三层自进化 + canary""自动复制验证码"等头条能力,在生产路径上要么是无调用方的愿景代码,要么是确凿的功能 bug;其二是**安全信任边界在默认 APPROVAL 模式下成立,却在 FULL_POWER / 明文 ws / 群聊 ACL 这三处仍然可被攻破** —— 而 FULL_POWER 恰恰是产品主打的群控部署形态,会原样复活"对话即完全控制"的高危姿态。
 
 **一句话裁决:这是一只技术上令人印象深刻、安全意识在持续补强、但"宣传面跑在接线面前面"的触手。** 作为可信网络下的个人自动化工具,它已可用且不乏亮点;但在它把 FULL_POWER 群控、明文母体链路与群聊 ACL 这三件事解决之前,任何"无人值守 / 公开通道 / 多设备群控"的生产部署都应被视为高风险。优先级很清晰:先封边界(P0),再补可靠性(P1),最后还技术债与诚实化文档(P2)。

@@ -18,7 +18,7 @@
 | `98b1ccd` `fix(agent)` | 崩溃恢复重放"悬空 tool_call"致恢复任务即崩;`resumeTask` 用 get/set 非 CAS 致并发重复执行 | HIGH×2 |
 | `bb2dbcf` `fix(safety)` | 审计日志记录工具结果时不脱敏(验证码/token 明文入库并在 UI 原样显示);`AuditLogActivity` 从不显示 `tampered` 篡改标志 | MED×2 |
 | `c56c90d` `fix(connection)` | 母体不回 `heartbeat/ack` 时每设备每 ~90s 强制重连风暴(改默认关开关);无界重连退避移位溢出(指数封顶) | MED+LOW |
-| `cd950d3` `fix(browser)` | GeckoView 扩展 drive-by:任意网页可静默装带权限扩展(关 Web API + 仅放行 App 主动发起的安装) | HIGH |
+| `cd950d3` `fix(browser)` | ~~GeckoView 扩展 drive-by~~ ⚠️ GeckoView 已整体移除,此修复不再适用(浏览器改用系统 WebView) | ~~HIGH~~ → N/A |
 | `9a1268a` `fix(browser)` | **evaluateJs 实际完全失效**(拼出非法 JS 致恒超时);共享状态并发串线;alert 桥可被页面伪造结果 | HIGH+MED×2 |
 | `5693c7e` `fix(proactive)` | 短信验证码自动复制规则坏:工具名 `set_clipboard` 错(应 `clipboard`)+ 无验证码提取逻辑 | HIGH(功能) |
 | `a8fbd68` `fix(media)` | H264 SPS 解析分辨率无范围校验,异常时可能用负/畸大值 configure | LOW |

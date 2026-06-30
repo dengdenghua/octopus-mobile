@@ -399,7 +399,7 @@ abstract class BaseTool {
 | `impl/mobile/VisionMarkersTool.kt` | `tap_by_vision` | Set-of-Marks 视觉定位：截图叠加编号框 → VLM 选号 → 精确点击节点中心 |
 | `impl/LookAtScreenTool.kt` | `look_at_screen` | 截图送 VLM 分析（游戏/画布等无障碍树失效场景） |
 | `impl/NavigateTool.kt` | `navigate` | UI 导航知识图谱：录制/A*寻路/状态检测/重规划 |
-| `impl/browser/BrowserTools.kt` | `browser_*` (7个) | GeckoView/WebView 浏览器自动化（URL scheme 白名单） |
+| `impl/browser/BrowserTools.kt` | `browser_*` (7个) | 系统 WebView 浏览器自动化（URL scheme 白名单 + UrlGuard SSRF 防护） |
 | `impl/FileOpsTool.kt` | `file_ops` | 文件操作（PathGuard 限制 /sdcard 沙箱） |
 | `impl/MediaTools.kt` | `media_player` | mpv 控制 + 媒体扫描 + 网盘（mpv stub 时播放类报错） |
 | `impl/EchoUniverseTools.kt` | `echo_observe/act/bind` | Echo 虚拟世界感知/行动 |
@@ -533,7 +533,7 @@ ClawApplication
 **系统能力**
 | 依赖 | 版本 | 用途 |
 |------|------|------|
-| GeckoView | 151.0.20260513195118 | Firefox 内核 WebView（反爬+扩展） |
+| ~~GeckoView~~ | ~~151.0~~ | **已移除**(瘦 -180MB),改用系统 WebView(Chromium 内核,0 包体) |
 | Shizuku (api/provider) | 13.1.5 | Shell 级权限增强 |
 
 **UI**
@@ -648,7 +648,7 @@ uvicorn app:app --host 127.0.0.1 --port 8081
 | 触手 RPC 层 | ✅ 启动全量接线 | ClawApplication → initOctopusMobile() |
 | 无障碍服务 | ✅ 完整 | 节点 recycle / latch 待优化 |
 | LLM 路由（平台/BYO/本地） | ✅ 完整 | LlmRouting.effective() |
-| 浏览器自动化 | ⚠️ 部分受限 | GeckoView 151 移除 evaluateJavascript，待 WebExtension 改造 |
+| 浏览器自动化 | ✅ 完整 | 系统 WebView(Chromium 内核),evaluateJavascript / click / type / get_dom / screenshot 均可用 |
 | Shizuku shell 提权 | ⚠️ 受限 | exec 回退 app 进程；需 IUserService 绑定才能 shell UID |
 | 投屏 / 外接屏工作台 | ⚠️ 可用不完整 | 检测/渲染/REST 通；窗口跟踪未实现 |
 | 自进化 L3 deepEvolve / Canary | 💤 已实现未接线 | 无调用入口 |
