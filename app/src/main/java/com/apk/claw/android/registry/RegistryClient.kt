@@ -12,18 +12,14 @@ import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 
 /**
- * 资产 Registry 消费端(技能商城用)。
+ * 资产 Registry 消费端。
  *
- * 从公网 registry 浏览 / 下载技能,落地到 [Context.getFilesDir]/registry/skills/。
- * 复用 [OctoHttp.shared](连接池)+ Gson(项目统一 JSON)+ [KVUtils](MMKV 缓存)。
- *
- * **设计边界(按产品决策 2+3)**:registry 技能是「指令型」(纯 markdown 指导、无参数、无执行器),
- * 与 mobile 内置「可执行工具技能」是不同品类。**下载的技能不混进工具调用列表**(避免 LLM 调到无执行器的工具),
- * 而是作为「知识包」由注入通道([RegistrySkillStore.enabledKnowledge])喂给 agent 上下文。内置技能一律保留。
+ * 技能([listSkills]):指令型,落地到 filesDir/registry/skills/,通过 [RegistrySkillStore] 管理。
+ * 插件([listPlugins]):可执行型,落地到 filesDir/plugins/<slug>/,通过 [PluginRegistryStore] 管理。
  *
  * 契约(公开只读,无鉴权):
- *   GET <base>/api/v1/registry/assets?type=skill        列技能(信封,不含 body)
- *   GET <base>/api/v1/registry/assets/{type/slug}/download   取 {..信封, body:"<markdown>"}
+ *   GET <base>/api/v1/registry/assets?type=skill|plugin    列资产(信封,不含 body)
+ *   GET <base>/api/v1/registry/assets/{type}/{slug}/download    取完整 body
  */
 
 // ───────────────────────── registry 信封 DTO(Gson)─────────────────────────
@@ -169,6 +165,39 @@ internal object RegistryClient {
         }
         null
     }
+
+    // ──── 插件 (type=plugin) ────
+
+    private const val PLUGIN_CACHE_KEY = "PLUGIN_MARKETPLACE_FEED_JSON"
+
+    /** 列插件目录:服务端 → 缓存回退(永不空屏)。 */
+    suspend fun listPlugins(): List<RegistryAsset> = withContext(Dispatchers.IO) {
+        runCatching {
+            val req = Request.Builder().url("${base()}$API?type=plugin").get().build()
+            http.newCall(req).execute().use { resp ->
+                val body = resp.body?.string().orEmpty()
+                if (resp.isSuccessful && body.isNotBlank()) {
+                    val parsed = gson.fromJson(body, RegistryListResponse::class.java)
+                    if (parsed?.data?.isNotEmpty() == true) {
+                        KVUtils.putString(PLUGIN_CACHE_KEY, body)
+                        return@withContext parsed.data
+                    }
+                }
+            }
+        }
+        // 缓存兜底
+        val cached = KVUtils.getString(PLUGIN_CACHE_KEY, "")
+        if (cached.isNotBlank()) {
+            runCatching {
+                val parsed = gson.fromJson(cached, RegistryListResponse::class.java)
+                if (parsed?.data?.isNotEmpty() == true) return@withContext parsed.data
+            }
+        }
+        emptyList()
+    }
+
+    /** 下载单个插件完整 payload(含 base64 ZIP body)。失败返回 null。 */
+    suspend fun downloadPlugin(id: String): RegistryDownloadData? = download(id)
 }
 
 // ───────────────────────── 本地落地 + 安装清单 ─────────────────────────

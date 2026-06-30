@@ -166,6 +166,7 @@ fun FeatureHubScreen(
     onNavigateToAgentSquare: () -> Unit = {},
     onNavigateToUniverse: () -> Unit = {},
     onNavigateToSkillMarketplace: () -> Unit = {},
+    onNavigateToPluginMarketplace: () -> Unit = {},
 ) {
     val ctx = LocalContext.current
     var tab by remember { mutableStateOf(0) }
@@ -192,7 +193,7 @@ fun FeatureHubScreen(
                     onNavigateToUniverse = onNavigateToUniverse,
                     onOpenPost = { selectedPost = it },
                 )
-                else -> ToolboxTab(sections, onNavigateToSkillMarketplace) { ctx.open(it.target) }
+                else -> ToolboxTab(sections, onNavigateToSkillMarketplace, onNavigateToPluginMarketplace) { ctx.open(it.target) }
             }
         }
 
@@ -860,6 +861,7 @@ private fun ExploreEntryCard(icon: ImageVector, tint: Color, title: String, desc
 private fun ToolboxTab(
     sections: List<Pair<Int, List<FeatureItem>>>,
     onMarket: () -> Unit,
+    onPluginMarket: () -> Unit,
     onClick: (FeatureItem) -> Unit,
 ) {
     LazyVerticalGrid(
@@ -874,7 +876,7 @@ private fun ToolboxTab(
         horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.md),
         verticalArrangement = Arrangement.spacedBy(OctopusSpacing.md),
     ) {
-        // 技能商城入口(整行):云端按需下载技能,与内置并存
+        // 技能商城入口(整行)
         item(span = { GridItemSpan(maxLineSpan) }) {
             ExploreEntryCard(
                 icon = Icons.Filled.Extension,
@@ -882,6 +884,16 @@ private fun ToolboxTab(
                 title = stringResource(R.string.skill_marketplace_title),
                 desc = stringResource(R.string.skill_marketplace_entry_desc),
                 onClick = onMarket,
+            )
+        }
+        // 插件商城入口(整行)
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            ExploreEntryCard(
+                icon = Icons.Filled.Apps,
+                tint = PluginTint,
+                title = stringResource(R.string.plugin_marketplace_title),
+                desc = stringResource(R.string.plugin_marketplace_entry_desc),
+                onClick = onPluginMarket,
             )
         }
         sections.forEach { (headerRes, items) ->

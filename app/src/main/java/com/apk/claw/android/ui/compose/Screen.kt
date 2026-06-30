@@ -27,6 +27,8 @@ sealed class Screen(val route: String, @StringRes val labelRes: Int, val icon: I
     data object Universe : Screen("universe", R.string.nav_universe, Icons.Filled.AutoAwesome)
     // 技能商城:广场 → 能力 的嵌套页(非底部 Tab)
     data object SkillMarketplace : Screen("skill_marketplace", R.string.skill_marketplace_title, Icons.Filled.GridView)
+    // 插件商城:广场 → 插件(非底部 Tab)
+    data object PluginMarketplace : Screen("plugin_marketplace", R.string.plugin_marketplace_title, Icons.Filled.GridView)
 
     companion object {
         /** 底部 Tab：对话优先。设备不再独立成页——设备发现/选择已并入对话目标选择器，

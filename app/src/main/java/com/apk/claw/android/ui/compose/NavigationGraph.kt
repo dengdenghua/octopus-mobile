@@ -49,6 +49,7 @@ import com.apk.claw.android.ui.compose.screen.DiscoverScreen
 import com.apk.claw.android.ui.compose.screen.FeatureHubScreen
 import com.apk.claw.android.ui.compose.screen.GhostChatSessionStore
 import com.apk.claw.android.ui.compose.screen.SettingsScreen
+import com.apk.claw.android.ui.compose.screen.PluginMarketplaceScreen
 import com.apk.claw.android.ui.compose.screen.SkillMarketplaceScreen
 import com.apk.claw.android.ui.compose.screen.UniverseScreen
 import com.apk.claw.android.ui.compose.component.LiquidGlassLayer
@@ -277,10 +278,14 @@ fun OctopusNavHost(
                 onNavigateToAgentSquare = { navController.navigate(Screen.AgentSquare.route) },
                 onNavigateToUniverse = { navController.navigate(Screen.Universe.route) },
                 onNavigateToSkillMarketplace = { navController.navigate(Screen.SkillMarketplace.route) },
+                onNavigateToPluginMarketplace = { navController.navigate(Screen.PluginMarketplace.route) },
             )
         }
         composable(Screen.SkillMarketplace.route) {
             SkillMarketplaceScreen(onBack = { navController.popBackStack() })
+        }
+        composable(Screen.PluginMarketplace.route) {
+            PluginMarketplaceScreen(onBack = { navController.popBackStack() })
         }
         composable(Screen.AgentSquare.route) {
             AgentSquareScreen(

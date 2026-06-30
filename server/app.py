@@ -380,6 +380,28 @@ def init_db() -> None:
                 device_id TEXT NOT NULL, report_type TEXT NOT NULL,
                 payload TEXT NOT NULL, ts INTEGER NOT NULL
             );
+            -- 插件/技能 registry(开发者上传 → 管理员审核 → 公开)
+            CREATE TABLE IF NOT EXISTS registry_assets(
+                id TEXT PRIMARY KEY,        -- "<type>/<slug>"
+                slug TEXT NOT NULL,
+                type TEXT NOT NULL,         -- skill | plugin
+                kind TEXT NOT NULL DEFAULT '',  -- browser-script | tool | mini-app | dex | data
+                version TEXT DEFAULT '1.0.0',
+                name TEXT NOT NULL,
+                description TEXT DEFAULT '',
+                category TEXT DEFAULT '',
+                tags TEXT DEFAULT '[]',     -- JSON array of strings
+                platforms TEXT DEFAULT '["mobile"]',  -- JSON array
+                mode TEXT DEFAULT '',       -- inject | tool | mini-app (hint for client)
+                author_id TEXT DEFAULT '',  -- uploader's user_id
+                status TEXT DEFAULT 'pending',  -- pending | approved | rejected
+                reject_reason TEXT DEFAULT '',
+                checksum TEXT DEFAULT '',   -- "sha256:<hex>" of body
+                body TEXT DEFAULT '',       -- base64 ZIP (plugin) or markdown text (skill)
+                body_size INTEGER DEFAULT 0,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            );
             """
         )
         # 迁移:给已存在的 users 表补 email 列(幂等)
@@ -416,6 +438,7 @@ def init_db() -> None:
         c.execute("CREATE INDEX IF NOT EXISTS idx_remote_pair_codes_user ON remote_pair_codes(user_id, expires_at)")
         c.execute("CREATE INDEX IF NOT EXISTS idx_credit_txn_user ON credit_transactions(user_id, ts)")
         c.execute("CREATE INDEX IF NOT EXISTS idx_device_reports_user ON device_reports(user_id, device_id, ts)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_registry_type_status ON registry_assets(type, status, updated_at)")
         # 迁移:给已存在的 remote_devices 表补新列(幂等)
         for _col in (
             "push_token TEXT DEFAULT ''", "os_version TEXT DEFAULT ''",
@@ -1993,6 +2016,261 @@ def plugin_pay(body: dict[str, Any], u: sqlite3.Row = Depends(actor)) -> dict[st
     return {"success": True, "data": {"balance_after": bal_after, "plugin_id": plugin_id, "item": item}}
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# Registry API  (公开只读列表 + 下载;鉴权仅在上传/审核端用)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _registry_row_to_asset(r: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "id": r["id"], "type": r["type"], "kind": r["kind"],
+        "slug": r["slug"], "version": r["version"],
+        "name": r["name"], "description": r["description"],
+        "category": r["category"] or None,
+        "tags": json.loads(r["tags"] or "[]"),
+        "platforms": json.loads(r["platforms"] or '["mobile"]'),
+        "mode": r["mode"] or None,
+        "content": {"ref": r["id"], "checksum": r["checksum"]} if r["checksum"] else None,
+    }
+
+
+@app.get("/api/v1/registry/assets")
+def registry_list(type: str = "", category: str = "", q: str = "") -> dict[str, Any]:
+    """公开资产目录:?type=skill|plugin  可选 category/q 过滤。"""
+    with closing(db()) as c:
+        sql = "SELECT * FROM registry_assets WHERE status='approved'"
+        params: list[Any] = []
+        if type:
+            sql += " AND type=?"; params.append(type)
+        if category:
+            sql += " AND category=?"; params.append(category)
+        rows = c.execute(sql + " ORDER BY updated_at DESC", params).fetchall()
+    data = [_registry_row_to_asset(r) for r in rows]
+    if q:
+        ql = q.lower()
+        data = [a for a in data if ql in a["name"].lower() or ql in a["description"].lower() or ql in a["slug"]]
+    return {"success": True, "total": len(data), "data": data}
+
+
+@app.get("/api/v1/registry/assets/{asset_type}/{slug}/download")
+def registry_download(asset_type: str, slug: str) -> dict[str, Any]:
+    """下载单个资产(含 body)。skill→ markdown 文本;plugin→ base64 ZIP。"""
+    aid = f"{asset_type}/{slug}"
+    with closing(db()) as c:
+        r = c.execute("SELECT * FROM registry_assets WHERE id=? AND status='approved'", (aid,)).fetchone()
+    if not r:
+        raise HTTPException(status_code=404, detail="资产不存在或未审核通过")
+    d = _registry_row_to_asset(r)
+    d["body"] = r["body"] or ""
+    return {"success": True, "data": d}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Developer Portal  (登录用户均可上传;管理员审核后公开)
+# ══════════════════════════════════════════════════════════════════════════════
+
+# 插件 manifest 字段白名单(避免开发者注入非法字段到 DB)
+_PLUGIN_MANIFEST_KEYS = {
+    "type", "kind", "version", "name", "description", "category", "tags",
+    "platforms", "mode", "js", "host_pattern", "block_rules",
+    "tool_name", "tool_params", "http", "page",
+    "allow_hosts", "allow_tools", "allow_device", "allow_pay",
+    "entry_class", "dex_file", "permissions",
+}
+
+MAX_PLUGIN_BODY_BYTES = 10 * 1024 * 1024   # 10MB ZIP 上限
+
+
+@app.post("/dev/plugins/upload")
+def dev_plugin_upload(body: dict[str, Any], u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    """开发者上传插件:
+    {manifest:{...}, body_b64:"<base64 ZIP or empty>", platforms:["mobile"]}
+    body_b64 对 browser-script/tool 可为空(manifest inline);mini-app/dex 需包含 ZIP。
+    SHA-256 在服务端计算并存储;状态 pending → 等待审核。"""
+    manifest: dict = body.get("manifest") or {}
+    body_b64: str = str(body.get("body_b64") or "")
+    platforms = body.get("platforms") or ["mobile"]
+
+    slug = str(manifest.get("id") or manifest.get("slug") or "").strip().lower()
+    if not slug or not re.match(r'^[a-z0-9][a-z0-9_-]{0,63}$', slug):
+        raise HTTPException(400, "slug 无效(小写字母数字/下划线/连字符,1–64 字符)")
+    name = str(manifest.get("name") or "").strip()
+    if not name:
+        raise HTTPException(400, "name required")
+    plugin_type = str(manifest.get("type") or "plugin")
+    kind = str(manifest.get("kind") or manifest.get("type") or "")
+
+    # 解码并校验 body
+    raw_body = b""
+    if body_b64:
+        try:
+            raw_body = base64.b64decode(body_b64)
+        except Exception:
+            raise HTTPException(400, "body_b64 不是合法 base64")
+        if len(raw_body) > MAX_PLUGIN_BODY_BYTES:
+            raise HTTPException(413, f"插件包过大(上限 {MAX_PLUGIN_BODY_BYTES // 1048576}MB)")
+
+    checksum = "sha256:" + hashlib.sha256(raw_body).hexdigest() if raw_body else ""
+    manifest_clean = {k: v for k, v in manifest.items() if k in _PLUGIN_MANIFEST_KEYS}
+
+    aid = f"plugin/{slug}"
+    now = now_ms()
+    user_id = u["user_id"]
+    with closing(db()) as c:
+        existing = c.execute("SELECT author_id, status FROM registry_assets WHERE id=?", (aid,)).fetchone()
+        if existing and existing["author_id"] != user_id:
+            raise HTTPException(403, "该 slug 已被其他开发者占用")
+        c.execute("""
+            INSERT INTO registry_assets(id, slug, type, kind, version, name, description,
+                category, tags, platforms, mode, author_id, status, checksum, body, body_size, created_at, updated_at)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ON CONFLICT(id) DO UPDATE SET
+                kind=excluded.kind, version=excluded.version, name=excluded.name,
+                description=excluded.description, category=excluded.category,
+                tags=excluded.tags, platforms=excluded.platforms, mode=excluded.mode,
+                checksum=excluded.checksum, body=excluded.body, body_size=excluded.body_size,
+                status='pending', reject_reason='', updated_at=excluded.updated_at
+        """, (
+            aid, slug, plugin_type, kind,
+            str(manifest_clean.get("version") or "1.0.0"),
+            name, str(manifest_clean.get("description") or ""),
+            str(manifest_clean.get("category") or ""),
+            json.dumps(manifest_clean.get("tags") or []),
+            json.dumps(platforms),
+            str(manifest_clean.get("mode") or kind),
+            user_id, "pending", checksum,
+            body_b64, len(raw_body),
+            now, now,
+        ))
+        c.commit()
+    return {"success": True, "data": {"id": aid, "slug": slug, "status": "pending"}}
+
+
+@app.get("/dev/plugins")
+def dev_plugin_list(u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    """列出当前用户上传的插件(含各状态)。"""
+    with closing(db()) as c:
+        rows = c.execute(
+            "SELECT id, slug, type, kind, version, name, description, status, reject_reason, "
+            "body_size, checksum, created_at, updated_at FROM registry_assets "
+            "WHERE author_id=? ORDER BY updated_at DESC",
+            (u["user_id"],)
+        ).fetchall()
+    return {"success": True, "data": [dict(r) for r in rows]}
+
+
+@app.delete("/dev/plugins/{slug}")
+def dev_plugin_delete(slug: str, u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    """开发者删除自己上传的插件(只能删 pending/rejected;approved 需管理员)。"""
+    aid = f"plugin/{slug}"
+    with closing(db()) as c:
+        r = c.execute("SELECT author_id, status FROM registry_assets WHERE id=?", (aid,)).fetchone()
+        if not r:
+            raise HTTPException(404, "插件不存在")
+        if r["author_id"] != u["user_id"]:
+            raise HTTPException(403, "无权删除")
+        if r["status"] == "approved":
+            raise HTTPException(400, "已审核通过的插件请联系管理员下架")
+        c.execute("DELETE FROM registry_assets WHERE id=?", (aid,))
+        c.commit()
+    return {"success": True}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Admin — 插件审核
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.get("/admin/api/plugins")
+def admin_plugin_list(
+    status: str = "pending", type: str = "",
+    _: bool = Depends(admin_guard),
+) -> dict[str, Any]:
+    with closing(db()) as c:
+        sql = "SELECT id, slug, type, kind, version, name, description, category, " \
+              "status, reject_reason, author_id, body_size, checksum, created_at, updated_at " \
+              "FROM registry_assets WHERE 1"
+        params: list[Any] = []
+        if status:
+            sql += " AND status=?"; params.append(status)
+        if type:
+            sql += " AND type=?"; params.append(type)
+        rows = c.execute(sql + " ORDER BY created_at DESC LIMIT 200", params).fetchall()
+    return {"success": True, "data": [dict(r) for r in rows]}
+
+
+@app.post("/admin/api/plugins/{slug}/approve")
+def admin_plugin_approve(slug: str, _: bool = Depends(admin_guard)) -> dict[str, Any]:
+    aid = f"plugin/{slug}"
+    with closing(db()) as c:
+        r = c.execute("SELECT id FROM registry_assets WHERE id=?", (aid,)).fetchone()
+        if not r:
+            raise HTTPException(404, "插件不存在")
+        c.execute("UPDATE registry_assets SET status='approved', reject_reason='', updated_at=? WHERE id=?",
+                  (now_ms(), aid))
+        c.commit()
+    return {"success": True}
+
+
+@app.post("/admin/api/plugins/{slug}/reject")
+def admin_plugin_reject(slug: str, body: dict[str, Any], _: bool = Depends(admin_guard)) -> dict[str, Any]:
+    aid = f"plugin/{slug}"
+    reason = str(body.get("reason") or "")[:500]
+    with closing(db()) as c:
+        r = c.execute("SELECT id FROM registry_assets WHERE id=?", (aid,)).fetchone()
+        if not r:
+            raise HTTPException(404, "插件不存在")
+        c.execute("UPDATE registry_assets SET status='rejected', reject_reason=?, updated_at=? WHERE id=?",
+                  (reason, now_ms(), aid))
+        c.commit()
+    return {"success": True}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Admin — Profit time-series
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.get("/admin/api/profit/timeseries")
+def admin_profit_timeseries(days: int = 30, _: bool = Depends(admin_guard)) -> dict[str, Any]:
+    """盈利时序:最近 N 天逐日分解(收入 + 新用户 + 对话次数 + 积分消耗 + 插件支付)。"""
+    days = max(1, min(days, 365))
+    cutoff = now_ms() - days * 86_400_000
+    with closing(db()) as c:
+        rev_rows = c.execute(
+            "SELECT date(ts/1000,'unixepoch') d, SUM(amount_fen)/100.0 rev, COUNT(*) n "
+            "FROM orders WHERE status='PAID' AND ts>=? GROUP BY d", (cutoff,)
+        ).fetchall()
+        usr_rows = c.execute(
+            "SELECT date(created_at/1000,'unixepoch') d, COUNT(*) n "
+            "FROM users WHERE created_at>=? GROUP BY d", (cutoff,)
+        ).fetchall()
+        chat_rows = c.execute(
+            "SELECT date(ts/1000,'unixepoch') d, COUNT(*) calls, "
+            "COALESCE(SUM(tokens_in+tokens_out),0) tokens, COALESCE(SUM(credits),0) cr "
+            "FROM usage_log WHERE ts>=? GROUP BY d", (cutoff,)
+        ).fetchall()
+        plugin_rows = c.execute(
+            "SELECT date(ts/1000,'unixepoch') d, COALESCE(SUM(ABS(delta)),0) cr, COUNT(*) n "
+            "FROM credit_transactions WHERE source='plugin_pay' AND ts>=? GROUP BY d", (cutoff,)
+        ).fetchall()
+
+    # 合并到 day→dict
+    days_map: dict[str, dict[str, Any]] = {}
+    for r in rev_rows:
+        days_map.setdefault(r["d"], {})["revenue"] = round(r["rev"] or 0, 2)
+        days_map[r["d"]]["paidOrders"] = r["n"]
+    for r in usr_rows:
+        days_map.setdefault(r["d"], {})["newUsers"] = r["n"]
+    for r in chat_rows:
+        days_map.setdefault(r["d"], {})["chatCalls"] = r["calls"]
+        days_map[r["d"]]["tokens"] = r["tokens"]
+        days_map[r["d"]]["creditsSpent"] = r["cr"]
+    for r in plugin_rows:
+        days_map.setdefault(r["d"], {})["pluginPayCredits"] = r["cr"]
+        days_map[r["d"]]["pluginPayOrders"] = r["n"]
+
+    data = sorted([{"date": d, **v} for d, v in days_map.items()])
+    return {"success": True, "days": days, "data": data}
+
+
 @app.get("/v1/models")
 def list_models() -> dict[str, Any]:
     """公开模型目录(带每模型积分倍率 + 是否免费),供 App 渲染。"""
@@ -2692,6 +2970,15 @@ def _profit_snapshot() -> dict[str, Any]:
                         "SUM(CASE WHEN member_expire_at>? THEN 1 ELSE 0 END) mem FROM users", (now,)).fetchone()
         act = c.execute("SELECT COUNT(*) n FROM (SELECT user_id FROM usage_log "
                         "UNION SELECT user_id FROM media_log)").fetchone()
+        plugin_pay = c.execute(
+            "SELECT COALESCE(SUM(ABS(delta)),0) cr, COUNT(*) n "
+            "FROM credit_transactions WHERE source='plugin_pay'"
+        ).fetchone()
+        registry = c.execute(
+            "SELECT SUM(CASE WHEN status='approved' THEN 1 ELSE 0 END) approved, "
+            "SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) pending, "
+            "COUNT(*) total FROM registry_assets WHERE type='plugin'"
+        ).fetchone()
     revenue = (rev["fen"] or 0) / 100.0
     img_n, vid_n = med["img"] or 0, med["vid"] or 0
     chat_cost = g["tin"] / 1e6 * QWEN_IN_PRICE + g["tout"] / 1e6 * QWEN_OUT_PRICE
@@ -2720,6 +3007,15 @@ def _profit_snapshot() -> dict[str, Any]:
         "creditPrice": CREDIT_PRICE, "freeQuota": QWEN_FREE_QUOTA,
         "prices": {"qwenIn": QWEN_IN_PRICE, "qwenOut": QWEN_OUT_PRICE,
                    "agnesImage": AGNES_IMAGE_COST, "agnesVideo": AGNES_VIDEO_COST},
+        # 插件生态指标
+        "pluginPayCredits": plugin_pay["cr"] or 0,
+        "pluginPayOrders": plugin_pay["n"] or 0,
+        "pluginPayRevenue": round((plugin_pay["cr"] or 0) * CREDIT_PRICE, 2),
+        "registry": {
+            "totalPlugins": registry["total"] or 0,
+            "approvedPlugins": registry["approved"] or 0,
+            "pendingReview": registry["pending"] or 0,
+        },
     }
 
 
