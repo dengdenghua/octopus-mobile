@@ -97,6 +97,14 @@ VIDEO_CREDITS = int(os.environ.get("VIDEO_CREDITS", "40"))           # 非会员
 VIDEO_DAILY_QUOTA = int(os.environ.get("VIDEO_DAILY_QUOTA", "3"))    # 每用户每日视频次数上限
 IMAGE_MODEL = os.environ.get("IMAGE_MODEL", "agnes-image-2.1-flash")
 VIDEO_MODEL = os.environ.get("VIDEO_MODEL", "agnes-video-v2.0")
+# ── 盈利模型(后台「盈利/经营」用,均可 env 覆盖):上游成本单价 + 积分售价 ──
+QWEN_IN_PRICE = float(os.environ.get("QWEN_IN_PRICE", "0.2"))       # ¥/百万 输入 token(qwen3.5-flash 基础档)
+QWEN_OUT_PRICE = float(os.environ.get("QWEN_OUT_PRICE", "2.0"))     # ¥/百万 输出 token
+AGNES_IMAGE_COST = float(os.environ.get("AGNES_IMAGE_COST", "0"))   # ¥/张(Agnes 现对平台免费)
+AGNES_VIDEO_COST = float(os.environ.get("AGNES_VIDEO_COST", "0"))   # ¥/个
+CREDIT_PRICE = float(os.environ.get("CREDIT_PRICE", "0.05"))        # ¥/积分(充值档反推的估算均价)
+# 是否仍吃 qwen 免费额度:决定「当前」成本口径(True→当前上游≈0;满负荷口径恒按真实价)
+QWEN_FREE_QUOTA = os.environ.get("QWEN_FREE_QUOTA", "1") not in ("0", "false", "False", "")
 # 无限额度白名单(管理员/内部账号邮箱):走中转不预扣、不扣费、不被余额拦,仍记 usage_log(credits=0)。
 # 逗号分隔、大小写不敏感。
 UNLIMITED_EMAILS = {s.strip().lower() for s in os.environ.get("UNLIMITED_EMAILS", "").split(",") if s.strip()}
@@ -333,6 +341,15 @@ def init_db() -> None:
             CREATE TABLE IF NOT EXISTS usage_log(
                 id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, model TEXT,
                 tokens_in INTEGER, tokens_out INTEGER, credits INTEGER, ts INTEGER
+            );
+            -- 生图/生视频(Agnes)调用流水:会员也记(免费→credits=0),用于后台按用户统计媒体次数
+            CREATE TABLE IF NOT EXISTS media_log(
+                id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, kind TEXT,
+                model TEXT, credits INTEGER, ref_id TEXT, ts INTEGER
+            );
+            -- 意图标签:异步对每段对话首轮消息分类,【只存标签不存任何聊天内容】,用于"用户主要用来做啥"
+            CREATE TABLE IF NOT EXISTS message_tags(
+                id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, tag TEXT, model TEXT, ts INTEGER
             );
             CREATE TABLE IF NOT EXISTS admin_log(
                 id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER, action TEXT,
@@ -1534,7 +1551,12 @@ def _stripe_checkout_url(order_no: str, goods: dict[str, Any], currency: str, am
 
 
 def _settle(c: sqlite3.Connection, order: sqlite3.Row) -> int:
-    """Mark order PAID and grant credits / membership. Returns granted credits."""
+    """Mark order PAID and grant credits / membership. 返回发放积分(已结算过返回 0)。
+    幂等闸:把 PENDING→PAID 用一条原子 UPDATE 抢占(取写锁)——并发/重复回调里只有一个能赢,
+    赢家才发放,杜绝重复发钱。整笔(抢占+发放)在调用方一次 commit 内,崩溃则整体回滚保持一致。"""
+    if c.execute("UPDATE orders SET status='PAID' WHERE order_no=? AND status='PENDING'",
+                 (order["order_no"],)).rowcount != 1:
+        return 0  # 已被并发/重复回调结算,本次不再发放
     g = GOODS_BY_ID[order["goods_id"]]
     uid = order["user_id"]
     currency = _normalize_currency(order["currency"] or "CNY")
@@ -1565,7 +1587,7 @@ def _settle(c: sqlite3.Connection, order: sqlite3.Row) -> int:
                   (new_exp, uid))
     if g["kind"] == "subscription":  # 记录当前订阅档,供续费用
         c.execute("UPDATE users SET sub_goods_id = ? WHERE user_id = ?", (g["id"], uid))
-    c.execute("UPDATE orders SET status='PAID' WHERE order_no=?", (order["order_no"],))
+    # 订单状态已在开头原子置 PAID(幂等闸),此处不再重复
     return granted + gift
 
 
@@ -1580,8 +1602,11 @@ def query_order(order_no: str, u: sqlite3.Row = Depends(actor)) -> dict[str, Any
         status = o["status"]
         if status == "PENDING" and PAYMENT_PROVIDER == "mock":
             granted = _settle(c, o)
-            status = "PAID"
             c.commit()
+            status = "PAID"
+            if granted == 0:  # 已被并发/回调结算 → 按商品算应得积分用于展示
+                _p, _gf = _goods_credits(GOODS_BY_ID[o["goods_id"]], _normalize_currency(o["currency"] or "CNY"))
+                granted = _p + _gf
         elif status == "PAID":
             g = GOODS_BY_ID[o["goods_id"]]
             paid, gift = _goods_credits(g, _normalize_currency(o["currency"] or "CNY"))
@@ -1634,7 +1659,15 @@ async def _stripe_webhook(request: Request) -> JSONResponse:
         return JSONResponse({"ok": True, "no_order": True})
     with closing(db()) as c:
         o = c.execute("SELECT * FROM orders WHERE order_no=?", (order_no,)).fetchone()
-        if o is not None and o["status"] == "PENDING":  # 幂等:已 PAID 的重复回调放过
+        if o is not None and o["status"] == "PENDING":  # 幂等由 _settle 内原子 UPDATE 兜底
+            # 防御纵深:核对 Stripe 实收金额/币种与订单一致才结算(金额本就服务端固定,这是防漂移兜底;
+            # amount_total 缺失时不阻断,回退信任已验签回调 + 服务端固定金额)
+            paid_minor = obj.get("amount_total")
+            paid_cur = str(obj.get("currency") or "").upper()
+            if paid_minor is not None and (
+                int(paid_minor) != int(o["amount_minor"] or 0)
+                or paid_cur != _normalize_currency(o["currency"] or "CNY")):
+                return JSONResponse({"ok": True, "amount_mismatch": True})  # 200 防 Stripe 反复重投
             _settle(c, o)
             c.commit()
     return JSONResponse({"ok": True})
@@ -1976,6 +2009,18 @@ async def chat_completions(body: dict[str, Any], request: Request, u: sqlite3.Ro
         _reconcile_usage(user_id, model, tin, tout, mult, hold, free=unlimited,
                          ref_id=request_id, reserved=reserved)
 
+    # ── 意图打标签(C:异步 fire-and-forget)──
+    # 只在每段对话「首轮」(≤1 条 user 消息)打一次,降量;只存标签不存内容;不阻塞聊天、不加延迟。
+    try:
+        _user_msgs = [m for m in (body.get("messages") or [])
+                      if isinstance(m, dict) and m.get("role") == "user"]
+        if _user_msgs and len(_user_msgs) <= 1:
+            _c = _user_msgs[-1].get("content")
+            _txt = _c if isinstance(_c, str) else json.dumps(_c, ensure_ascii=False)
+            _fire_bg(_tag_intent(user_id, _txt))
+    except Exception:  # noqa: BLE001 — 打标签调度失败不影响聊天
+        pass
+
     # ── 非流式 ──
     if not bool(body.get("stream")):
         payload = dict(body)
@@ -2087,6 +2132,19 @@ def _refund_media(user_id: str, charged: int, ref_id: str) -> None:
         c.commit()
 
 
+def _log_media(user_id: str, kind: str, model: str, credits: int, ref_id: str) -> None:
+    """记一笔生图/生视频调用流水(会员免费也记,credits=0)。仅用于统计,失败不影响主流程。"""
+    try:
+        with closing(db()) as c:
+            c.execute(
+                "INSERT INTO media_log(user_id, kind, model, credits, ref_id, ts) VALUES(?,?,?,?,?,?)",
+                (user_id, kind, model, credits, ref_id, now_ms()),
+            )
+            c.commit()
+    except Exception:  # noqa: BLE001 — 统计流水写失败不该让生成接口报错
+        pass
+
+
 @app.post("/v1/images/generations")
 async def images_generations(body: dict[str, Any], u: sqlite3.Row = Depends(actor)) -> Any:
     """生图(同步):会员/白名单免费,非会员扣 IMAGE_CREDITS。透传 Agnes /images/generations。"""
@@ -2115,6 +2173,7 @@ async def images_generations(body: dict[str, Any], u: sqlite3.Row = Depends(acto
         _refund_media(u["user_id"], charged, ref_id)
         return JSONResponse(status_code=resp.status_code,
                             content={"error": {"message": "生图失败", "status": resp.status_code}})
+    _log_media(u["user_id"], "image", payload["model"], charged, ref_id)
     return JSONResponse(content=resp.json())
 
 
@@ -2146,6 +2205,7 @@ async def video_generations(body: dict[str, Any], u: sqlite3.Row = Depends(actor
         msg = "视频生成繁忙(每分钟限 1 个),请稍后再试" if busy else "生视频失败"
         return JSONResponse(status_code=resp.status_code,
                             content={"error": {"message": msg, "status": resp.status_code}})
+    _log_media(u["user_id"], "video", payload["model"], charged, ref_id)
     return JSONResponse(content=data)
 
 
@@ -2222,11 +2282,17 @@ def admin_stats(_: bool = Depends(admin_guard)) -> dict[str, Any]:
             "SELECT COALESCE(SUM(tokens_in),0) tin, COALESCE(SUM(tokens_out),0) tout, "
             "COALESCE(SUM(credits),0) spent, COUNT(*) calls FROM usage_log"
         ).fetchone()
+        m = c.execute(
+            "SELECT SUM(CASE WHEN kind='image' THEN 1 ELSE 0 END) img, "
+            "SUM(CASE WHEN kind='video' THEN 1 ELSE 0 END) vid, "
+            "COALESCE(SUM(credits),0) mspent FROM media_log"
+        ).fetchone()
     return {
         "users": u["n"], "totalCredits": u["cr"], "freeGranted": u["fg"],
         "members": u["mem"] or 0, "banned": u["ban"] or 0, "invited": u["inv"] or 0,
         "orders": o["n"], "paidOrders": o["paid"] or 0, "revenueFen": o["rev"],
         "tokensIn": g["tin"], "tokensOut": g["tout"], "creditsSpent": g["spent"], "calls": g["calls"],
+        "imageCalls": m["img"] or 0, "videoCalls": m["vid"] or 0, "mediaSpent": m["mspent"],
     }
 
 
@@ -2243,13 +2309,24 @@ def admin_users(_: bool = Depends(admin_guard), q: str = "", limit: int = 50, of
         total = c.execute(f"SELECT COUNT(*) n FROM users {where}", params).fetchone()["n"]
         rows = c.execute(
             f"SELECT user_id, email, mobile, nickname, credits, free_granted, member_expire_at, "
-            f"banned, invite_code, invited_by, created_at FROM users {where} "
+            f"banned, invite_code, invited_by, created_at, "
+            # 每用户累计消耗:聊天扣分合计 + 调用次数(口径同顶部「消耗积分」卡 = usage_log)
+            f"(SELECT COALESCE(SUM(credits),0) FROM usage_log WHERE usage_log.user_id = users.user_id) AS spent, "
+            f"(SELECT COUNT(*) FROM usage_log WHERE usage_log.user_id = users.user_id) AS calls, "
+            # 生图/生视频调用次数(会员免费也计入,来自 media_log)
+            f"(SELECT COUNT(*) FROM media_log WHERE media_log.user_id = users.user_id AND kind='image') AS image_calls, "
+            f"(SELECT COUNT(*) FROM media_log WHERE media_log.user_id = users.user_id AND kind='video') AS video_calls, "
+            # 媒体消耗积分:生图/生视频实际扣分合计(会员=0;失败已退款不入表,故即净消耗)
+            f"(SELECT COALESCE(SUM(credits),0) FROM media_log WHERE media_log.user_id = users.user_id) AS media_spent "
+            f"FROM users {where} "
             f"ORDER BY created_at DESC LIMIT ? OFFSET ?", params + [limit, offset]
         ).fetchall()
     now = now_ms()
     return {"total": total, "items": [
         {"userId": r["user_id"], "email": r["email"], "mobile": r["mobile"], "nickname": r["nickname"],
          "credits": r["credits"], "freeGranted": r["free_granted"],
+         "spent": r["spent"], "calls": r["calls"],
+         "imageCalls": r["image_calls"], "videoCalls": r["video_calls"], "mediaSpent": r["media_spent"],
          "memberActive": r["member_expire_at"] > now, "memberExpireAt": r["member_expire_at"],
          "banned": bool(r["banned"]), "inviteCode": r["invite_code"], "invitedBy": r["invited_by"],
          "createdAt": r["created_at"]} for r in rows]}
@@ -2381,6 +2458,259 @@ def admin_logs(_: bool = Depends(admin_guard), limit: int = 100) -> dict[str, An
     return {"items": [dict(r) for r in rows]}
 
 
+async def _qwen_complete(messages: list[dict[str, str]], max_tokens: int = 1400,
+                         timeout: float = 90) -> str | None:
+    """服务端发起一次 qwen 补全。未配置 qwen → None(本地优雅降级)。timeout 可调:
+    后台打标签传短超时(8s),避免次要任务挂久;后台 AI 分析用默认 90s。"""
+    prov = PROVIDERS.get("qwen", {})
+    base, key = (prov.get("base_url") or "").rstrip("/"), prov.get("api_key") or ""
+    if not base or not key:
+        return None
+    import httpx  # 惰性 import
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.post(
+                f"{base}/chat/completions",
+                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                json={"model": DEFAULT_MODEL, "messages": messages,
+                      "max_tokens": max_tokens, "temperature": 0.4, "stream": False},
+            )
+        if resp.status_code >= 400:
+            return None
+        data = resp.json()
+        return ((data.get("choices") or [{}])[0].get("message") or {}).get("content")
+    except Exception:  # noqa: BLE001 — 分析失败不该让后台 500
+        return None
+
+
+# 意图标签固定类目(只用于分类落标签,不存原文)。改这里即调整分类体系。
+INTENT_TAGS = ["编程", "写作", "翻译", "学习答疑", "生活咨询", "角色扮演", "办公效率", "信息查询", "其他"]
+
+_bg_tasks: set[Any] = set()
+
+
+_BG_MAX = 64  # 在途后台任务上限:超过即丢弃新任务(背压),防 qwen 持续慢时堆积涨内存
+
+
+def _fire_bg(coro: Any) -> None:
+    """启动 fire-and-forget 后台任务并持强引用(防被 GC 取消)。
+    背压:在途任务≥_BG_MAX 时直接丢弃(关闭协程避免 never-awaited 警告);无运行 loop 时同样丢弃。"""
+    if len(_bg_tasks) >= _BG_MAX:
+        coro.close()
+        return
+    try:
+        t = asyncio.create_task(coro)
+        _bg_tasks.add(t)
+        t.add_done_callback(_bg_tasks.discard)
+    except RuntimeError:
+        coro.close()
+
+
+async def _tag_intent(user_id: str, text: str) -> None:
+    """异步给一段对话首轮消息打意图标签 —— 【只存标签,不存任何聊天内容】。
+    qwen 未配置/失败/超时一律静默跳过,绝不影响聊天主流程。"""
+    text = (text or "").strip()
+    if not text:
+        return
+    try:
+        out = await _qwen_complete(
+            [{"role": "system", "content":
+              "你是意图分类器。把用户消息归到且仅归到以下类别之一,只输出类别名(四个字以内)、不要解释:"
+              + "、".join(INTENT_TAGS)},
+             {"role": "user", "content": text[:400]}],  # 只取前 400 字做分类,够判主题
+            max_tokens=8, timeout=8)  # 次要任务,短超时:qwen 慢就放弃这次打标签,不挂久
+        if not out:
+            return
+        tag = next((t for t in INTENT_TAGS if t in out), "其他")
+        with closing(db()) as c:
+            c.execute("INSERT INTO message_tags(user_id, tag, model, ts) VALUES(?,?,?,?)",
+                      (user_id, tag, DEFAULT_MODEL, now_ms()))
+            c.commit()
+    except Exception:  # noqa: BLE001 — 后台打标签失败绝不冒泡
+        pass
+
+
+def _collect_analysis() -> dict[str, Any]:
+    """聚合行为元数据(平台不存聊天内容,故仅行为):每用户特征 + 规则分群 + 重点名单。"""
+    now = now_ms()
+    day = 86_400_000
+    with closing(db()) as c:
+        rows = c.execute(
+            "SELECT u.user_id, u.email, u.mobile, u.credits, u.member_expire_at, u.banned, u.created_at, "
+            "(SELECT COALESCE(SUM(credits),0) FROM usage_log WHERE user_id=u.user_id) chat_spent, "
+            "(SELECT COUNT(*) FROM usage_log WHERE user_id=u.user_id) chat_calls, "
+            "(SELECT COUNT(*) FROM media_log WHERE user_id=u.user_id AND kind='image') img, "
+            "(SELECT COUNT(*) FROM media_log WHERE user_id=u.user_id AND kind='video') vid, "
+            "(SELECT COALESCE(SUM(credits),0) FROM media_log WHERE user_id=u.user_id) media_spent, "
+            "(SELECT MAX(ts) FROM usage_log WHERE user_id=u.user_id) last_chat, "
+            "(SELECT MAX(ts) FROM media_log WHERE user_id=u.user_id) last_media "
+            "FROM users u"
+        ).fetchall()
+        tag_rows = c.execute("SELECT user_id, tag, COUNT(*) n FROM message_tags "
+                             "GROUP BY user_id, tag").fetchall()
+        dist_rows = c.execute("SELECT tag, COUNT(*) n FROM message_tags "
+                              "GROUP BY tag ORDER BY n DESC").fetchall()
+    # 每用户主要用途(标签计数最高的)+ 全站用途分布
+    top_tag: dict[str, str] = {}
+    _best: dict[str, int] = {}
+    for tr in tag_rows:
+        if tr["n"] > _best.get(tr["user_id"], 0):
+            _best[tr["user_id"]] = tr["n"]
+            top_tag[tr["user_id"]] = tr["tag"]
+    tag_dist = [{"tag": d["tag"], "n": d["n"]} for d in dist_rows]
+
+    def mask(e: str) -> str:
+        if "@" in e:
+            loc, dom = e.split("@", 1)
+            return (loc[:1] + "***@" + dom)
+        return (e[:3] + "***") if len(e) > 3 else "用户"
+
+    feats, seg_counts = [], {"高价值": 0, "待转化": 0, "活跃普通": 0, "沉睡": 0, "封禁": 0}
+    for r in rows:
+        member = r["member_expire_at"] > now
+        total_spent = (r["chat_spent"] or 0) + (r["media_spent"] or 0)
+        media_calls = (r["img"] or 0) + (r["vid"] or 0)
+        activity = (r["chat_calls"] or 0) + media_calls
+        last = max(r["last_chat"] or 0, r["last_media"] or 0, r["created_at"] or 0)
+        days_idle = round((now - last) / day, 1) if last else None
+        if r["banned"]:
+            seg = "封禁"
+        elif activity == 0 or (days_idle is not None and days_idle > 14):
+            seg = "沉睡"
+        elif member or (r["credits"] or 0) >= 500:  # 会员 或 余额高(充过值)= 真高价值
+            seg = "高价值"
+        elif (not member) and (media_calls >= 5 or total_spent >= 40):  # 非会员重度免费 = 转化目标
+            seg = "待转化"
+        else:
+            seg = "活跃普通"
+        seg_counts[seg] += 1
+        email = r["email"] or r["mobile"] or r["user_id"]
+        feats.append({
+            "email": email, "label": mask(email), "uid": r["user_id"],
+            "member": member, "banned": bool(r["banned"]), "balance": r["credits"],
+            "totalSpent": total_spent, "chatSpent": r["chat_spent"] or 0, "chatCalls": r["chat_calls"] or 0,
+            "img": r["img"] or 0, "vid": r["vid"] or 0, "mediaSpent": r["media_spent"] or 0,
+            "daysIdle": days_idle, "seg": seg, "topTag": top_tag.get(r["user_id"]),
+        })
+    convert = sorted([f for f in feats if f["seg"] == "待转化"],
+                     key=lambda x: (x["img"] + x["vid"], x["totalSpent"]), reverse=True)[:5]
+    vip = sorted([f for f in feats if f["seg"] == "高价值"],
+                 key=lambda x: x["totalSpent"], reverse=True)[:5]
+    churn = sorted([f for f in feats if not f["banned"] and (f["chatCalls"] + f["img"] + f["vid"]) > 0
+                    and ((f["daysIdle"] or 0) > 7 or ((not f["member"]) and (f["balance"] or 0) < 20))],
+                   key=lambda x: (x["daysIdle"] or 0), reverse=True)[:5]
+    return {"now": now, "users": len(feats), "segments": seg_counts, "tagDist": tag_dist,
+            "convert": convert, "vip": vip, "churn": churn, "feats": feats}
+
+
+@app.post("/admin/api/ai-analysis")
+async def admin_ai_analysis(request: Request, _: bool = Depends(admin_guard)) -> dict[str, Any]:
+    """后台 AI 经营分析:规则分群(即时)+ qwen 自然语言洞察(需配置 qwen)。仅行为元数据,无聊天内容。"""
+    rate_limit(f"aianalysis:{client_ip(request)}", 6, 60)  # LLM 有成本,限频
+    d = _collect_analysis()
+    brief = {  # 发给 LLM 的画像:邮箱脱敏(label),无任何聊天内容(仅意图粗标签)
+        "总用户": d["users"], "分群计数": d["segments"],
+        "全站用途分布": d["tagDist"],
+        "用户行为(节选)": [
+            {"用户": f["label"], "分群": f["seg"], "会员": f["member"], "余额": f["balance"],
+             "累计消耗": f["totalSpent"], "聊天次数": f["chatCalls"], "生图": f["img"],
+             "生视频": f["vid"], "闲置天数": f["daysIdle"], "主要用途": f["topTag"]}
+            for f in d["feats"][:40]
+        ],
+    }
+    sys_p = ("你是 Octopus(手机 AI 自动化助手 App)的数据运营分析师。下面是后台用户的"
+             "【行为元数据 + 意图粗标签】。重要:平台不存任何聊天原文/图片 prompt,"
+             "「用途/主要用途」只是粗分类标签,可据此描述用户用来做什么,但不要编造标签之外的细节。"
+             "请用中文输出一份简洁务实的经营分析:①整体快照(含『用户主要用来做啥』的用途分布解读);"
+             "②各分群画像与典型代表(用脱敏代号);③转化/流失重点名单及理由;④3 条可执行运营动作。"
+             "markdown 小标题+要点,不说空话。")
+    report = await _qwen_complete(
+        [{"role": "system", "content": sys_p},
+         {"role": "user", "content": "数据(JSON):\n" + json.dumps(brief, ensure_ascii=False)}],
+        max_tokens=1400)
+    strip = lambda arr: [{k: f[k] for k in ("email", "seg", "member", "balance", "totalSpent",
+                                            "img", "vid", "daysIdle")} for f in arr]
+    return {
+        "generatedAt": d["now"], "users": d["users"], "segments": d["segments"], "tagDist": d["tagDist"],
+        "convert": strip(d["convert"]), "vip": strip(d["vip"]), "churn": strip(d["churn"]),
+        "llm": {"available": report is not None, "report": report,
+                "note": None if report else "未配置 qwen(本地 mock 无 key)。结构化分群为规则实时计算;接入 qwen 的盒子上会自动生成 AI 叙述。"},
+    }
+
+
+def _profit_snapshot() -> dict[str, Any]:
+    """盈利/单位经济快照(确定性)。成本两套口径:当前(吃免费额度→上游≈0)vs 满负荷(真实上游价)。"""
+    now = now_ms()
+    with closing(db()) as c:
+        rev = c.execute("SELECT COALESCE(SUM(amount_fen),0) fen, COUNT(*) n "
+                        "FROM orders WHERE status='PAID'").fetchone()
+        g = c.execute("SELECT COALESCE(SUM(tokens_in),0) tin, COALESCE(SUM(tokens_out),0) tout, "
+                      "COALESCE(SUM(credits),0) cr, COUNT(*) calls FROM usage_log").fetchone()
+        med = c.execute("SELECT SUM(CASE WHEN kind='image' THEN 1 ELSE 0 END) img, "
+                        "SUM(CASE WHEN kind='video' THEN 1 ELSE 0 END) vid, "
+                        "COALESCE(SUM(credits),0) cr FROM media_log").fetchone()
+        usr = c.execute("SELECT COUNT(*) n, COALESCE(SUM(credits),0) bal, COALESCE(SUM(free_granted),0) fg, "
+                        "SUM(CASE WHEN member_expire_at>? THEN 1 ELSE 0 END) mem FROM users", (now,)).fetchone()
+        act = c.execute("SELECT COUNT(*) n FROM (SELECT user_id FROM usage_log "
+                        "UNION SELECT user_id FROM media_log)").fetchone()
+    revenue = (rev["fen"] or 0) / 100.0
+    img_n, vid_n = med["img"] or 0, med["vid"] or 0
+    chat_cost = g["tin"] / 1e6 * QWEN_IN_PRICE + g["tout"] / 1e6 * QWEN_OUT_PRICE
+    media_cost = img_n * AGNES_IMAGE_COST + vid_n * AGNES_VIDEO_COST
+    cost_full = chat_cost + media_cost                      # 满负荷:真实上游成本
+    cost_now = (0.0 if QWEN_FREE_QUOTA else chat_cost) + media_cost  # 当前:免费额度下 qwen≈0、media 现免费
+    credits_spent = (g["cr"] or 0) + (med["cr"] or 0)
+    users_n, active_n = usr["n"] or 0, act["n"] or 0
+    outstanding = usr["bal"] or 0
+    return {
+        "revenue": round(revenue, 2), "paidOrders": rev["n"] or 0,
+        "users": users_n, "members": usr["mem"] or 0, "activeUsers": active_n,
+        "tokensIn": g["tin"] or 0, "tokensOut": g["tout"] or 0, "chatCalls": g["calls"] or 0,
+        "imageCalls": img_n, "videoCalls": vid_n,
+        "creditsSpent": credits_spent, "servedValue": round(credits_spent * CREDIT_PRICE, 2),
+        "freeGranted": usr["fg"] or 0,
+        "outstandingCredits": outstanding, "outstandingLiability": round(outstanding * CREDIT_PRICE, 2),
+        "costFull": round(cost_full, 4), "chatCostFull": round(chat_cost, 4), "mediaCostFull": round(media_cost, 4),
+        "costNow": round(cost_now, 4),
+        "grossFull": round(revenue - cost_full, 2),
+        "grossMarginFull": round((revenue - cost_full) / revenue * 100, 1) if revenue > 0 else None,
+        "subsidyFull": round(cost_full - revenue, 4),                    # 满负荷下净烧的上游钱
+        "costPerActiveFull": round(cost_full / active_n, 4) if active_n else 0,
+        "arpu": round(revenue / users_n, 2) if users_n else 0,
+        "costPerCreditFull": round(cost_full / credits_spent, 5) if credits_spent else 0,  # ¥/积分 真实成本基(给 L2)
+        "creditPrice": CREDIT_PRICE, "freeQuota": QWEN_FREE_QUOTA,
+        "prices": {"qwenIn": QWEN_IN_PRICE, "qwenOut": QWEN_OUT_PRICE,
+                   "agnesImage": AGNES_IMAGE_COST, "agnesVideo": AGNES_VIDEO_COST},
+    }
+
+
+@app.get("/admin/api/profit")
+def admin_profit(_: bool = Depends(admin_guard)) -> dict[str, Any]:
+    """盈利模型 L1 快照 + L2 盈亏平衡基数(确定性,即时)。"""
+    return _profit_snapshot()
+
+
+@app.post("/admin/api/profit-advisor")
+async def admin_profit_advisor(request: Request, _: bool = Depends(admin_guard)) -> dict[str, Any]:
+    """盈利模型 L3:把财务快照喂 qwen 出经营诊断 + 定价/增长/风险建议。仅聚合财务数,无 PII。"""
+    rate_limit(f"profitai:{client_ip(request)}", 6, 60)
+    s = _profit_snapshot()
+    sys_p = ("你是 Octopus(手机 AI 自动化助手 App)的增长/财务顾问(CFO 视角)。下面是平台财务与单位经济快照。"
+             "背景:平台是 AI 中转(聊天走 qwen 按 token 计成本、生图/生视频走 Agnes 现对平台免费),"
+             "用户用积分消费、积分来自赠送或充值;`当前`成本口径是 qwen 仍吃免费额度(≈0),`满负荷`是免费额度用完后的真实上游价。"
+             "若收入为 0 说明真实支付(Stripe)尚未上线、消耗全是补贴。请用中文输出务实的经营诊断:"
+             "①现状判断(在烧钱补贴还是已盈利、补贴规模);②钱漏在哪(成本结构、最烧钱的环节);"
+             "③定价建议(积分倍率/积分售价/会员定价,给具体方向与数值区间);"
+             "④盈亏平衡路径(需要多少付费转化/客单价才能打平满负荷成本);⑤风险预警(免费额度耗尽、Agnes 免费不可持续等)。"
+             "markdown 小标题+要点,给数不空话。")
+    report = await _qwen_complete(
+        [{"role": "system", "content": sys_p},
+         {"role": "user", "content": "财务快照(JSON):\n" + json.dumps(s, ensure_ascii=False)}],
+        max_tokens=1500)
+    return {"snapshot": s, "llm": {"available": report is not None, "report": report,
+            "note": None if report else "未配置 qwen(本地 mock 无 key)。财务快照与盈亏平衡为确定性计算、实时可用;接入 qwen 的盒子上会自动生成经营诊断。"}}
+
+
 @app.get("/healthz")
 def healthz() -> dict[str, str]:
     return {"status": "ok"}
@@ -2437,6 +2767,8 @@ th{color:var(--mut);font-weight:600}tr:hover td{background:#12151c}
     <button class="on" data-tab="users" onclick="tab('users')">用户</button>
     <button data-tab="usage" onclick="tab('usage')">用量</button>
     <button data-tab="orders" onclick="tab('orders')">订单</button>
+    <button data-tab="ai" onclick="tab('ai')">AI 分析</button>
+    <button data-tab="profit" onclick="tab('profit')">盈利/经营</button>
     <button data-tab="logs" onclick="tab('logs')">操作审计</button>
   </div>
   <div id="bar" class="row" style="margin-bottom:10px"></div>
@@ -2465,14 +2797,15 @@ function logout(msg){sessionStorage.removeItem(SS);$("#app").classList.add("hide
   if(msg)$("#loginErr").textContent=msg;}
 function refresh(){loadStats();tab(curTab);}
 function tab(t){curTab=t;document.querySelectorAll(".tabs button").forEach(b=>b.classList.toggle("on",b.dataset.tab===t));
-  $("#bar").innerHTML=""; ({users:loadUsers,usage:loadUsage,orders:loadOrders,logs:loadLogs}[t])();}
+  $("#bar").innerHTML=""; ({users:loadUsers,usage:loadUsage,orders:loadOrders,ai:loadAI,profit:loadProfit,logs:loadLogs}[t])();}
 
 async function loadStats(){
   try{const s=await api("/admin/api/stats");
   const cards=[["用户",s.users],["总积分余额",s.totalCredits],["免费已发",s.freeGranted],
     ["有效会员",s.members],["封禁",s.banned],["邀请兑换",s.invited],
     ["订单(已付)",s.orders+" / "+s.paidOrders],["收入",money(s.revenueFen)],
-    ["调用次数",s.calls],["消耗积分",s.creditsSpent],["输入tok",s.tokensIn],["输出tok",s.tokensOut]];
+    ["调用次数",s.calls],["消耗积分",s.creditsSpent],["输入tok",s.tokensIn],["输出tok",s.tokensOut],
+    ["生图次数",s.imageCalls],["生视频次数",s.videoCalls],["媒体消耗积分",s.mediaSpent]];
   $("#stats").innerHTML=cards.map(([k,v])=>`<div class="card"><div class="k">${k}</div><div class="v">${esc(v)}</div></div>`).join("");
   }catch(e){if(e.message!=="auth")$("#stats").innerHTML=`<div class="card">加载失败:${esc(e.message)}</div>`;}
 }
@@ -2486,6 +2819,8 @@ async function loadUsers(q){
   const rows=d.items.map(u=>`<tr data-uid="${esc(u.userId)}">
     <td><div>${esc(u.email||u.mobile||"-")}</div><div class="mut mono" style="font-size:11px">${esc(u.userId)}</div></td>
     <td><b>${u.credits}</b><div class="mut" style="font-size:11px">免:${u.freeGranted}</div></td>
+    <td><b>${(u.spent||0)+(u.mediaSpent||0)}</b><div class="mut" style="font-size:11px">聊天 ${u.spent||0} · 媒体 ${u.mediaSpent||0}</div></td>
+    <td>图 <b>${u.imageCalls||0}</b><div class="mut" style="font-size:11px">视 ${u.videoCalls||0}</div></td>
     <td>${u.memberActive?`<span class="pill ok">会员</span><div class="mut" style="font-size:11px">${dt(u.memberExpireAt)}</div>`:'<span class="pill no">非会员</span>'}</td>
     <td>${u.banned?'<span class="pill bad">封禁</span>':'<span class="pill ok">正常</span>'}</td>
     <td class="mono">${esc(u.inviteCode||"-")}${u.invitedBy?`<div class="mut" style="font-size:11px">←${esc(u.invitedBy)}</div>`:""}</td>
@@ -2496,7 +2831,7 @@ async function loadUsers(q){
       <button class="sm ghost" data-act="ban">${u.banned?"解封":"封禁"}</button>
     </td></tr>`).join("");
   $("#view").innerHTML=`<div class="mut" style="margin-bottom:6px">共 ${d.total} 人</div>
-    <table><thead><tr><th>账号</th><th>积分</th><th>会员</th><th>状态</th><th>邀请</th><th>注册</th><th>操作</th></tr></thead><tbody>${rows}</tbody></table>`;
+    <table><thead><tr><th>账号</th><th>积分</th><th>累计消耗</th><th>生图/视频</th><th>会员</th><th>状态</th><th>邀请</th><th>注册</th><th>操作</th></tr></thead><tbody>${rows}</tbody></table>`;
   if(!usersListenerBound){usersListenerBound=true;
     $("#view").addEventListener("click",onUserAction);}
   $("#view").onclick=onUserAction;
@@ -2559,6 +2894,95 @@ async function loadLogs(){
     d.items.map(l=>`<tr><td class="mut" style="font-size:12px">${dt(l.ts)}</td><td class="mono">${esc(l.action)}</td>
       <td class="mono" style="font-size:12px">${esc(l.target_user)}</td><td>${esc(l.detail)}</td></tr>`).join("")||
       '<tr><td colspan=4 class="mut">暂无操作记录</td></tr>'}</tbody></table>`;
+  }catch(e){if(e.message!=="auth")$("#view").innerHTML=esc(e.message);}
+}
+
+function mdLite(s){return esc(s)
+  .replace(/^\s*###?#?\s*(.*)$/gm,'<h4 style="margin:12px 0 4px">$1</h4>')
+  .replace(/^\s*##\s*(.*)$/gm,'<h3 style="margin:14px 0 6px">$1</h3>')
+  .replace(/^\s*#\s*(.*)$/gm,'<h3 style="margin:14px 0 6px">$1</h3>')
+  .replace(/\*\*(.+?)\*\*/g,'<b>$1</b>')
+  .replace(/^\s*[-*]\s+(.*)$/gm,'<li>$1</li>')
+  .replace(/(<li>[\s\S]*?<\/li>)/g,'<ul style="margin:4px 0 4px 4px">$1</ul>')
+  .replace(/\n{2,}/g,'<br><br>').replace(/\n/g,'<br>');}
+async function loadAI(){
+  $("#bar").innerHTML=`<button class="sm" id="genAI">⚡ 生成分析</button>
+    <span class="mut">基于行为元数据(平台不存聊天内容);AI 叙述由 qwen 生成</span>`;
+  $("#view").innerHTML=`<div class="mut">点「生成分析」开始 —— 结构化分群即时可用;AI 叙述需服务端配置 qwen。</div>`;
+  $("#genAI").onclick=async function(){
+    this.disabled=true;$("#view").innerHTML=`<div class="mut">分析中…(LLM 生成约数秒)</div>`;
+    try{const d=await api("/admin/api/ai-analysis",{method:"POST"});
+      const seg=Object.entries(d.segments).map(([k,v])=>`<div class="card"><div class="k">${esc(k)}</div><div class="v">${v}</div></div>`).join("");
+      const tbl=(title,arr,fmt)=>arr&&arr.length?`<h3 style="margin:16px 0 6px">${title}</h3><table><tbody>${arr.map(fmt).join("")}</tbody></table>`:"";
+      const conv=tbl("🟢 转化重点(重度免费用户)",d.convert,u=>`<tr><td>${esc(u.email)}</td><td>图${u.img}/视${u.vid}</td><td>累计消耗 ${u.totalSpent}</td><td class="mut">非会员</td></tr>`);
+      const vip=tbl("💎 高价值",d.vip,u=>`<tr><td>${esc(u.email)}</td><td>${u.member?'<span class="pill ok">会员</span>':'<span class="pill no">非会员</span>'}</td><td>累计消耗 ${u.totalSpent}</td><td>余额 ${u.balance}</td></tr>`);
+      const churn=tbl("⚠️ 流失预警",d.churn,u=>`<tr><td>${esc(u.email)}</td><td>${u.daysIdle!=null?u.daysIdle+' 天未活跃':''}</td><td>余额 ${u.balance}</td></tr>`);
+      const tot=(d.tagDist||[]).reduce((s,t)=>s+t.n,0)||1;
+      const dist=(d.tagDist&&d.tagDist.length)
+        ?`<h3 style="margin:16px 0 6px">📊 用户主要用来做啥(意图标签)</h3><table><tbody>${d.tagDist.map(t=>`<tr><td style="width:84px">${esc(t.tag)}</td><td style="width:260px"><div style="background:var(--brand);height:11px;border-radius:6px;width:${Math.max(6,Math.round(t.n/tot*240))}px;display:inline-block"></div></td><td class="mut">${t.n} · ${Math.round(t.n/tot*100)}%</td></tr>`).join("")}</tbody></table>`
+        :`<h3 style="margin:16px 0 6px">📊 用户主要用来做啥(意图标签)</h3><div class="card mut">暂无意图标签 —— 接入 qwen 的盒子上线后,用户聊天会自动打标签累积,这里就能看用途分布。</div>`;
+      const ai=d.llm.available
+        ?`<div class="card" style="margin-top:10px;line-height:1.7">${mdLite(d.llm.report)}</div>`
+        :`<div class="card" style="margin-top:10px;border-color:var(--warn)"><b>AI 叙述未生成</b><div class="mut" style="margin-top:6px">${esc(d.llm.note||"")}</div></div>`;
+      $("#view").innerHTML=`<div class="mut" style="margin-bottom:8px">分群概览(共 ${d.users} 用户)</div><div class="cards">${seg}</div>${dist}${conv}${vip}${churn}<h3 style="margin:18px 0 6px">🤖 AI 经营分析</h3>${ai}`;
+    }catch(e){if(e.message!=="auth")$("#view").innerHTML=`<div class="card" style="border-color:var(--bad)">分析失败:${esc(e.message)}</div>`;}
+  };
+}
+
+let _profitBase=null;
+const fmtY=v=>"¥"+Number(v||0).toLocaleString(undefined,{maximumFractionDigits:2});
+function profitCalc(){
+  if(!_profitBase)return;
+  const N=+$("#pN").value||0,c=+$("#pC").value||0,r=+$("#pR").value||0,p=+$("#pP").value||0;
+  const k=$("#pBasis").value==='full'?_profitBase.costPerCreditFull:0;
+  const rev=N*(r/100)*p, cost=N*c*k, profit=rev-cost;
+  const beR=(N*p>0)?(cost/(N*p)*100):0;
+  $("#pOut").innerHTML=`<div class="cards">
+    <div class="card"><div class="k">月收入(估)</div><div class="v">${fmtY(rev)}</div></div>
+    <div class="card"><div class="k">月上游成本</div><div class="v">${fmtY(cost)}</div></div>
+    <div class="card"><div class="k">月利润</div><div class="v" style="color:${profit>=0?'var(--ok)':'var(--bad)'}">${fmtY(profit)}</div></div>
+    <div class="card"><div class="k">盈亏平衡转化率</div><div class="v">${beR<0.1?beR.toFixed(2):beR.toFixed(1)}%</div></div>
+  </div><div class="mut" style="margin-top:6px">口径:${$("#pBasis").value==='full'?'满负荷真实上游价':'免费额度(上游≈0)'} · 上游成本 ¥${k.toFixed(5)}/积分</div>`;
+}
+async function loadProfit(){
+  $("#bar").innerHTML=`<button class="sm" id="genProfitAI">⚡ AI 经营诊断</button> <span class="mut">财务为确定性计算·即时;AI 诊断由 qwen 生成</span>`;
+  $("#view").innerHTML=`<div class="mut">加载中…</div>`;
+  try{
+    const s=await api("/admin/api/profit"); _profitBase=s;
+    const mar=s.grossMarginFull==null?'—(无收入)':s.grossMarginFull+'%';
+    const l1=`<div class="mut" style="margin:4px 0 8px">L1 · 财务 / 单位经济快照</div><div class="cards">
+      <div class="card"><div class="k">收入(实付)</div><div class="v">${fmtY(s.revenue)}</div><div class="mut" style="font-size:11px">${s.paidOrders} 单</div></div>
+      <div class="card"><div class="k">上游成本·满负荷</div><div class="v">${fmtY(s.costFull)}</div><div class="mut" style="font-size:11px">聊${fmtY(s.chatCostFull)}·媒${fmtY(s.mediaCostFull)}</div></div>
+      <div class="card"><div class="k">上游成本·当前</div><div class="v">${fmtY(s.costNow)}</div><div class="mut" style="font-size:11px">${s.freeQuota?'吃免费额度':'已计真实价'}</div></div>
+      <div class="card"><div class="k">净盈亏(满负荷)</div><div class="v" style="color:${s.grossFull>=0?'var(--ok)':'var(--bad)'}">${fmtY(s.grossFull)}</div></div>
+      <div class="card"><div class="k">毛利率(满负荷)</div><div class="v">${mar}</div></div>
+      <div class="card"><div class="k">已消耗积分价值</div><div class="v">${fmtY(s.servedValue)}</div><div class="mut" style="font-size:11px">${s.creditsSpent} 积分</div></div>
+      <div class="card"><div class="k">未消耗积分·潜在负债</div><div class="v">${fmtY(s.outstandingLiability)}</div><div class="mut" style="font-size:11px">${s.outstandingCredits} 积分</div></div>
+      <div class="card"><div class="k">活跃/会员/总</div><div class="v">${s.activeUsers}/${s.members}/${s.users}</div></div>
+      <div class="card"><div class="k">人均成本(满负荷)</div><div class="v">${fmtY(s.costPerActiveFull)}</div></div>
+    </div>`;
+    const defC=Math.max(1,Math.round((s.creditsSpent||0)/(s.activeUsers||1)));
+    const l2=`<div class="mut" style="margin:18px 0 8px">L2 · 盈亏平衡 / What-if(改数字实时算)</div>
+      <div class="row" style="gap:14px;flex-wrap:wrap;align-items:flex-end">
+        <label class="mut" style="font-size:12px">活跃用户<br><input id="pN" type="number" value="${s.activeUsers||1000}" style="width:96px"></label>
+        <label class="mut" style="font-size:12px">人均月消耗积分<br><input id="pC" type="number" value="${defC}" style="width:90px"></label>
+        <label class="mut" style="font-size:12px">付费转化率%<br><input id="pR" type="number" value="5" style="width:70px"></label>
+        <label class="mut" style="font-size:12px">会员单价¥<br><input id="pP" type="number" value="30" style="width:76px"></label>
+        <label class="mut" style="font-size:12px">成本口径<br><select id="pBasis" style="background:#0b0d11;border:1px solid var(--line);color:var(--fg);border-radius:8px;padding:8px"><option value="full">满负荷真实价</option><option value="free">免费额度(≈0)</option></select></label>
+      </div><div id="pOut" style="margin-top:12px"></div>`;
+    const l3=`<div class="mut" style="margin:18px 0 8px">L3 · AI 经营顾问</div><div id="profitAI" class="mut">点上方「⚡ AI 经营诊断」生成(需服务端配置 qwen)。</div>`;
+    $("#view").innerHTML=l1+l2+l3;
+    ["pN","pC","pR","pP","pBasis"].forEach(id=>$("#"+id).addEventListener("input",profitCalc));
+    profitCalc();
+    $("#genProfitAI").onclick=async function(){
+      this.disabled=true;$("#profitAI").innerHTML=`<div class="mut">分析中…(LLM 生成约数秒)</div>`;
+      try{const d=await api("/admin/api/profit-advisor",{method:"POST"});
+        $("#profitAI").innerHTML=d.llm.available
+          ?`<div class="card" style="line-height:1.7">${mdLite(d.llm.report)}</div>`
+          :`<div class="card" style="border-color:var(--warn)"><b>AI 诊断未生成</b><div class="mut" style="margin-top:6px">${esc(d.llm.note||"")}</div></div>`;
+      }catch(e){if(e.message!=="auth")$("#profitAI").innerHTML=`<div class="card" style="border-color:var(--bad)">失败:${esc(e.message)}</div>`;}
+      this.disabled=false;
+    };
   }catch(e){if(e.message!=="auth")$("#view").innerHTML=esc(e.message);}
 }
 
