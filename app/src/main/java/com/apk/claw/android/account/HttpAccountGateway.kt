@@ -184,6 +184,14 @@ class HttpAccountGateway(baseUrl: String) : AccountGateway {
     override suspend fun deviceStatus(token: String, deviceId: String): DeviceStatusResult =
         get("/device/$deviceId/status", token, DeviceStatusResult::class.java)
 
+    override suspend fun pluginPay(
+        token: String, pluginId: String, item: String, credits: Int, description: String,
+    ): PluginPayResult = post(
+        "/plugin/pay",
+        mapOf("plugin_id" to pluginId, "item" to item, "credits" to credits, "description" to description),
+        token, PluginPayResult::class.java
+    )
+
     companion object {
         private val JSON = "application/json; charset=utf-8".toMediaTypeOrNull()
     }

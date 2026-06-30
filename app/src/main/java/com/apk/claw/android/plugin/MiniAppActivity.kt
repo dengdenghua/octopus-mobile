@@ -9,6 +9,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
 import java.io.ByteArrayInputStream
+import java.lang.ref.WeakReference
 
 /**
  * 小程序宿主 —— 跑你自己的 mini-app(H5 + `octopus.*` 桥).
@@ -53,7 +54,7 @@ class MiniAppActivity : ComponentActivity() {
             allowFileAccessFromFileURLs = false
             allowUniversalAccessFromFileURLs = false
         }
-        wv.addJavascriptInterface(OctopusBridge(manifest), "octopusNative")
+        wv.addJavascriptInterface(OctopusBridge(manifest, WeakReference(this)), "octopusNative")
         wv.webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
                 view.evaluateJavascript(OctopusBridge.SHIM_JS, null)

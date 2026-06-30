@@ -206,3 +206,16 @@ data class DeviceStatusResult(
     @SerializedName("deviceModel") val deviceModel: String = "",
     val revoked: Boolean = false,
 )
+
+// ── 插件积分支付 ────────────────────────────────────────────────────────────
+
+data class PluginPayData(
+    @SerializedName("balance_after") val balanceAfter: Long = 0,
+    @SerializedName("plugin_id") val pluginId: String = "",
+    val item: String = "",
+)
+
+data class PluginPayResult(
+    val success: Boolean = false,
+    val data: PluginPayData? = null,
+)

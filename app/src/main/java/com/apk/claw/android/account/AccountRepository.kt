@@ -125,6 +125,14 @@ object AccountRepository {
         return r
     }
 
+    /** 插件内购:原子扣积分。未登录 / 余额不足时返回 Failure。 */
+    suspend fun pluginPay(
+        pluginId: String, item: String, credits: Int, description: String = ""
+    ): Result<PluginPayResult> {
+        val tok = AccountStore.token.ifBlank { return Result.failure(IllegalStateException("未登录")) }
+        return runCatching { gateway().pluginPay(tok, pluginId, item, credits, description) }
+    }
+
     fun logout() {
         AccountStore.clear()
         publish()

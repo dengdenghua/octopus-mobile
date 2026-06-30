@@ -1954,6 +1954,45 @@ def _reconcile_usage(user_id: str, model: str, tin: int, tout: int, mult: float,
     return actual
 
 
+# ── 插件积分支付 ──────────────────────────────────────────────────────────────
+
+@app.post("/plugin/pay")
+def plugin_pay(body: dict[str, Any], u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    """Mini-app 积分支付:从用户余额原子扣除 credits 给插件内购消费。
+    余额不足立即以 402 拒绝(不透支);成功后返回扣后余额。"""
+    plugin_id = str(body.get("plugin_id") or "").strip()
+    item      = str(body.get("item") or "").strip()
+    credits   = int(body.get("credits") or 0)
+    description = str(body.get("description") or "")[:200]
+
+    if not plugin_id or not item:
+        raise HTTPException(status_code=400, detail="plugin_id and item required")
+    if credits <= 0 or credits > 1_000:
+        raise HTTPException(status_code=400, detail="credits must be 1–1000 per transaction")
+
+    user_id = u["user_id"]
+    ref = f"plugin/{plugin_id}/{item}/{now_ms()}"
+    txn_detail = (description or item)[:200]
+
+    with closing(db()) as c:
+        cur = c.execute(
+            "UPDATE users SET credits = credits - ? WHERE user_id = ? AND credits >= ?",
+            (credits, user_id, credits),
+        )
+        if cur.rowcount == 0:
+            row = c.execute("SELECT credits FROM users WHERE user_id=?", (user_id,)).fetchone()
+            bal = int(row["credits"]) if row else 0
+            raise HTTPException(status_code=402,
+                                detail=f"积分不足: 需要 {credits},当前余额 {bal}")
+        _record_credit_txn(c, user_id, -credits, source="plugin_pay",
+                           detail=txn_detail, ref_id=ref)
+        c.commit()
+        row = c.execute("SELECT credits FROM users WHERE user_id=?", (user_id,)).fetchone()
+        bal_after = int(row["credits"]) if row else 0
+
+    return {"success": True, "data": {"balance_after": bal_after, "plugin_id": plugin_id, "item": item}}
+
+
 @app.get("/v1/models")
 def list_models() -> dict[str, Any]:
     """公开模型目录(带每模型积分倍率 + 是否免费),供 App 渲染。"""

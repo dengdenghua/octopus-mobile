@@ -61,4 +61,13 @@ interface AccountGateway {
     ): DeviceReportResult
 
     suspend fun deviceStatus(token: String, deviceId: String): DeviceStatusResult
+
+    /** 插件内购:从用户积分余额原子扣除 credits(余额不足时服务端返回 402 错误)。 */
+    suspend fun pluginPay(
+        token: String,
+        pluginId: String,
+        item: String,
+        credits: Int,
+        description: String = "",
+    ): PluginPayResult
 }

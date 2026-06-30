@@ -267,4 +267,13 @@ class MockAccountGateway : AccountGateway {
         userOf(token)
         return DeviceStatusResult(deviceId = deviceId, deviceName = "Mock Device")
     }
+
+    override suspend fun pluginPay(
+        token: String, pluginId: String, item: String, credits: Int, description: String,
+    ): PluginPayResult {
+        val u = userOf(token)
+        if (u.credits < credits) return PluginPayResult(success = false)
+        // Mock: 只报成功,不真正扣(测试用)
+        return PluginPayResult(success = true, data = PluginPayData(balanceAfter = u.credits - credits, pluginId = pluginId, item = item))
+    }
 }
