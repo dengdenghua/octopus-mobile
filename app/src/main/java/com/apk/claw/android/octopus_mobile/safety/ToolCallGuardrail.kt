@@ -45,6 +45,7 @@ class ToolCallGuardrailController(
         val DANGEROUS_TOOLS: Set<String> = setOf(
             "browser_install_extension",  // 装 CRX 有风险
             "browser_evaluate",           // 在任意已登录页面执行任意 JS（会话/Cookie 窃取）
+            "run_code",                   // 在设备上执行 Agent 生成代码（纯计算沙箱，但仍属最危一档）
         )
 
         fun classifyTool(name: String): ToolKind {

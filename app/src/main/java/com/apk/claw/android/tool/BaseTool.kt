@@ -36,7 +36,8 @@ abstract class BaseTool {
             "browser_go_forward", "browser_reload", "browser_submit", "browser_scroll",
             "browser_tap_by_vision", "tap_by_vision", "vision_click",
             "browser_evaluate", "browser_install_extension",
-            "search_app_in_store"
+            "search_app_in_store",
+            "run_code"
         )
 
         private val threadCancelToken = ThreadLocal<CancellationToken>()

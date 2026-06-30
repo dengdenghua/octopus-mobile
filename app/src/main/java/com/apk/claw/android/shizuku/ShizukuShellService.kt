@@ -1026,6 +1026,97 @@ object ShizukuShellService {
         return result.stdout.trim()
     }
 
+    // ======================== 代码执行(QuickJS 沙箱 runtime)========================
+
+    /** octopus runtime 沙箱根目录。shell 域可在此 exec(shell_data_file);App(untrusted_app)不可写。 */
+    const val RUNTIME_DIR = "/data/local/tmp/octopus"
+
+    /** 代码执行 stdout/stderr 各自上限,防失控刷屏。 */
+    private const val MAX_CODE_OUTPUT = 64 * 1024
+
+    /**
+     * 安装 runtime 可执行文件到沙箱:cp + chmod 755。仅供 [com.apk.claw.android.octopus_mobile.codeexec.QuickJsRuntime]。
+     *
+     * src/dst 均为 App 控制的固定路径(无 LLM/用户内容),每步用 argv 数组**直接 exec**
+     * (无 sh -c、无字符串拼接)→ 零注入面。不走 [exec] 命令白名单(白名单本就无 chmod),
+     * 改用此受限专用通路 + 前缀校验,避免给通用 shell 开 chmod 口子。
+     */
+    fun installRuntimeBinary(srcPath: String, dstPath: String): Boolean {
+        if (!ShizukuManager.isAvailable()) return false
+        if (!dstPath.startsWith("$RUNTIME_DIR/")) {
+            Log.w(TAG, "installRuntimeBinary: dst outside sandbox: $dstPath"); return false
+        }
+        if (!srcPath.startsWith("/sdcard/") && !srcPath.startsWith("/storage/emulated/0/")) {
+            Log.w(TAG, "installRuntimeBinary: src not in external storage: $srcPath"); return false
+        }
+        return try {
+            readProcessOutput(createProcess(arrayOf("mkdir", "-p", RUNTIME_DIR)), "mkdir runtime")
+            val cp = readProcessOutput(createProcess(arrayOf("cp", srcPath, dstPath)), "cp runtime")
+            if (cp.exitCode != 0) { Log.w(TAG, "cp runtime failed: ${cp.stderr}"); return false }
+            val chmod = readProcessOutput(createProcess(arrayOf("chmod", "755", dstPath)), "chmod runtime")
+            chmod.exitCode == 0
+        } catch (e: Exception) {
+            Log.e(TAG, "installRuntimeBinary failed", e); false
+        }
+    }
+
+    /**
+     * 在 QuickJS 沙箱 runner 中执行一个脚本文件。
+     *
+     * 安全:argv 数组 [runnerPath, scriptPath] **直接 exec** —— 不经 sh -c、不做字符串拼接;
+     * 脚本是**文件**(JS 内容从不出现在命令行)→ 零 shell 注入面。runner 与脚本都必须位于沙箱
+     * 目录内。runner 本身已在编译期砍掉 os/std(无文件/进程/网络符号),是纯计算沙箱。
+     *
+     * @param timeoutMs 执行超时,到点强杀进程。
+     * @return ShellResult(各流截断至 64KB);Shizuku 不可用返回 null。
+     */
+    fun runQuickJs(runnerPath: String, scriptPath: String, timeoutMs: Long): ShellResult? {
+        if (!ShizukuManager.isAvailable()) return null
+        if (!runnerPath.startsWith("$RUNTIME_DIR/") || !scriptPath.startsWith("$RUNTIME_DIR/")) {
+            return ShellResult(-1, "", "path outside sandbox")
+        }
+        return try {
+            readProcessOutputCapped(createProcess(arrayOf(runnerPath, scriptPath)), "qjs", timeoutMs)
+        } catch (e: Exception) {
+            Log.e(TAG, "runQuickJs failed", e); null
+        }
+    }
+
+    /** [readProcessOutput] 的「可配置超时 + 输出上限」版本,供代码执行使用。 */
+    private fun readProcessOutputCapped(process: Process, label: String, timeoutMs: Long): ShellResult {
+        val stdout = ByteArrayOutputStream()
+        val stderr = ByteArrayOutputStream()
+        fun pump(input: java.io.InputStream, sink: ByteArrayOutputStream) {
+            try {
+                input.use {
+                    val buffer = ByteArray(4096)
+                    var len: Int
+                    while (it.read(buffer).also { n -> len = n } != -1) {
+                        val room = MAX_CODE_OUTPUT - sink.size()
+                        if (room > 0) sink.write(buffer, 0, minOf(len, room))
+                        // 超上限后继续 drain(不累积)以免子进程因管道满而阻塞
+                    }
+                }
+            } catch (e: Exception) { Log.w(TAG, "$label read failed", e) }
+        }
+        val to = Thread { pump(process.inputStream, stdout) }
+        val te = Thread { pump(process.errorStream, stderr) }
+        to.start(); te.start()
+        val finished = process.waitFor(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
+        if (!finished) {
+            process.destroyForcibly()
+            to.join(500); te.join(500)
+            Log.w(TAG, "$label timed out after ${timeoutMs}ms")
+            return ShellResult(-1, stdout.toString(Charsets.UTF_8.name()), "执行超时(${timeoutMs}ms),已强制终止")
+        }
+        to.join(1000); te.join(1000)
+        return ShellResult(
+            process.exitValue(),
+            stdout.toString(Charsets.UTF_8.name()),
+            stderr.toString(Charsets.UTF_8.name())
+        )
+    }
+
     // ======================== 数据类 ========================
 
     /**

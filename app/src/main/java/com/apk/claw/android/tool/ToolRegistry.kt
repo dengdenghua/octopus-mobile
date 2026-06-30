@@ -131,6 +131,9 @@ object ToolRegistry {
         // 企业版 PM 编程接入(D①):未配置 octopus.pm.url 时工具会返回错误而非崩溃。
         register(CreatePmTaskTool())
         register(ListPmProjectsTool())
+
+        // 代码执行(QuickJS 纯计算沙箱,Shizuku-only,登记为 HIGH)
+        register(com.apk.claw.android.tool.impl.RunCodeTool())
     }
 
     private fun registerTvTools() {

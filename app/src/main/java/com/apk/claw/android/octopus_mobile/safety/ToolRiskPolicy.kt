@@ -27,6 +27,9 @@ object ToolRiskPolicy {
         // 若该能力以插件/技能形式重新出现，默认仍按高危闸门处理。见 ToolRiskPolicyCoverageTest。
         "install_app",
         "send_file",
+        // 代码执行:以 shell UID 跑 Agent 生成的 JS(虽是纯计算沙箱,仍是最高危一类)。
+        // 登记 HIGH → 自动获得「不可信来源弹审批 + 全程审计」,无需新增闸门。见 RunCodeTool。
+        "run_code",
     )
 
     val MEDIUM_RISK_TOOLS: Set<String> = setOf(
@@ -43,6 +46,9 @@ object ToolRiskPolicy {
         "read_sms",
         "read_calendar",
         "get_usage_stats",
+        // Agnes 生成类：调用外部付费 API，消耗用户积分，纳入审计。
+        "generate_image",
+        "generate_video",
         // 状态变更 / 外部写入类：纳入审计，避免远程/LAN 不可信源驱动这些操作却无审计轨迹。
         // （仅审计，不新增拦截——HIGH 才会对不可信源走来源闸门。）
         "navigate",            // UI 导航编排（驱动一连串点击）
@@ -72,6 +78,8 @@ object ToolRiskPolicy {
         "current_time", "device_info", "echo_observe", "list_pm_projects",
         // 控制 / 无副作用
         "finish", "wait", "hello_world",
+        // 视频生成状态查询（只读轮询，无副作用）
+        "check_video",
         // 滚动 / 检索（轻量、低危）
         "scroll_to_find", "search_app_in_store",
         // 输入按键事件：TV 遥控导航键，低危且高频，审计价值低于噪音成本，保留 LOW。
