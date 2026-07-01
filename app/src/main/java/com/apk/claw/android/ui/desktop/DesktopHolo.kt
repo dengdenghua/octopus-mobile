@@ -6,6 +6,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -14,21 +15,28 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.apk.claw.android.R
 
 /**
  * 「本地虚拟电脑」的科幻/全息皮肤 —— 参考 MiniMax OpenRoom 的"AI 操作的桌面",
@@ -123,4 +131,47 @@ private fun LiveDot(active: Boolean) {
 @Composable
 fun HoloDot(color: Color) {
     Canvas(Modifier.size(7.dp)) { drawCircle(color) }
+}
+
+/**
+ * Agent 头像 —— Echo 宇宙角色 Zero(银发 + 粉镜片,赛博风,契合科幻皮肤)。圆形裁切。
+ * 资产来自 echo-universe-engine/assets/characters/001_zero。
+ */
+@Composable
+fun ZeroAvatar(size: Dp, modifier: Modifier = Modifier) {
+    Image(
+        painter = painterResource(R.drawable.zero_avatar),
+        contentDescription = "Zero",
+        contentScale = ContentScale.Crop,
+        modifier = modifier.size(size).clip(CircleShape),
+    )
+}
+
+/**
+ * 全息角色立绘 —— Zero 全身图。原图是纯黑底,用"亮度→透明度"色彩矩阵把黑底抠掉、
+ * 让人物按亮度半透明,呈现悬浮全息投影感(越亮越实,暗部渐隐)。
+ */
+@Composable
+fun ZeroCompanion(modifier: Modifier = Modifier, alpha: Float = 0.85f) {
+    // 输出 alpha = 亮度(0.33R+0.5G+0.16B):黑底→透明,亮部→实体。
+    val lumaToAlpha = remember {
+        ColorFilter.colorMatrix(
+            ColorMatrix(
+                floatArrayOf(
+                    1f, 0f, 0f, 0f, 0f,
+                    0f, 1f, 0f, 0f, 0f,
+                    0f, 0f, 1f, 0f, 0f,
+                    0.33f, 0.5f, 0.16f, 0f, 0f,
+                ),
+            ),
+        )
+    }
+    Image(
+        painter = painterResource(R.drawable.zero_front),
+        contentDescription = null,
+        contentScale = ContentScale.Fit,
+        alpha = alpha,
+        colorFilter = lumaToAlpha,
+        modifier = modifier,
+    )
 }

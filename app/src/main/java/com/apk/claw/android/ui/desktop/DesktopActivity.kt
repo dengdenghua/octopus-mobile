@@ -7,8 +7,10 @@ import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -239,10 +241,12 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
                 if (chatWidth > 0.dp) {
                     Column(Modifier.fillMaxSize().holoGlass(16.dp)) {
                         Row(
-                            modifier = Modifier.fillMaxWidth().height(30.dp).padding(start = 12.dp),
+                            modifier = Modifier.fillMaxWidth().height(34.dp).padding(start = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text("AGENT", color = Holo.Accent, fontSize = 11.sp, modifier = Modifier.weight(1f))
+                            ZeroAvatar(22.dp)
+                            Spacer(Modifier.width(6.dp))
+                            Text("ZERO", color = Holo.Accent, fontSize = 11.sp, modifier = Modifier.weight(1f))
                             IconButton(onClick = { chatExpanded = false }, modifier = Modifier.size(30.dp)) {
                                 Icon(Icons.Filled.ChevronRight, contentDescription = "收起对话", tint = Holo.TextHud, modifier = Modifier.size(18.dp))
                             }
@@ -252,14 +256,20 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
                 }
             }
         }
-        // 收起态:右下角悬浮球,点开展开对话
+        // 收起态:右下角 Zero 头像悬浮球(青色霓虹环),点开展开对话
         if (!chatExpanded) {
-            FloatingActionButton(
-                onClick = { chatExpanded = true },
-                containerColor = Holo.Accent,
-                modifier = Modifier.align(Alignment.BottomEnd).padding(24.dp),
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(24.dp)
+                    .size(56.dp)
+                    .clip(CircleShape)
+                    .background(Holo.Glass)
+                    .border(2.dp, Holo.Accent, CircleShape)
+                    .clickable { chatExpanded = true },
+                contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Filled.ChatBubbleOutline, contentDescription = "展开对话", tint = Color(0xFF05131A))
+                ZeroAvatar(56.dp)
             }
         }
     }
@@ -300,7 +310,16 @@ private fun DesktopMonitor(
                 modifier = Modifier.fillMaxSize(),
             )
             val idle = currentUrl.isBlank() || currentUrl == "about:blank"
-            if (idle) DesktopWallpaper(Modifier.fillMaxSize())
+            if (idle) {
+                DesktopWallpaper(Modifier.fillMaxSize())
+                // 空闲时 Zero 以全息投影立于桌面右侧(黑底已抠除,按亮度半透明)
+                ZeroCompanion(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .fillMaxHeight(0.88f)
+                        .aspectRatio(0.46f, matchHeightConstraintsFirst = true),
+                )
+            }
         }
     }
 }
