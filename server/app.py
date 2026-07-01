@@ -211,7 +211,28 @@ SQUARE_FEED: dict[str, Any] = {
 }
 
 # 灵感发现流(公开下发)。topic 用 key(automation/efficiency/life/learning/device)，App 映射到本地化分类胶囊。
+# header/topics 远端化：App 拉到后直接渲染；字段留空时回退到 App 内置本地化资源。
+# icon/tint 用 key 字符串与 "#RRGGBB" 颜色，App 端做映射；action: search/universe/publish。
 SQUARE_DISCOVERY: dict[str, Any] = {
+    "header": {
+        "title": "Inspiration Plaza",
+        "desc": "Browse ideas, copy templates, and save inspirations you can run right away.",
+        "icon": "AutoAwesome",
+        "tint": "#5DBCD8",
+        "actions": [
+            {"icon": "Search", "text": "Search", "action": "search", "tint": "#5DBCD8"},
+            {"icon": "Psychology", "text": "My Ghost", "action": "universe", "tint": "#9B8CFF"},
+            {"icon": "Add", "text": "Publish", "action": "publish", "tint": "#74A7FF"},
+        ],
+    },
+    "topics": [
+        {"key": "recommend", "label": "For You", "tint": "#FF6B6B"},
+        {"key": "automation", "label": "Automation", "tint": "#FF9F5A"},
+        {"key": "efficiency", "label": "Efficiency", "tint": "#74A7FF"},
+        {"key": "life", "label": "Lifestyle", "tint": "#42C893"},
+        {"key": "learning", "label": "Learning", "tint": "#9B8CFF"},
+        {"key": "device", "label": "Device", "tint": "#5AA0FF"},
+    ],
     "posts": [
         {"id": "agent-travel", "title": "Travel Planner: Flights to Itinerary in One Tap",
          "desc": "Enter destination and budget to auto-search attractions, plan routes, and generate a shareable checklist.",

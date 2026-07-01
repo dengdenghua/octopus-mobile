@@ -58,6 +58,13 @@ internal data class SquareFeedDto(val posts: List<SquarePostDto> = emptyList())
 private fun parseColor(hex: String, fallback: Color): Color =
     runCatching { Color(android.graphics.Color.parseColor(hex.trim())) }.getOrDefault(fallback)
 
+private val BrowserTint get() = OctopusTints.Browser
+private val MemoryTint get() = OctopusTints.Memory
+private val SkillTint get() = OctopusTints.Skill
+private val RoutineTint get() = OctopusTints.Routine
+private val CloudTint get() = OctopusTints.Cloud
+private val WindowTint get() = OctopusTints.Window
+
 private fun SquarePostDto.toAgentPost(): AgentPost {
     val grad = coverGradient
         .mapNotNull { runCatching { Color(android.graphics.Color.parseColor(it.trim())) }.getOrNull() }
@@ -171,6 +178,7 @@ internal object SquareRepository {
 /**
  * 灵感发现卡片（富模型：封面/作者/用量/成功率/权限/详情）。
  * 内容文本走服务端，可后台随意改；[topicRes] 仍是本地化分类资源，保留 App 内分类胶囊/筛选/封面图标逻辑。
+ * [topicKey] 是服务端 topic key（automation/efficiency/life/learning/device），用于远端 topics 标签匹配。
  */
 internal data class AgentDiscoveryPost(
     val id: String,
@@ -180,6 +188,7 @@ internal data class AgentDiscoveryPost(
     val authorInitial: String,
     val likes: String,
     val topicRes: Int,
+    val topicKey: String,
     val tag: String,
     val tagColor: Color,
     val coverHeight: Int,
@@ -209,7 +218,68 @@ internal data class DiscoveryPostDto(
     val permissions: List<String> = emptyList(),
 )
 
-internal data class DiscoveryFeedDto(val posts: List<DiscoveryPostDto> = emptyList())
+/** 服务端下发的顶部引导动作（icon/action 用 key 字符串，App 端映射）。 */
+internal data class DiscoveryActionDto(
+    val icon: String = "",
+    val text: String = "",
+    val action: String = "",
+    val tint: String = "",
+)
+
+/** 服务端下发的顶部引导头（title/desc/icon/tint/actions）。 */
+internal data class DiscoveryHeaderDto(
+    val title: String = "",
+    val desc: String = "",
+    val icon: String = "",
+    val tint: String = "",
+    val actions: List<DiscoveryActionDto> = emptyList(),
+)
+
+/** 服务端下发的主题标签（key 用于筛选，label/tint 可选，留空时 App 回退本地化资源）。 */
+internal data class DiscoveryTopicDto(
+    val key: String = "",
+    val label: String = "",
+    val tint: String = "",
+)
+
+internal data class DiscoveryFeedDto(
+    val posts: List<DiscoveryPostDto> = emptyList(),
+    val header: DiscoveryHeaderDto = DiscoveryHeaderDto(),
+    val topics: List<DiscoveryTopicDto> = emptyList(),
+)
+
+// ── 灵感流 domain（颜色已解析为 Compose Color，UI 直接用） ──
+
+/** 顶部引导动作。text 为空时 UI 用 stringResource 兜底。 */
+internal data class DiscoveryAction(
+    val icon: String,
+    val text: String,
+    val action: String,
+    val tint: Color,
+)
+
+/** 顶部引导头。title/desc 为空时 UI 用 stringResource 兜底。 */
+internal data class DiscoveryHeader(
+    val title: String,
+    val desc: String,
+    val icon: String,
+    val tint: Color,
+    val actions: List<DiscoveryAction>,
+)
+
+/** 主题标签。label 为空时 UI 用 stringResource 兜底。 */
+internal data class DiscoveryTopic(
+    val key: String,
+    val label: String,
+    val tint: Color,
+)
+
+/** 灵感流整体：header + topics + posts 三段。 */
+internal data class DiscoveryFeed(
+    val header: DiscoveryHeader,
+    val topics: List<DiscoveryTopic>,
+    val posts: List<AgentDiscoveryPost>,
+)
 
 /** 服务端 topic key → 本地化分类资源（沿用 App 内已有分类胶囊/筛选/图标）。 */
 private fun topicKeyToRes(key: String): Int = when (key.trim().lowercase()) {
@@ -231,6 +301,7 @@ private fun DiscoveryPostDto.toPost(): AgentDiscoveryPost {
         authorInitial = authorInitial.ifBlank { author.take(1) },
         likes = likes,
         topicRes = topicKeyToRes(topic),
+        topicKey = topic.trim().lowercase(),
         tag = tag.ifBlank { topic },
         tagColor = parseColor(tagColor, OctopusTints.Routine),
         coverHeight = coverHeight.coerceIn(120, 240),
@@ -239,6 +310,33 @@ private fun DiscoveryPostDto.toPost(): AgentDiscoveryPost {
         permissions = permissions,
     )
 }
+
+private fun DiscoveryActionDto.toAction(): DiscoveryAction = DiscoveryAction(
+    icon = icon,
+    text = text,
+    action = action,
+    tint = parseColor(tint, OctopusTints.Browser),
+)
+
+private fun DiscoveryHeaderDto.toHeader(): DiscoveryHeader = DiscoveryHeader(
+    title = title,
+    desc = desc,
+    icon = icon,
+    tint = parseColor(tint, OctopusTints.Browser),
+    actions = actions.map { it.toAction() },
+)
+
+private fun DiscoveryTopicDto.toTopic(): DiscoveryTopic = DiscoveryTopic(
+    key = key.trim().lowercase(),
+    label = label,
+    tint = parseColor(tint, OctopusTints.Hot),
+)
+
+private fun DiscoveryFeedDto.toFeed(): DiscoveryFeed = DiscoveryFeed(
+    header = header.toHeader(),
+    topics = topics.map { it.toTopic() },
+    posts = posts.map { it.toPost() },
+)
 
 /** 灵感发现流仓库：服务端 `/square/discovery` → 缓存 → 内置种子。 */
 internal object DiscoveryRepository {
@@ -249,7 +347,7 @@ internal object DiscoveryRepository {
         .readTimeout(15, TimeUnit.SECONDS)
         .build()
 
-    suspend fun feed(): List<AgentDiscoveryPost> = withContext(Dispatchers.IO) {
+    suspend fun feed(): DiscoveryFeed = withContext(Dispatchers.IO) {
         RemoteConfig.refresh()  // 先取服务端下发的技能中心域名（拿不到则用缓存/默认）
         val base = AccountConfig.squareBaseUrl.trim().trimEnd('/')
         if (base.isNotBlank()) {
@@ -258,10 +356,10 @@ internal object DiscoveryRepository {
                 http.newCall(req).execute().use { resp ->
                     val body = resp.body?.string().orEmpty()
                     if (resp.isSuccessful && body.isNotBlank()) {
-                        val feed = gson.fromJson(body, DiscoveryFeedDto::class.java)
-                        if (feed?.posts?.isNotEmpty() == true) {
+                        val dto = gson.fromJson(body, DiscoveryFeedDto::class.java)
+                        if (dto != null && dto.posts.isNotEmpty()) {
                             KVUtils.putString(CACHE_KEY, body)
-                            return@withContext feed.posts.map { it.toPost() }
+                            return@withContext dto.toFeed()
                         }
                     }
                 }
@@ -270,25 +368,43 @@ internal object DiscoveryRepository {
         cachedOrSeed()
     }
 
-    private fun cachedOrSeed(): List<AgentDiscoveryPost> {
+    private fun cachedOrSeed(): DiscoveryFeed {
         val cached = KVUtils.getString(CACHE_KEY, "")
         if (cached.isNotBlank()) {
             runCatching {
-                val feed = gson.fromJson(cached, DiscoveryFeedDto::class.java)
-                if (feed?.posts?.isNotEmpty() == true) return feed.posts.map { it.toPost() }
+                val dto = gson.fromJson(cached, DiscoveryFeedDto::class.java)
+                if (dto != null && dto.posts.isNotEmpty()) return dto.toFeed()
             }
         }
         return SEED
     }
 
-    /** 离线兜底种子（与原硬编码内容一致，仅作为服务端/缓存不可用时的回退）。 */
-    private val SEED: List<AgentDiscoveryPost> = listOf(
-        AgentDiscoveryPost("agent-travel", "Travel Planner: Flights to Itinerary in One Tap", "Enter destination and budget to auto-search attractions, plan routes, and generate a shareable checklist.", "Travel Inspiration", "T", "3.2k", R.string.agent_topic_life, "Lifestyle", OctopusTints.Routine, 168, listOf(Color(0xFFFFB199), Color(0xFFFF0844)), "18.6k", "92%", "About 4 min", listOf("Browser", "Location", "Screenshot")),
-        AgentDiscoveryPost("agent-weekly", "Weekly Report Auto-Saver Template", "Pulls chat logs, task lists, and schedules to auto-write a report your boss will love.", "Efficiency Player", "E", "2.8k", R.string.agent_topic_efficiency, "Efficiency", OctopusTints.Skill, 138, listOf(Color(0xFF667EEA), Color(0xFF764BA2)), "12.4k", "95%", "About 2 min", listOf("Calendar", "Clipboard", "Documents")),
-        AgentDiscoveryPost("agent-phone", "Turn Old Phone into 24/7 Executor", "Let your backup handle messages, screenshots, forwarding, and scheduled tasks while your main phone stays quiet.", "Geek Hub", "G", "1.7k", R.string.agent_topic_device, "Device", OctopusTints.Window, 190, listOf(Color(0xFF134E5E), Color(0xFF71B280)), "8.1k", "89%", "About 6 min", listOf("Accessibility", "Notifications", "Background")),
-        AgentDiscoveryPost("agent-shopping", "Price Tracker Saved Me 2000+", "Monitors historical prices, coupons, and platform promos, and alerts you when the price drops.", "Savings Bot", "S", "4.6k", R.string.agent_topic_automation, "Automation", OctopusTints.Hot, 156, listOf(Color(0xFFFFD194), Color(0xFFD1913C)), "23.9k", "91%", "About 3 min", listOf("Browser", "Notifications", "Timer")),
-        AgentDiscoveryPost("agent-paper", "Paper Reader: Key Points in 10 Minutes", "Reads PDFs, web pages, and screenshots, auto-extracts conclusions and citable insights.", "Academic Assistant", "A", "986", R.string.agent_topic_learning, "Learning", OctopusTints.Memory, 176, listOf(Color(0xFF00C6FF), Color(0xFF0072FF)), "6.5k", "94%", "About 5 min", listOf("Files", "Browser", "Clipboard")),
-        AgentDiscoveryPost("agent-voice", "Voice Assistant: Handle Messages While Driving", "Press and speak, auto-detects recipient, adjusts tone, and sends.", "Car Enthusiast", "C", "742", R.string.agent_topic_automation, "Voice", OctopusTints.Trust, 146, listOf(Color(0xFFF2994A), Color(0xFFF2C94C)), "5.7k", "88%", "About 2 min", listOf("Microphone", "Notifications", "Accessibility")),
+    /** 离线兜底种子（header/topics 字段留空 → UI 用 stringResource 兜底）。 */
+    private val SEED: DiscoveryFeed = DiscoveryFeed(
+        header = DiscoveryHeader(
+            title = "", desc = "", icon = "AutoAwesome", tint = OctopusTints.Browser,
+            actions = listOf(
+                DiscoveryAction("Search", "", "search", OctopusTints.Browser),
+                DiscoveryAction("Psychology", "", "universe", OctopusTints.Memory),
+                DiscoveryAction("Add", "", "publish", OctopusTints.Skill),
+            ),
+        ),
+        topics = listOf(
+            DiscoveryTopic("recommend", "", OctopusTints.Hot),
+            DiscoveryTopic("automation", "", OctopusTints.Routine),
+            DiscoveryTopic("efficiency", "", OctopusTints.Skill),
+            DiscoveryTopic("life", "", OctopusTints.Cloud),
+            DiscoveryTopic("learning", "", OctopusTints.Memory),
+            DiscoveryTopic("device", "", OctopusTints.Window),
+        ),
+        posts = listOf(
+            AgentDiscoveryPost("agent-travel", "Travel Planner: Flights to Itinerary in One Tap", "Enter destination and budget to auto-search attractions, plan routes, and generate a shareable checklist.", "Travel Inspiration", "T", "3.2k", R.string.agent_topic_life, "life", "Lifestyle", OctopusTints.Routine, 168, listOf(Color(0xFFFFB199), Color(0xFFFF0844)), "18.6k", "92%", "About 4 min", listOf("Browser", "Location", "Screenshot")),
+            AgentDiscoveryPost("agent-weekly", "Weekly Report Auto-Saver Template", "Pulls chat logs, task lists, and schedules to auto-write a report your boss will love.", "Efficiency Player", "E", "2.8k", R.string.agent_topic_efficiency, "efficiency", "Efficiency", OctopusTints.Skill, 138, listOf(Color(0xFF667EEA), Color(0xFF764BA2)), "12.4k", "95%", "About 2 min", listOf("Calendar", "Clipboard", "Documents")),
+            AgentDiscoveryPost("agent-phone", "Turn Old Phone into 24/7 Executor", "Let your backup handle messages, screenshots, forwarding, and scheduled tasks while your main phone stays quiet.", "Geek Hub", "G", "1.7k", R.string.agent_topic_device, "device", "Device", OctopusTints.Window, 190, listOf(Color(0xFF134E5E), Color(0xFF71B280)), "8.1k", "89%", "About 6 min", listOf("Accessibility", "Notifications", "Background")),
+            AgentDiscoveryPost("agent-shopping", "Price Tracker Saved Me 2000+", "Monitors historical prices, coupons, and platform promos, and alerts you when the price drops.", "Savings Bot", "S", "4.6k", R.string.agent_topic_automation, "automation", "Automation", OctopusTints.Hot, 156, listOf(Color(0xFFFFD194), Color(0xFFD1913C)), "23.9k", "91%", "About 3 min", listOf("Browser", "Notifications", "Timer")),
+            AgentDiscoveryPost("agent-paper", "Paper Reader: Key Points in 10 Minutes", "Reads PDFs, web pages, and screenshots, auto-extracts conclusions and citable insights.", "Academic Assistant", "A", "986", R.string.agent_topic_learning, "learning", "Learning", OctopusTints.Memory, 176, listOf(Color(0xFF00C6FF), Color(0xFF0072FF)), "6.5k", "94%", "About 5 min", listOf("Files", "Browser", "Clipboard")),
+            AgentDiscoveryPost("agent-voice", "Voice Assistant: Handle Messages While Driving", "Press and speak, auto-detects recipient, adjusts tone, and sends.", "Car Enthusiast", "C", "742", R.string.agent_topic_automation, "automation", "Voice", OctopusTints.Trust, 146, listOf(Color(0xFFF2994A), Color(0xFFF2C94C)), "5.7k", "88%", "About 2 min", listOf("Microphone", "Notifications", "Accessibility")),
+        ),
     )
 }
 

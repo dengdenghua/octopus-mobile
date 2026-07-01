@@ -464,19 +464,10 @@ fun ChatScreen() {
                 Text("Octopus", fontWeight = FontWeight.SemiBold, fontSize = OctopusType.titleLg, color = TextPrimary)
                 Spacer(Modifier.width(OctopusSpacing.sm))
                 val ready = llmOk && a11yOk
-                Surface(
-                shape = OctopusShape.capsule,
-                color = OctopusBackground.glassSurface,
-                border = BorderStroke(1.dp, OctopusBackground.glassBorder),
-                shadowElevation = 2.dp,
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = OctopusSpacing.sm, vertical = OctopusSpacing.xs),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
-                            .size(5.dp)
+                            .size(6.dp)
                             .background(if (ready) SuccessColor else WarningColor, CircleShape)
                     )
                     Spacer(modifier = Modifier.width(OctopusSpacing.xs))
@@ -487,8 +478,7 @@ fun ChatScreen() {
                     )
                 }
             }
-        }
-        // 录制示范技能按钮：顶栏 REC 胶囊，录制中红色闪烁
+        // 录制示范技能按钮：顶栏 REC 文字按钮，录制中红点闪烁
             val isRecording = remember { com.apk.claw.android.octopus_mobile.DemoRecorder.isRecording() }
             val recPulse by rememberInfiniteTransition(label = "rec").animateFloat(
                 initialValue = 0.4f,
@@ -496,30 +486,25 @@ fun ChatScreen() {
                 animationSpec = infiniteRepeatable(animation = tween(600), repeatMode = RepeatMode.Reverse),
                 label = "recPulse",
             )
-            Surface(
-                shape = OctopusShape.capsule,
-                color = if (isRecording) ErrorColor.copy(alpha = recPulse * 0.85f) else Color.Transparent,
-                border = BorderStroke(1.dp, if (isRecording) ErrorColor else TextMuted.copy(alpha = 0.35f)),
-                modifier = Modifier.clickable { com.apk.claw.android.octopus_mobile.DemoRecorder.toggle() },
+            Row(
+                modifier = Modifier
+                    .clickable { com.apk.claw.android.octopus_mobile.DemoRecorder.toggle() }
+                    .padding(horizontal = OctopusSpacing.sm, vertical = OctopusSpacing.xs),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = OctopusSpacing.sm, vertical = OctopusSpacing.xs),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(5.dp)
-                            .background(if (isRecording) Color.White else ErrorColor, CircleShape)
-                    )
-                    Spacer(Modifier.width(OctopusSpacing.xs))
-                    Text(
-                        "REC",
-                        color = if (isRecording) Color.White else ErrorColor,
-                        fontSize = OctopusType.micro,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.5.sp,
-                    )
-                }
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .background(ErrorColor.copy(alpha = if (isRecording) recPulse else 0.6f), CircleShape)
+                )
+                Spacer(Modifier.width(OctopusSpacing.xs))
+                Text(
+                    "REC",
+                    color = if (isRecording) ErrorColor else TextMuted,
+                    fontSize = OctopusType.micro,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.5.sp,
+                )
             }
             // 目标选择器:决定 Agent 在「本机」还是某台局域网设备上执行(移到右上,与三点并排)
             TargetSelector(onPreview = { previewDevice = it })

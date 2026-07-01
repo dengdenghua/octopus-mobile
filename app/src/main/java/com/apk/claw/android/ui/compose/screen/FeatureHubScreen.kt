@@ -256,14 +256,15 @@ private fun ExploreTab(
     onNavigateToUniverse: () -> Unit,
     onOpenPost: (AgentDiscoveryPost) -> Unit,
 ) {
-    var selectedTopic by remember { mutableStateOf(R.string.agent_square_tab_recommend) }
-    // 灵感流来自服务端 /square/discovery（后台可改），失败回退缓存/种子；null=加载中。
-    val posts by produceState<List<AgentDiscoveryPost>?>(initialValue = null) {
+    var selectedTopic by remember { mutableStateOf("recommend") }
+    // 灵感流来自服务端 /square/discovery（后台可改 header/topics/posts），失败回退缓存/种子；null=加载中。
+    val feed by produceState<DiscoveryFeed?>(initialValue = null) {
         value = DiscoveryRepository.feed()
     }
-    val all = posts ?: emptyList()
-    val filteredPosts = if (selectedTopic == R.string.agent_square_tab_recommend) all
-        else all.filter { it.topicRes == selectedTopic }
+    val data = feed
+    val all = data?.posts ?: emptyList()
+    val filteredPosts = if (selectedTopic == "recommend") all
+        else all.filter { it.topicKey == selectedTopic }
     LazyVerticalStaggeredGrid(
         columns = StaggeredGridCells.Fixed(2),
         modifier = Modifier.fillMaxSize(),
@@ -278,6 +279,7 @@ private fun ExploreTab(
     ) {
         item(span = StaggeredGridItemSpan.FullLine) {
             AgentDiscoveryHeader(
+                header = data?.header,
                 onSearch = onNavigateToAgentSquare,
                 onUniverse = onNavigateToUniverse,
                 onCreate = { onOpenActivity(SkillsActivity::class.java) },
@@ -285,15 +287,17 @@ private fun ExploreTab(
         }
 
         item(span = StaggeredGridItemSpan.FullLine) {
-            AgentTopicChips(selectedTopic = selectedTopic, onSelect = { selectedTopic = it })
+            AgentTopicChips(
+                topics = data?.topics,
+                selectedTopic = selectedTopic,
+                onSelect = { selectedTopic = it },
+            )
         }
 
         item(span = StaggeredGridItemSpan.FullLine) {
-            SectionHeaderWithAction(
-                if (selectedTopic == R.string.agent_square_tab_recommend) stringResource(R.string.agent_trending_now) else stringResource(R.string.agent_topic_inspiration, stringResource(selectedTopic)),
-                Icons.Filled.Whatshot,
-                com.apk.claw.android.ui.compose.theme.OctopusTints.Hot,
-            )
+            val title = if (selectedTopic == "recommend") stringResource(R.string.agent_trending_now)
+                else stringResource(R.string.agent_topic_inspiration, topicLabel(selectedTopic))
+            SectionHeaderWithAction(title, Icons.Filled.Whatshot, com.apk.claw.android.ui.compose.theme.OctopusTints.Hot)
         }
 
         staggeredItems(filteredPosts, key = { it.id }) { post ->
@@ -302,27 +306,63 @@ private fun ExploreTab(
     }
 }
 
+/** topic key → 本地化标签文案（远端 label 留空时兜底）。 */
+@Composable
+private fun topicLabel(key: String): String = when (key.trim().lowercase()) {
+    "recommend" -> stringResource(R.string.agent_square_tab_recommend)
+    "automation" -> stringResource(R.string.agent_topic_automation)
+    "efficiency" -> stringResource(R.string.agent_topic_efficiency)
+    "life", "lifestyle" -> stringResource(R.string.agent_topic_life)
+    "learning" -> stringResource(R.string.agent_topic_learning)
+    "device" -> stringResource(R.string.agent_topic_device)
+    else -> stringResource(R.string.agent_square_tab_recommend)
+}
+
+/** icon key → ImageVector（远端下发 key，App 端映射；未知 key 用 AutoAwesome 兜底）。 */
+private fun iconKeyToVector(key: String): ImageVector = when (key.trim().lowercase()) {
+    "search" -> Icons.Filled.Search
+    "psychology" -> Icons.Filled.Psychology
+    "add" -> Icons.Filled.Add
+    "autoawesome" -> Icons.Filled.AutoAwesome
+    "bolt" -> Icons.Filled.Bolt
+    "trendingup" -> Icons.Filled.TrendingUp
+    "weekend" -> Icons.Filled.Weekend
+    "phoneandroid" -> Icons.Filled.PhoneAndroid
+    "whatshot" -> Icons.Filled.Whatshot
+    else -> Icons.Filled.AutoAwesome
+}
+
 @Composable
 private fun AgentDiscoveryHeader(
+    header: DiscoveryHeader?,
     onSearch: () -> Unit,
     onUniverse: () -> Unit,
     onCreate: () -> Unit,
 ) {
+    val title = header?.title?.takeIf { it.isNotBlank() } ?: stringResource(R.string.agent_inspiration_plaza)
+    val desc = header?.desc?.takeIf { it.isNotBlank() } ?: stringResource(R.string.agent_inspiration_desc)
+    val icon = iconKeyToVector(header?.icon ?: "AutoAwesome")
+    val tint = header?.tint ?: BrowserTint
+    val actions = header?.actions?.takeIf { it.isNotEmpty() } ?: listOf(
+        DiscoveryAction("Search", "", "search", BrowserTint),
+        DiscoveryAction("Psychology", "", "universe", MemoryTint),
+        DiscoveryAction("Add", "", "publish", SkillTint),
+    )
     GlassCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(OctopusSpacing.lg)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier
                         .size(42.dp)
-                        .background(BrowserTint.copy(alpha = 0.18f), CircleShape),
+                        .background(tint.copy(alpha = 0.18f), CircleShape),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = BrowserTint, modifier = Modifier.size(22.dp))
+                    Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(22.dp))
                 }
                 Spacer(Modifier.width(OctopusSpacing.md))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        stringResource(R.string.agent_inspiration_plaza),
+                        title,
                         color = OctopusColors.TextPrimary,
                         fontSize = OctopusType.title,
                         fontWeight = FontWeight.Bold,
@@ -330,7 +370,7 @@ private fun AgentDiscoveryHeader(
                     )
                     Spacer(Modifier.height(OctopusSpacing.xs))
                     Text(
-                        stringResource(R.string.agent_inspiration_desc),
+                        desc,
                         color = OctopusColors.TextMuted,
                         fontSize = OctopusType.caption,
                         lineHeight = 15.sp,
@@ -340,11 +380,40 @@ private fun AgentDiscoveryHeader(
             }
             Spacer(Modifier.height(OctopusSpacing.md))
             Row(horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.sm), modifier = Modifier.fillMaxWidth()) {
-                AgentActionPill(Icons.Filled.Search, stringResource(R.string.agent_action_search), BrowserTint, Modifier.weight(1f), onSearch)
-                AgentActionPill(Icons.Filled.Psychology, stringResource(R.string.agent_action_universe), MemoryTint, Modifier.weight(1f), onUniverse)
-                AgentActionPill(Icons.Filled.Add, stringResource(R.string.agent_action_publish), SkillTint, Modifier.weight(1f), onCreate)
+                actions.forEach { action ->
+                    val label = action.text.takeIf { it.isNotBlank() } ?: actionLabel(action.action)
+                    AgentActionPill(
+                        icon = iconKeyToVector(action.icon),
+                        text = label,
+                        tint = action.tint,
+                        modifier = Modifier.weight(1f),
+                        onClick = { handleAction(action.action, onSearch, onUniverse, onCreate) },
+                    )
+                }
             }
         }
+    }
+}
+
+/** action key → 本地化文案兜底。 */
+@Composable
+private fun actionLabel(action: String): String = when (action.trim().lowercase()) {
+    "search" -> stringResource(R.string.agent_action_search)
+    "universe" -> stringResource(R.string.agent_action_universe)
+    "publish" -> stringResource(R.string.agent_action_publish)
+    else -> stringResource(R.string.agent_action_search)
+}
+
+private fun handleAction(
+    action: String,
+    onSearch: () -> Unit,
+    onUniverse: () -> Unit,
+    onCreate: () -> Unit,
+) {
+    when (action.trim().lowercase()) {
+        "search" -> onSearch()
+        "universe" -> onUniverse()
+        "publish" -> onCreate()
     }
 }
 
@@ -361,32 +430,34 @@ private fun AgentActionPill(
 
 @Composable
 private fun AgentTopicChips(
-    selectedTopic: Int,
-    onSelect: (Int) -> Unit,
+    topics: List<DiscoveryTopic>?,
+    selectedTopic: String,
+    onSelect: (String) -> Unit,
 ) {
-    val topics = listOf(
-        R.string.agent_square_tab_recommend to com.apk.claw.android.ui.compose.theme.OctopusTints.Hot,
-        R.string.agent_topic_automation to RoutineTint,
-        R.string.agent_topic_efficiency to SkillTint,
-        R.string.agent_topic_life to CloudTint,
-        R.string.agent_topic_learning to MemoryTint,
-        R.string.agent_topic_device to WindowTint,
+    val list = topics?.takeIf { it.isNotEmpty() } ?: listOf(
+        DiscoveryTopic("recommend", "", com.apk.claw.android.ui.compose.theme.OctopusTints.Hot),
+        DiscoveryTopic("automation", "", RoutineTint),
+        DiscoveryTopic("efficiency", "", SkillTint),
+        DiscoveryTopic("life", "", CloudTint),
+        DiscoveryTopic("learning", "", MemoryTint),
+        DiscoveryTopic("device", "", WindowTint),
     )
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(OctopusSpacing.sm),
     ) {
-        topics.chunked(3).forEach { row ->
+        list.chunked(3).forEach { row ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.sm),
             ) {
-                row.forEach { (label, tint) ->
+                row.forEach { topic ->
+                    val label = topic.label.takeIf { it.isNotBlank() } ?: topicLabel(topic.key)
                     GlassTextPill(
-                        text = stringResource(label),
-                        tint = tint,
-                        selected = selectedTopic == label,
-                        onClick = { onSelect(label) },
+                        text = label,
+                        tint = topic.tint,
+                        selected = selectedTopic == topic.key,
+                        onClick = { onSelect(topic.key) },
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -417,13 +488,13 @@ private fun savePostAsRoutine(title: String, desc: String, reproducePrefix: Stri
     return name
 }
 
-/** 按主题给灵感卡片不同的封面图标，避免所有卡片都用同一个机器人图标。 */
-private fun discoveryIconFor(topicRes: Int): androidx.compose.ui.graphics.vector.ImageVector = when (topicRes) {
-    R.string.agent_topic_automation -> Icons.Filled.Bolt
-    R.string.agent_topic_efficiency -> Icons.Filled.TrendingUp
-    R.string.agent_topic_life -> Icons.Filled.Weekend
-    R.string.agent_topic_learning -> Icons.Filled.Psychology
-    R.string.agent_topic_device -> Icons.Filled.PhoneAndroid
+/** 按主题给灵感卡片不同的封面图标，避免所有卡片都用同一个机器人图标。基于 topic key 匹配。 */
+private fun discoveryIconFor(topicKey: String): ImageVector = when (topicKey.trim().lowercase()) {
+    "automation" -> Icons.Filled.Bolt
+    "efficiency" -> Icons.Filled.TrendingUp
+    "life", "lifestyle" -> Icons.Filled.Weekend
+    "learning" -> Icons.Filled.Psychology
+    "device" -> Icons.Filled.PhoneAndroid
     else -> Icons.Filled.AutoAwesome
 }
 
@@ -450,7 +521,7 @@ private fun AgentDiscoveryCard(post: AgentDiscoveryPost, onClick: () -> Unit) {
                     Text(post.tag, color = Color.White, fontSize = OctopusType.tag, fontWeight = FontWeight.SemiBold)
                 }
                 Icon(
-                    discoveryIconFor(post.topicRes),
+                    discoveryIconFor(post.topicKey),
                     contentDescription = null,
                     tint = Color.White.copy(alpha = 0.78f),
                     modifier = Modifier.align(Alignment.Center).size(34.dp),
