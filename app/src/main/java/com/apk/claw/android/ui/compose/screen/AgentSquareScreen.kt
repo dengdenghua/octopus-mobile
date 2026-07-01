@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.apk.claw.android.R
 import com.apk.claw.android.ui.compose.theme.OctopusBackground
+import com.apk.claw.android.ui.compose.theme.OctopusThemeStyle
 import com.apk.claw.android.ui.compose.theme.OctopusColors
 import com.apk.claw.android.ui.compose.theme.OctopusIconSize
 import com.apk.claw.android.ui.compose.theme.OctopusShape
@@ -192,7 +193,7 @@ private fun AgentPostCard(post: AgentPost) {
         shape = OctopusShape.large,
         color = OctopusBackground.glassSurface,
         border = androidx.compose.foundation.BorderStroke(1.dp, OctopusBackground.glassBorder),
-        shadowElevation = 2.dp,
+        shadowElevation = OctopusThemeStyle.cardShadow(2.dp),
         modifier = Modifier
             .fillMaxWidth()
             .clip(OctopusShape.large)

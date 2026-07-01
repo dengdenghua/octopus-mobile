@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.DesktopWindows
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Monitor
@@ -1238,7 +1239,7 @@ private fun TargetSelector(onPreview: (DeviceInfo?) -> Unit = {}) {
                     onClick = { ControlTarget.setRemote(d); label = ControlTarget.label(); menu = false; onPreview(d) },
                 )
             }
-            // 电脑远程桌面：与"选手机目标"统一到同一个设备入口（WebRTC 远程桌面，电脑端跑 pc_remote_webrtc.py）
+            // 电脑：远端电脑(WebRTC 远程桌面) + 本地虚拟电脑(桌面模式:本机浏览器桌面 + Agent)
             HorizontalDivider()
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.settings_remote_pc_title)) },
@@ -1246,6 +1247,14 @@ private fun TargetSelector(onPreview: (DeviceInfo?) -> Unit = {}) {
                 onClick = {
                     menu = false
                     runCatching { context.startActivity(android.content.Intent(context, com.apk.claw.android.ui.featurescreens.PcRemoteWebrtcActivity::class.java)) }
+                },
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.chat_target_virtual_pc)) },
+                leadingIcon = { Icon(Icons.Filled.DesktopWindows, contentDescription = null, modifier = Modifier.size(OctopusIconSize.small)) },
+                onClick = {
+                    menu = false
+                    runCatching { context.startActivity(android.content.Intent(context, com.apk.claw.android.ui.desktop.DesktopActivity::class.java)) }
                 },
             )
             // 调试：回环目标（远程控制自己，用于单机验证远程路由）

@@ -51,9 +51,11 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.apk.claw.android.R
 import com.apk.claw.android.appViewModel
 import com.apk.claw.android.octopus_mobile.ConnectionState
 import com.apk.claw.android.octopus_mobile.browser.BrowserEngine
@@ -210,7 +212,7 @@ private fun DesktopMonitor(
         // 「正在打开 X」+ 进度条:仅加载时显示
         if (loading) {
             Text(
-                "正在打开 ${hostOf(currentUrl)}…",
+                stringResource(R.string.desktop_opening_host, hostOf(currentUrl)),
                 color = OctopusColors.Primary, fontSize = 11.sp,
                 modifier = Modifier.fillMaxWidth().background(OctopusColors.Surface)
                     .padding(horizontal = 12.dp, vertical = 2.dp),
@@ -250,7 +252,7 @@ private fun DesktopAddressBar(currentUrl: String, pageTitle: String, loading: Bo
             value = text,
             onValueChange = { text = it },
             singleLine = true,
-            placeholder = { Text(pageTitle.ifBlank { "输入网址…" }, fontSize = 13.sp, maxLines = 1) },
+            placeholder = { Text(pageTitle.ifBlank { stringResource(R.string.desktop_address_placeholder) }, fontSize = 13.sp, maxLines = 1) },
             textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = OctopusColors.TextPrimary),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
             keyboardActions = KeyboardActions(onGo = {
@@ -279,15 +281,16 @@ private fun DesktopWallpaper(modifier: Modifier = Modifier) {
         }
     }
     val timeFmt = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
-    val dateFmt = remember { SimpleDateFormat("M月d日 EEEE", Locale.getDefault()) }
+    val datePattern = stringResource(R.string.desktop_date_format)
+    val dateFmt = remember(datePattern) { SimpleDateFormat(datePattern, Locale.getDefault()) }
 
     // 母体连接状态
     val connState by appViewModel.connectionState.collectAsState()
     val (connLabel, connColor) = when (connState) {
-        ConnectionState.ONLINE -> "母体在线" to OctopusColors.Success
+        ConnectionState.ONLINE -> stringResource(R.string.desktop_conn_online) to OctopusColors.Success
         ConnectionState.CONNECTING, ConnectionState.CONNECTED,
-        ConnectionState.HELLO_SENT, ConnectionState.RECONNECTING -> "连接中…" to OctopusColors.Warning
-        else -> "未连接" to OctopusColors.TextMuted
+        ConnectionState.HELLO_SENT, ConnectionState.RECONNECTING -> stringResource(R.string.desktop_conn_connecting) to OctopusColors.Warning
+        else -> stringResource(R.string.desktop_conn_disconnected) to OctopusColors.TextMuted
     }
 
     Box(modifier = modifier.background(OctopusBackground.pageBrush()), contentAlignment = Alignment.Center) {
@@ -302,7 +305,7 @@ private fun DesktopWallpaper(modifier: Modifier = Modifier) {
             Spacer(Modifier.height(14.dp))
             Icon(Icons.Filled.DesktopWindows, contentDescription = null, tint = OctopusColors.TextMuted, modifier = Modifier.size(40.dp))
             Text(
-                "Agent 桌面 · 空闲中,在右侧对话下达指令",
+                stringResource(R.string.desktop_idle_hint),
                 color = OctopusColors.TextMuted, fontSize = 12.sp,
             )
             Spacer(Modifier.height(6.dp))
@@ -316,8 +319,12 @@ private fun DesktopWallpaper(modifier: Modifier = Modifier) {
 private fun DefaultLaunchToggle() {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     var pinned by remember { mutableStateOf(KVUtils.isDesktopModeDefault()) }
+    val pinnedText = ctx.getString(R.string.desktop_launch_pinned)
+    val unpinnedText = ctx.getString(R.string.desktop_launch_pin)
+    val pinnedToast = ctx.getString(R.string.desktop_launch_pinned_toast)
+    val unpinnedToast = ctx.getString(R.string.desktop_launch_unpinned_toast)
     Text(
-        text = if (pinned) "★ 已设为启动直达" else "☆ 设为启动直达桌面",
+        text = if (pinned) pinnedText else unpinnedText,
         color = if (pinned) OctopusColors.Primary else OctopusColors.TextMuted,
         fontSize = 11.sp,
         modifier = Modifier
@@ -327,7 +334,7 @@ private fun DefaultLaunchToggle() {
                 KVUtils.setDesktopModeDefault(pinned)
                 android.widget.Toast.makeText(
                     ctx,
-                    if (pinned) "开机将直接进入桌面模式" else "已取消开机直达",
+                    if (pinned) pinnedToast else unpinnedToast,
                     android.widget.Toast.LENGTH_SHORT,
                 ).show()
             }

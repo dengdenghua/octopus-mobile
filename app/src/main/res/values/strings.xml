@@ -6,6 +6,7 @@
     <string name="common_cancel">取消</string>
     <string name="common_close">关闭</string>
     <string name="common_save">保存</string>
+    <string name="common_delete">删除</string>
     <string name="common_more">更多</string>
     <string name="common_agree">同意</string>
     <string name="common_bound">已连接</string>
@@ -365,6 +366,8 @@ Shizuku 是安全、开源的本地辅助工具。</string>
     <string name="browser_home_miniapp_tag">小程序</string>
     <string name="browser_home_bookmarks">书签</string>
     <string name="browser_home_common_sites">常用网站</string>
+    <string name="browser_home_remove_common_site_title">从常用网站移除？</string>
+    <string name="browser_home_removed_toast">已移除</string>
 
     <!-- Bottom navigation -->
     <string name="nav_discover">发现</string>
@@ -569,6 +572,7 @@ Shizuku 是安全、开源的本地辅助工具。</string>
     <string name="chat_voice_hold_to_speak">按住说话</string>
     <string name="chat_scroll_bottom">回到底部</string>
     <string name="chat_target_local_device">本机</string>
+    <string name="chat_target_virtual_pc">本地虚拟电脑</string>
     <string name="chat_demo_open_wechat">打开微信，给小明发一条消息</string>
     <string name="chat_demo_main_screen">✓ 主屏幕</string>
     <string name="chat_demo_search">✓ 搜索</string>
@@ -791,8 +795,21 @@ Shizuku 是安全、开源的本地辅助工具。</string>
     <string name="feat_clouddrive">云盘</string>
     <string name="feat_memory">记忆</string>
     <string name="feat_video">视频库</string>
-    <string name="feat_desktop">桌面模式</string>
-    <string name="feat_desktop_desc">横屏工作台:左浏览器桌面 + 右对话</string>
+    <!-- Desktop mode (横屏桌面) -->
+    <string name="desktop_chat_label">对话</string>
+    <string name="desktop_collapse_chat">收起对话</string>
+    <string name="desktop_expand_chat">展开对话</string>
+    <string name="desktop_opening_host">正在打开 %1$s…</string>
+    <string name="desktop_address_placeholder">输入网址…</string>
+    <string name="desktop_conn_online">母体在线</string>
+    <string name="desktop_conn_connecting">连接中…</string>
+    <string name="desktop_conn_disconnected">未连接</string>
+    <string name="desktop_idle_hint">Agent 桌面 · 空闲中,在右侧对话下达指令</string>
+    <string name="desktop_launch_pinned">★ 已设为启动直达</string>
+    <string name="desktop_launch_pin">☆ 设为启动直达桌面</string>
+    <string name="desktop_launch_pinned_toast">开机将直接进入桌面模式</string>
+    <string name="desktop_launch_unpinned_toast">已取消开机直达</string>
+    <string name="desktop_date_format">M月d日 EEEE</string>
     <string name="feat_multiwindow">多窗口</string>
     <string name="feat_evolution">自我优化</string>
     <string name="feat_trust">信任中心</string>

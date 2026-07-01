@@ -2,10 +2,13 @@ package com.apk.claw.android.ui.compose.screen
 
 import android.content.Context
 import android.content.Intent
+import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -16,15 +19,11 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Apps
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Public
-import androidx.compose.material.icons.filled.School
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -52,6 +51,8 @@ import com.apk.claw.android.plugin.PluginManifest
 import com.apk.claw.android.ui.browser.BookmarkItem
 import com.apk.claw.android.ui.browser.BookmarkManager
 import com.apk.claw.android.ui.browser.BrowserActivity
+import com.apk.claw.android.ui.browser.CommonSiteItem
+import com.apk.claw.android.ui.browser.CommonSiteStore
 import com.apk.claw.android.ui.compose.theme.OctopusBackground
 import com.apk.claw.android.ui.compose.theme.OctopusColors
 import com.apk.claw.android.ui.compose.theme.OctopusIconSize
@@ -92,14 +93,8 @@ private data class BrowserSearchOption(
     val mode: SearchMode,
 )
 
-private data class BrowserShortcut(
-    val label: String,
-    val categoryRes: Int,
-    val url: String,
-    val iconUrl: String?,
-    val fallbackIcon: ImageVector,
-    val tint: Color,
-)
+private fun urlHost(url: String): String =
+    runCatching { android.net.Uri.parse(url).host }.getOrNull().orEmpty()
 
 private fun openBrowser(context: Context, query: String?) {
     val intent = Intent(context, BrowserActivity::class.java)
@@ -146,17 +141,8 @@ fun DiscoverScreen(onOpenUrl: ((String?) -> Unit)? = null) {
     }
     val miniApps = remember(refreshTick) { MiniAppRegistry.all() }
     val bookmarks = remember(refreshTick) { BookmarkManager().getAll() }
-    val tongyiQianwenLabel = stringResource(R.string.browser_app_tongyi_qianwen)
-    val shortcuts = remember(tongyiQianwenLabel) {
-        listOf(
-            BrowserShortcut("DeepSeek", R.string.browser_cat_ai, "https://chat.deepseek.com", "https://www.deepseek.com/favicon.ico", Icons.Filled.AutoAwesome, OctopusTints.CatAI),
-            BrowserShortcut(tongyiQianwenLabel, R.string.browser_cat_ai, "https://tongyi.aliyun.com/qianwen", "https://img.alicdn.com/imgextra/i3/O1CN01X1H2wE1eJxXvX9v7P_!!6000000003854-2-tps-180-180.png", Icons.Filled.AutoAwesome, OctopusTints.CatAI),
-            BrowserShortcut("YouTube", R.string.browser_cat_video, "https://www.youtube.com", "https://www.youtube.com/s/desktop/6d0b8f16/img/favicon_32x32.png", Icons.Filled.Movie, OctopusTints.CatVideo),
-            BrowserShortcut("GitHub", R.string.browser_cat_dev, "https://github.com", "https://github.githubassets.com/favicons/favicon.png", Icons.Filled.Code, OctopusTints.CatDev),
-            BrowserShortcut("Bilibili", R.string.browser_cat_video, "https://www.bilibili.com", "https://www.bilibili.com/favicon.ico", Icons.Filled.Movie, OctopusTints.CatVideo),
-            BrowserShortcut("Perplexity", R.string.browser_cat_ai, "https://www.perplexity.ai", "https://www.perplexity.ai/favicon.ico", Icons.Filled.School, OctopusTints.CatKnowledge),
-        )
-    }
+    val commonSites = remember(refreshTick) { CommonSiteStore().getAll() }
+    var siteToDelete by remember { mutableStateOf<CommonSiteItem?>(null) }
 
     LazyColumn(
         modifier = Modifier
@@ -203,8 +189,31 @@ fun DiscoverScreen(onOpenUrl: ((String?) -> Unit)? = null) {
         }
 
         item {
-            CommonSitesSection(shortcuts = shortcuts) { openUrl(it) }
+            CommonSitesSection(
+                sites = commonSites,
+                onOpen = { openUrl(it) },
+                onLongPress = { siteToDelete = it },
+            )
         }
+    }
+
+    siteToDelete?.let { site ->
+        AlertDialog(
+            onDismissRequest = { siteToDelete = null },
+            title = { Text(stringResource(R.string.browser_home_remove_common_site_title)) },
+            text = { Text(site.title.ifBlank { site.url }) },
+            confirmButton = {
+                TextButton(onClick = {
+                    CommonSiteStore().remove(site.url)
+                    siteToDelete = null
+                    Toast.makeText(context, context.getString(R.string.browser_home_removed_toast), Toast.LENGTH_SHORT).show()
+                    refreshTick++
+                }) { Text(stringResource(R.string.common_delete)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { siteToDelete = null }) { Text(stringResource(R.string.common_cancel)) }
+            },
+        )
     }
 }
 
@@ -304,7 +313,7 @@ private fun MiniAppsSection(apps: List<PluginManifest>, onLaunch: (String) -> Un
 private fun BookmarksSection(bookmarks: List<BookmarkItem>, onOpen: (String) -> Unit) {
     HomeSectionCard(title = stringResource(R.string.browser_home_bookmarks), isEmpty = bookmarks.isEmpty()) {
         TwoColumnTiles(bookmarks.take(6)) { b, mod ->
-            val host = remember(b.url) { runCatching { android.net.Uri.parse(b.url).host }.getOrNull().orEmpty() }
+            val host = remember(b.url) { urlHost(b.url) }
             HomeTile(label = b.title.ifBlank { host }, subtitle = host, modifier = mod, onClick = { onOpen(b.url) }) {
                 FaviconIcon(
                     url = host.takeIf { it.isNotBlank() }?.let { "https://$it/favicon.ico" },
@@ -317,13 +326,32 @@ private fun BookmarksSection(bookmarks: List<BookmarkItem>, onOpen: (String) -> 
     }
 }
 
-/** 常用网站：内置的几个快捷方式，新用户没有小程序/书签时页面不至于空荡荡。 */
+/**
+ * 常用网站：[CommonSiteStore] 里存的站点(首次为内置默认值)。长按删除——添加走浏览器内
+ * "收藏"弹窗的"添加到主页"，不在这个首页单独做加号入口。
+ */
 @Composable
-private fun CommonSitesSection(shortcuts: List<BrowserShortcut>, onOpen: (String) -> Unit) {
-    HomeSectionCard(title = stringResource(R.string.browser_home_common_sites), isEmpty = shortcuts.isEmpty()) {
-        TwoColumnTiles(shortcuts) { shortcut, mod ->
-            HomeTile(label = shortcut.label, subtitle = stringResource(shortcut.categoryRes), modifier = mod, onClick = { onOpen(shortcut.url) }) {
-                FaviconIcon(url = shortcut.iconUrl, tint = shortcut.tint, fallback = shortcut.fallbackIcon, contentDescription = shortcut.label)
+private fun CommonSitesSection(
+    sites: List<CommonSiteItem>,
+    onOpen: (String) -> Unit,
+    onLongPress: (CommonSiteItem) -> Unit,
+) {
+    HomeSectionCard(title = stringResource(R.string.browser_home_common_sites), isEmpty = sites.isEmpty()) {
+        TwoColumnTiles(sites) { site, mod ->
+            val host = remember(site.url) { urlHost(site.url) }
+            HomeTile(
+                label = site.title.ifBlank { host },
+                subtitle = host,
+                modifier = mod,
+                onClick = { onOpen(site.url) },
+                onLongClick = { onLongPress(site) },
+            ) {
+                FaviconIcon(
+                    url = host.takeIf { it.isNotBlank() }?.let { "https://$it/favicon.ico" },
+                    tint = OctopusTints.CatKnowledge,
+                    fallback = Icons.Filled.Public,
+                    contentDescription = site.title,
+                )
             }
         }
     }
@@ -453,6 +481,7 @@ private fun HomeTile(
     subtitle: String,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
     icon: @Composable () -> Unit,
 ) {
     val isGlass = OctopusThemeStyle.isGlass
@@ -463,7 +492,10 @@ private fun HomeTile(
             .height(52.dp)
             .clip(OctopusShape.large)
             .background(tileBg)
-            .clickable(onClick = onClick)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick,
+            )
             .padding(horizontal = OctopusSpacing.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {

@@ -83,6 +83,8 @@ object KVUtils {
         "config_server_auth_token",
         // 审计日志 HMAC 密钥(ToolAuditLog.KEY_HMAC_SECRET)—— 与日志分离,防 root 读 MMKV 重铸哈希链
         "tool_audit_hmac_secret",
+        // 远程访问日志 HMAC 密钥(RemoteAccessLog.KEY_HMAC_SECRET)—— 同上,与 ToolAuditLog 对称加密
+        "remote_access_hmac_secret",
     )
 
     /**

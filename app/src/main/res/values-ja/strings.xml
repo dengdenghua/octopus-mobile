@@ -6,6 +6,7 @@
     <string name="common_cancel">キャンセル</string>
     <string name="common_close">閉じる</string>
     <string name="common_save">保存</string>
+    <string name="common_delete">削除</string>
     <string name="common_agree">同意</string>
     <string name="common_bound">接続済み</string>
     <string name="common_unbound">未接続</string>
@@ -675,6 +676,23 @@
     <string name="feat_clouddrive">クラウド</string>
     <string name="feat_memory">メモリ</string>
     <string name="feat_video">ビデオライブラリ</string>
+    <string name="feat_desktop">デスクトップモード</string>
+    <string name="feat_desktop_desc">横向きワークベンチ:左ブラウザ + 右チャット</string>
+    <!-- Desktop mode (横屏桌面) -->
+    <string name="desktop_chat_label">チャット</string>
+    <string name="desktop_collapse_chat">チャットを折りたたむ</string>
+    <string name="desktop_expand_chat">チャットを展開</string>
+    <string name="desktop_opening_host">%1$s を開いています…</string>
+    <string name="desktop_address_placeholder">URLを入力…</string>
+    <string name="desktop_conn_online">ホスト接続済み</string>
+    <string name="desktop_conn_connecting">接続中…</string>
+    <string name="desktop_conn_disconnected">未接続</string>
+    <string name="desktop_idle_hint">Agent デスクトップ · 待機中、右側のチャットで指示してください</string>
+    <string name="desktop_launch_pinned">★ 起動時ダイレクト設定済み</string>
+    <string name="desktop_launch_pin">☆ 起動時ダイレクトに設定</string>
+    <string name="desktop_launch_pinned_toast">次回起動からデスクトップモードに入ります</string>
+    <string name="desktop_launch_unpinned_toast">起動時ダイレクトを解除しました</string>
+    <string name="desktop_date_format">M月d日 EEEE</string>
     <string name="feat_multiwindow">マルチウィンドウ</string>
     <string name="feat_evolution">自己進化</string>
     <string name="feat_trust">トラストセンター</string>
@@ -837,6 +855,8 @@
     <string name="browser_home_miniapp_tag">ミニアプリ</string>
     <string name="browser_home_bookmarks">ブックマーク</string>
     <string name="browser_home_common_sites">よく使うサイト</string>
+    <string name="browser_home_remove_common_site_title">よく使うサイトから削除しますか？</string>
+    <string name="browser_home_removed_toast">削除しました</string>
 
     <!-- サークル名とタグ -->
     <string name="circle_ai_players">AIプレイヤー</string>

@@ -210,7 +210,12 @@ class ScriptSandbox {
                 val paramsJs = args.getOrNull(1)
                 val params = jsToParams(paramsJs)
 
-                val result = ToolRegistry.getInstance().executeTool(name, params, null)
+                // JS 沙箱代码视为不可信来源:即使 run_code 本身已被来源闸门放行,
+                // 沙箱内调高危工具(send_sms / file_ops / browser_evaluate 等)仍要
+                // 走来源闸门,防止「批准一次 run_code = 解锁全部高危工具」的 launderer。
+                val result = ToolRegistry.withUntrustedSource {
+                    ToolRegistry.getInstance().executeTool(name, params, null)
+                }
                 if (result.isSuccess) {
                     result.data ?: "ok"
                 } else {

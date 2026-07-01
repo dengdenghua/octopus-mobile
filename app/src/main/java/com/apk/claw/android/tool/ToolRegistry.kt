@@ -324,19 +324,24 @@ object ToolRegistry {
             }
         }
 
-        // ── 高危工具来源闸门 + 审批流程 ──
-        // APPROVAL 模式：不可信来源调高危工具 → 弹窗审批
+        // ── 高危/中危工具来源闸门 + 审批流程 ──
+        // APPROVAL 模式：不可信来源调高危工具 → 弹窗审批；中危工具按 mediumRiskAction 处理
         // FULL_POWER 模式：trustAllSources=true，跳过来源闸门，高危工具自动放行
+        // 注:中危工具(tap/swipe/input_text/clipboard/browser_navigate 等)从不可信来源驱动时
+        // 也能造成实质危害(读剪贴板凭据/输密码/跳钓鱼站),故同样走闸门,仅 action 默认更宽松。
         val riskLevel = ToolRiskPolicy.riskOf(name)
         val isHighRisk = riskLevel == ToolRiskPolicy.RISK_HIGH
-        val needsSourceGate = !policy.trustAllSources && isUntrustedSource() && isHighRisk
+        val isMediumRisk = riskLevel == ToolRiskPolicy.RISK_MEDIUM
+        val needsSourceGate = !policy.trustAllSources && isUntrustedSource() && (isHighRisk || isMediumRisk)
 
         if (needsSourceGate) {
-            when (policy.highRiskAction) {
+            // HIGH 走 highRiskAction,MEDIUM 走 mediumRiskAction(默认 ALLOW,用户可收紧为 CONFIRM)
+            val action = if (isHighRisk) policy.highRiskAction else policy.mediumRiskAction
+            when (action) {
                 PermissionPolicy.RiskAction.BLOCK -> {
-                    eventBus?.publish(EventBus.ToolBlockedEvent(name, "high_risk_blocked", "policy"))
+                    eventBus?.publish(EventBus.ToolBlockedEvent(name, "risk_blocked", "policy"))
                     return audited(
-                        ToolResult.error("高危工具「$name」被安全策略拦截（当前为审批模式）。"),
+                        ToolResult.error("${if (isHighRisk) "高危" else "中危"}工具「$name」被安全策略拦截（当前为审批模式）。"),
                         blockedBy = "policy",
                     )
                 }
@@ -345,7 +350,7 @@ object ToolRegistry {
                     //  1) 若注册了 UI 确认回调（逐次人工确认）→ 用它；
                     //  2) 否则若用户在设置里显式打开"允许远程来源执行高危工具"→ 放行（适合无人值守的母体/局域网/群控机）；
                     //  3) 否则弹本地审批窗（默认，阻塞等待设备前用户确认）。
-                    val riskDesc = "高危工具 · 不可信来源(${if (isUntrustedSource()) "远程/自动" else "本地"})"
+                    val riskDesc = "${if (isHighRisk) "高危" else "中危"}工具 · 不可信来源(${if (isUntrustedSource()) "远程/自动" else "本地"})"
                     val approved = highRiskConfirmer?.invoke(name, params)
                         ?: if (com.apk.claw.android.utils.KVUtils.isRemoteHighRiskAllowed()) {
                             true
@@ -355,7 +360,7 @@ object ToolRegistry {
                     if (!approved) {
                         eventBus?.publish(EventBus.ToolBlockedEvent(name, "approval_denied", "policy"))
                         return audited(
-                            ToolResult.error("高危工具「$name」被用户拒绝或审批超时。"),
+                            ToolResult.error("${if (isHighRisk) "高危" else "中危"}工具「$name」被用户拒绝或审批超时。"),
                             blockedBy = "approval",
                         )
                     }
