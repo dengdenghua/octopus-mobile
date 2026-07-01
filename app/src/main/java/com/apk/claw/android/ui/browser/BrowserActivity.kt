@@ -297,7 +297,7 @@ class BrowserActivity : BaseActivity() {
         runCatching { window.statusBarColor = Color.TRANSPARENT }
         runCatching { window.navigationBarColor = Color.TRANSPARENT }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && isGlassStyle) {
             runCatching { window.setBackgroundBlurRadius(80) }
         }
 
@@ -498,7 +498,7 @@ class BrowserActivity : BaseActivity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
-            background = glassBg(0, 0.72f, stroke = false)  // 顶栏无圆角，全宽
+            background = panelBgNoStroke(0)  // 顶栏无圆角，全宽
             setPadding(dp(6), dp(SPACING_SM), dp(6), dp(SPACING_SM))
 
             // 返回胶囊按钮
@@ -506,10 +506,10 @@ class BrowserActivity : BaseActivity() {
                 text = "←"
                 textSize = 18f
                 gravity = Gravity.CENTER
-                setTextColor(cMuted)
+                setTextColor(if (isGlassStyle) cMuted else cText)
                 val s = dp(ICON_SIZE_SM)
                 layoutParams = LinearLayout.LayoutParams(s, s)
-                background = capsuleBg(withAlpha(cPrimary, 30), RADIUS_LG)
+                background = capsuleBgAdaptive(solidControlBg, RADIUS_LG)
                 setOnClickListener { finish() }
                 contentDescription = getString(R.string.advanced_action_close)
             })
@@ -522,7 +522,11 @@ class BrowserActivity : BaseActivity() {
                     marginStart = dp(6)
                     marginEnd = dp(6)
                 }
-                background = capsuleBg(glassCard, RADIUS_XL, withAlpha(cPrimary, 50), 1)
+                background = if (isGlassStyle) {
+                    capsuleBg(glassCard, RADIUS_XL, withAlpha(cPrimary, 50), 1)
+                } else {
+                    solidRoundRect(solidSurfaceVariant, RADIUS_XL, solidStroke, 1)
+                }
                 setPadding(dp(SPACING_SM), 0, dp(SPACING_XS), 0)
             }
 
@@ -570,8 +574,8 @@ class BrowserActivity : BaseActivity() {
                 val s = dp(28)
                 layoutParams = LinearLayout.LayoutParams(s, s)
                 setImageResource(android.R.drawable.ic_menu_rotate)
-                setColorFilter(cMuted)
-                background = capsuleBg(Color.TRANSPARENT, RADIUS_MD)
+                setColorFilter(if (isGlassStyle) cMuted else cText)
+                background = capsuleBgAdaptive(Color.TRANSPARENT, RADIUS_MD)
                 setPadding(dp(SPACING_XS), dp(SPACING_XS), dp(SPACING_XS), dp(SPACING_XS))
                 scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
                 contentDescription = getString(R.string.browser_refresh_button)
@@ -586,10 +590,10 @@ class BrowserActivity : BaseActivity() {
                 text = "⌂"
                 textSize = 16f
                 gravity = Gravity.CENTER
-                setTextColor(cMuted)
+                setTextColor(if (isGlassStyle) cMuted else cText)
                 val s = dp(ICON_SIZE_SM)
                 layoutParams = LinearLayout.LayoutParams(s, s)
-                background = capsuleBg(withAlpha(cPrimary, 30), RADIUS_LG)
+                background = capsuleBgAdaptive(solidControlBg, RADIUS_LG)
                 setOnClickListener {
                     if (isHomeVisible) hideHome() else showHome()
                 }
@@ -601,10 +605,10 @@ class BrowserActivity : BaseActivity() {
                 val s = dp(ICON_SIZE_SM)
                 layoutParams = LinearLayout.LayoutParams(s, s).apply { marginStart = dp(2) }
                 setImageResource(android.R.drawable.ic_menu_gallery)
-                setColorFilter(cMuted)
+                setColorFilter(if (isGlassStyle) cMuted else cText)
                 scaleType = ImageView.ScaleType.FIT_CENTER
                 setPadding(dp(SPACING_XS), dp(SPACING_XS), dp(SPACING_XS), dp(SPACING_XS))
-                background = capsuleBg(withAlpha(cPrimary, 30), RADIUS_LG)
+                background = capsuleBgAdaptive(solidControlBg, RADIUS_LG)
                 setOnClickListener { showWallpaperPicker() }
                 contentDescription = "Wallpaper"
             })
@@ -618,8 +622,8 @@ class BrowserActivity : BaseActivity() {
         return LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            background = glassBg(RADIUS_XL, 0.82f)
-            elevation = dp(10).toFloat()
+            background = panelBg(RADIUS_XL)
+            elevation = if (isGlassStyle) dp(10).toFloat() else 0f
             setPadding(dp(6), dp(6), dp(6), dp(6))
             // 悬浮固定在底部（导航栏上方）
             layoutParams = FrameLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply {
@@ -638,10 +642,14 @@ class BrowserActivity : BaseActivity() {
                 textSize = 13f
                 gravity = Gravity.CENTER
                 setTypeface(typeface, Typeface.BOLD)
-                setTextColor(cText)
+                setTextColor(if (isGlassStyle) cText else cPrimary)
                 val s = dp(32)
                 layoutParams = LinearLayout.LayoutParams(s, s).apply { marginStart = dp(3); marginEnd = dp(1) }
-                background = capsuleBg(withAlpha(cPrimary, 70), RADIUS_SM, withAlpha(cPrimary, 160), 1)
+                background = if (isGlassStyle) {
+                    capsuleBg(withAlpha(cPrimary, 70), RADIUS_SM, withAlpha(cPrimary, 160), 1)
+                } else {
+                    solidRoundRect(solidSurfaceVariant, RADIUS_SM, solidStroke, 1)
+                }
                 contentDescription = getString(R.string.browser_windows)
                 setOnClickListener { showWindowsSheet() }
             }
@@ -657,7 +665,11 @@ class BrowserActivity : BaseActivity() {
             textSize = if (accent) 12f else 17f
             gravity = Gravity.CENTER
             setTextColor(if (accent) cOnPrimary else cText)
-            background = if (accent) capsuleBg(cPrimary, RADIUS_XL) else capsuleBg(withAlpha(cText, 25), RADIUS_XL)
+            background = if (accent) {
+                capsuleBgAdaptive(cPrimary, RADIUS_XL)
+            } else {
+                capsuleBgAdaptive(if (isGlassStyle) withAlpha(cText, 25) else solidControlBg, RADIUS_XL)
+            }
             contentDescription = desc
             setOnClickListener { onClick() }
         }
@@ -668,7 +680,7 @@ class BrowserActivity : BaseActivity() {
         val sheet = com.google.android.material.bottomsheet.BottomSheetDialog(this)
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(glassOverlay)
+            setBackgroundColor(if (isGlassStyle) glassOverlay else solidSurface)
             setPadding(dp(SPACING_LG), dp(SPACING_LG), dp(SPACING_LG), dp(SPACING_XXL))
         }
         container.addView(TextView(this).apply {
@@ -685,7 +697,7 @@ class BrowserActivity : BaseActivity() {
                 setTextColor(cText)
                 setPadding(dp(SPACING_SM), dp(SPACING_MD + 2), dp(SPACING_SM), dp(SPACING_MD + 2))
                 isClickable = true
-                background = capsuleBg(withAlpha(cSurface, 20), RADIUS_LG)
+                background = capsuleBgAdaptive(if (isGlassStyle) withAlpha(cSurface, 20) else solidSurfaceVariant, RADIUS_LG)
                 layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = dp(SPACING_SM) }
                 setOnClickListener { sheet.dismiss(); onClick() }
             })
@@ -751,7 +763,7 @@ class BrowserActivity : BaseActivity() {
         val sheet = com.google.android.material.bottomsheet.BottomSheetDialog(this)
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(glassOverlay)
+            setBackgroundColor(if (isGlassStyle) glassOverlay else solidSurface)
             setPadding(dp(SPACING_LG), dp(SPACING_LG), dp(SPACING_LG), dp(SPACING_XXL))
         }
         // 标题 + 新窗口
@@ -782,12 +794,19 @@ class BrowserActivity : BaseActivity() {
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(dp(SPACING_MD), dp(SPACING_MD), dp(SPACING_SM), dp(SPACING_MD))
                 val active = w.id == currentWindowId
-                background = capsuleBg(
-                    if (active) withAlpha(cPrimary, 45) else withAlpha(cSurface, 12), RADIUS_LG,
-                    if (active) cPrimary else Color.TRANSPARENT, 1,
-                )
+                background = if (isGlassStyle) {
+                    capsuleBg(
+                        if (active) withAlpha(cPrimary, 45) else withAlpha(cSurface, 12), RADIUS_LG,
+                        if (active) cPrimary else Color.TRANSPARENT, 1,
+                    )
+                } else {
+                    solidRoundRect(
+                        if (active) withAlpha(cPrimary, 25) else solidSurfaceVariant, RADIUS_LG,
+                        if (active) cPrimary else solidStroke, 1,
+                    )
+                }
                 layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = dp(SPACING_SM) }
-                elevation = dp(2).toFloat()
+                elevation = if (isGlassStyle) dp(2).toFloat() else 0f
                 isClickable = true
                 setOnClickListener { sheet.dismiss(); switchWindow(w) }
 
@@ -803,7 +822,7 @@ class BrowserActivity : BaseActivity() {
                     addView(TextView(this@BrowserActivity).apply {
                         text = w.url.ifBlank { "—" }
                         textSize = 11f
-                        setTextColor(cOnWallpaperMuted)
+                        setTextColor(if (isGlassStyle) cOnWallpaperMuted else cMuted)
                         setSingleLine(true)
                     })
                 })
@@ -811,7 +830,7 @@ class BrowserActivity : BaseActivity() {
                     text = "×"
                     textSize = 18f
                     gravity = Gravity.CENTER
-                    setTextColor(cOnWallpaperMuted)
+                    setTextColor(if (isGlassStyle) cOnWallpaperMuted else cMuted)
                     val s = dp(32)
                     layoutParams = LinearLayout.LayoutParams(s, s)
                     setOnClickListener { closeWindow(w); sheet.dismiss(); showWindowsSheet() }
@@ -826,6 +845,11 @@ class BrowserActivity : BaseActivity() {
     // ── 壁纸 ──
 
     private fun applyWallpaper() {
+        if (!isGlassStyle) {
+            wallpaperBg.setImageDrawable(null)
+            wallpaperBg.setBackgroundColor(solidPageBg)
+            return
+        }
         if (useCustomWallpaper) {
             val file = File(filesDir, CUSTOM_WALLPAPER_FILE)
             if (file.exists()) {
@@ -903,7 +927,7 @@ class BrowserActivity : BaseActivity() {
         val sheet = com.google.android.material.bottomsheet.BottomSheetDialog(this)
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(glassOverlay)
+            setBackgroundColor(if (isGlassStyle) glassOverlay else solidSurface)
             setPadding(dp(SPACING_XL), dp(SPACING_XL), dp(SPACING_XL), dp(SPACING_XL))
         }
 
@@ -917,14 +941,14 @@ class BrowserActivity : BaseActivity() {
                 text = getString(R.string.browser_wallpaper_title)
                 textSize = 18f
                 setTypeface(typeface, Typeface.BOLD)
-                setTextColor(cOnWallpaper)
+                setTextColor(if (isGlassStyle) cOnWallpaper else cText)
                 layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f)
             })
 
             addView(TextView(this@BrowserActivity).apply {
                 text = "×"
                 textSize = 20f
-                setTextColor(cOnWallpaperMuted)
+                setTextColor(if (isGlassStyle) cOnWallpaperMuted else cMuted)
                 val s = dp(ICON_SIZE_SM)
                 layoutParams = LinearLayout.LayoutParams(s, s)
                 gravity = Gravity.CENTER
@@ -936,7 +960,7 @@ class BrowserActivity : BaseActivity() {
         container.addView(TextView(this@BrowserActivity).apply {
             text = getString(R.string.browser_wallpaper_presets)
             textSize = 13f
-            setTextColor(cOnWallpaperMuted)
+            setTextColor(if (isGlassStyle) cOnWallpaperMuted else cMuted)
             setPadding(0, dp(SPACING_MD), 0, dp(SPACING_SM))
         })
 
@@ -1002,7 +1026,7 @@ class BrowserActivity : BaseActivity() {
                 topMargin = dp(SPACING_SM)
                 bottomMargin = dp(SPACING_SM)
             }
-            setBackgroundColor(withAlpha(cOnWallpaper, 40))
+            setBackgroundColor(if (isGlassStyle) withAlpha(cOnWallpaper, 40) else OctopusColors.Border.toArgb())
         })
 
         // 上传壁纸按钮
@@ -1012,14 +1036,18 @@ class BrowserActivity : BaseActivity() {
             layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
                 topMargin = dp(SPACING_XS)
             }
-            background = capsuleBg(withAlpha(cOnWallpaper, 60), RADIUS_LG)
+            background = if (isGlassStyle) {
+                capsuleBg(withAlpha(cOnWallpaper, 60), RADIUS_LG)
+            } else {
+                solidRoundRect(solidSurfaceVariant, RADIUS_LG, solidStroke, 1)
+            }
             setPadding(dp(SPACING_MD), dp(SPACING_MD), dp(SPACING_MD), dp(SPACING_MD))
-            elevation = dp(2).toFloat()
+            elevation = if (isGlassStyle) dp(2).toFloat() else 0f
 
             addView(ImageView(this@BrowserActivity).apply {
                 layoutParams = LinearLayout.LayoutParams(dp(ICON_SIZE_SM), dp(ICON_SIZE_SM))
                 setImageResource(android.R.drawable.ic_menu_camera)
-                setColorFilter(cOnWallpaper)
+                setColorFilter(if (isGlassStyle) cOnWallpaper else cText)
                 scaleType = ImageView.ScaleType.FIT_CENTER
             })
 
@@ -1032,14 +1060,14 @@ class BrowserActivity : BaseActivity() {
                 addView(TextView(this@BrowserActivity).apply {
                     text = getString(R.string.browser_wallpaper_upload)
                     textSize = 14f
-                    setTextColor(cOnWallpaper)
+                    setTextColor(if (isGlassStyle) cOnWallpaper else cText)
                     setTypeface(typeface, Typeface.BOLD)
                 })
 
                 addView(TextView(this@BrowserActivity).apply {
                     text = getString(R.string.browser_wallpaper_upload_hint)
                     textSize = 11f
-                    setTextColor(cOnWallpaperFaint)
+                    setTextColor(if (isGlassStyle) cOnWallpaperFaint else cMuted)
                 })
             })
 
@@ -1114,7 +1142,7 @@ class BrowserActivity : BaseActivity() {
         val pad = dp(SPACING_LG)
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(glassOverlay)
+            setBackgroundColor(if (isGlassStyle) glassOverlay else solidSurface)
             setPadding(pad, pad, pad, pad)
         }
 
