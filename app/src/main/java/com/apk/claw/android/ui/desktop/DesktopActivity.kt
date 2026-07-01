@@ -293,14 +293,14 @@ private fun DesktopMonitor(
         if (loading) {
             Text(
                 stringResource(R.string.desktop_opening_host, hostOf(currentUrl)),
-                color = OctopusColors.Primary, fontSize = 11.sp,
-                modifier = Modifier.fillMaxWidth().background(OctopusColors.Surface)
+                color = Holo.Accent, fontSize = 11.sp,
+                modifier = Modifier.fillMaxWidth().background(Holo.Panel)
                     .padding(horizontal = 12.dp, vertical = 2.dp),
             )
             LinearProgressIndicator(
                 progress = { (progress.coerceIn(0, 100)) / 100f },
                 modifier = Modifier.fillMaxWidth().height(2.dp),
-                color = OctopusColors.Primary,
+                color = Holo.Accent,
                 trackColor = Color.Transparent,
             )
         }
@@ -322,27 +322,27 @@ private fun DesktopAddressBar(currentUrl: String, pageTitle: String, loading: Bo
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(OctopusColors.Surface)
+            .background(Holo.Panel)
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // 状态点:加载中琥珀,空闲/完成灰
-        Dot(if (loading) OctopusColors.Warning else OctopusColors.TextMuted)
+        // 状态点:加载中黄,空闲/完成灰
+        Dot(if (loading) Holo.Accent else Holo.TextSecondary)
         Spacer(Modifier.width(8.dp))
         TextField(
             value = text,
             onValueChange = { text = it },
             singleLine = true,
-            placeholder = { Text(pageTitle.ifBlank { stringResource(R.string.desktop_address_placeholder) }, fontSize = 13.sp, maxLines = 1) },
-            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = OctopusColors.TextPrimary),
+            placeholder = { Text(pageTitle.ifBlank { stringResource(R.string.desktop_address_placeholder) }, fontSize = 13.sp, maxLines = 1, color = Holo.TextSecondary) },
+            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = Holo.TextHud),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
             keyboardActions = KeyboardActions(onGo = {
                 val u = normalizeUrl(text)
                 if (u.isNotBlank()) onGo(u)
             }),
             colors = TextFieldDefaults.colors(
-                focusedContainerColor = OctopusColors.SurfaceVariant,
-                unfocusedContainerColor = OctopusColors.SurfaceVariant,
+                focusedContainerColor = Holo.Surface2,
+                unfocusedContainerColor = Holo.Surface2,
                 focusedIndicatorColor = Color.Transparent,
                 unfocusedIndicatorColor = Color.Transparent,
             ),

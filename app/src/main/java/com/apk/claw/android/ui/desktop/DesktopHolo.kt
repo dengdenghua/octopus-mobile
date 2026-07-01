@@ -31,7 +31,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
@@ -50,48 +49,42 @@ import com.apk.claw.android.plugin.MiniAppRegistry
 import com.apk.claw.android.utils.KVUtils
 
 /**
- * 「本地虚拟电脑」的科幻/全息皮肤 —— 参考 MiniMax OpenRoom 的"AI 操作的桌面",
- * 做成:壁纸背景 + 玻璃拟态面板 + 霓虹描边 + 顶部 HUD 直播条(● LIVE + 遥测)。
+ * 「本地虚拟电脑」皮肤 —— 配色 1:1 学 MiniMax OpenRoom 的 ChatPanel:
+ * 深灰扁平面板(#1C1D20 / #121214 / #282A2A)+ 柔黄强调(#FAEA5F)+ 白透明层次,
+ * **无 blur / 无 shadow / 无渐变辉光,纯扁平**。壁纸打底,面板悬浮。
  *
  * 放在独立文件里,尽量少改并行编辑中的 [DesktopActivity]。
  */
 internal object Holo {
-    val Accent = Color(0xFF41E0FF)          // 霓虹青
-    val AccentDim = Color(0xFF1E6E82)
-    val Glass = Color(0xFF0A1626)           // 玻璃面板底色(配 alpha 用)
-    val Border = Color(0x6641E0FF)          // 青色描边(40% alpha)
-    val BorderDim = Color(0x2241E0FF)
-    val TextHud = Color(0xFFBFEFFF)
-    val Live = Color(0xFFFF4D6A)            // 直播红点
+    val Accent = Color(0xFFFAEA5F)          // OpenRoom 主强调:柔黄
+    val AccentDim = Color(0x80FAEA5F)       // 黄 50%
+    val Panel = Color(0xFF1C1D20)           // 面板底(不透明)
+    val AvatarBg = Color(0xFF121214)        // 更深(头像/壁纸侧)
+    val Surface2 = Color(0xFF282A2A)        // 气泡/输入
+    val Glass = Color(0xFF1C1D20)           // 兼容旧名(现=面板底,配 alpha 用)
+    val Border = Color(0x0FFFFFFF)          // 白 0.06 主分隔
+    val BorderDim = Color(0x0FFFFFFF)       // 白 0.06
+    val BorderStrong = Color(0x1AFFFFFF)    // 白 0.1
+    val TextHud = Color(0xE6FFFFFF)         // 白 0.9 主文本
+    val TextSecondary = Color(0x99FFFFFF)   // 白 0.6
+    val Live = Color(0xFFFF4D6A)            // 直播红点(录制语义,深色上醒目)
 
+    // 壁纸:OpenRoom 用图片壁纸;这里用近黑扁平渐变兜底(无网格辉光)
     val bgBrush = Brush.verticalGradient(
-        listOf(Color(0xFF070B16), Color(0xFF0A1020), Color(0xFF05070E)),
+        listOf(Color(0xFF121214), Color(0xFF1C1D20)),
     )
 }
 
-/** 玻璃拟态面板:半透明底 + 霓虹描边 + 圆角。 */
-fun Modifier.holoGlass(corner: Dp = 14.dp, fillAlpha: Float = 0.55f): Modifier =
+/** 扁平面板:深灰底 + 白 0.06 描边 + 圆角(学 OpenRoom,12px 卡片)。 */
+fun Modifier.holoGlass(corner: Dp = 12.dp, fillAlpha: Float = 1f): Modifier =
     this.clip(RoundedCornerShape(corner))
-        .background(Holo.Glass.copy(alpha = fillAlpha))
+        .background(if (fillAlpha >= 1f) Holo.Panel else Holo.Panel.copy(alpha = fillAlpha))
         .border(1.dp, Holo.Border, RoundedCornerShape(corner))
 
-/** 全屏科幻壁纸:深空渐变 + 淡青网格。 */
+/** 全屏壁纸:近黑扁平(无网格),面板悬浮其上。 */
 @Composable
 fun HoloBackground(modifier: Modifier = Modifier) {
-    Canvas(modifier = modifier.fillMaxSize().background(Holo.bgBrush)) {
-        val step = 46.dp.toPx()
-        val line = Holo.Accent.copy(alpha = 0.045f)
-        var x = 0f
-        while (x < size.width) {
-            drawLine(line, Offset(x, 0f), Offset(x, size.height), 1f)
-            x += step
-        }
-        var y = 0f
-        while (y < size.height) {
-            drawLine(line, Offset(0f, y), Offset(size.width, y), 1f)
-            y += step
-        }
-    }
+    Box(modifier.fillMaxSize().background(Holo.bgBrush))
 }
 
 /** 顶部 HUD 直播条:● LIVE(空闲=IDLE)+ 当前 URL + 连接态 + 时钟,等宽字体。 */

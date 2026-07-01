@@ -15,7 +15,8 @@ import com.google.gson.reflect.TypeToken
  * 标题/网址都是现成的，不用用户手填。删：首页 tile 长按。
  *
  * 单例([object]):所有调用方共享同一份内存缓存,避免每个 `CommonSiteStore()` 实例各自
- * 维护一份 cache 导致增删后其它实例仍读到旧值。
+ * 维护一份 cache 导致增删后其它实例仍读到旧值(与 [BookmarkManager] 同一方案)。
+ * 读写方法加 @Synchronized 防 read-modify-write 竞态。
  */
 object CommonSiteStore {
 
@@ -24,6 +25,7 @@ object CommonSiteStore {
     private val gson = Gson()
     private var cache: MutableList<CommonSiteItem>? = null
 
+    @Synchronized
     fun getAll(): List<CommonSiteItem> {
         if (cache == null) {
             cache = loadFromStorage().toMutableList()
@@ -31,6 +33,7 @@ object CommonSiteStore {
         return cache!!.toList()
     }
 
+    @Synchronized
     fun add(url: String, title: String) {
         val list = getAll().toMutableList()
         if (list.any { it.url == url }) return
@@ -38,6 +41,7 @@ object CommonSiteStore {
         save(list)
     }
 
+    @Synchronized
     fun remove(url: String) {
         val list = getAll().toMutableList()
         list.removeAll { it.url == url }
