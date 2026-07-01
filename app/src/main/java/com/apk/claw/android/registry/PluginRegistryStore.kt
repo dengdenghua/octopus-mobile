@@ -78,13 +78,14 @@ internal object PluginRegistryStore {
             runCatching {
                 val rawBytes = android.util.Base64.decode(data.body, android.util.Base64.DEFAULT)
 
-                // sha256 校验
+                // sha256 校验(fail-closed:checksum 缺失即拒绝,防服务端被攻破后下发无校验恶意插件)
                 val expectedCs = (data.content?.checksum ?: asset.content?.checksum)?.removePrefix("sha256:")
-                if (!expectedCs.isNullOrBlank()) {
-                    val actual = sha256Hex(rawBytes)
-                    if (!actual.equals(expectedCs, ignoreCase = true))
-                        return@withContext "校验失败:checksum 不符,已拒绝安装"
+                if (expectedCs.isNullOrBlank()) {
+                    return@withContext "校验失败:服务端未提供 checksum,已拒绝安装"
                 }
+                val actual = sha256Hex(rawBytes)
+                if (!actual.equals(expectedCs, ignoreCase = true))
+                    return@withContext "校验失败:checksum 不符,已拒绝安装"
 
                 val destDir = File(pluginsDir(context), asset.slug).apply { mkdirs() }
 

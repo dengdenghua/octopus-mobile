@@ -46,6 +46,7 @@ import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.Weekend
 import androidx.compose.material.icons.filled.Whatshot
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -300,8 +301,32 @@ private fun ExploreTab(
             SectionHeaderWithAction(title, Icons.Filled.Whatshot, com.apk.claw.android.ui.compose.theme.OctopusTints.Hot)
         }
 
-        staggeredItems(filteredPosts, key = { it.id }) { post ->
-            AgentDiscoveryCard(post, onClick = { onOpenPost(post) })
+        // feed==null 表示首次加载中,展示 loading 占位,避免空白闪烁。
+        if (data == null) {
+            item(span = StaggeredGridItemSpan.FullLine) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = OctopusSpacing.xl),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(OctopusIconSize.medium),
+                        strokeWidth = 2.dp,
+                    )
+                    Spacer(Modifier.width(OctopusSpacing.sm))
+                    Text(
+                        stringResource(R.string.browser_loading_text),
+                        color = OctopusColors.TextSecondary,
+                        fontSize = OctopusType.body,
+                    )
+                }
+            }
+        } else {
+            staggeredItems(filteredPosts, key = { it.id }) { post ->
+                AgentDiscoveryCard(post, onClick = { onOpenPost(post) })
+            }
         }
     }
 }

@@ -1,6 +1,5 @@
 package com.apk.claw.android.agent
 
-import dev.langchain4j.exception.HttpException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -16,14 +15,6 @@ import java.util.LinkedList
 class DefaultAgentServiceTest {
 
     // ==================== 反射辅助方法 ====================
-
-    /** 通过反射调用私有方法 isAuthOrQuotaError */
-    private fun invokeIsAuthOrQuotaError(service: DefaultAgentService, e: Throwable): Boolean {
-        val method = DefaultAgentService::class.java
-            .getDeclaredMethod("isAuthOrQuotaError", Throwable::class.java)
-        method.isAccessible = true
-        return method.invoke(service, e) as Boolean
-    }
 
     /** 通过反射创建私有数据类 RoundFingerprint 实例 */
     private fun createFingerprint(screenHash: Int, toolCall: String): Any {
@@ -44,72 +35,6 @@ class DefaultAgentServiceTest {
             .getDeclaredMethod("isStuckInLoop", LinkedList::class.java)
         method.isAccessible = true
         return method.invoke(service, history) as Boolean
-    }
-
-    // ==================== isAuthOrQuotaError 方法测试 ====================
-
-    @Test
-    fun `isAuthOrQuotaError returns true for HttpException 401`() {
-        val service = DefaultAgentService()
-        val ex = HttpException(401, "Unauthorized")
-        assertTrue(invokeIsAuthOrQuotaError(service, ex))
-    }
-
-    @Test
-    fun `isAuthOrQuotaError returns true for HttpException 403`() {
-        val service = DefaultAgentService()
-        val ex = HttpException(403, "Forbidden")
-        assertTrue(invokeIsAuthOrQuotaError(service, ex))
-    }
-
-    @Test
-    fun `isAuthOrQuotaError returns false for HttpException 500`() {
-        val service = DefaultAgentService()
-        val ex = HttpException(500, "Internal Server Error")
-        assertFalse(invokeIsAuthOrQuotaError(service, ex))
-    }
-
-    @Test
-    fun `isAuthOrQuotaError returns true for exception message containing HTTP 401`() {
-        val service = DefaultAgentService()
-        val ex = RuntimeException("Request failed: HTTP 401 Unauthorized")
-        assertTrue(invokeIsAuthOrQuotaError(service, ex))
-    }
-
-    @Test
-    fun `isAuthOrQuotaError returns false for exception message containing 40123`() {
-        val service = DefaultAgentService()
-        // "40123" 不应被误判为 401 —— 正则要求 HTTP/status/code 前缀且 \b 边界
-        val ex = RuntimeException("Request id 40123 not found")
-        assertFalse(invokeIsAuthOrQuotaError(service, ex))
-    }
-
-    @Test
-    fun `isAuthOrQuotaError returns true for exception message containing status 403`() {
-        val service = DefaultAgentService()
-        val ex = RuntimeException("status=403 Forbidden")
-        assertTrue(invokeIsAuthOrQuotaError(service, ex))
-    }
-
-    @Test
-    fun `isAuthOrQuotaError returns false for exception with null message`() {
-        val service = DefaultAgentService()
-        val ex = RuntimeException()
-        assertFalse(invokeIsAuthOrQuotaError(service, ex))
-    }
-
-    @Test
-    fun `isAuthOrQuotaError returns true for insufficient_quota message`() {
-        val service = DefaultAgentService()
-        val ex = RuntimeException("insufficient_quota: you exceeded your quota")
-        assertTrue(invokeIsAuthOrQuotaError(service, ex))
-    }
-
-    @Test
-    fun `isAuthOrQuotaError returns true for invalid_api_key message`() {
-        val service = DefaultAgentService()
-        val ex = RuntimeException("invalid_api_key provided")
-        assertTrue(invokeIsAuthOrQuotaError(service, ex))
     }
 
     // ==================== RoundFingerprint 相等性测试 ====================

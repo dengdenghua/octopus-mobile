@@ -142,7 +142,8 @@ JWT_EXPIRE_SECONDS = int(os.environ.get("JWT_EXPIRE_SECONDS", str(30 * 24 * 3600
 DEVICE_TOKEN_SECRET = os.environ.get("DEVICE_TOKEN_SECRET", "") or JWT_SECRET
 
 # WebSocket Origin 白名单(防 CSWSH)。逗号分隔,如 "https://app.octoapk.com,https://club.octoapk.com"。
-# 留空则允许所有 Origin(仅适合开发环境;生产环境务必配置)。
+# fail-closed:留空时拒绝所有 Origin,避免生产环境误开为允许任意来源。
+# 本地开发需测试 WebSocket 时,请显式设置 WS_ALLOWED_ORIGINS=http://localhost:<port>。
 WS_ALLOWED_ORIGINS = {
     o.strip().rstrip("/").lower()
     for o in os.environ.get("WS_ALLOWED_ORIGINS", "").split(",")
@@ -151,9 +152,9 @@ WS_ALLOWED_ORIGINS = {
 
 
 def _is_allowed_origin(origin: str) -> bool:
-    """检查 WebSocket Origin 是否在白名单中。空白名单时允许所有(开发模式)。"""
+    """检查 WebSocket Origin 是否在白名单中。空白名单时拒绝(fail-closed)。"""
     if not WS_ALLOWED_ORIGINS:
-        return True
+        return False
     return origin.strip().rstrip("/").lower() in WS_ALLOWED_ORIGINS
 
 # 第三方辅助工具下载镜像。生产把 Shizuku 官方 APK 放到 SHIZUKU_APK_PATH 指向的位置;
@@ -2248,6 +2249,7 @@ def admin_plugin_approve(slug: str, _: bool = Depends(admin_guard)) -> dict[str,
             raise HTTPException(404, "插件不存在")
         c.execute("UPDATE registry_assets SET status='approved', reject_reason='', updated_at=? WHERE id=?",
                   (now_ms(), aid))
+        _admin_log(c, "plugin_approve", aid, f"slug={slug} ip={client_ip(request)}")
         c.commit()
     return {"success": True}
 
@@ -2262,6 +2264,7 @@ def admin_plugin_reject(slug: str, body: dict[str, Any], _: bool = Depends(admin
             raise HTTPException(404, "插件不存在")
         c.execute("UPDATE registry_assets SET status='rejected', reject_reason=?, updated_at=? WHERE id=?",
                   (reason, now_ms(), aid))
+        _admin_log(c, "plugin_reject", aid, f"slug={slug} reason={reason} ip={client_ip(request)}")
         c.commit()
     return {"success": True}
 

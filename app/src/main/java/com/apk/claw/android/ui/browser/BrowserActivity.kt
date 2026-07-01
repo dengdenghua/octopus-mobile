@@ -222,9 +222,10 @@ class BrowserActivity : BaseActivity() {
         }
     }
 
-    /** 给 BottomSheetDialog 的 window 加真实背景模糊（API31+），低版本由 glassOverlay 兜底 */
+    /** 给 BottomSheetDialog 的 window 加真实背景模糊（API31+），低版本由 glassOverlay 兜底。
+     *  Standard 主题跳过模糊,保持扁平纯色底。 */
     private fun applyDialogBlur(sheet: com.google.android.material.bottomsheet.BottomSheetDialog) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && isGlassStyle) {
             runCatching { sheet.window?.setBackgroundBlurRadius(40) }
         }
     }
@@ -778,7 +779,7 @@ class BrowserActivity : BaseActivity() {
                 layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f)
             })
             addView(TextView(this@BrowserActivity).apply {
-                text = "+ 新窗口"
+                text = getString(R.string.browser_new_window)
                 textSize = 14f
                 setTypeface(typeface, Typeface.BOLD)
                 setTextColor(cOnPrimary)

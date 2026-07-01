@@ -93,6 +93,13 @@ class ScriptSandbox {
             cx.optimizationLevel = -1
             cx.languageVersion = Context.VERSION_ES6
             cx.instructionObserverThreshold = 5_000
+            // 沙箱隔离核心:拒绝脚本访问任何 Java 类。
+            // Rhino 默认允许 java.lang.Runtime.exec / Class.forName 等反射逃逸,
+            // 装 ClassShutter 后所有 Java 类访问(含 LiveConnect)都被拒,
+            // 脚本只能用我们显式注入的宿主 API(print/readFile/writeFile/fetch/callTool)。
+            // 注:用 setClassShutter() 方法调用而非属性赋值——Context 内部同名私有字段会让
+            // Kotlin 的属性语法糖误解析到那个私有字段上,编译不过。
+            cx.setClassShutter(ClassShutter { _ -> false })
         }
 
         override fun observeInstructionCount(cx: Context, instructionCount: Int) {

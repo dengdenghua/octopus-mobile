@@ -75,6 +75,14 @@ object KVUtils {
         KEY_OCTOPUS_AUTH_TOKEN,
         KEY_LLM_API_KEY,
         KEY_VISION_API_KEY,
+        // 服务端账号 JWT(AccountStore.K_TOKEN)—— bearer 级秘密,泄漏可冒充用户
+        "ACCOUNT_TOKEN",
+        // 远程控制台设备 token(RemoteConsoleGateway.KEY_DEVICE_TOKEN)—— bearer 级秘密
+        "REMOTE_CONSOLE_DEVICE_TOKEN",
+        // 局域网配置服务端鉴权 token(ConfigServerManager)—— 可改写设备配置
+        "config_server_auth_token",
+        // 审计日志 HMAC 密钥(ToolAuditLog.KEY_HMAC_SECRET)—— 与日志分离,防 root 读 MMKV 重铸哈希链
+        "tool_audit_hmac_secret",
     )
 
     /**

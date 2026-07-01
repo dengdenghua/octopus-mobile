@@ -24,13 +24,6 @@ enum class OctopusGlassQuality {
     }
 }
 
-enum class OctopusGlassMaterial {
-    Thin,
-    Card,
-    Dock,
-    Sheet;
-}
-
 enum class UiStyle {
     Glass,
     Standard;
@@ -172,11 +165,11 @@ object OctopusTints {
 /**
  * 统一的 Shape token（合并原 OctopusShape 与 OctopusShapes 双轨）。
  *
- * 数值与 XML ShapeAppearance 对齐：
- * - small  = 8dp（小控件：Chip、Tag）
- * - medium = 12dp（中控件：按钮、输入框）
- * - large  = 16dp（大控件：卡片）
- * - xl     = 20dp（面板、底部弹窗）
+ * 圆角较保守以贴合扁平 UI(避免气泡感):
+ * - small  = 6dp（小控件：Chip、Tag）
+ * - medium = 8dp（中控件：按钮、输入框）
+ * - large  = 10dp（大控件：卡片）
+ * - xl     = 12dp（面板、底部弹窗）
  * - capsule = 50%（胶囊）
  *
  * 注意：原 OctopusShape（裸 Dp）已废弃，请使用本对象的 RoundedCornerShape 字段。
@@ -248,6 +241,13 @@ object OctopusThemeStyle {
 
     val isGlass: Boolean get() = _style.value == UiStyle.Glass
     val isStandard: Boolean get() = _style.value == UiStyle.Standard
+
+    /**
+     * 卡片阴影:Standard 模式归零(扁平 UI,无阴影),Glass 模式保留传入值。
+     * 用法:shadowElevation = OctopusThemeStyle.cardShadow(6.dp)
+     */
+    fun cardShadow(glassElevation: Dp): Dp =
+        if (isStandard) 0.dp else glassElevation
 }
 
 object OctopusBackground {

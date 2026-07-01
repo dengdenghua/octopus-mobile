@@ -238,10 +238,11 @@ internal object RegistrySkillStore {
         val data = RegistryClient.download(asset.id) ?: return "下载失败:网络或服务不可达"
         val body = data.body
         val expected = (data.content?.checksum ?: asset.content?.checksum)?.removePrefix("sha256:")
-        if (!expected.isNullOrBlank() && body.isNotBlank()) {
-            val actual = sha256Hex(body)
-            if (!actual.equals(expected, ignoreCase = true)) return "校验失败:checksum 不符,已拒绝安装"
+        if (expected.isNullOrBlank() || body.isBlank()) {
+            return "校验失败:服务端未提供 checksum 或 body 为空,已拒绝安装"
         }
+        val actual = sha256Hex(body)
+        if (!actual.equals(expected, ignoreCase = true)) return "校验失败:checksum 不符,已拒绝安装"
         return withContext(Dispatchers.IO) {
             runCatching {
                 val dir = File(skillsDir(context), asset.slug).apply { mkdirs() }

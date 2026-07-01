@@ -98,6 +98,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.core.content.ContextCompat
 import com.apk.claw.android.ui.compose.theme.OctopusBackground
+import com.apk.claw.android.ui.compose.theme.OctopusThemeStyle
 import com.apk.claw.android.ui.compose.theme.OctopusColors
 import com.apk.claw.android.ui.compose.theme.OctopusIconSize
 import com.apk.claw.android.ui.compose.theme.OctopusShape
@@ -625,7 +626,7 @@ fun ChatScreen() {
             shape = OctopusShape.xl,
             color = OctopusBackground.glassSurface,
             border = BorderStroke(1.dp, OctopusBackground.glassBorder),
-            shadowElevation = 6.dp,
+            shadowElevation = OctopusThemeStyle.cardShadow(6.dp),
         ) {
             Column(modifier = Modifier.padding(horizontal = OctopusSpacing.lg, vertical = OctopusSpacing.sm)) {
             if (voiceMode) {
@@ -820,7 +821,7 @@ private fun AgentHomeStatusCard(
         shape = OctopusShape.xl,
         color = OctopusBackground.glassSurface,
         border = BorderStroke(1.dp, OctopusBackground.glassBorder),
-        shadowElevation = 8.dp,
+        shadowElevation = OctopusThemeStyle.cardShadow(8.dp),
     ) {
         Column(modifier = Modifier.padding(OctopusSpacing.lg), verticalArrangement = Arrangement.spacedBy(OctopusSpacing.md)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -910,7 +911,7 @@ private fun ColumnScope.ChatHomeWorkbench(
                 shape = OctopusShape.xl,
                 color = OctopusBackground.glassSurface,
                 border = BorderStroke(1.dp, OctopusBackground.glassBorder),
-                shadowElevation = 10.dp,
+                shadowElevation = OctopusThemeStyle.cardShadow(10.dp),
             ) {
                 Column(modifier = Modifier.padding(OctopusSpacing.xl)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1049,7 +1050,7 @@ private fun PromptSuggestion(prompt: HomePrompt, onClick: () -> Unit) {
         shape = OctopusShape.large,
         color = OctopusBackground.glassSurface,
         border = BorderStroke(1.dp, OctopusBackground.glassBorder),
-        shadowElevation = 1.dp,
+        shadowElevation = OctopusThemeStyle.cardShadow(1.dp),
     ) {
         Row(modifier = Modifier.padding(horizontal = OctopusSpacing.md, vertical = OctopusSpacing.md), verticalAlignment = Alignment.CenterVertically) {
             Surface(shape = CircleShape, color = prompt.color.copy(alpha = 0.14f)) {
@@ -1072,7 +1073,7 @@ private fun DrawerStatusPanel(llmOk: Boolean, a11yOk: Boolean, deviceCount: Int)
         shape = OctopusShape.large,
         color = OctopusBackground.glassSurface,
         border = BorderStroke(1.dp, OctopusBackground.glassBorder),
-        shadowElevation = 1.dp,
+        shadowElevation = OctopusThemeStyle.cardShadow(1.dp),
     ) {
         Column(modifier = Modifier.padding(OctopusSpacing.md), verticalArrangement = Arrangement.spacedBy(OctopusSpacing.sm)) {
             DrawerStatusRow(Icons.Filled.PhoneAndroid, stringResource(R.string.setup_a11y), a11yOk)
@@ -1108,7 +1109,7 @@ private fun MiniMetric(label: String, value: String, ok: Boolean, modifier: Modi
         shape = OctopusShape.large,
         color = SurfaceDeepColor,
         border = BorderStroke(1.dp, if (ok) PrimaryColor.copy(alpha = 0.16f) else BorderColor),
-        shadowElevation = 1.dp,
+        shadowElevation = OctopusThemeStyle.cardShadow(1.dp),
     ) {
         Column(modifier = Modifier.padding(horizontal = OctopusSpacing.sm, vertical = OctopusSpacing.sm)) {
             Text(label, color = TextMuted, fontSize = OctopusType.tag, maxLines = 1)
@@ -1141,7 +1142,7 @@ private fun SessionDrawerRow(
         shape = OctopusShape.large,
         color = if (selected) SurfaceVariantColor else SurfaceColor,
         border = BorderStroke(1.dp, if (selected) PrimaryColor.copy(alpha = 0.26f) else BorderColor),
-        shadowElevation = 1.dp,
+        shadowElevation = OctopusThemeStyle.cardShadow(1.dp),
     ) {
         Row(
             modifier = Modifier.padding(horizontal = OctopusSpacing.md, vertical = OctopusSpacing.md),
@@ -1514,7 +1515,7 @@ private fun SetupGuideCard(
         shape = OctopusShape.large,
         color = PrimaryColor.copy(alpha = 0.10f),
         border = BorderStroke(1.dp, PrimaryColor.copy(alpha = 0.25f)),
-        shadowElevation = 1.dp,
+        shadowElevation = OctopusThemeStyle.cardShadow(1.dp),
     ) {
         Column(modifier = Modifier.padding(OctopusSpacing.lg)) {
             Text(
@@ -1613,7 +1614,7 @@ private fun ToolGroupItem(tools: List<ChatMessage.ToolCall>, expanded: Boolean, 
         color = PrimaryColor.copy(alpha = 0.08f),
         border = BorderStroke(1.dp, PrimaryColor.copy(alpha = 0.15f)),
         modifier = Modifier.clickable { onToggle(gid) },
-        shadowElevation = 1.dp,
+        shadowElevation = OctopusThemeStyle.cardShadow(1.dp),
     ) {
         Column(modifier = Modifier.padding(horizontal = OctopusSpacing.md, vertical = OctopusSpacing.sm)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1682,7 +1683,7 @@ private fun ToolCallItem(msg: ChatMessage.ToolCall) {
         shape = OctopusShape.medium,
         color = PrimaryColor.copy(alpha = 0.08f),
         border = BorderStroke(1.dp, PrimaryColor.copy(alpha = 0.15f)),
-        shadowElevation = 1.dp,
+        shadowElevation = OctopusThemeStyle.cardShadow(1.dp),
     ) {
         Row(
             modifier = Modifier.padding(horizontal = OctopusSpacing.md, vertical = OctopusSpacing.sm),
@@ -1786,7 +1787,7 @@ private fun ScrollToBottomButton(visible: Boolean, onClick: () -> Unit) {
             shape = OctopusShape.capsule,
             color = OctopusBackground.glassSurface,
             border = BorderStroke(1.dp, OctopusBackground.glassBorder),
-            shadowElevation = 8.dp,
+            shadowElevation = OctopusThemeStyle.cardShadow(8.dp),
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = OctopusSpacing.md, vertical = OctopusSpacing.sm),

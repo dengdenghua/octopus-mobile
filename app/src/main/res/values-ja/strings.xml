@@ -833,6 +833,10 @@
     <string name="browser_installing_extension_toast">拡張機能をインストール中…</string>
     <string name="browser_home_favorites">お気に入りタグ</string>
     <string name="browser_home_tools">よく使う入口</string>
+    <string name="browser_home_miniapps">マイミニアプリ</string>
+    <string name="browser_home_miniapp_tag">ミニアプリ</string>
+    <string name="browser_home_bookmarks">ブックマーク</string>
+    <string name="browser_home_common_sites">よく使うサイト</string>
 
     <!-- サークル名とタグ -->
     <string name="circle_ai_players">AIプレイヤー</string>
@@ -1105,4 +1109,5 @@
     <string name="browser_open_in_system">システムブラウザで開く</string>
     <string name="browser_new_tab">新しいタブ</string>
     <string name="browser_windows_count">ウィンドウ (%1$d)</string>
+    <string name="browser_new_window">+ 新しいウィンドウ</string>
 </resources>

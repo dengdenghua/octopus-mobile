@@ -361,6 +361,10 @@ Shizuku 是安全、开源的本地辅助工具。</string>
     <string name="browser_home_subtitle">搜索或输入网址</string>
     <string name="browser_home_favorites">常用标签</string>
     <string name="browser_home_tools">常用入口</string>
+    <string name="browser_home_miniapps">我的小程序</string>
+    <string name="browser_home_miniapp_tag">小程序</string>
+    <string name="browser_home_bookmarks">书签</string>
+    <string name="browser_home_common_sites">常用网站</string>
 
     <!-- Bottom navigation -->
     <string name="nav_discover">发现</string>
@@ -1119,6 +1123,7 @@ Shizuku 是安全、开源的本地辅助工具。</string>
     <string name="browser_open_in_system">Open in System Browser</string>
     <string name="browser_new_tab">New Tab</string>
     <string name="browser_windows_count">Windows (%1$d)</string>
+    <string name="browser_new_window">+ New Window</string>
     <!-- Cast approval gate -->
     <string name="cast_approval_channel_name">投屏确认</string>
     <string name="cast_approval_channel_desc">远程请求开始投屏或在外接屏启动应用时显示确认通知</string>

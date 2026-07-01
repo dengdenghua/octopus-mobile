@@ -356,6 +356,10 @@
     <string name="browser_home_subtitle">搜索或输入网址</string>
     <string name="browser_home_favorites">收藏标签</string>
     <string name="browser_home_tools">常用入口</string>
+    <string name="browser_home_miniapps">我的小程序</string>
+    <string name="browser_home_miniapp_tag">小程序</string>
+    <string name="browser_home_bookmarks">书签</string>
+    <string name="browser_home_common_sites">常用网站</string>
 
     <!-- Bottom navigation -->
     <string name="nav_discover">发现</string>
@@ -1106,4 +1110,5 @@
     <string name="browser_open_in_system">用系统浏览器打开</string>
     <string name="browser_new_tab">新标签页</string>
     <string name="browser_windows_count">窗口 (%1$d)</string>
+    <string name="browser_new_window">+ 新窗口</string>
 </resources>

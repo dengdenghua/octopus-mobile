@@ -430,27 +430,6 @@ class DefaultAgentService : AgentService {
         return null
     }
 
-    /**
-     * 判断异常是否为认证失败 / 额度不足 / 权限拒绝（不重试）.
-     *
-     * 优先基于 LangChain4j 的 [dev.langchain4j.exception.HttpException.statusCode]，
-     * 兜底用更严格的正则匹配（避免 "request id 40123" 这类误判）。
-     */
-    private fun isAuthOrQuotaError(e: Throwable): Boolean {
-        // 1. 优先基于 HttpException 的状态码判断（最可靠）
-        if (e is dev.langchain4j.exception.HttpException) {
-            val code = e.statusCode()
-            return code == 401 || code == 403
-        }
-        // 2. 兜底：用更严格的正则匹配 HTTP 状态码，避免 "40123" 这类数字误判
-        val msg = e.message ?: return false
-        // 匹配 "HTTP 401"、"status=403"、"code: 401" 等明确模式，或 "insufficient_quota" 等明确文案
-        val authPattern = Regex("""(?:HTTP|status|code)\D*(401|403)\b""", RegexOption.IGNORE_CASE)
-        return authPattern.containsMatchIn(msg) ||
-               msg.contains("insufficient_quota", ignoreCase = true) ||
-               msg.contains("invalid_api_key", ignoreCase = true)
-    }
-
     // ==================== 死循环检测 ====================
 
     private data class RoundFingerprint(val screenHash: Int, val toolCall: String)

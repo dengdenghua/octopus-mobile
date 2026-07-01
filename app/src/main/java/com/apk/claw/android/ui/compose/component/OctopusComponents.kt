@@ -38,18 +38,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
@@ -60,12 +54,9 @@ import androidx.compose.ui.unit.sp
 import com.apk.claw.android.ui.compose.theme.OctopusBackground
 import com.apk.claw.android.ui.compose.theme.OctopusColors
 import com.apk.claw.android.ui.compose.theme.OctopusGlass
-import com.apk.claw.android.ui.compose.theme.OctopusGlassMaterial
-import com.apk.claw.android.ui.compose.theme.OctopusGlassQuality
 import com.apk.claw.android.ui.compose.theme.OctopusIconSize
 import com.apk.claw.android.ui.compose.theme.OctopusShape
 import com.apk.claw.android.ui.compose.theme.OctopusSpacing
-import com.apk.claw.android.ui.compose.theme.OctopusThemeStyle
 import com.apk.claw.android.ui.compose.theme.OctopusType
 
 // OctopusShapes 已统一到 OctopusShape（见 OctopusDesign.kt），以下为向后兼容别名
@@ -105,227 +96,8 @@ fun CapsuleButton(
     }
 }
 
-@Composable
-fun LiquidGlassLayer(
-    shape: Shape,
-    modifier: Modifier = Modifier,
-    blurRadius: Dp = OctopusGlass.blurRadius,
-    tint: Color = OctopusBackground.glassSurface,
-    tintAlpha: Float = 1f,
-    highlightIntensity: Float = OctopusGlass.highlightIntensity,
-    refractionBoost: Float = 1f,
-    focalX: Float = 0.24f,
-    focalY: Float = 0.18f,
-    material: OctopusGlassMaterial = OctopusGlassMaterial.Card,
-) {
-    if (OctopusThemeStyle.isStandard) {
-        Box(
-            modifier = modifier
-                .clip(shape)
-                .background(OctopusBackground.cardSurface, shape),
-        )
-        return
-    }
-    val transition = rememberInfiniteTransition(label = "liquid-glass")
-    val shimmer by transition.animateFloat(
-        initialValue = -0.35f,
-        targetValue = 1.35f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 5200, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart,
-        ),
-        label = "liquid-glass-shimmer",
-    )
-    val ripple by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 6800, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart,
-        ),
-        label = "liquid-glass-ripple",
-    )
-    val quality = OctopusGlass.quality
-    val refraction = OctopusGlass.refractionOffset * refractionBoost
-    val edgeGlow = OctopusGlass.edgeGlowAlpha * highlightIntensity
-    val innerShadow = OctopusGlass.innerShadowAlpha
-    val noiseAlpha = OctopusGlass.noiseAlpha
-    val light = OctopusColors.isLight
-    val useRefraction = OctopusGlass.useRefraction
-    val useNoise = OctopusGlass.useNoise
-    val useDynamic = OctopusGlass.useDynamicHighlight
-    val surfaceScale = when (quality) {
-        OctopusGlassQuality.Low -> 1.012f
-        OctopusGlassQuality.Medium -> 1.024f
-        OctopusGlassQuality.High -> 1.035f
-        OctopusGlassQuality.Ultra -> 1.052f
-    }
-    val shimmerAlpha = when (quality) {
-        OctopusGlassQuality.Low -> 0f
-        OctopusGlassQuality.Medium -> 0.18f
-        OctopusGlassQuality.High -> 0.32f
-        OctopusGlassQuality.Ultra -> 0.42f
-    } * highlightIntensity
-    val causticAlpha = when (quality) {
-        OctopusGlassQuality.Low -> 0f
-        OctopusGlassQuality.Medium -> 0.05f
-        OctopusGlassQuality.High -> 0.09f
-        OctopusGlassQuality.Ultra -> 0.15f
-    } * highlightIntensity
-    val thickness = when (material) {
-        OctopusGlassMaterial.Thin -> 0.70f
-        OctopusGlassMaterial.Card -> 1.00f
-        OctopusGlassMaterial.Dock -> 1.28f
-        OctopusGlassMaterial.Sheet -> 1.18f
-    }
-    val readabilityMist = when (material) {
-        OctopusGlassMaterial.Thin -> if (light) 0.05f else 0.08f
-        OctopusGlassMaterial.Card -> if (light) 0.08f else 0.12f
-        OctopusGlassMaterial.Dock -> if (light) 0.11f else 0.16f
-        OctopusGlassMaterial.Sheet -> if (light) 0.14f else 0.20f
-    }
-    val topCutAlpha = (if (light) 0.58f else 0.26f) * highlightIntensity * thickness
-    val bottomCutAlpha = (if (light) 0.18f else 0.42f) * thickness
-    val outerStrokeWidth = when (material) {
-        OctopusGlassMaterial.Thin -> 0.9.dp
-        OctopusGlassMaterial.Card -> 1.2.dp
-        OctopusGlassMaterial.Dock -> 1.55.dp
-        OctopusGlassMaterial.Sheet -> 1.45.dp
-    }
-    val innerStrokeWidth = outerStrokeWidth * 0.62f
-
-    Box(modifier = modifier.clip(shape)) {
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .graphicsLayer {
-                    val px = if (useRefraction) refraction.toPx() else 0f
-                    translationX = px
-                    translationY = -px * 0.55f
-                    scaleX = surfaceScale
-                    scaleY = surfaceScale
-                    // 复用 octopus-agent 液态玻璃透明度(surface≈0.54):更透。
-                    alpha = if (light) 0.60f else 0.52f
-                }
-                .blur(blurRadius, edgeTreatment = BlurredEdgeTreatment(shape))
-                .background(tint.copy(alpha = tint.alpha * tintAlpha), shape)
-        )
-        if (quality == OctopusGlassQuality.Ultra && useRefraction) {
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .graphicsLayer {
-                        val wave = if (useDynamic) ripple else 0.35f
-                        translationX = kotlin.math.sin(wave * 6.2831855f) * refraction.toPx() * 0.62f
-                        translationY = kotlin.math.cos(wave * 6.2831855f) * refraction.toPx() * 0.38f
-                        scaleX = 1.018f
-                        scaleY = 1.018f
-                        alpha = 0.36f
-                    }
-                    .blur(blurRadius * 0.62f, edgeTreatment = BlurredEdgeTreatment(shape))
-                    .background(
-                        Brush.radialGradient(
-                            listOf(
-                                Color.White.copy(alpha = 0.18f * highlightIntensity),
-                                Color.Transparent,
-                                tint.copy(alpha = 0.10f),
-                            )
-                        ),
-                        shape,
-                    )
-            )
-        }
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .background(
-                    Brush.linearGradient(
-                        0f to Color.White.copy(alpha = 0.42f * highlightIntensity),
-                        0.34f to Color.White.copy(alpha = if (light) 0.14f else 0.06f),
-                        0.68f to Color.Transparent,
-                        1f to Color.Black.copy(alpha = innerShadow),
-                    ),
-                    shape,
-                )
-        )
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .background(
-                    Brush.verticalGradient(
-                        0f to Color.White.copy(alpha = readabilityMist),
-                        0.45f to tint.copy(alpha = readabilityMist * 0.55f),
-                        1f to Color.Black.copy(alpha = readabilityMist * 0.35f),
-                    ),
-                    shape,
-                )
-        )
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .graphicsLayer { translationX = size.width * if (useDynamic) shimmer else 0.34f }
-                .background(
-                    Brush.linearGradient(
-                        0f to Color.Transparent,
-                        0.42f to Color.White.copy(alpha = 0.0f),
-                        0.50f to Color.White.copy(alpha = shimmerAlpha),
-                        0.58f to Color.White.copy(alpha = 0.0f),
-                        1f to Color.Transparent,
-                    ),
-                    shape,
-                )
-        )
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .drawWithCache {
-                    val edgeBrush = Brush.linearGradient(
-                        0f to Color.White.copy(alpha = edgeGlow),
-                        0.45f to Color.White.copy(alpha = edgeGlow * 0.18f),
-                        1f to Color.Black.copy(alpha = innerShadow),
-                    )
-                    val topCutBrush = Brush.verticalGradient(
-                        0f to Color.White.copy(alpha = topCutAlpha),
-                        0.18f to Color.White.copy(alpha = topCutAlpha * 0.20f),
-                        1f to Color.Transparent,
-                    )
-                    val bottomCutBrush = Brush.verticalGradient(
-                        0f to Color.Transparent,
-                        0.72f to Color.Black.copy(alpha = bottomCutAlpha * 0.08f),
-                        1f to Color.Black.copy(alpha = bottomCutAlpha),
-                    )
-                    val causticBrush = Brush.radialGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = causticAlpha),
-                            Color.Transparent,
-                            Color.White.copy(alpha = causticAlpha * 0.45f),
-                            Color.Transparent,
-                        ),
-                        center = androidx.compose.ui.geometry.Offset(size.width * focalX.coerceIn(0f, 1f), size.height * focalY.coerceIn(0f, 1f)),
-                        radius = size.maxDimension * 0.72f,
-                    )
-                    val noiseBrush = Brush.radialGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = noiseAlpha),
-                            Color.Transparent,
-                            Color.Black.copy(alpha = noiseAlpha * 0.55f),
-                            Color.Transparent,
-                        ),
-                        radius = size.maxDimension * 0.14f,
-                        tileMode = TileMode.Repeated,
-                    )
-                    onDrawBehind {
-                        drawRect(topCutBrush)
-                        drawRect(bottomCutBrush)
-                        drawRect(causticBrush)
-                        if (useNoise) drawRect(noiseBrush)
-                        drawRect(edgeBrush, style = Stroke(width = outerStrokeWidth.toPx()))
-                        drawRect(Color.White.copy(alpha = topCutAlpha * 0.38f), style = Stroke(width = innerStrokeWidth.toPx()))
-                    }
-                }
-        )
-    }
-}
+// LiquidGlassLayer 已删除:Standard 主题走扁平纯色,Glass 主题统一用 BrowserActivity/DiscoverScreen
+// 内联的实色卡片 + 细描边方案,该多层液态玻璃叠加组件无调用方,属死代码。
 
 @Composable
 fun rememberGlassPressState(
