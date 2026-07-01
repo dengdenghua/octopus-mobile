@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.apk.claw.android.octopus_mobile.browser.BrowserPluginHost
 import com.apk.claw.android.octopus_mobile.safety.SafetyGate
+import com.apk.claw.android.registry.PluginRegistryStore
 import com.apk.claw.android.tool.ToolRegistry
 import java.io.File
 
@@ -211,22 +212,34 @@ class PluginManager(private val context: Context) {
     /**
      * 加载非 dex 类型插件:browser-script / tool / mini-app。
      *
-     * 安全(与 dex 同口径 fail-closed):**只信任 assets(随签名 APK 打包)的非 dex 插件**。
-     * 外部 files 源的注入脚本/小程序会执行 JS(可碰登录态页面),在签名/校验落地前一律不加载。
-     * registry 下载路径已 sha256 校验,未来可作为"可信 files 源"放开。
+     * 信任规则(fail-closed):
+     *  - assets 源 — 随签名 APK 打包,无条件信任。
+     *  - files 源 — 仅限经 [PluginRegistryStore] sha256 校验安装的插件(registry 下载路径)。
+     *    外部旁加载的 files 源注入脚本/小程序不加载(无 sha256 记录则不在 installedSlugs 中)。
      */
     private fun loadNonDexPlugins() {
-        val manifests = scanAssetsManifests().filter { it.type != "dex" }
-        if (manifests.isEmpty()) {
-            // 即便没有插件,也清空一次,保证停用即时生效
+        // assets 来源:无条件信任
+        val assetsManifests = scanAssetsManifests().filter { it.type != "dex" }
+
+        // files 来源:只信任 PluginRegistryStore 已校验安装的 slug(目录名即 slug)
+        val installedSlugs = PluginRegistryStore.installed(context).map { it.slug }.toSet()
+        val filesManifests = scanFilesManifests()
+            .filter { (slug, m) -> m.type != "dex" && slug in installedSlugs }
+            .map { (_, m) -> m }
+
+        // assets 优先:id 冲突时保留 assets 版本
+        val assetIds = assetsManifests.map { it.id }.toSet()
+        val allManifests = assetsManifests + filesManifests.filter { it.id !in assetIds }
+
+        if (allManifests.isEmpty()) {
             BrowserPluginHost.setPlugins(emptyList())
             BrowserPluginHost.setBlockRules(emptyList())
             MiniAppRegistry.set(emptyList())
             return
         }
 
-        // browser-script → BrowserPluginHost
-        val scripts = manifests.filter { it.type == "browser-script" }
+        // browser-script → BrowserPluginHost(只信任 assets 源,注入脚本安全边界更严格)
+        val scripts = assetsManifests.filter { it.type == "browser-script" }
         BrowserPluginHost.setPlugins(scripts.map { m ->
             BrowserPluginHost.InjectPlugin(
                 id = m.id, name = m.name, hostPattern = m.hostPattern, js = m.js, enabled = true
@@ -234,17 +247,38 @@ class PluginManager(private val context: Context) {
         })
         BrowserPluginHost.setBlockRules(scripts.flatMap { it.blockRules })
 
-        // tool → 声明式工具注册进 ToolRegistry
-        manifests.filter { it.type == "tool" }.forEach { m ->
+        // tool → 声明式工具注册进 ToolRegistry(files 源 registry 插件也可贡献工具)
+        allManifests.filter { it.type == "tool" }.forEach { m ->
             runCatching { ToolRegistry.registerPluginTool(DeclarativePluginTool(m)) }
                 .onFailure { Log.e(TAG, "register declarative tool failed: ${m.id}", it) }
         }
 
-        // mini-app → 注册表(供宫格启动)
-        MiniAppRegistry.set(manifests.filter { it.type == "mini-app" })
+        // mini-app → 注册表(assets + registry-verified files 均可启动)
+        MiniAppRegistry.set(allManifests.filter { it.type == "mini-app" })
 
         Log.i(TAG, "Non-dex plugins: ${scripts.size} browser-script, " +
-            "${manifests.count { it.type == "tool" }} tool, ${manifests.count { it.type == "mini-app" }} mini-app")
+            "${allManifests.count { it.type == "tool" }} tool, " +
+            "${allManifests.count { it.type == "mini-app" }} mini-app " +
+            "(assets=${assetsManifests.size} files=${filesManifests.size})")
+    }
+
+    /**
+     * 扫描 filesDir/plugins 下所有 manifest(不要求 dex 文件存在)。
+     * 返回 Pair(目录名, manifest),目录名即 registry slug,调用方用它过滤可信来源。
+     */
+    private fun scanFilesManifests(): List<Pair<String, PluginManifest>> {
+        val out = mutableListOf<Pair<String, PluginManifest>>()
+        val pluginsDir = File(context.filesDir, FILES_PLUGIN_DIR)
+        if (!pluginsDir.isDirectory) return out
+        pluginsDir.listFiles()?.forEach { dir ->
+            if (!dir.isDirectory) return@forEach
+            runCatching {
+                File(dir, "manifest.json").takeIf { it.isFile }?.inputStream()?.use { s ->
+                    PluginManifest.fromStream(s)?.let { out.add(dir.name to it) }
+                }
+            }
+        }
+        return out
     }
 
     /** 扫描 assets/plugins 下所有 manifest（不要求 dex 文件存在）。 */

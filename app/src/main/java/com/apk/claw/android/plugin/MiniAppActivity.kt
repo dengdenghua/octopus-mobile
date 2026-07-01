@@ -9,6 +9,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
 import java.io.ByteArrayInputStream
+import java.io.File
 import java.lang.ref.WeakReference
 
 /**
@@ -37,13 +38,10 @@ class MiniAppActivity : ComponentActivity() {
         val manifest = id?.let { MiniAppRegistry.get(it) }
         if (manifest == null || manifest.page.isBlank()) { finish(); return }
 
-        // 当前仅信任 assets 源插件(fail-closed),小程序页面从 assets 加载,
-        // 用 WebView 的 file:///android_asset/ 方案,无需复制到 filesDir。
-        // (未来 registry 下载、经校验的小程序改为从 filesDir 读 + 标记 source。)
-        val assetRel = "plugins/${manifest.id}/${manifest.page}"
-        val pageExists = runCatching { assets.open(assetRel).use { true } }.getOrDefault(false)
-        if (!pageExists) { finish(); return }
-        val pageUrl = "file:///android_asset/$assetRel"
+        // 页面 URL 解析:
+        // 1. filesDir/plugins/<slug>/<page> — registry 校验安装的插件(sha256 已验)
+        // 2. assets/plugins/<id>/<page>     — 内置签名插件(fail-closed 兜底)
+        val pageUrl = resolvePageUrl(manifest) ?: run { finish(); return }
 
         val wv = WebView(this)
         wv.settings.apply {
@@ -74,6 +72,39 @@ class MiniAppActivity : ComponentActivity() {
         setContentView(wv)
         webView = wv
         wv.loadUrl(pageUrl)
+    }
+
+    /**
+     * 解析小程序页面 URL:
+     *  - 先查 filesDir/plugins(slug 为目录名,slug = id.substringAfterLast('/') 或完整 id)
+     *  - 再回落 assets/plugins(内置打包)
+     *  - 两处都找不到 → 返回 null
+     *
+     * 安全:filesDir 查找做 canonicalPath 防 path traversal;
+     * assets 路径不需要额外检查(由 APK 签名保护)。
+     */
+    private fun resolvePageUrl(manifest: PluginManifest): String? {
+        // --- filesDir 路径 ---
+        // 目录名可能是完整 id 或 slug(substringAfterLast('/'))，两者都试
+        val candidates = linkedSetOf(manifest.id, manifest.id.substringAfterLast('/'))
+        for (slug in candidates) {
+            val pluginDir = File(filesDir, "plugins/$slug")
+            if (!pluginDir.isDirectory) continue
+            val page = File(pluginDir, manifest.page)
+            if (!page.isFile) continue
+            // path traversal 防护
+            if (!page.canonicalPath.startsWith(pluginDir.canonicalPath + File.separator) &&
+                page.canonicalPath != pluginDir.canonicalPath
+            ) continue
+            return page.toURI().toString()
+        }
+
+        // --- assets 回落 ---
+        val assetRel = "plugins/${manifest.id}/${manifest.page}"
+        val existsInAssets = runCatching { assets.open(assetRel).use { true } }.getOrDefault(false)
+        if (existsInAssets) return "file:///android_asset/$assetRel"
+
+        return null
     }
 
     override fun onDestroy() {
