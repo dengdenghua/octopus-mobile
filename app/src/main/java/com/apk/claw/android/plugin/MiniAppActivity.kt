@@ -3,11 +3,12 @@ package com.apk.claw.android.plugin
 import android.annotation.SuppressLint
 import android.graphics.Bitmap
 import android.os.Bundle
+import android.util.Log
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import androidx.activity.ComponentActivity
+import androidx.appcompat.app.AppCompatActivity
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.lang.ref.WeakReference
@@ -22,9 +23,10 @@ import java.lang.ref.WeakReference
  *    只能走受网关的 `octopus.*` 桥,而不是 WebView 自行联网,避免桥暴露给远端内容。
  *  - 禁 file 跨源越权读。
  */
-class MiniAppActivity : ComponentActivity() {
+class MiniAppActivity : AppCompatActivity() {
 
     companion object {
+        private const val TAG = "MiniAppActivity"
         const val EXTRA_PLUGIN_ID = "plugin_id"
     }
 
@@ -33,45 +35,49 @@ class MiniAppActivity : ComponentActivity() {
     @SuppressLint("SetJavaScriptEnabled", "JavascriptInterface")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        try {
+            val id = intent.getStringExtra(EXTRA_PLUGIN_ID)
+            val manifest = id?.let { MiniAppRegistry.get(it) }
+            if (manifest == null || manifest.page.isBlank()) { finish(); return }
 
-        val id = intent.getStringExtra(EXTRA_PLUGIN_ID)
-        val manifest = id?.let { MiniAppRegistry.get(it) }
-        if (manifest == null || manifest.page.isBlank()) { finish(); return }
+            // 页面 URL 解析:
+            // 1. filesDir/plugins/<slug>/<page> — registry 校验安装的插件(sha256 已验)
+            // 2. assets/plugins/<id>/<page>     — 内置签名插件(fail-closed 兜底)
+            val pageUrl = resolvePageUrl(manifest) ?: run { finish(); return }
 
-        // 页面 URL 解析:
-        // 1. filesDir/plugins/<slug>/<page> — registry 校验安装的插件(sha256 已验)
-        // 2. assets/plugins/<id>/<page>     — 内置签名插件(fail-closed 兜底)
-        val pageUrl = resolvePageUrl(manifest) ?: run { finish(); return }
-
-        val wv = WebView(this)
-        wv.settings.apply {
-            javaScriptEnabled = true
-            domStorageEnabled = true
-            allowFileAccess = true
-            // 禁 file:// 页面跨源读其它本地文件(只允许读自身目录由 baseUrl 决定)
-            allowFileAccessFromFileURLs = false
-            allowUniversalAccessFromFileURLs = false
+            val wv = WebView(this)
+            wv.settings.apply {
+                javaScriptEnabled = true
+                domStorageEnabled = true
+                allowFileAccess = true
+                // 禁 file:// 页面跨源读其它本地文件(只允许读自身目录由 baseUrl 决定)
+                allowFileAccessFromFileURLs = false
+                allowUniversalAccessFromFileURLs = false
+            }
+            wv.addJavascriptInterface(OctopusBridge(manifest, WeakReference(this)), "octopusNative")
+            wv.webViewClient = object : WebViewClient() {
+                override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
+                    view.evaluateJavascript(OctopusBridge.SHIM_JS, null)
+                }
+                // 锁定在本地源:禁止小程序导航去远端
+                override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                    val u = request.url?.toString() ?: return true
+                    return !u.startsWith("file://")
+                }
+                // 拦截一切非 file:// 子资源:对外 I/O 只能走 octopus.* 桥
+                override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
+                    val u = request.url?.toString().orEmpty()
+                    return if (u.startsWith("file://")) null
+                    else WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))
+                }
+            }
+            setContentView(wv)
+            webView = wv
+            wv.loadUrl(pageUrl)
+        } catch (e: Exception) {
+            Log.e(TAG, "MiniApp launch failed: ${e.message}", e)
+            finish()
         }
-        wv.addJavascriptInterface(OctopusBridge(manifest, WeakReference(this)), "octopusNative")
-        wv.webViewClient = object : WebViewClient() {
-            override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
-                view.evaluateJavascript(OctopusBridge.SHIM_JS, null)
-            }
-            // 锁定在本地源:禁止小程序导航去远端
-            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-                val u = request.url?.toString() ?: return true
-                return !u.startsWith("file://")
-            }
-            // 拦截一切非 file:// 子资源:对外 I/O 只能走 octopus.* 桥
-            override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
-                val u = request.url?.toString().orEmpty()
-                return if (u.startsWith("file://")) null
-                else WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))
-            }
-        }
-        setContentView(wv)
-        webView = wv
-        wv.loadUrl(pageUrl)
     }
 
     /**
@@ -88,15 +94,19 @@ class MiniAppActivity : ComponentActivity() {
         // 目录名可能是完整 id 或 slug(substringAfterLast('/'))，两者都试
         val candidates = linkedSetOf(manifest.id, manifest.id.substringAfterLast('/'))
         for (slug in candidates) {
-            val pluginDir = File(filesDir, "plugins/$slug")
-            if (!pluginDir.isDirectory) continue
-            val page = File(pluginDir, manifest.page)
-            if (!page.isFile) continue
-            // path traversal 防护
-            if (!page.canonicalPath.startsWith(pluginDir.canonicalPath + File.separator) &&
-                page.canonicalPath != pluginDir.canonicalPath
-            ) continue
-            return page.toURI().toString()
+            try {
+                val pluginDir = File(filesDir, "plugins/$slug")
+                if (!pluginDir.isDirectory) continue
+                val page = File(pluginDir, manifest.page)
+                if (!page.isFile) continue
+                // path traversal 防护
+                val pageCanon = page.canonicalPath
+                val dirCanon = pluginDir.canonicalPath
+                if (!pageCanon.startsWith(dirCanon + File.separator) && pageCanon != dirCanon) continue
+                return page.toURI().toString()
+            } catch (e: Exception) {
+                Log.w(TAG, "resolvePageUrl filesDir error for $slug: ${e.message}")
+            }
         }
 
         // --- assets 回落 ---

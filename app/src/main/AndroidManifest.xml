@@ -145,7 +145,11 @@
         <activity android:name=".ui.featurescreens.AuditLogActivity" android:exported="false" />
         <activity android:name=".ui.featurescreens.ActivityActivity" android:exported="false" />
         <activity android:name=".ui.featurescreens.RoutinesActivity" android:exported="false" />
-        <activity android:name=".plugin.MiniAppActivity" android:exported="false" />
+        <activity
+            android:name=".plugin.MiniAppActivity"
+            android:exported="false"
+            android:hardwareAccelerated="true"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
         <activity android:name=".ui.featurescreens.MiniAppListActivity" android:exported="false" />
         <activity android:name=".ui.featurescreens.SkillsActivity" android:exported="false" />
         <activity android:name=".ui.featurescreens.ChannelsActivity" android:exported="false" />

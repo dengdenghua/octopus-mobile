@@ -18,16 +18,26 @@
         android:textSize="17pt"
         android:textStyle="bold" />
 
-    <!-- 内容 -->
-    <TextView
-        android:id="@+id/tvMessage"
+    <!-- 内容:超高时可滚动,避免长代码把弹窗撑出屏幕 -->
+    <com.apk.claw.android.widget.MaxHeightScrollView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8pt"
-        android:gravity="center"
-        android:textColor="@color/colorTextTertiary"
-        android:textSize="14pt"
-        android:visibility="gone" />
+        android:maxHeight="320pt"
+        android:scrollbars="vertical"
+        android:fadingEdge="vertical"
+        android:requiresFadingEdge="vertical">
+
+        <TextView
+            android:id="@+id/tvMessage"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="start"
+            android:textColor="@color/colorTextTertiary"
+            android:textSize="14pt"
+            android:visibility="gone" />
+
+    </com.apk.claw.android.widget.MaxHeightScrollView>
 
     <!-- 勾选区域 -->
     <LinearLayout

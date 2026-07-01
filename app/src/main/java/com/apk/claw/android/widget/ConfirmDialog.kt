@@ -14,7 +14,7 @@ import com.apk.claw.android.R
 class ConfirmDialog private constructor(context: Context) : Dialog(context, R.style.DialogStyle) {
 
     private var title: String = ""
-    private var message: String = ""
+    private var message: CharSequence = ""
     private var actionTitle: String = ""
     private var cancelTitle: String? = null
     private var checkboxLabel: String? = null
@@ -34,7 +34,7 @@ class ConfirmDialog private constructor(context: Context) : Dialog(context, R.st
         fun show(
             context: Context,
             title: String,
-            message: String = "",
+            message: CharSequence = "",
             actionTitle: String = context.getString(R.string.common_confirm),
             cancelTitle: String? = null,
             checkboxLabel: String? = null,
@@ -64,7 +64,7 @@ class ConfirmDialog private constructor(context: Context) : Dialog(context, R.st
         fun showWarm(
             context: Context,
             title: String,
-            message: String = "",
+            message: CharSequence = "",
             actionTitle: String = context.getString(R.string.common_confirm),
             cancelTitle: String = context.getString(R.string.common_cancel),
             checkboxLabel: String? = null,
