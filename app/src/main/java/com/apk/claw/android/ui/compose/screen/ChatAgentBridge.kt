@@ -209,6 +209,8 @@ object ChatAgentBridge {
         onError: (String) -> Unit,
         recordKey: String? = null,
         untrusted: Boolean = false,
+        onImage: ((toolName: String, imageBase64: String) -> Unit)? = null,
+        onHtml: ((toolName: String, htmlContent: String) -> Unit)? = null,
     ) {
         // 忙判断必须在改动任何共享状态(updateConfig/curTask)之前,拒绝并发任务。
         if (!busy.compareAndSet(false, true)) {
@@ -249,6 +251,14 @@ object ChatAgentBridge {
                 curSteps++
                 LiveControlOverlay.updateStep("$icon $friendly")
                 main.post { onTool(icon, friendly, parameters, summary.take(48)) }
+                val img = result.imageBase64
+                if (img != null && onImage != null) {
+                    main.post { onImage(toolName, img) }
+                }
+                val html = result.htmlContent
+                if (html != null && onHtml != null) {
+                    main.post { onHtml(toolName, html) }
+                }
             }
 
             override fun onComplete(round: Int, finalAnswer: String, totalTokens: Int) {

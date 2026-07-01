@@ -256,6 +256,30 @@
       chat.scrollTop = chat.scrollHeight;
     }
     else if (ev.type === 'tool') { bubble('tool', '\uD83D\uDD27 ' + ev.data); curAsst = null; }
+    else if (ev.type === 'image') {
+      var wrap = bubble('tool', '');
+      var img = document.createElement('img');
+      img.src = 'data:image/jpeg;base64,' + ev.data;
+      img.style.cssText = 'max-width:100%;border-radius:8px;margin-top:6px;display:block;cursor:pointer';
+      img.title = '\u70B9\u51FB\u5728\u65B0\u6807\u7B7E\u9875\u67E5\u770B\u539F\u56FE';
+      img.onclick = function() { window.open(img.src, '_blank'); };
+      wrap.appendChild(img);
+      curAsst = null;
+    }
+    else if (ev.type === 'html') {
+      // \u7B2C\u4E00\u884C\u662F\u9AD8\u5EA6\u6570\u5B57\uFF0C\u5176\u4F59\u662F HTML \u5185\u5BB9
+      var nl = ev.data.indexOf('\n');
+      var h = nl > 0 ? parseInt(ev.data.substring(0, nl), 10) : 600;
+      var htmlSrc = nl > 0 ? ev.data.substring(nl + 1) : ev.data;
+      if (!h || h < 100) h = 600;
+      var wrap = bubble('tool', '');
+      var frame = document.createElement('iframe');
+      frame.setAttribute('sandbox', 'allow-scripts');
+      frame.srcdoc = htmlSrc;
+      frame.style.cssText = 'width:100%;height:' + h + 'px;border:1px solid var(--border,#e5e7eb);border-radius:8px;margin-top:6px;background:#fff';
+      wrap.appendChild(frame);
+      curAsst = null;
+    }
     else if (ev.type === 'done') {
       if ((!curAsst || !curAsst.textContent) && ev.data) bubble('asst', ev.data);
       curAsst = null;

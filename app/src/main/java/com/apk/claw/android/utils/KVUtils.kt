@@ -498,6 +498,13 @@ object KVUtils {
     fun getVisionModelName(): String = getString(KEY_VISION_MODEL_NAME, "")
     fun setVisionModelName(value: String) = putString(KEY_VISION_MODEL_NAME, value)
 
+    // ── 脚本工作空间 ──
+    private const val KEY_SCRIPT_WORKSPACE = "KEY_SCRIPT_WORKSPACE"
+    const val DEFAULT_SCRIPT_WORKSPACE = "/sdcard/Download/Octopus/"
+
+    fun getScriptWorkspace(): String = getString(KEY_SCRIPT_WORKSPACE, DEFAULT_SCRIPT_WORKSPACE)
+    fun setScriptWorkspace(value: String) = putString(KEY_SCRIPT_WORKSPACE, value.trimEnd('/') + "/")
+
     // ── Octopus Mobile 方案 F 便捷方法 ──
     fun getOctopusRpcUrl(): String = getString(KEY_OCTOPUS_RPC_URL, "")
     fun setOctopusRpcUrl(value: String) = putString(KEY_OCTOPUS_RPC_URL, value)

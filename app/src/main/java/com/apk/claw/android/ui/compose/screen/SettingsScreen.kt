@@ -143,6 +143,8 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
     var showRemotePairDialog by remember { mutableStateOf(false) }
     var pairCode by remember { mutableStateOf("") }
     var pairBusy by remember { mutableStateOf(false) }
+    var showWorkspaceDialog by remember { mutableStateOf(false) }
+    var workspaceDraft by remember { mutableStateOf("") }
     DisposableEffect(lifecycleOwner) {
         val obs = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_RESUME) refreshTick++ }
         lifecycleOwner.lifecycle.addObserver(obs)
@@ -204,6 +206,35 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
                 TextButton(enabled = !pairBusy, onClick = { showRemotePairDialog = false }) {
                     Text(stringResource(R.string.cancel))
                 }
+            },
+        )
+    }
+
+    if (showWorkspaceDialog) {
+        AlertDialog(
+            onDismissRequest = { showWorkspaceDialog = false },
+            title = { Text(stringResource(R.string.settings_workspace_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(OctopusSpacing.sm)) {
+                    Text(stringResource(R.string.settings_workspace_desc), color = TextMuted, fontSize = OctopusType.caption, lineHeight = 16.sp)
+                    OutlinedTextField(
+                        value = workspaceDraft,
+                        onValueChange = { workspaceDraft = it },
+                        singleLine = true,
+                        label = { Text(stringResource(R.string.settings_workspace_hint)) },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(enabled = workspaceDraft.isNotBlank(), onClick = {
+                    KVUtils.setScriptWorkspace(workspaceDraft.trim())
+                    showWorkspaceDialog = false
+                    refreshTick++
+                }) { Text(stringResource(R.string.confirm)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showWorkspaceDialog = false }) { Text(stringResource(R.string.cancel)) }
             },
         )
     }
@@ -338,6 +369,12 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
             var advExpanded by remember { mutableStateOf(false) }
             SettingsCard(stringResource(R.string.settings_advanced_title), Icons.Filled.Tune, compact = true, onClick = { advExpanded = !advExpanded }) {
                 if (advExpanded) {
+                    val currentWorkspace = remember(refreshTick) { KVUtils.getScriptWorkspace() }
+                    ClickableSettingsRow(Icons.Filled.Storage, stringResource(R.string.settings_workspace_title), currentWorkspace) {
+                        workspaceDraft = KVUtils.getScriptWorkspace()
+                        showWorkspaceDialog = true
+                    }
+                    SettingsDivider()
                     ClickableSettingsRow(Icons.Filled.Hub, stringResource(R.string.settings_octopus_runtime_title), stringResource(R.string.settings_runtime_plain_desc)) {
                         context.startActivity(Intent(context, RuntimeConfigActivity::class.java))
                     }

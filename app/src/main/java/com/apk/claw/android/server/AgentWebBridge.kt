@@ -54,6 +54,8 @@ object AgentWebBridge {
                     onText = { t -> if (t.isNotEmpty()) add("text", t) },
                     onDone = { ans -> add("done", ans); running.set(false) },
                     onError = { e -> add("error", e); running.set(false) },
+                    onImage = { _, imageBase64 -> add("image", imageBase64) },
+                    onHtml  = { _, htmlContent -> add("html",  htmlContent) },
                 )
             }.onFailure { add("error", it.message ?: "运行失败"); running.set(false) }
         }

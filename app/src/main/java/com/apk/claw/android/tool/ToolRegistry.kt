@@ -14,6 +14,7 @@ import com.apk.claw.android.octopus_mobile.safety.PermissionModeManager
 import com.apk.claw.android.octopus_mobile.safety.PermissionPolicy
 import com.apk.claw.android.octopus_mobile.safety.ApprovalFlow
 import com.apk.claw.android.octopus_mobile.ToolAuditLog
+import com.apk.claw.android.octopus_mobile.MobileActionTimeline
 import com.apk.claw.android.octopus_mobile.evolution.TurnScorer
 import com.apk.claw.android.octopus_mobile.nerves.EventBus
 import java.util.concurrent.ConcurrentHashMap
@@ -255,9 +256,20 @@ object ToolRegistry {
         }
 
         fun audited(result: ToolResult, blockedBy: String? = null): ToolResult {
+            val duration = System.currentTimeMillis() - auditStartMs
+            MobileActionTimeline.record(
+                toolName = name,
+                params = params,
+                success = result.isSuccess,
+                resultText = if (result.isSuccess) result.data else result.error,
+                blockedBy = blockedBy,
+                durationMs = duration,
+                source = if (isUntrustedSource()) "untrusted" else "local",
+                hasImage = result.imageBase64 != null,
+                hasHtml = result.htmlContent != null,
+            )
             if (ToolRiskPolicy.shouldAudit(name) && PermissionModeManager.getCurrentPolicy().auditLogEnabled) {
                 val resultText = if (result.isSuccess) result.data else result.error
-                val duration = System.currentTimeMillis() - auditStartMs
                 ToolAuditLog.record(
                     ToolAuditLog.Entry(
                         id = "tool_${auditStartMs}_${name}",

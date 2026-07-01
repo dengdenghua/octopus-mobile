@@ -176,6 +176,9 @@ dependencies {
     // NanoHTTPD 嵌入式 HTTP 服务器（局域网配置服务）
     implementation(libs.nanohttpd)
 
+    // Rhino — Mozilla 纯 Java JS 引擎，用于 run_code 沙箱（无需 Shizuku，JVM 内执行）
+    implementation(libs.rhino)
+
     // GeckoView(Firefox 内核)已移除以瘦身 APK(约 -180MB:libxul.so 144MB + omni.ja
     // 13MB + 一众 mozilla .so)。浏览器统一用系统 WebView(SystemWebViewEngine,0 包体)。
     // 扩展能力改由自建注入式插件生态承载;反爬靠 document-start 注入 + 服务端兜底。

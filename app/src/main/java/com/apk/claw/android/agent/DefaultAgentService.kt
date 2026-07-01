@@ -475,7 +475,9 @@ class DefaultAgentService : AgentService {
         "take_screenshot" to "[截图结果已省略]",
         "find_node_info" to "[节点查找结果已省略]",
         "get_installed_apps" to "[应用列表已省略]",
-        "scroll_to_find" to "[滚动查找结果已省略]"
+        "scroll_to_find" to "[滚动查找结果已省略]",
+        "preview_html" to "[HTML预览截图已省略]",
+        "browser_screenshot" to "[浏览器截图已省略]",
     )
 
     /**
@@ -876,6 +878,17 @@ class DefaultAgentService : AgentService {
             "error" to result.error
         )
         messages.add(ToolExecutionResultMessage.from(toolRequest, GSON.toJson(resultForJson)))
+
+        // 工具返回图片时（如 preview_html），追加视觉消息供多模态 LLM 直接查看并自迭代。
+        val img = result.imageBase64
+        if (img != null && config.enableVision) {
+            messages.add(
+                UserMessage.from(
+                    TextContent.from("以下是工具截图，请仔细查看后决定下一步："),
+                    ImageContent.from("data:image/jpeg;base64,$img"),
+                )
+            )
+        }
     }
 
     private enum class DialogHandleResult { NONE, SKIP_REMAINING, TERMINATE }

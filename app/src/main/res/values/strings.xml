@@ -830,6 +830,10 @@ Shizuku 是安全、开源的本地辅助工具。</string>
     <string name="settings_advanced_hint">主机连接 · 局域网远程桌面</string>
     <string name="settings_remote_lan_title">远程桌面 · 局域网</string>
     <string name="settings_runtime_plain_desc">让电脑向这台手机分发任务</string>
+    <string name="settings_workspace_title">脚本工作空间</string>
+    <string name="settings_workspace_desc">Agent 脚本通过 WORKSPACE 常量访问的默认目录。readFile/writeFile 限制在此目录和 Download/Documents 内，目录不存在时自动创建。</string>
+    <string name="settings_workspace_hint">/sdcard/Download/Octopus/</string>
+    <string name="confirm">确认</string>
 
     <!-- ── account &amp; billing ── -->
     <string name="menu_account">账户与点数</string>

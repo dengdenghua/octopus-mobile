@@ -53,6 +53,7 @@ object SkillExporter {
         "browse_files" to 20_000,
         "search_files" to 20_000,
         "app_backup" to 120_000,
+        "run_code" to 30_000,
     )
 
     /**

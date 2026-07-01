@@ -1,4 +1,5 @@
 [versions]
+rhino = "1.7.15"
 agp = "9.1.0"
 coreKtx = "1.10.1"
 junit = "4.13.2"
@@ -73,6 +74,7 @@ zxing = { module = "com.google.zxing:core", version.ref = "zxing" }
 oapi-sdk = { module = "com.larksuite.oapi:oapi-sdk", version.ref = "oapi" }
 dingtalk = { module = "com.dingtalk.open:app-stream-client", version.ref = "dingtalk" }
 nanohttpd = { module = "org.nanohttpd:nanohttpd", version.ref = "nanohttpd" }
+rhino = { group = "org.mozilla", name = "rhino", version.ref = "rhino" }
 mpv-android-lib = { module = "io.github.abdallahmehiz:mpv-android-lib", version.ref = "mpvAndroidLib" }
 coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "coroutines" }
 coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }

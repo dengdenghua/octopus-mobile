@@ -49,6 +49,8 @@ object ToolRiskPolicy {
         // Agnes 生成类：调用外部付费 API，消耗用户积分，纳入审计。
         "generate_image",
         "generate_video",
+        // HTML 预览：离屏 WebView 执行任意 JS，纳入审计（与 browser_navigate 同级）。
+        "preview_html",
         // 状态变更 / 外部写入类：纳入审计，避免远程/LAN 不可信源驱动这些操作却无审计轨迹。
         // （仅审计，不新增拦截——HIGH 才会对不可信源走来源闸门。）
         "navigate",            // UI 导航编排（驱动一连串点击）

@@ -294,3 +294,8 @@
 -keep class coil.** { *; }
 -keep interface coil.** { *; }
 -dontwarn coil.**
+
+# Rhino JS 引擎（run_code 沙箱）
+# 解释器模式下不生成 JVM 字节码,但 Rhino 用反射加载内部类需全量保留
+-keep class org.mozilla.javascript.** { *; }
+-dontwarn org.mozilla.javascript.**

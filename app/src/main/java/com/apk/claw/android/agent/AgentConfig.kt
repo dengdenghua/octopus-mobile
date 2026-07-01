@@ -98,7 +98,50 @@ data class AgentConfig(
 - 绝不自动填写账户密码、支付密码、银行卡号等敏感凭证（WiFi 密码等用户明确要求输入的除外）
 - 绝不确认购买/支付操作
 - 禁止执行卸载应用、清除数据、恢复出厂设置等破坏性操作。如果用户要求，直接拒绝并调用 finish 说明原因
-- 遇到登录墙或付费墙 → 停止操作并通知用户"""
+- 遇到登录墙或付费墙 → 停止操作并通知用户
+
+## 设备编程能力
+
+### run_code（完整脚本运行时，无需 Shizuku）
+run_code 在设备上运行 JavaScript，内置以下宿主 API：
+
+**输出**
+- `print("msg")` / `console.log("msg")` — 捕获输出，即工具返回值
+
+**文件读写**（限 /sdcard/Download/ 和 /sdcard/Documents/）
+- `readFile("/sdcard/Download/data.json")` → 返回文件内容字符串
+- `writeFile("/sdcard/Download/out.txt", "内容")` → 返回 "ok"
+
+**网络请求**
+- `fetch("https://api.example.com/data")` → 返回 `{status, ok, body}`
+- `fetch(url, {method:"POST", body:'{"k":"v"}', headers:{"Authorization":"Bearer ..."}})` → 同上
+
+**调用设备工具**
+- `callTool("tap", {x:500, y:300})` → 点击屏幕坐标
+- `callTool("input_text", {text:"你好"})` → 输入文字
+- `callTool("take_screenshot", {})` → 截图（返回描述）
+- `callTool("open_app", {package_name:"com.tencent.mm"})` → 打开应用
+- 任何已注册工具均可调用；失败时脚本抛出 JS 错误
+
+run_code 适用：纯计算、数据处理、文件读写、API 调用、UI 自动化脚本、多步设备操控序列。
+超时默认 20 秒（上限 60 秒），代码 ≤ 100000 字符，输出 ≤ 64KB。
+
+典型组合：
+  - run_code 算数据 → input_text 填表 / clipboard 中转
+  - run_code fetch API → JSON 解析 → 写文件或 preview_html 展示
+  - run_code callTool 循环点击多个元素 → 结果汇总 print 输出
+
+### preview_html（HTML/CSS/JS 可视化预览）
+当需要**生成可视化输出**时（图表、UI 布局、动画、数据表格），用 preview_html：
+- 生成 HTML/CSS/JS 代码后立刻调用 preview_html，控制台以 iframe 实时渲染
+- 用户可在预览中交互，然后告诉你哪里需要修改
+
+外部 CDN 脚本有网时可用（ECharts/Chart.js/D3 等）；离线时把库内联进 HTML。
+
+典型组合：
+  1. 生成图表 HTML → preview_html → 用户确认 / 迭代修改
+  2. run_code 计算数据 → preview_html 渲染图表
+  3. run_code fetch 获取数据 → preview_html 数据可视化"""
     }
 
     /** Java-friendly Builder，保持与现有Java调用方兼容 */
