@@ -132,6 +132,13 @@ object UrlGuard {
         return check(url, allowPrivate = allowPrivate).allow
     }
 
+    /**
+     * 已解析地址是否属于应阻断的目标(loopback/link-local/site-local/any-local/multicast +
+     * 169.254/16 + IPv4-mapped/compat 内嵌 IPv4 + fc00::/7)。供 [SsrfSafeDns] 在**连接期**
+     * 对 OkHttp 实际使用的解析结果逐个校验,消除 check-then-connect 的 DNS rebinding 窗口。
+     */
+    fun isDisallowedAddress(addr: InetAddress): Boolean = isPrivateAddress(addr)
+
     // ── 内部 ──────────────────────────────────────────
 
     private fun parseIp(host: String): String? {

@@ -33,6 +33,7 @@ class ScriptSandbox {
     companion object {
         private const val MAX_OUTPUT_CHARS = 65_536
         // 禁用自动重定向:由 SsrfSafeHttp 逐跳 UrlGuard 校验后手动跟随,防 302→内网/元数据 SSRF。
+        // dns(SsrfSafeDns):在连接期对实际解析结果再校验,消除 DNS rebinding 窗口。
         // callTimeout 为整次调用(含所有重定向跳)的硬上限:指令观察器超时无法中断阻塞的 host
         // 调用(fetch),这里给 fetch 一个绝对天花板,避免慢速滴流响应把脚本挂死超过 timeoutMs。
         private val HTTP = OkHttpClient.Builder()
@@ -41,6 +42,7 @@ class ScriptSandbox {
             .callTimeout(45, TimeUnit.SECONDS)
             .followRedirects(false)
             .followSslRedirects(false)
+            .dns(com.apk.claw.android.octopus_mobile.safety.SsrfSafeDns)
             .build()
 
         private val BASE_SAFE_PREFIXES = listOf(

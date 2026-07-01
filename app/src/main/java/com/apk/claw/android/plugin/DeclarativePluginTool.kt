@@ -1,5 +1,6 @@
 package com.apk.claw.android.plugin
 
+import com.apk.claw.android.octopus_mobile.safety.SsrfSafeDns
 import com.apk.claw.android.octopus_mobile.safety.SsrfSafeHttp
 import com.apk.claw.android.tool.BaseTool
 import com.apk.claw.android.tool.ToolParameter
@@ -25,9 +26,11 @@ class DeclarativePluginTool(private val manifest: PluginManifest) : BaseTool() {
     companion object {
         // 禁用自动重定向:allowHost 只校验首跳,若跟随 302 到内网/元数据即 SSRF。
         // 改由 SsrfSafeHttp 逐跳过 UrlGuard + 手动重定向,并对每一跳重跑 allowHost。
+        // dns(SsrfSafeDns):连接期再校验解析结果,消除 DNS rebinding 窗口。
         private val NO_REDIRECT_CLIENT: OkHttpClient = OctoHttp.shared.newBuilder()
             .followRedirects(false)
             .followSslRedirects(false)
+            .dns(SsrfSafeDns)
             .build()
     }
 

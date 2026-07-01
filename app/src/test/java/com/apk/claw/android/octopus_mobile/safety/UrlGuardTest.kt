@@ -111,4 +111,22 @@ class UrlGuardTest {
     fun `blocks ipv6 loopback literal`() {
         assertFalse(UrlGuard.isSafeUrl("http://[::1]/"))
     }
+
+    // ── DNS rebinding 防护:连接期地址分类(SsrfSafeDns 复用 isDisallowedAddress) ──
+
+    @Test
+    fun `isDisallowedAddress flags private and loopback and metadata`() {
+        assertTrue(UrlGuard.isDisallowedAddress(java.net.InetAddress.getByName("127.0.0.1")))
+        assertTrue(UrlGuard.isDisallowedAddress(java.net.InetAddress.getByName("10.0.0.1")))
+        assertTrue(UrlGuard.isDisallowedAddress(java.net.InetAddress.getByName("192.168.1.1")))
+        assertTrue(UrlGuard.isDisallowedAddress(java.net.InetAddress.getByName("169.254.169.254")))
+        assertTrue(UrlGuard.isDisallowedAddress(java.net.InetAddress.getByName("::1")))
+        assertTrue(UrlGuard.isDisallowedAddress(java.net.InetAddress.getByName("::ffff:127.0.0.1")))
+    }
+
+    @Test
+    fun `isDisallowedAddress allows public addresses`() {
+        assertFalse(UrlGuard.isDisallowedAddress(java.net.InetAddress.getByName("8.8.8.8")))
+        assertFalse(UrlGuard.isDisallowedAddress(java.net.InetAddress.getByName("1.1.1.1")))
+    }
 }
