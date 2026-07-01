@@ -15,7 +15,9 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -34,14 +36,21 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.apk.claw.android.R
 import com.apk.claw.android.octopus_mobile.browser.SearchEngines
+import com.apk.claw.android.plugin.MiniAppRegistry
+import com.apk.claw.android.plugin.PluginManifest
+import com.apk.claw.android.ui.browser.BookmarkItem
+import com.apk.claw.android.ui.browser.BookmarkManager
 import com.apk.claw.android.ui.browser.BrowserActivity
 import com.apk.claw.android.ui.compose.theme.OctopusBackground
 import com.apk.claw.android.ui.compose.theme.OctopusColors
@@ -81,13 +90,6 @@ private data class BrowserSearchOption(
     val label: String,
     val favicon: String?,
     val mode: SearchMode,
-)
-
-private data class BrowserCategory(
-    val titleRes: Int,
-    val icon: ImageVector,
-    val tint: Color,
-    val target: String,
 )
 
 private data class BrowserShortcut(
@@ -133,14 +135,17 @@ fun DiscoverScreen(onOpenUrl: ((String?) -> Unit)? = null) {
         openUrl(text.ifBlank { null })
         query = ""
     }
-    val categories = remember {
-        listOf(
-            BrowserCategory(R.string.browser_cat_ai, Icons.Filled.AutoAwesome, OctopusTints.CatAI, "https://chat.deepseek.com"),
-            BrowserCategory(R.string.browser_cat_video, Icons.Filled.Movie, OctopusTints.CatVideo, "https://www.youtube.com"),
-            BrowserCategory(R.string.browser_cat_dev, Icons.Filled.Code, OctopusTints.CatDev, "https://github.com"),
-            BrowserCategory(R.string.browser_cat_knowledge, Icons.Filled.School, OctopusTints.CatKnowledge, "https://www.perplexity.ai"),
-        )
+    // 小程序/书签都可能在别的页面(能力→小程序 / 浏览器设置)被改动，回到这个 tab 时要重读一遍，
+    // 跟 SettingsScreen 的 refreshTick 是同一个套路。
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var refreshTick by remember { mutableStateOf(0) }
+    DisposableEffect(lifecycleOwner) {
+        val obs = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_RESUME) refreshTick++ }
+        lifecycleOwner.lifecycle.addObserver(obs)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
     }
+    val miniApps = remember(refreshTick) { MiniAppRegistry.all() }
+    val bookmarks = remember(refreshTick) { BookmarkManager().getAll() }
     val tongyiQianwenLabel = stringResource(R.string.browser_app_tongyi_qianwen)
     val shortcuts = remember(tongyiQianwenLabel) {
         listOf(
@@ -190,16 +195,16 @@ fun DiscoverScreen(onOpenUrl: ((String?) -> Unit)? = null) {
         }
 
         item {
-            BrowserCategoryGrid(
-                categories = categories,
-                onOpen = { openUrl(it) },
-            )
+            MiniAppsSection(apps = miniApps) { id -> MiniAppRegistry.launch(context, id) }
         }
 
         item {
-            FavoriteDeskCard(shortcuts = shortcuts) { openUrl(it) }
+            BookmarksSection(bookmarks = bookmarks) { openUrl(it) }
         }
 
+        item {
+            CommonSitesSection(shortcuts = shortcuts) { openUrl(it) }
+        }
     }
 }
 
@@ -254,74 +259,91 @@ private fun BrowserHomeTopBar() {
     }
 }
 
+/** 三个聚合小节共用的卡片外壳：标题 + 内容；列表为空时整块不占地方。 */
 @Composable
-private fun BrowserCategoryGrid(categories: List<BrowserCategory>, onOpen: (String) -> Unit) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        GlassPanel(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(18.dp),
-            contentPadding = OctopusSpacing.xs,
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(OctopusSpacing.sm)) {
-                categories.chunked(2).forEach { row ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.sm), modifier = Modifier.fillMaxWidth()) {
-                        row.forEach { category ->
-                            BrowserCategoryTile(
-                                category = category,
-                                modifier = Modifier.weight(1f),
-                            ) { onOpen(category.target) }
-                        }
-                    }
-                }
-            }
+private fun HomeSectionCard(title: String, isEmpty: Boolean, content: @Composable ColumnScope.() -> Unit) {
+    if (isEmpty) return
+    GlassPanel(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        contentPadding = OctopusSpacing.sm,
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(OctopusSpacing.sm)) {
+            Text(title, color = TextPrimary, fontSize = OctopusType.bodyStrong, fontWeight = FontWeight.Bold)
+            content()
         }
-        Spacer(Modifier.height(OctopusSpacing.sm))
-        Text(
-            stringResource(R.string.browser_home_categories),
-            color = BrowserHomeTextColor(),
-            fontSize = OctopusType.caption,
-            fontWeight = FontWeight.Medium,
-        )
     }
 }
 
+/** 三个聚合小节共用的两列平铺：最后一行落单时补一个等宽 Spacer 保持对齐。 */
 @Composable
-private fun BrowserCategoryTile(
-    category: BrowserCategory,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit,
-) {
-    val iconBg = if (OctopusThemeStyle.isGlass) {
-        Color.White.copy(alpha = 0.78f)
-    } else {
-        OctopusColors.PrimaryContainer
+private fun <T> TwoColumnTiles(items: List<T>, tile: @Composable (T, Modifier) -> Unit) {
+    items.chunked(2).forEach { row ->
+        Row(horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.sm), modifier = Modifier.fillMaxWidth()) {
+            row.forEach { tile(it, Modifier.weight(1f)) }
+            if (row.size == 1) Spacer(Modifier.weight(1f))
+        }
     }
-    Column(
-        modifier = modifier
-            .clip(OctopusShape.large)
-            .clickable(onClick = onClick)
-            .padding(vertical = OctopusSpacing.xs),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Surface(
-            modifier = Modifier.size(42.dp),
-            shape = OctopusShape.large,
-            color = iconBg,
-            shadowElevation = if (OctopusThemeStyle.isGlass) 2.dp else 0.dp,
-        ) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Icon(category.icon, contentDescription = null, tint = category.tint, modifier = Modifier.size(OctopusIconSize.large))
+}
+
+/** 我的小程序：[MiniAppRegistry] 里已注册的小程序（含 generate_app 现场生成的），点了直接启动。 */
+@Composable
+private fun MiniAppsSection(apps: List<PluginManifest>, onLaunch: (String) -> Unit) {
+    val miniAppTag = stringResource(R.string.browser_home_miniapp_tag)
+    HomeSectionCard(title = stringResource(R.string.browser_home_miniapps), isEmpty = apps.isEmpty()) {
+        TwoColumnTiles(apps) { m, mod ->
+            HomeTile(label = m.name.ifBlank { m.id }, subtitle = miniAppTag, modifier = mod, onClick = { onLaunch(m.id) }) {
+                Icon(Icons.Filled.Apps, contentDescription = null, tint = OctopusTints.CatDev, modifier = Modifier.size(OctopusIconSize.medium))
             }
         }
-        Spacer(Modifier.height(6.dp))
-        Text(
-            stringResource(category.titleRes),
-            color = TextPrimary,
-            fontSize = OctopusType.caption,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-        )
     }
+}
+
+/** 书签：[BookmarkManager] 里存的收藏，图标尝试用站点自己的 favicon.ico，加载失败落回书签图标。 */
+@Composable
+private fun BookmarksSection(bookmarks: List<BookmarkItem>, onOpen: (String) -> Unit) {
+    HomeSectionCard(title = stringResource(R.string.browser_home_bookmarks), isEmpty = bookmarks.isEmpty()) {
+        TwoColumnTiles(bookmarks.take(6)) { b, mod ->
+            val host = remember(b.url) { runCatching { android.net.Uri.parse(b.url).host }.getOrNull().orEmpty() }
+            HomeTile(label = b.title.ifBlank { host }, subtitle = host, modifier = mod, onClick = { onOpen(b.url) }) {
+                FaviconIcon(
+                    url = host.takeIf { it.isNotBlank() }?.let { "https://$it/favicon.ico" },
+                    tint = OctopusTints.CatKnowledge,
+                    fallback = Icons.Filled.Bookmark,
+                    contentDescription = b.title,
+                )
+            }
+        }
+    }
+}
+
+/** 常用网站：内置的几个快捷方式，新用户没有小程序/书签时页面不至于空荡荡。 */
+@Composable
+private fun CommonSitesSection(shortcuts: List<BrowserShortcut>, onOpen: (String) -> Unit) {
+    HomeSectionCard(title = stringResource(R.string.browser_home_common_sites), isEmpty = shortcuts.isEmpty()) {
+        TwoColumnTiles(shortcuts) { shortcut, mod ->
+            HomeTile(label = shortcut.label, subtitle = stringResource(shortcut.categoryRes), modifier = mod, onClick = { onOpen(shortcut.url) }) {
+                FaviconIcon(url = shortcut.iconUrl, tint = shortcut.tint, fallback = shortcut.fallbackIcon, contentDescription = shortcut.label)
+            }
+        }
+    }
+}
+
+/** favicon 加载中/失败都落回同一个矢量图标兜底，三个小节共用，别各写一份。 */
+@Composable
+private fun FaviconIcon(url: String?, tint: Color, fallback: ImageVector, contentDescription: String?) {
+    if (url == null) {
+        Icon(fallback, contentDescription = null, tint = tint, modifier = Modifier.size(OctopusIconSize.medium))
+        return
+    }
+    coil.compose.SubcomposeAsyncImage(
+        model = url,
+        contentDescription = contentDescription,
+        modifier = Modifier.size(20.dp).clip(RoundedCornerShape(6.dp)),
+        contentScale = ContentScale.Fit,
+        loading = { Icon(fallback, contentDescription = null, tint = tint, modifier = Modifier.size(OctopusIconSize.medium)) },
+        error = { Icon(fallback, contentDescription = null, tint = tint, modifier = Modifier.size(OctopusIconSize.medium)) },
+    )
 }
 
 @Composable
@@ -424,51 +446,14 @@ private fun SearchOptionIcon(option: BrowserSearchOption, modifier: Modifier = M
     }
 }
 
+/** 三个聚合小节共用的单个格子：图标 + 主标题 + 副标题。 */
 @Composable
-private fun FavoriteDeskCard(shortcuts: List<BrowserShortcut>, onOpen: (String) -> Unit) {
-    GlassPanel(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        contentPadding = OctopusSpacing.sm,
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(OctopusSpacing.sm)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    stringResource(R.string.browser_home_favorites),
-                    color = TextPrimary,
-                    fontSize = OctopusType.bodyStrong,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f),
-                )
-                Text(
-                    stringResource(R.string.browser_home_tools),
-                    color = TextSecondary,
-                    fontSize = OctopusType.caption,
-                )
-            }
-            shortcuts.chunked(2).forEach { row ->
-                Row(horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.sm), modifier = Modifier.fillMaxWidth()) {
-                    row.forEach { shortcut ->
-                        BrowserShortcutTile(
-                            shortcut = shortcut,
-                            modifier = Modifier.weight(1f),
-                        ) { onOpen(shortcut.url) }
-                    }
-                    if (row.size == 1) Spacer(Modifier.weight(1f))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun BrowserShortcutTile(
-    shortcut: BrowserShortcut,
+private fun HomeTile(
+    label: String,
+    subtitle: String,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
+    icon: @Composable () -> Unit,
 ) {
     val isGlass = OctopusThemeStyle.isGlass
     val tileBg = if (isGlass) Color.White.copy(alpha = 0.22f) else OctopusColors.FillSecondary
@@ -487,25 +472,12 @@ private fun BrowserShortcutTile(
             shape = RoundedCornerShape(10.dp),
             color = iconBg,
         ) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                if (shortcut.iconUrl != null) {
-                    coil.compose.SubcomposeAsyncImage(
-                        model = shortcut.iconUrl,
-                        contentDescription = shortcut.label,
-                        modifier = Modifier.size(20.dp).clip(RoundedCornerShape(6.dp)),
-                        contentScale = ContentScale.Fit,
-                        loading = { ShortcutFallbackIcon(shortcut) },
-                        error = { ShortcutFallbackIcon(shortcut) },
-                    )
-                } else {
-                    ShortcutFallbackIcon(shortcut)
-                }
-            }
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { icon() }
         }
         Spacer(Modifier.width(OctopusSpacing.sm))
         Column(modifier = Modifier.weight(1f)) {
-            Text(shortcut.label, color = TextPrimary, fontSize = OctopusType.caption, fontWeight = FontWeight.SemiBold, maxLines = 1)
-            Text(stringResource(shortcut.categoryRes), color = TextSecondary, fontSize = OctopusType.tag, maxLines = 1)
+            Text(label, color = TextPrimary, fontSize = OctopusType.caption, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Text(subtitle, color = TextSecondary, fontSize = OctopusType.tag, maxLines = 1)
         }
     }
 }
@@ -528,14 +500,4 @@ private fun GlassPanel(
             content()
         }
     }
-}
-
-@Composable
-private fun ShortcutFallbackIcon(shortcut: BrowserShortcut) {
-    Icon(
-        shortcut.fallbackIcon,
-        contentDescription = null,
-        tint = shortcut.tint,
-        modifier = Modifier.size(OctopusIconSize.medium),
-    )
 }

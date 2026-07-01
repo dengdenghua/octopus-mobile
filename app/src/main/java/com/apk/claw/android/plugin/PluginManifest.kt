@@ -83,15 +83,30 @@ data class PluginManifest(
         private val gson = Gson()
 
         /**
-         * 从 JSON 字符串解析
+         * 从 JSON 字符串解析。
+         *
+         * 注意:Gson 反射构造 Kotlin data class 时会跳过构造函数默认值——JSON 里缺失的 List 字段
+         * 落地成运行时 null(哪怕声明类型是非空 List&lt;String&gt;),下游 forEach 会直接 NPE 崩溃
+         * (例如 demo-clock/manifest.json 没写 allow_device，MiniAppListActivity 一渲染就崩)。
+         * 这里在唯一的反序列化出口统一补齐，不用满仓库找每个调用点加 null 检查。
          */
         fun fromJson(json: String): PluginManifest? {
             return try {
-                gson.fromJson(json, PluginManifest::class.java)
+                gson.fromJson(json, PluginManifest::class.java)?.let(::sanitizeNullLists)
             } catch (e: Exception) {
                 null
             }
         }
+
+        @Suppress("USELESS_ELVIS")
+        private fun sanitizeNullLists(m: PluginManifest): PluginManifest = m.copy(
+            permissions = m.permissions ?: emptyList(),
+            blockRules = m.blockRules ?: emptyList(),
+            toolParams = m.toolParams ?: emptyList(),
+            allowHosts = m.allowHosts ?: emptyList(),
+            allowTools = m.allowTools ?: emptyList(),
+            allowDevice = m.allowDevice ?: emptyList(),
+        )
 
         /**
          * 从 InputStream 解析

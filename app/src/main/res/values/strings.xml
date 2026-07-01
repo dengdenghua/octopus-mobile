@@ -791,6 +791,8 @@ Shizuku 是安全、开源的本地辅助工具。</string>
     <string name="feat_clouddrive">云盘</string>
     <string name="feat_memory">记忆</string>
     <string name="feat_video">视频库</string>
+    <string name="feat_desktop">桌面模式</string>
+    <string name="feat_desktop_desc">横屏工作台:左浏览器桌面 + 右对话</string>
     <string name="feat_multiwindow">多窗口</string>
     <string name="feat_evolution">自我优化</string>
     <string name="feat_trust">信任中心</string>

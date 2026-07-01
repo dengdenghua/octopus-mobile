@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudQueue
 import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.DesktopWindows
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.GridView
@@ -155,6 +156,7 @@ private fun featureSections(): List<Pair<Int, List<FeatureItem>>> = listOf(
         FeatureItem(R.string.feat_video, R.string.feat_video_desc, Icons.Filled.Movie, VideoTint, VideoLibraryActivity::class.java),
     ),
     R.string.feat_section_advanced to listOf(
+        FeatureItem(R.string.feat_desktop, R.string.feat_desktop_desc, Icons.Filled.DesktopWindows, BrowserTint, com.apk.claw.android.ui.desktop.DesktopActivity::class.java),
         FeatureItem(R.string.feat_browser_settings, R.string.feat_browser_desc, Icons.Filled.Public, BrowserTint, BrowserSettingsActivity::class.java),
         FeatureItem(R.string.feat_multiwindow, R.string.feat_multiwindow_desc, Icons.Filled.GridView, WindowTint, MultiWindowActivity::class.java),
         FeatureItem(R.string.feat_evolution, R.string.feat_evolution_desc, Icons.Filled.TrendingUp, EvolveTint, EvolutionActivity::class.java),

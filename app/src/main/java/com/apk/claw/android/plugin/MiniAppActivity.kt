@@ -82,30 +82,33 @@ class MiniAppActivity : AppCompatActivity() {
 
     /**
      * 解析小程序页面 URL:
-     *  - 先查 filesDir/plugins(slug 为目录名,slug = id.substringAfterLast('/') 或完整 id)
+     *  - 先查 filesDir/plugins(registry 安装,slug 为目录名,slug = id.substringAfterLast('/') 或完整 id)
+     *  - 再查 filesDir/generated_apps(generate_app 工具现场生成)
      *  - 再回落 assets/plugins(内置打包)
-     *  - 两处都找不到 → 返回 null
+     *  - 都找不到 → 返回 null
      *
      * 安全:filesDir 查找做 canonicalPath 防 path traversal;
      * assets 路径不需要额外检查(由 APK 签名保护)。
      */
     private fun resolvePageUrl(manifest: PluginManifest): String? {
-        // --- filesDir 路径 ---
+        // --- filesDir 路径(registry 安装 / 自生成两个目录都试) ---
         // 目录名可能是完整 id 或 slug(substringAfterLast('/'))，两者都试
         val candidates = linkedSetOf(manifest.id, manifest.id.substringAfterLast('/'))
-        for (slug in candidates) {
-            try {
-                val pluginDir = File(filesDir, "plugins/$slug")
-                if (!pluginDir.isDirectory) continue
-                val page = File(pluginDir, manifest.page)
-                if (!page.isFile) continue
-                // path traversal 防护
-                val pageCanon = page.canonicalPath
-                val dirCanon = pluginDir.canonicalPath
-                if (!pageCanon.startsWith(dirCanon + File.separator) && pageCanon != dirCanon) continue
-                return page.toURI().toString()
-            } catch (e: Exception) {
-                Log.w(TAG, "resolvePageUrl filesDir error for $slug: ${e.message}")
+        for (baseDir in listOf("plugins", "generated_apps")) {
+            for (slug in candidates) {
+                try {
+                    val pluginDir = File(filesDir, "$baseDir/$slug")
+                    if (!pluginDir.isDirectory) continue
+                    val page = File(pluginDir, manifest.page)
+                    if (!page.isFile) continue
+                    // path traversal 防护
+                    val pageCanon = page.canonicalPath
+                    val dirCanon = pluginDir.canonicalPath
+                    if (!pageCanon.startsWith(dirCanon + File.separator) && pageCanon != dirCanon) continue
+                    return page.toURI().toString()
+                } catch (e: Exception) {
+                    Log.w(TAG, "resolvePageUrl $baseDir error for $slug: ${e.message}")
+                }
             }
         }
 

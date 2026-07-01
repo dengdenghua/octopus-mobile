@@ -53,6 +53,7 @@ import com.apk.claw.android.server.ConfigServerManager
 import com.apk.claw.android.server.RemoteConsoleGateway
 import com.apk.claw.android.service.ClawAccessibilityService
 import com.apk.claw.android.shizuku.ShizukuManager
+import com.apk.claw.android.widget.AdvancedPermissionDialog
 import com.apk.claw.android.ui.compose.theme.OctopusBackground
 import com.apk.claw.android.ui.compose.theme.OctopusColors
 import com.apk.claw.android.ui.compose.theme.OctopusGlass
@@ -307,9 +308,14 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
                         permission = perm,
                         onClick = {
                             if (!perm.ok) {
-                                permissionIntent(i, context)?.let {
-                                    it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                    context.startActivity(it)
+                                if (i == 5) {
+                                    // Shizuku 没有系统设置页可跳，走专门的安装/授权引导弹窗
+                                    AdvancedPermissionDialog.show(context)
+                                } else {
+                                    permissionIntent(i, context)?.let {
+                                        it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        context.startActivity(it)
+                                    }
                                 }
                             }
                         },

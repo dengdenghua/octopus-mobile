@@ -26,6 +26,7 @@ class PluginManager(private val context: Context) {
         private const val TAG = "PluginManager"
         private const val ASSETS_PLUGIN_DIR = "plugins"
         private const val FILES_PLUGIN_DIR = "plugins"
+        private const val GENERATED_APPS_DIR = "generated_apps"
     }
 
     private val loader = PluginLoader(context)
@@ -210,12 +211,24 @@ class PluginManager(private val context: Context) {
     }
 
     /**
+     * 只重扫非 dex 插件(browser-script/tool/mini-app),不重跑 dex 扫描/加载。
+     * 供 [com.apk.claw.android.tool.impl.GenerateAppTool] 现场生成小程序后立即刷新
+     * [MiniAppRegistry],不需要用户重启 App 就能在「小程序」列表里看到、打开。
+     */
+    fun refreshNonDexPlugins() = loadNonDexPlugins()
+
+    /**
      * 加载非 dex 类型插件:browser-script / tool / mini-app。
      *
      * 信任规则(fail-closed):
      *  - assets 源 — 随签名 APK 打包,无条件信任。
-     *  - files 源 — 仅限经 [PluginRegistryStore] sha256 校验安装的插件(registry 下载路径)。
+     *  - files 源(registry 安装) — 仅限经 [PluginRegistryStore] sha256 校验安装的插件。
      *    外部旁加载的 files 源注入脚本/小程序不加载(无 sha256 记录则不在 installedSlugs 中)。
+     *  - generated 源 — [GENERATED_APPS_DIR] 只有本 App 自己的 generate_app 工具会写入,
+     *    这是「自己生成给自己用」而非「第三方发布插件」，跟 registry 的 sha256 供应链校验是
+     *    两个不同的信任场景，故不经 installedSlugs 那道闸门。桥的能力面本身仍受
+     *    [PermissionGate] + [ToolRegistry.withUntrustedSource] 管控(生成的 manifest 默认
+     *    不声明任何 allow_tools/allow_device/allow_pay，等同零桥权限)。
      */
     private fun loadNonDexPlugins() {
         // assets 来源:无条件信任
@@ -227,9 +240,15 @@ class PluginManager(private val context: Context) {
             .filter { (slug, m) -> m.type != "dex" && slug in installedSlugs }
             .map { (_, m) -> m }
 
-        // assets 优先:id 冲突时保留 assets 版本
+        // 自生成来源:见上方信任规则注释
+        val generatedManifests = scanGeneratedAppManifests().filter { it.type != "dex" }
+
+        // assets 优先,其次 files(registry),同 id 冲突一律保留更早枚举的来源
         val assetIds = assetsManifests.map { it.id }.toSet()
-        val allManifests = assetsManifests + filesManifests.filter { it.id !in assetIds }
+        val filesIds = filesManifests.map { it.id }.toSet()
+        val allManifests = assetsManifests +
+            filesManifests.filter { it.id !in assetIds } +
+            generatedManifests.filter { it.id !in assetIds && it.id !in filesIds }
 
         if (allManifests.isEmpty()) {
             BrowserPluginHost.setPlugins(emptyList())
@@ -259,7 +278,26 @@ class PluginManager(private val context: Context) {
         Log.i(TAG, "Non-dex plugins: ${scripts.size} browser-script, " +
             "${allManifests.count { it.type == "tool" }} tool, " +
             "${allManifests.count { it.type == "mini-app" }} mini-app " +
-            "(assets=${assetsManifests.size} files=${filesManifests.size})")
+            "(assets=${assetsManifests.size} files=${filesManifests.size} generated=${generatedManifests.size})")
+    }
+
+    /**
+     * 扫描 filesDir/generated_apps 下所有 manifest —— [com.apk.claw.android.tool.impl.GenerateAppTool]
+     * 现场生成的小程序。只有本 App 自己的进程会写入这个目录，见 [loadNonDexPlugins] 顶部的信任规则注释。
+     */
+    private fun scanGeneratedAppManifests(): List<PluginManifest> {
+        val out = mutableListOf<PluginManifest>()
+        val dir = File(context.filesDir, GENERATED_APPS_DIR)
+        if (!dir.isDirectory) return out
+        dir.listFiles()?.forEach { sub ->
+            if (!sub.isDirectory) return@forEach
+            runCatching {
+                File(sub, "manifest.json").takeIf { it.isFile }?.inputStream()?.use { s ->
+                    PluginManifest.fromStream(s)?.let { out.add(it) }
+                }
+            }
+        }
+        return out
     }
 
     /**

@@ -150,6 +150,14 @@
             android:exported="false"
             android:hardwareAccelerated="true"
             android:configChanges="orientation|screenSize|keyboardHidden" />
+
+        <!-- 横屏「桌面模式」:左浏览器桌面 + 右对话。锁横屏 + configChanges 防旋转 recreate 闪断 WebView -->
+        <activity
+            android:name=".ui.desktop.DesktopActivity"
+            android:exported="false"
+            android:hardwareAccelerated="true"
+            android:screenOrientation="landscape"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
         <activity android:name=".ui.featurescreens.MiniAppListActivity" android:exported="false" />
         <activity android:name=".ui.featurescreens.SkillsActivity" android:exported="false" />
         <activity android:name=".ui.featurescreens.ChannelsActivity" android:exported="false" />
