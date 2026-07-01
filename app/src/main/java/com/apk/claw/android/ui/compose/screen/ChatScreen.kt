@@ -479,7 +479,7 @@ fun ChatScreen() {
                 }
             }
         // 录制示范技能按钮：顶栏 REC 文字按钮，录制中红点闪烁
-            val isRecording = remember { com.apk.claw.android.octopus_mobile.DemoRecorder.isRecording() }
+            val isRecording = com.apk.claw.android.octopus_mobile.DemoRecorder.isRecording()
             val recPulse by rememberInfiniteTransition(label = "rec").animateFloat(
                 initialValue = 0.4f,
                 targetValue = 1f,

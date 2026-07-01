@@ -45,6 +45,7 @@ import com.apk.claw.android.tool.ToolRegistry
 import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.toArgb
 import com.apk.claw.android.ui.compose.theme.OctopusColors
+import com.apk.claw.android.ui.compose.theme.OctopusThemeStyle
 
 // ── 统一间距 token ──
 private const val SPACING_XS = 4
@@ -155,6 +156,57 @@ class BrowserActivity : BaseActivity() {
 
     /** 玻璃描边色（亮色=深色描边，暗色=浅色描边，模拟玻璃边缘） */
     private val glassStroke: Int get() = if (OctopusColors.isLight) withAlpha(cText, 30) else withAlpha(cOnWallpaper, 35)
+
+    /** 当前是否处于玻璃特效主题；Standard 模式下使用实色/扁平风格 */
+    private val isGlassStyle get() = OctopusThemeStyle.isGlass
+
+    /** Standard 模式下浏览器 Activity 的实色背景（跟随主题） */
+    private val solidPageBg: Int get() = OctopusColors.Background.toArgb()
+
+    /** Standard 模式下卡片/顶栏背景 */
+    private val solidSurface: Int get() = OctopusColors.Surface.toArgb()
+
+    /** Standard 模式下次级卡片背景 */
+    private val solidSurfaceVariant: Int get() = OctopusColors.SurfaceVariant.toArgb()
+
+    /** Standard 模式下细描边 */
+    private val solidStroke: Int get() = if (OctopusColors.isLight) withAlpha(cText, 25) else withAlpha(cText, 40)
+
+    /** Standard 模式下胶囊按钮背景 */
+    private val solidControlBg: Int get() = if (OctopusColors.isLight) withAlpha(cPrimary, 20) else withAlpha(cText, 25)
+
+    /** 顶栏/底栏/容器的背景：Glass 用毛玻璃，Standard 用实色 Surface */
+    private fun panelBg(radiusDp: Int): GradientDrawable {
+        return if (isGlassStyle) glassBg(radiusDp, 0.72f, stroke = true) else solidRoundRect(solidSurface, radiusDp, solidStroke, 1)
+    }
+
+    /** 面板背景（无描边）：Glass 用无描边毛玻璃，Standard 用实色 */
+    private fun panelBgNoStroke(radiusDp: Int): GradientDrawable {
+        return if (isGlassStyle) glassBg(radiusDp, 0.72f, stroke = false) else solidRoundRect(solidSurface, radiusDp, Color.TRANSPARENT, 0)
+    }
+
+    /** 浏览器视窗容器背景：Glass 用毛玻璃，Standard 用 Surface 实色 */
+    private fun viewportBg(): GradientDrawable {
+        return if (isGlassStyle) glassBg(RADIUS_XL, 0.78f) else solidRoundRect(solidSurface, RADIUS_XL, solidStroke, 1)
+    }
+
+    /** 实色圆角矩形（Standard 模式用） */
+    private fun solidRoundRect(color: Int, radiusDp: Int, strokeColor: Int, strokeWidthDp: Int): GradientDrawable {
+        return GradientDrawable().apply {
+            cornerRadius = dp(radiusDp).toFloat()
+            setColor(color)
+            if (strokeWidthDp > 0) setStroke(dp(strokeWidthDp), strokeColor)
+        }
+    }
+
+    /** 胶囊按钮背景：Glass 用半透明玻璃，Standard 用实色 */
+    private fun capsuleBgAdaptive(fillColor: Int, radiusDp: Int, strokeColor: Int? = null, strokeWidthDp: Int = 0): GradientDrawable {
+        return if (isGlassStyle) {
+            capsuleBg(fillColor, radiusDp, strokeColor, strokeWidthDp)
+        } else {
+            solidRoundRect(fillColor, radiusDp, strokeColor ?: Color.TRANSPARENT, if (strokeColor == null) 0 else strokeWidthDp)
+        }
+    }
 
     /** 应用真实模糊（API31+ RenderEffect），低版本无操作（由半透明玻璃色兜底） */
     private fun applyBlur(view: View, radiusDp: Int = 24) {
@@ -328,8 +380,8 @@ class BrowserActivity : BaseActivity() {
                 }
                 outlineProvider = android.view.ViewOutlineProvider.BOUNDS
                 clipToOutline = false
-                background = glassBg(RADIUS_XL, 0.78f)
-                elevation = dp(SPACING_XS).toFloat()
+                background = viewportBg()
+                elevation = if (isGlassStyle) dp(SPACING_XS).toFloat() else 0f
             }
             contentLayer.addView(browserContainer)
 
@@ -337,7 +389,7 @@ class BrowserActivity : BaseActivity() {
             loadingOverlay = LinearLayout(this@BrowserActivity).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
-                setBackgroundColor(glassOverlay)
+                setBackgroundColor(if (isGlassStyle) glassOverlay else solidSurface)
                 layoutParams = FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT)
                 addView(ProgressBar(this@BrowserActivity).apply {
                     layoutParams = LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT)
@@ -405,7 +457,7 @@ class BrowserActivity : BaseActivity() {
                     topMargin = dp(40)
                     marginEnd = dp(SPACING_MD)
                 }
-                background = capsuleBg(withAlpha(cSurface, 210), RADIUS_LG)
+                background = capsuleBgAdaptive(solidSurface, RADIUS_LG)
                 setOnClickListener { finish() }
                 contentDescription = getString(R.string.advanced_action_close)
             })

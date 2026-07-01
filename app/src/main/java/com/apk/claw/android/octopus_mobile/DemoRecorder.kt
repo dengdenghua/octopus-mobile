@@ -5,6 +5,7 @@ import android.os.Handler
 import android.os.Looper
 import android.view.accessibility.AccessibilityEvent
 import android.widget.Toast
+import androidx.compose.runtime.mutableStateOf
 import com.apk.claw.android.ClawApplication
 import com.apk.claw.android.floating.LiveControlOverlay
 import com.apk.claw.android.service.ClawAccessibilityService
@@ -42,8 +43,12 @@ object DemoRecorder {
     private val gson = Gson()
     private val steps = mutableListOf<ActionCache.Step>()
 
-    @Volatile
-    private var recording = false
+    // mutableStateOf 而非 @Volatile:顶栏 REC 按钮要在 toggle() 后立刻重组变色/变字，
+    // 光靠 volatile 字段 Compose 感知不到变化（见 ChatScreen 的 isRecording 读取点）。
+    private val recordingState = mutableStateOf(false)
+    private var recording: Boolean
+        get() = recordingState.value
+        set(value) { recordingState.value = value }
 
     fun isRecording(): Boolean = recording
 

@@ -48,6 +48,73 @@ class RemoteAccessLogTest {
         assertFalse("写入应带 HMAC 签名", stored[0].signature.isNullOrEmpty())
     }
 
+    // ── 哈希链:删除 / 调序检测 ──
+
+    private val gson = Gson()
+    private val listType = object : TypeToken<List<RemoteAccessLog.Entry>>() {}.type
+    private fun readRaw(): List<RemoteAccessLog.Entry> =
+        gson.fromJson(KVUtils.getString("remote_access_log", ""), listType)
+    private fun writeRaw(list: List<RemoteAccessLog.Entry>) =
+        KVUtils.putString("remote_access_log", gson.toJson(list))
+
+    @Test
+    fun `deleting a middle entry breaks the chain`() {
+        RemoteAccessLog.record(entry("a", 1L)) // oldest
+        RemoteAccessLog.record(entry("b", 2L)) // middle
+        RemoteAccessLog.record(entry("c", 3L)) // newest
+        // 原始 newest-first = [c, b, a];删掉中间的 b
+        val raw = readRaw()
+        writeRaw(raw.filter { it.action != "b" }) // [c, a]
+
+        val entries = RemoteAccessLog.all()
+        assertEquals(2, entries.size)
+        // c.prevHash 指向已删的 b.signature,现与 a.signature 不符 → c 断链
+        assertTrue("删中间条应导致后继断链被标记", entries.first { it.action == "c" }.tampered)
+    }
+
+    @Test
+    fun `deleting the newest entry is detected via head anchor`() {
+        RemoteAccessLog.record(entry("a", 1L))
+        RemoteAccessLog.record(entry("b", 2L)) // newest
+        // 删掉最新的 b → 首条变 a,但 headAnchor 仍是 b 的签名
+        val raw = readRaw()
+        writeRaw(raw.filter { it.action != "b" }) // [a]
+
+        val entries = RemoteAccessLog.all()
+        assertEquals(1, entries.size)
+        assertTrue("删最新条应经 headAnchor 检测到", entries[0].tampered)
+    }
+
+    @Test
+    fun `reordering entries is detected`() {
+        RemoteAccessLog.record(entry("a", 1L))
+        RemoteAccessLog.record(entry("b", 2L))
+        RemoteAccessLog.record(entry("c", 3L))
+        val raw = readRaw().toMutableList() // [c, b, a]
+        // 调换 b 与 a 的顺序 → [c, a, b]
+        val reordered = listOf(raw[0], raw[2], raw[1])
+        writeRaw(reordered)
+
+        val entries = RemoteAccessLog.all()
+        assertTrue("调序应被链接校验检测到", entries.any { it.tampered })
+    }
+
+    @Test
+    fun `legacy entries without prevHash are not falsely flagged`() {
+        // 模拟升级前写入的旧条目:无 prevHash,签名用旧方案 HMAC(payload)
+        val secret = KVUtils.getString("remote_access_hmac_secret", "").ifEmpty {
+            AuditChain.generateSecret().also { KVUtils.putString("remote_access_hmac_secret", it) }
+        }
+        val e = entry("legacy", 1L)
+        val payload = "${e.id}|${e.ts}|${e.method}|${e.uri}|${e.source}|${e.action}|${e.success}|${e.summary}|${e.durationMs}"
+        val legacy = e.copy(prevHash = null, signature = AuditChain.signLegacy(secret, payload))
+        writeRaw(listOf(legacy))
+
+        val entries = RemoteAccessLog.all()
+        assertEquals(1, entries.size)
+        assertFalse("旧方案条目不应被误判为篡改", entries[0].tampered)
+    }
+
     @Test
     fun `record stores newest entry first`() {
         RemoteAccessLog.record(entry("first", 1L))
