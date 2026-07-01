@@ -50,6 +50,7 @@ import com.apk.claw.android.ui.compose.theme.OctopusLayout
 import com.apk.claw.android.ui.compose.theme.OctopusShape
 import com.apk.claw.android.ui.compose.theme.OctopusSpacing
 import com.apk.claw.android.ui.compose.theme.OctopusTints
+import com.apk.claw.android.ui.compose.theme.OctopusThemeStyle
 import com.apk.claw.android.ui.compose.theme.OctopusType
 import com.apk.claw.android.utils.KVUtils
 import java.text.SimpleDateFormat
@@ -62,6 +63,16 @@ private val TextPrimary get() = OctopusColors.TextPrimary
 private val TextSecondary get() = OctopusColors.TextSecondary
 private val TextMuted get() = OctopusColors.TextMuted
 private val BorderColor get() = OctopusColors.Border
+
+/** 浏览器首页在 Glass（暖色渐变背景）和 Standard（纯色背景）下的标题文字色 */
+@Composable
+private fun BrowserHomeTextColor(): Color =
+    if (OctopusThemeStyle.isGlass) Color.White else TextPrimary
+
+/** 浏览器首页在 Glass 和 Standard 下的次级文字色 */
+@Composable
+private fun BrowserHomeMutedTextColor(): Color =
+    if (OctopusThemeStyle.isGlass) Color.White.copy(alpha = 0.78f) else TextSecondary
 
 private enum class SearchMode { Web, Ai, All }
 
@@ -198,6 +209,11 @@ private fun BrowserHomeTopBar() {
     val monthText = remember {
         SimpleDateFormat("MMM yyyy", Locale.getDefault()).format(calendar.time)
     }
+    val dateCardBg = if (OctopusThemeStyle.isGlass) {
+        OctopusBackground.cardSurface
+    } else {
+        PrimaryColor
+    }
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -205,6 +221,7 @@ private fun BrowserHomeTopBar() {
         GlassPanel(
             modifier = Modifier.size(width = 76.dp, height = 60.dp),
             shape = RoundedCornerShape(20.dp),
+            backgroundColor = dateCardBg,
             contentPadding = OctopusSpacing.xs,
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -222,14 +239,14 @@ private fun BrowserHomeTopBar() {
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 stringResource(R.string.browser_home_title),
-                color = Color.White,
+                color = BrowserHomeTextColor(),
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 0.sp,
             )
             Text(
                 SimpleDateFormat("EEEE", Locale.getDefault()).format(calendar.time),
-                color = Color.White.copy(alpha = 0.78f),
+                color = BrowserHomeMutedTextColor(),
                 fontSize = OctopusType.body,
                 maxLines = 1,
             )
@@ -261,7 +278,7 @@ private fun BrowserCategoryGrid(categories: List<BrowserCategory>, onOpen: (Stri
         Spacer(Modifier.height(OctopusSpacing.sm))
         Text(
             stringResource(R.string.browser_home_categories),
-            color = Color.White.copy(alpha = 0.84f),
+            color = BrowserHomeTextColor(),
             fontSize = OctopusType.caption,
             fontWeight = FontWeight.Medium,
         )
@@ -274,6 +291,11 @@ private fun BrowserCategoryTile(
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
+    val iconBg = if (OctopusThemeStyle.isGlass) {
+        Color.White.copy(alpha = 0.78f)
+    } else {
+        OctopusColors.PrimaryContainer
+    }
     Column(
         modifier = modifier
             .clip(OctopusShape.large)
@@ -284,8 +306,8 @@ private fun BrowserCategoryTile(
         Surface(
             modifier = Modifier.size(42.dp),
             shape = OctopusShape.large,
-            color = Color.White.copy(alpha = 0.78f),
-            shadowElevation = 2.dp,
+            color = iconBg,
+            shadowElevation = if (OctopusThemeStyle.isGlass) 2.dp else 0.dp,
         ) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Icon(category.icon, contentDescription = null, tint = category.tint, modifier = Modifier.size(OctopusIconSize.large))
@@ -313,12 +335,15 @@ private fun BrowserOmnibox(
     onEngineSelected: (BrowserSearchOption) -> Unit,
     onSubmit: () -> Unit,
 ) {
+    val isGlass = OctopusThemeStyle.isGlass
+    val omniBg = if (isGlass) Color.White.copy(alpha = 0.82f) else SurfaceColor
+    val omniBorder = if (isGlass) Color.White.copy(alpha = 0.58f) else OctopusBackground.glassBorder
     Surface(
         modifier = Modifier.fillMaxWidth().height(54.dp),
         shape = RoundedCornerShape(22.dp),
-        color = Color.White.copy(alpha = 0.82f),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.58f)),
-        shadowElevation = 8.dp,
+        color = omniBg,
+        border = BorderStroke(0.5.dp, omniBorder),
+        shadowElevation = if (isGlass) 8.dp else 0.dp,
     ) {
         Row(
             modifier = Modifier.fillMaxSize().padding(start = OctopusSpacing.md, end = OctopusSpacing.sm),
@@ -445,11 +470,14 @@ private fun BrowserShortcutTile(
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
+    val isGlass = OctopusThemeStyle.isGlass
+    val tileBg = if (isGlass) Color.White.copy(alpha = 0.22f) else OctopusColors.FillSecondary
+    val iconBg = if (isGlass) Color.White.copy(alpha = 0.72f) else SurfaceColor
     Row(
         modifier = modifier
             .height(52.dp)
             .clip(OctopusShape.large)
-            .background(Color.White.copy(alpha = 0.22f))
+            .background(tileBg)
             .clickable(onClick = onClick)
             .padding(horizontal = OctopusSpacing.xs),
         verticalAlignment = Alignment.CenterVertically,
@@ -457,7 +485,7 @@ private fun BrowserShortcutTile(
         Surface(
             modifier = Modifier.size(32.dp),
             shape = RoundedCornerShape(10.dp),
-            color = Color.White.copy(alpha = 0.72f),
+            color = iconBg,
         ) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 if (shortcut.iconUrl != null) {
@@ -486,13 +514,14 @@ private fun BrowserShortcutTile(
 private fun GlassPanel(
     modifier: Modifier = Modifier,
     shape: RoundedCornerShape,
+    backgroundColor: Color = OctopusBackground.cardSurface,
     contentPadding: androidx.compose.ui.unit.Dp = OctopusSpacing.md,
     content: @Composable () -> Unit,
 ) {
     Box(
         modifier = modifier
             .clip(shape)
-            .background(OctopusBackground.cardSurface, shape)
+            .background(backgroundColor, shape)
             .border(0.5.dp, OctopusBackground.glassBorder, shape)
     ) {
         Box(modifier = Modifier.padding(contentPadding)) {
