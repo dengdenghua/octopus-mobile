@@ -150,14 +150,36 @@ class FileRouteHandler(
             }
         val cacheFile = java.io.File(externalDir, "download_${System.currentTimeMillis()}")
         val shizuku = com.apk.claw.android.shizuku.ShizukuShellService
-        val result = shizuku.exec("cp \"$path\" \"${cacheFile.absolutePath}\" && chmod 644 \"${cacheFile.absolutePath}\"")
-        if (result == null || result.exitCode != 0) {
-            cacheFile.delete()
+        // 原 `cp ... && chmod ...` 组合命令被 ShizukuShellService.exec 双重拦截:
+        //   1) && 命中注入模式
+        //   2) cacheFile 在 app 私有目录 /data/data/<pkg>/files/ 下,命中 FORBIDDEN_PATH_PATTERNS
+        // 即使 sanitizeShellArg 单引号转义也无效——FORBIDDEN_PATH_PATTERNS 是对原始命令串做子串匹配,
+        // 引号内的 /data/data/ 照样命中。
+        //
+        // 修复方案:把文件拷到 /sdcard/OctopusDownloadCache/ 下(shell 可读写、app 可读),
+        // 再用 Java IO 复制到 app 私有目录的 cacheFile(随后 NanoHTTPD 从私有目录读返回客户端)。
+        // 路径参数统一用 sanitizeShellArg 单引号转义。
+        val sdcardCacheDir = "/sdcard/OctopusDownloadCache"
+        shizuku.exec("mkdir -p ${shizuku.sanitizeShellArg(sdcardCacheDir)}")
+        val tmpName = "dl_${System.currentTimeMillis()}_${path.substringAfterLast('/').take(40)}"
+        val sdcardCachePath = "$sdcardCacheDir/$tmpName"
+        val safeSrc = shizuku.sanitizeShellArg(path)
+        val safeTmp = shizuku.sanitizeShellArg(sdcardCachePath)
+        val cpResult = shizuku.exec("cp $safeSrc $safeTmp")
+        if (cpResult == null || cpResult.exitCode != 0) {
             ctx.recordRemoteAccess(session, "file_download", false, "path=$path,copy_failed=true", startMs)
             return ctx.corsResponse(NanoHTTPD.newFixedLengthResponse(
                 NanoHTTPD.Response.Status.INTERNAL_ERROR, MIME_JSON,
-                """{"code":-1,"message":"复制文件失败: ${result?.stderr?.trim() ?: "Shizuku 不可用"}"}"""
+                """{"code":-1,"message":"复制文件失败: ${cpResult?.stderr?.trim() ?: "Shizuku 不可用"}"}"""
             ))
+        }
+        // 从 /sdcard 中转文件复制到 app 私有目录,再删除中转文件。
+        try {
+            java.io.File(sdcardCachePath).inputStream().use { input ->
+                cacheFile.outputStream().use { output -> input.copyTo(output) }
+            }
+        } finally {
+            shizuku.exec("rm -f $safeTmp")
         }
 
         val mime = when (path.substringAfterLast('.').lowercase()) {

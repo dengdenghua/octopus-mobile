@@ -1,6 +1,7 @@
 package com.apk.claw.android.media
 
 import com.apk.claw.android.shizuku.ShizukuShellService
+import com.apk.claw.android.utils.KVUtils
 import com.apk.claw.android.utils.XLog
 import com.tencent.mmkv.MMKV
 
@@ -45,6 +46,9 @@ object CloudDriveManager {
     const val DEFAULT_PORT = 19798
     const val DEFAULT_URL = "http://127.0.0.1:$DEFAULT_PORT"
 
+    // 仅 server_url 走独立 MMKV 实例(非敏感配置);凭据走 KVUtils,
+    // 由 SECURE_KEYS 路由到 EncryptedSharedPreferences(AES256-GCM via Keystore)加密存储,
+    // 避免网盘密码在 root/备份提取下明文泄漏。
     private val mmkv: MMKV by lazy { MMKV.mmkvWithID(MMKV_ID, MMKV.SINGLE_PROCESS_MODE) }
 
     // ======================== 服务器配置 ========================
@@ -75,14 +79,15 @@ object CloudDriveManager {
 
     /**
      * 设置认证信息（可选，CD2 默认无需认证）。
+     * 凭据经 KVUtils → SECURE_KEYS → EncryptedSharedPreferences 加密存储。
      */
     fun setCredentials(username: String, password: String) {
-        mmkv.putString(KEY_USERNAME, username)
-        mmkv.putString(KEY_PASSWORD, password)
+        KVUtils.putString(KEY_USERNAME, username)
+        KVUtils.putString(KEY_PASSWORD, password)
     }
 
-    fun getUsername(): String = mmkv.getString(KEY_USERNAME, "") ?: ""
-    fun getPassword(): String = mmkv.getString(KEY_PASSWORD, "") ?: ""
+    fun getUsername(): String = KVUtils.getString(KEY_USERNAME, "")
+    fun getPassword(): String = KVUtils.getString(KEY_PASSWORD, "")
 
     // ======================== 进程管理 ========================
 

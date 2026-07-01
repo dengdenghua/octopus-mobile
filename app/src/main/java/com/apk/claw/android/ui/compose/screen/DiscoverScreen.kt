@@ -140,7 +140,7 @@ fun DiscoverScreen(onOpenUrl: ((String?) -> Unit)? = null) {
         onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
     }
     val miniApps = remember(refreshTick) { MiniAppRegistry.all() }
-    val bookmarks = remember(refreshTick) { BookmarkManager().getAll() }
+    val bookmarks = remember(refreshTick) { BookmarkManager.getAll() }
     val commonSites = remember(refreshTick) { CommonSiteStore.getAll() }
     var siteToDelete by remember { mutableStateOf<CommonSiteItem?>(null) }
 

@@ -7,16 +7,19 @@ import com.google.gson.reflect.TypeToken
 
 /**
  * 书签管理器 —— MMKV 持久化。
+ *
+ * 单例([object]):所有调用方共享同一份内存缓存,避免每个 `BookmarkManager()` 实例各自
+ * 维护 cache 导致增删后其它实例仍读旧值(与 [CommonSiteStore] 同一方案)。
+ * 读写方法加 @Synchronized 防 read-modify-write 竞态。
  */
-class BookmarkManager {
+object BookmarkManager {
 
-    companion object {
-        private const val KEY_BOOKMARKS = "BROWSER_BOOKMARKS"
-    }
+    private const val KEY_BOOKMARKS = "BROWSER_BOOKMARKS"
 
     private val gson = Gson()
     private var cache: MutableList<BookmarkItem>? = null
 
+    @Synchronized
     fun getAll(): List<BookmarkItem> {
         if (cache == null) {
             cache = loadFromStorage().toMutableList()
@@ -24,6 +27,7 @@ class BookmarkManager {
         return cache!!.toList()
     }
 
+    @Synchronized
     fun add(url: String, title: String) {
         val list = getAll().toMutableList()
         if (list.any { it.url == url }) return
@@ -31,6 +35,7 @@ class BookmarkManager {
         save(list)
     }
 
+    @Synchronized
     fun remove(url: String) {
         val list = getAll().toMutableList()
         list.removeAll { it.url == url }

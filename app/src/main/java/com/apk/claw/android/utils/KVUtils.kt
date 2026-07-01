@@ -85,6 +85,9 @@ object KVUtils {
         "tool_audit_hmac_secret",
         // 远程访问日志 HMAC 密钥(RemoteAccessLog.KEY_HMAC_SECRET)—— 同上,与 ToolAuditLog 对称加密
         "remote_access_hmac_secret",
+        // CloudDrive2 网盘凭据(CloudDriveManager)—— bearer 级秘密,泄漏可访问用户网盘
+        "cd2_username",
+        "cd2_password",
     )
 
     /**

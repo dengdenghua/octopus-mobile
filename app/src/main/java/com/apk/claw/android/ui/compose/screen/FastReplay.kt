@@ -78,9 +78,12 @@ object FastReplay {
             "tap" -> replayTap(svc, step, longPress = false)
             "long_press" -> replayTap(svc, step, longPress = true)
             else -> {
-                // 稳的工具（swipe / input_text / open_app / system_key / scroll_to_find）原样执行
-                val tool = reg.getTool(step.tool) ?: return false
-                tool.executeWithWaitAfter(parse(step.argsJson)).isSuccess
+                // 稳的工具（swipe / input_text / open_app / system_key / scroll_to_find）原样执行。
+                // 走 ToolRegistry.executeTool 而非直接 tool.executeWithWaitAfter:
+                // 补齐 7 门管线的审计(MobileActionTimeline/ToolAuditLog)与安全门(safetyGate/sourceGate),
+                // 否则快路径成为无审计盲区,变量替换后可能含凭据的参数也不经脱敏落盘。
+                val params = parse(step.argsJson)
+                reg.executeTool(step.tool, params).isSuccess
             }
         }
     }

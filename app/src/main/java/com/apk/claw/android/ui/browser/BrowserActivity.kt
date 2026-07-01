@@ -257,7 +257,6 @@ class BrowserActivity : BaseActivity() {
     private lateinit var homeLayer: FrameLayout
     private lateinit var contentLayer: LinearLayout
     private var isHomeVisible = true
-    private val bookmarkManager = BookmarkManager()
     private var tts: android.speech.tts.TextToSpeech? = null
     private var isLoading = false
     private var aiMode = true
@@ -1456,9 +1455,9 @@ class BrowserActivity : BaseActivity() {
     // ── 书签 Dialog ──
 
     private fun showBookmarkDialog() {
-        val bookmarks = bookmarkManager.getAll()
+        val bookmarks = BookmarkManager.getAll()
         val currentUrl = engine.currentUrl()
-        val isBookmarked = bookmarkManager.isBookmarked(currentUrl)
+        val isBookmarked = BookmarkManager.isBookmarked(currentUrl)
         val isCommonSite = CommonSiteStore.contains(currentUrl)
 
         val items = mutableListOf<String>()
@@ -1481,10 +1480,10 @@ class BrowserActivity : BaseActivity() {
                 when {
                     which == 0 -> {
                         if (isBookmarked) {
-                            bookmarkManager.remove(currentUrl)
+                            BookmarkManager.remove(currentUrl)
                             Toast.makeText(this, getString(R.string.browser_bookmark_removed), Toast.LENGTH_SHORT).show()
                         } else {
-                            bookmarkManager.add(currentUrl, etUrl.text.toString().ifEmpty { currentUrl })
+                            BookmarkManager.add(currentUrl, etUrl.text.toString().ifEmpty { currentUrl })
                             Toast.makeText(this, getString(R.string.browser_bookmarked), Toast.LENGTH_SHORT).show()
                         }
                     }
