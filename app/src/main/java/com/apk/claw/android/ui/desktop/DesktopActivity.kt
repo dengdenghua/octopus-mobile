@@ -5,6 +5,7 @@ import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,8 +23,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChatBubbleOutline
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.DesktopWindows
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
@@ -36,10 +41,12 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -132,20 +139,52 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
         }
     }
 
-    Row(Modifier.fillMaxSize().background(OctopusColors.Background)) {
-        Box(Modifier.weight(0.62f).fillMaxHeight()) {
-            DesktopMonitor(
-                engine = engine,
-                currentUrl = currentUrl,
-                pageTitle = pageTitle,
-                loading = loading,
-                progress = progress,
-                onNavigate = { currentUrl = it; pageTitle = "" },
-            )
+    // 对话展开/收起:收起时对话面板宽度动画到 0(仍在组合中,不丢上下文/不打断运行中的任务),
+    // 桌面占满;右下角出现悬浮球,点开恢复。
+    var chatExpanded by rememberSaveable { mutableStateOf(true) }
+    val chatWidth by animateDpAsState(if (chatExpanded) 340.dp else 0.dp, label = "chatWidth")
+
+    Box(Modifier.fillMaxSize().background(OctopusColors.Background)) {
+        Row(Modifier.fillMaxSize()) {
+            Box(Modifier.weight(1f).fillMaxHeight()) {
+                DesktopMonitor(
+                    engine = engine,
+                    currentUrl = currentUrl,
+                    pageTitle = pageTitle,
+                    loading = loading,
+                    progress = progress,
+                    onNavigate = { currentUrl = it; pageTitle = "" },
+                )
+            }
+            if (chatWidth > 0.dp) {
+                Box(Modifier.width(1.dp).fillMaxHeight().background(OctopusColors.Border))
+            }
+            // ChatScreen 常驻组合,只动宽度 → 收起再展开不丢对话/输入/运行状态
+            Box(Modifier.width(chatWidth).fillMaxHeight().clipToBounds()) {
+                Column(Modifier.fillMaxSize()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().height(30.dp)
+                            .background(OctopusColors.Surface).padding(start = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("对话", color = OctopusColors.TextMuted, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                        IconButton(onClick = { chatExpanded = false }, modifier = Modifier.size(30.dp)) {
+                            Icon(Icons.Filled.ChevronRight, contentDescription = "收起对话", tint = OctopusColors.TextMuted, modifier = Modifier.size(18.dp))
+                        }
+                    }
+                    Box(Modifier.weight(1f)) { ChatScreen() }
+                }
+            }
         }
-        Box(Modifier.width(1.dp).fillMaxHeight().background(OctopusColors.Border))
-        Box(Modifier.weight(0.38f).fillMaxHeight()) {
-            ChatScreen()
+        // 收起态:右下角悬浮球,点开展开对话
+        if (!chatExpanded) {
+            FloatingActionButton(
+                onClick = { chatExpanded = true },
+                containerColor = OctopusColors.Primary,
+                modifier = Modifier.align(Alignment.BottomEnd).padding(24.dp),
+            ) {
+                Icon(Icons.Filled.ChatBubbleOutline, contentDescription = "展开对话", tint = Color.White)
+            }
         }
     }
 }
