@@ -89,5 +89,36 @@
 - `PrivacyScannerTest`:`sk-proj-`/`sk-svcacct-` 命中。
 - `OctopusMobileClientHandshakeTest`:握手前 `tool/execute` 不被派发。
 
-### 6.6 仍 deferred(需产品/协议/重设计)
-母体 WS 强制 wss + 服务端身份校验、ConfigServer loopback 绑定(会破坏 LAN 控制台)、KVUtils 静态加密、审计日志 HMAC 链式防删、群聊 ACL 按人非按会话。
+### 6.6 仍 deferred(见 §7 用户复核后的分类)
+母体 WS 强制 wss + 服务端身份校验、ConfigServer loopback 绑定(会破坏 LAN 控制台)、KVUtils 静态加密、群聊 ACL 按人非按会话。(原列的"审计日志 HMAC 链式防删"已在 §7.3 完成。)
+
+---
+
+## 7. 2026-07-01 后续加固(用户逐条复核后拍板)
+
+深度审计确认项修复后,又做了三项技术明确、收益直接的加固,并对报告的优先级做了修正。
+
+### 7.1 SSRF 防护堵住 DNS rebinding 窗口(commit `12f7484`)
+§6.1 的 SSRF 修复是"发起前解析并校验一次",但 OkHttp 执行时会**再解析一次** —— 恶意/受控 DNS 可对第一次返回公网 IP 骗过 `UrlGuard.check`、对第二次返回内网/回环/元数据(实际连接),即 DNS rebinding TOCTOU。
+- `UrlGuard` 暴露 `isDisallowedAddress(InetAddress)`;新增 `SsrfSafeDns`(okhttp3.Dns),在 OkHttp **真正使用的解析结果**上逐个剔除内网/回环/link-local/元数据,全被剔除则抛 `UnknownHostException` 阻断。
+- `ScriptSandbox.HTTP` 与 `DeclarativePluginTool.NO_REDIRECT_CLIENT` 均 `.dns(SsrfSafeDns)`。
+- 测试:`isDisallowedAddress` 覆盖 loopback/私网/元数据/IPv4-mapped 阻断 + 公网放行。
+
+### 7.2 RemoteAccessLog 补逐条 HMAC(commit `94f924c`,后并入 §7.3 哈希链)
+**报告漏项**:`ToolAuditLog` 有逐条 HMAC 防篡改,但 `RemoteAccessLog`(远程 HTTP/LAN 访问审计)**完全裸奔** —— SharedPreferences 里的 JSON 谁都能改。这个不对称本身即缺陷。先补齐与 ToolAuditLog 一致的逐条 HMAC,随即在 §7.3 一起升级为哈希链。
+
+### 7.3 审计日志升级哈希链 —— 检测删条目/调序(commit `28e459c`)
+逐条 HMAC 只能测"改内容",测不出"删条目/调换顺序"。新增 `octopus_mobile/AuditChain.kt`(共享),`ToolAuditLog` 与 `RemoteAccessLog` 统一改用:
+- `signature = HMAC(payload | prevHash)`,`prevHash` 锚接前一条签名;持久化 `headAnchor`(最新签名)。
+- **检测**:改内容(自身签名不匹配)/ 删中间条·调序(相邻条 `prevHash↔signature` 断链)/ 删最新条(首条签名 ≠ `headAnchor`)。
+- **兼容**:旧条目 `prevHash==null` 走 legacy `HMAC(payload)` 校验,升级后历史不误判;首条新记录锚到当时最新旧条目,链自然接续。`java.util.Base64`(minSdk28,输出等价旧 `android NO_WRAP`)—— 密钥/历史签名零迁移,且纯 JVM 单测可覆盖。
+- **已知局限**(注释+此处):删**最旧**条(trim 边界)无法与正常 trim 区分;密钥与日志同存 KVUtils,能读密钥的本地攻击者可重算整条链(需 Android Keystore 硬件密钥,见 §7.4)。
+- 测试:删中间/删最新/调序均标 `tampered`,旧方案条目不误判。
+
+### 7.4 用户复核结论:报告优先级修正(未改代码,合理兜底 / 需产品方向)
+- **WS 强制 wss + 证书校验 —— 不紧急**:明文 `ws://` 仅在用户主动开 `KEY_OCTOPUS_ALLOW_INSECURE_RUNTIME` 时允许,且 loopback 豁免 —— 是知情选择,非默认开放的洞。强制 wss 会废掉无 TLS 证书的局域网自建部署(同 ConfigServer loopback 的理由)。更合理:只给"正式托管服务器"默认连接加**证书 pinning**,保留自建/局域网开关不动。
+- **KVUtils 明文兜底 —— 优先级低**:敏感 key 默认走 `EncryptedSharedPreferences`(AES-256-GCM),仅 Android Keystore 设备级损坏才退化为 MMKV 明文(非攻击者可触发),且有迁移路径。能触发者(root+Keystore 损坏)早有更直接攻击面。真做只加"降级告警"即可,不该做成失败即崩(否则 Keystore 损坏的设备直接不可用)。
+- **群聊 ACL 按人非按会话 —— 产品决策非漏洞**:现状"踢出群的人若 sender ID 仍在白名单理论上还能下命令",但要修需接 Telegram/Discord/钉钉各自的群成员 API,工程量不小,且取决于设备单人用还是团队共享 —— 单人用基本无所谓。不建议现在动。
+
+## 8. 验证方式(§6–§7 批次)
+`JAVA_HOME=<Android Studio JBR> ./gradlew :app:compileDebugKotlin` 编译绿 + `:app:testDebugUnitTest` 全量通过;关键修复补回归测试(`UrlGuardTest` / `PrivacyScannerTest` / `OctopusMobileClientHandshakeTest` / `RemoteAccessLogTest`)。服务端 `server/.venv/bin/python -m pytest server/test_app.py` 112/116(4 失败为本地未配 agnes provider 的既有环境依赖,非回归)。
