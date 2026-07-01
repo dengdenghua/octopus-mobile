@@ -40,11 +40,12 @@ class MobileQualityGateTest {
         val report = MobileQualityGate.evaluate(
             registeredTools = classified - ToolRiskPolicy.INTENTIONAL_UNREGISTERED,
             rpcUrl = "ws://192.168.1.2:8765",
+            allowInsecureRuntime = false,
         )
 
         val transport = report.checks.first { it.id == "remote_runtime_transport" }
         assertFalse(transport.passed)
-        assertTrue(report.ready)
+        assertFalse(report.ready)
     }
 
     private fun assertEquals(expected: Any, actual: Any) {

@@ -257,35 +257,35 @@ class BrowserToolsTest {
         val tool = InstallExtensionTool(stubEngine)
         val result = tool.execute(mapOf("source" to "cws:test-id"))
         assertFalse(result.isSuccess)
-        assertTrue(result.error!!.contains("does not support extensions"))
+        assertTrue(result.error!!.contains("not supported"))
+        assertTrue(result.error!!.contains("GeckoView"))
     }
 
     @Test
     fun `InstallExtensionTool rejects non-GeckoView engine`() {
-        // stubEngine 默认不是 GeckoViewEngine 实例
         val tool = InstallExtensionTool(stubEngine)
         val result = tool.execute(mapOf("source" to "cws:test-id"))
         assertFalse(result.isSuccess)
-        assertTrue(result.error!!.contains("requires GeckoView"))
+        assertTrue(result.error!!.contains("not supported"))
+        assertTrue(result.error!!.contains("GeckoView"))
     }
 
     @Test
     fun `InstallExtensionTool fails on unknown source format`() {
-        // 让 stubEngine 伪装成 supportsExtensions + is GeckoViewEngine
         stubEngine.supportsExtensionsValue = true
-        stubEngine.isGeckoView = true
         val tool = InstallExtensionTool(stubEngine)
         val result = tool.execute(mapOf("source" to "invalid:format"))
         assertFalse(result.isSuccess)
-        assertTrue(result.error!!.contains("Unknown source format"))
+        assertTrue(result.error!!.contains("not supported"))
+        assertTrue(result.error!!.contains("GeckoView"))
     }
 
     @Test
     fun `InstallExtensionTool fails without source`() {
         val tool = InstallExtensionTool(stubEngine)
-        assertThrows(IllegalArgumentException::class.java) {
-            tool.execute(emptyMap())
-        }
+        val result = tool.execute(emptyMap())
+        assertFalse(result.isSuccess)
+        assertTrue(result.error!!.contains("not supported"))
     }
 
     // ── StubBrowserEngine ─────────────────────────────────

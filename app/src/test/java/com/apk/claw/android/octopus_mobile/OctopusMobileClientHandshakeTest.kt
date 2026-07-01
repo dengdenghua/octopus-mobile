@@ -1,0 +1,125 @@
+package com.apk.claw.android.octopus_mobile
+
+import com.apk.claw.android.utils.KVUtils
+import okhttp3.Response
+import okhttp3.WebSocket
+import okhttp3.WebSocketListener
+import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.MockWebServer
+import org.json.JSONObject
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [33])
+class OctopusMobileClientHandshakeTest {
+
+    private lateinit var server: MockWebServer
+    private val clients = mutableListOf<OctopusMobileClient>()
+
+    @Before
+    fun setUp() {
+        server = MockWebServer()
+        server.start()
+        KVUtils.setInsecureOctopusRuntimeAllowed(false)
+    }
+
+    @After
+    fun tearDown() {
+        clients.forEach { it.disconnect() }
+        clients.clear()
+        server.shutdown()
+        KVUtils.setInsecureOctopusRuntimeAllowed(false)
+    }
+
+    @Test
+    fun `client only becomes online after explicit hello ack`() {
+        val online = CountDownLatch(1)
+        val helloSeen = CountDownLatch(1)
+        val socketClosed = enqueueRuntimeSocket { webSocket, text ->
+            val hello = JSONObject(text)
+            helloSeen.countDown()
+            webSocket.send("""{"jsonrpc":"2.0","method":"noise","id":"noise-1"}""")
+            webSocket.send(
+                JSONObject()
+                    .put("jsonrpc", "2.0")
+                    .put("id", hello.getString("id"))
+                    .put("result", JSONObject().put("registered", true))
+                    .toString(),
+            )
+        }
+
+        val client = newClient()
+        client.onStateChanged = { if (it == ConnectionState.ONLINE) online.countDown() }
+        client.connect()
+
+        assertTrue(helloSeen.await(2, TimeUnit.SECONDS))
+        assertTrue(online.await(2, TimeUnit.SECONDS))
+        assertEquals(ConnectionState.ONLINE, client.currentState())
+        client.disconnect()
+        assertTrue(socketClosed.await(2, TimeUnit.SECONDS))
+    }
+
+    @Test
+    fun `client stays handshaking when server sends unrelated message`() {
+        val helloSeen = CountDownLatch(1)
+        val socketClosed = enqueueRuntimeSocket { webSocket, _ ->
+            helloSeen.countDown()
+            webSocket.send("""{"jsonrpc":"2.0","method":"noise","id":"noise-1"}""")
+        }
+
+        val client = newClient()
+        client.connect()
+
+        assertTrue(helloSeen.await(2, TimeUnit.SECONDS))
+        Thread.sleep(150)
+        assertEquals(ConnectionState.HELLO_SENT, client.currentState())
+        client.disconnect()
+        assertTrue(socketClosed.await(2, TimeUnit.SECONDS))
+    }
+
+    @Test
+    fun `remote cleartext runtime is blocked before websocket opens`() {
+        val client = OctopusMobileClient("ws://192.168.1.2:8765", "test-device")
+        client.connect()
+        assertEquals(ConnectionState.DISCONNECTED, client.currentState())
+    }
+
+    private fun newClient(): OctopusMobileClient =
+        OctopusMobileClient(server.url("/ws").toString().replace("http://", "ws://"), "test-device")
+            .also { clients.add(it) }
+
+    private fun enqueueRuntimeSocket(
+        onText: (WebSocket, String) -> Unit,
+    ): CountDownLatch {
+        val socketClosed = CountDownLatch(1)
+        server.enqueue(
+            MockResponse().withWebSocketUpgrade(object : WebSocketListener() {
+                override fun onMessage(webSocket: WebSocket, text: String) {
+                    onText(webSocket, text)
+                }
+
+                override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+                    webSocket.close(code, reason)
+                }
+
+                override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                    socketClosed.countDown()
+                }
+
+                override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                    socketClosed.countDown()
+                }
+            }),
+        )
+        return socketClosed
+    }
+}

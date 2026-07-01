@@ -6,6 +6,8 @@ import com.apk.claw.android.tool.ToolResult
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
@@ -36,12 +38,13 @@ class ToolCallDispatcher(
     private val toolRegistry: ToolRegistry = ToolRegistry.getInstance()
 ) {
     private val tag = "ToolCallDispatcher"
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var scope = newScope()
 
     /**
      * 启动监听 —— 把 OctopusMobileClient.onToolExecute 接到本调度器.
      */
     fun start() {
+        if (!scope.isActive) scope = newScope()
         client.onToolExecute = { call -> dispatch(call) }
         Log.i(tag, "ToolCallDispatcher started")
     }
@@ -51,6 +54,7 @@ class ToolCallDispatcher(
      */
     fun stop() {
         client.onToolExecute = null
+        scope.cancel()
         Log.i(tag, "ToolCallDispatcher stopped")
     }
 
@@ -60,6 +64,17 @@ class ToolCallDispatcher(
      * 立即返回（异步执行），结果通过 WebSocket 异步回传.
      */
     fun dispatch(call: ToolCall) {
+        if (!scope.isActive) {
+            Log.w(tag, "dispatch rejected after dispatcher stopped: ${call.id}")
+            client.sendToolResult(
+                callId = call.id,
+                success = false,
+                data = null,
+                error = "Tool dispatcher is stopped",
+                errorCode = ErrorCodes.DEVICE_OFFLINE,
+            )
+            return
+        }
         scope.launch {
             val startTs = System.currentTimeMillis()
             val shortName = stripAndroidPrefix(call.name)
@@ -69,9 +84,7 @@ class ToolCallDispatcher(
             try {
                 if (result.isSuccess) {
                     // 截断超大返回（避免 WebSocket 帧超限）
-                    val data = result.data?.let {
-                        if (it.length > 32_000) it.substring(0, 32_000) + "...(truncated)" else it
-                    }
+                    val data = truncateResultData(result.data)
                     client.sendToolResult(
                         callId = call.id,
                         success = true,
@@ -136,5 +149,15 @@ class ToolCallDispatcher(
             msg.contains("app not found") || msg.contains("not installed") -> ErrorCodes.APP_NOT_FOUND
             else -> -32603  // Internal error (JSON-RPC 标准)
         }
+    }
+
+    private fun newScope(): CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    internal fun truncateResultData(data: String?): String? =
+        data?.let { if (it.length > MAX_RESULT_CHARS) it.substring(0, MAX_RESULT_CHARS) + TRUNCATED_SUFFIX else it }
+
+    companion object {
+        internal const val MAX_RESULT_CHARS = 32_000
+        internal const val TRUNCATED_SUFFIX = "...(truncated)"
     }
 }

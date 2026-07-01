@@ -51,8 +51,8 @@ class SystemWebViewEngineTest {
     }
 
     @Test
-    fun `antiBotScore is 50`() {
-        assertEquals(50, engine.antiBotScore)
+    fun `antiBotScore reflects stealth hardening`() {
+        assertEquals(70, engine.antiBotScore)
     }
 
     @Test
@@ -175,8 +175,8 @@ class SystemWebViewEngineTest {
         assertTrue("version should mention WebView", info.version.contains("WebView"))
         assertTrue("UA should contain Chrome", info.userAgent.contains("Chrome"))
         assertFalse(info.supportsExtensions)
-        assertEquals(50, info.antiBotScore)
-        assertTrue("notes should mention 兜底", info.notes.contains("兜底"))
+        assertEquals(70, info.antiBotScore)
+        assertTrue("notes should mention stealth", info.notes.contains("stealth"))
     }
 
     // ── 事件流 ────────────────────────────────────────────

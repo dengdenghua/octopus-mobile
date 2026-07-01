@@ -449,6 +449,13 @@ object KVUtils {
     fun isHeartbeatAckReconnectEnabled(): Boolean = getBoolean(KEY_HEARTBEAT_ACK_RECONNECT, false)
     fun setHeartbeatAckReconnectEnabled(enabled: Boolean) = putBoolean(KEY_HEARTBEAT_ACK_RECONNECT, enabled)
 
+    // ── Runtime 明文链路例外 ──
+    // 默认 false：wss:// 或本机/模拟器 ws:// 才允许连接母体。若用户明确在可信专网里使用
+    // ws://192.168.* 等明文 Runtime，可手动打开这个逃生阀；生产质量门仍会标记为不就绪。
+    private const val KEY_OCTOPUS_ALLOW_INSECURE_RUNTIME = "KEY_OCTOPUS_ALLOW_INSECURE_RUNTIME"
+    fun isInsecureOctopusRuntimeAllowed(): Boolean = getBoolean(KEY_OCTOPUS_ALLOW_INSECURE_RUNTIME, false)
+    fun setInsecureOctopusRuntimeAllowed(enabled: Boolean) = putBoolean(KEY_OCTOPUS_ALLOW_INSECURE_RUNTIME, enabled)
+
     // ==================== 技能(工具)启停 ====================
     private const val KEY_DISABLED_TOOLS = "KEY_DISABLED_TOOLS"
     fun getDisabledTools(): Set<String> {

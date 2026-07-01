@@ -1,6 +1,9 @@
 package com.apk.claw.android.octopus_mobile
 
 import com.apk.claw.android.tool.ToolRegistry
+import com.apk.claw.android.tool.BaseTool
+import com.apk.claw.android.tool.ToolParameter
+import com.apk.claw.android.tool.ToolResult
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.*
@@ -9,6 +12,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.TimeUnit
 
 /**
  * ToolCallDispatcher 单元测试.
@@ -80,9 +85,7 @@ class ToolCallDispatcherTest {
         dispatcher.start()
         val call = ToolCall(id = "test-1", name = "android.finish", args = mapOf("summary" to "done"))
         dispatcher.dispatch(call)
-        // Wait briefly for async dispatch
-        kotlinx.coroutines.delay(200)
-        val captured = client.lastToolResult
+        val captured = client.awaitToolResult()
         assertNotNull("expected a sendToolResult call", captured)
         assertEquals("test-1", captured!!.callId)
         assertTrue(captured.success)
@@ -93,8 +96,7 @@ class ToolCallDispatcherTest {
         dispatcher.start()
         val call = ToolCall(id = "test-2", name = "android.nope", args = emptyMap())
         dispatcher.dispatch(call)
-        kotlinx.coroutines.delay(200)
-        val captured = client.lastToolResult
+        val captured = client.awaitToolResult()
         assertNotNull(captured)
         assertEquals("test-2", captured!!.callId)
         assertFalse(captured.success)
@@ -102,20 +104,29 @@ class ToolCallDispatcherTest {
     }
 
     @Test
-    fun `dispatch truncates oversized result data`() = runBlocking {
-        dispatcher.start()
-        // 构造一个能返回大数据的工具（find_node_info 会返回节点信息）
-        val call = ToolCall(
-            id = "test-3",
-            name = "finish",
-            args = mapOf("summary" to "x".repeat(50_000)),
+    fun `truncates oversized result data`() {
+        val data = dispatcher.truncateResultData("x".repeat(50_000))
+
+        assertEquals(
+            ToolCallDispatcher.MAX_RESULT_CHARS + ToolCallDispatcher.TRUNCATED_SUFFIX.length,
+            data?.length,
         )
-        dispatcher.dispatch(call)
-        kotlinx.coroutines.delay(300)
-        val captured = client.lastToolResult
+        assertTrue(data!!.endsWith(ToolCallDispatcher.TRUNCATED_SUFFIX))
+    }
+
+    @Test
+    fun `stop rejects future dispatch work explicitly`() = runBlocking {
+        ToolRegistry.register(SlowResultTool())
+        dispatcher.start()
+        dispatcher.stop()
+
+        dispatcher.dispatch(ToolCall(id = "test-stopped", name = "slow_result", args = emptyMap()))
+
+        val captured = client.awaitToolResult(timeoutMs = 250)
         assertNotNull(captured)
-        // success 路径：data 应该是被截断的（如果原 result 超过 32K 字符）
-        // finish 的真实结果可能不长，但测试逻辑不依赖具体长度
+        assertEquals("test-stopped", captured!!.callId)
+        assertFalse(captured.success)
+        assertEquals(ErrorCodes.DEVICE_OFFLINE, captured.errorCode)
     }
 
     // ── Stub ─────────────────────────────────────────────────
@@ -124,7 +135,11 @@ class ToolCallDispatcherTest {
         runtimeUrl: String,
         tentacleId: String,
     ) : OctopusMobileClient(runtimeUrl, tentacleId) {
-        var lastToolResult: CapturedToolResult? = null
+        private val results = LinkedBlockingQueue<CapturedToolResult>()
+
+        fun awaitToolResult(timeoutMs: Long = 1_000): CapturedToolResult? {
+            return results.poll(timeoutMs, TimeUnit.MILLISECONDS)
+        }
 
         override fun sendToolResult(
             callId: String,
@@ -135,13 +150,28 @@ class ToolCallDispatcherTest {
             durationMs: Int,
             screenHashAfter: String?,
         ) {
-            lastToolResult = CapturedToolResult(
-                callId = callId,
-                success = success,
-                data = data,
-                error = error,
-                errorCode = errorCode ?: -32603,
+            results.offer(
+                CapturedToolResult(
+                    callId = callId,
+                    success = success,
+                    data = data,
+                    error = error,
+                    errorCode = errorCode ?: -32603,
+                ),
             )
+        }
+    }
+
+    class SlowResultTool : BaseTool() {
+        override fun getName(): String = "slow_result"
+        override fun getDisplayName(): String = "Slow Result"
+        override fun getDescriptionEN(): String = "Returns slowly for dispatcher cancellation tests."
+        override fun getDescriptionCN(): String = "返回较慢，用于调度器取消测试。"
+        override fun getParameters(): List<ToolParameter> = emptyList()
+
+        override fun execute(params: Map<String, Any>): ToolResult {
+            Thread.sleep(1_000)
+            return ToolResult.success("late")
         }
     }
 

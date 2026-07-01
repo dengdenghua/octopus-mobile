@@ -12,6 +12,7 @@ import okio.ByteString
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
+import com.apk.claw.android.utils.KVUtils
 
 /**
  * Octopus Mobile 客户端 —— Octopus Mobile 与 octopus-agent Runtime 之间的 WebSocket 通道.
@@ -90,12 +91,29 @@ open class OctopusMobileClient(
     @Volatile
     private var state: ConnectionState = ConnectionState.OFFLINE
 
+    @Volatile
+    private var pendingHelloId: String? = null
+
     /** 启动客户端 —— 建立 WebSocket 连接 + 发送 hello + 状态流转. */
     open fun connect() {
+        val transport = MobileRuntimeSecurity.assess(
+            runtimeUrl,
+            allowInsecureRuntime = KVUtils.isInsecureOctopusRuntimeAllowed(),
+        )
+        if (!transport.allowed) {
+            Log.w(tag, "blocked runtime connection to $runtimeUrl: ${transport.reason}")
+            diagnostics.onDisconnected("blocked: ${transport.reason}", System.currentTimeMillis())
+            setState(ConnectionState.DISCONNECTED)
+            return
+        }
         Log.i(tag, "connecting to $runtimeUrl as $tentacleId")
 
         val request = Request.Builder()
             .url(runtimeUrl)
+            .also { builder ->
+                val token = authToken?.takeIf { it.isNotBlank() }
+                if (token != null) builder.header("Authorization", "Bearer $token")
+            }
             .build()
 
         val listener = object : WebSocketListener() {
@@ -116,26 +134,21 @@ open class OctopusMobileClient(
                     capabilities = emptyList(),
                     authToken = authToken
                 )
+                pendingHelloId = hello.id
                 webSocket.send(hello.toJson())
                 setState(ConnectionState.HELLO_SENT)
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
                 Log.d(tag, "received: $text")
-                // 收到任何消息且处于 HELLO_SENT 状态 → 视为握手成功
-                if (state == ConnectionState.HELLO_SENT) {
-                    setState(ConnectionState.ONLINE)
-                    reconnectAttempts.set(0)
-                }
                 handleIncomingMessage(text)
-                onMessage?.invoke(text)
             }
 
             override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
                 // 二进制帧：母体 push_pc_frame 推来的 PC 屏幕帧（远程桌面）
                 if (state == ConnectionState.HELLO_SENT) {
-                    setState(ConnectionState.ONLINE)
-                    reconnectAttempts.set(0)
+                    Log.w(tag, "binary frame ignored before hello acknowledgement")
+                    return
                 }
                 onPcFrame?.invoke(bytes.toByteArray())
             }
@@ -225,13 +238,21 @@ open class OctopusMobileClient(
      *
      * 使用 Gson 解析 JSON，替代之前的正则提取（正则无法正确处理嵌套 JSON、转义字符、Unicode）。
      */
-    private fun handleIncomingMessage(text: String) {
+    internal fun handleIncomingMessage(text: String) {
         try {
             val root = JsonParser.parseString(text).asJsonObject
+            if (handleHelloAck(root)) {
+                // Continue to listener fan-out below, but no further protocol dispatch needed.
+            } else if (handleHelloError(root)) {
+                return
+            }
             // 母体（Python json.dumps）发的是 "method": "..."，Gson 自动处理空白
-            val method = root.get("method")?.asString ?: return
+            val method = root.get("method")?.asString
 
             when (method) {
+                "device/hello_ack", "device/registered" -> {
+                    markHelloAcknowledged(method)
+                }
                 // 任务结果（母体返回的任务执行结果）
                 "task/result" -> {
                     val taskId = root.get("task_id")?.asString ?: return
@@ -262,6 +283,9 @@ open class OctopusMobileClient(
                 }
                 // 心跳 ACK（母体确认收到心跳，表明母体存活）
                 "heartbeat/ack" -> {
+                    if (state == ConnectionState.HELLO_SENT) {
+                        markHelloAcknowledged("heartbeat/ack")
+                    }
                     onHeartbeatAck?.invoke()
                 }
             }
@@ -275,6 +299,49 @@ open class OctopusMobileClient(
             } catch (e: Exception) {
                 Log.w(tag, "messageListener failed: ${e.message}")
             }
+        }
+    }
+
+    private fun handleHelloAck(root: JsonObject): Boolean {
+        val helloId = pendingHelloId ?: return false
+        val id = root.get("id")?.asString ?: return false
+        if (id != helloId || !root.has("result")) return false
+        val result = root.get("result")
+        if (result.isJsonObject) {
+            val obj = result.asJsonObject
+            val registered = obj.get("registered")?.asBoolean == true ||
+                obj.get("ok")?.asBoolean == true ||
+                obj.get("accepted")?.asBoolean == true
+            if (registered) {
+                markHelloAcknowledged("hello result")
+                return true
+            }
+        } else if (result.isJsonPrimitive && result.asJsonPrimitive.isBoolean && result.asBoolean) {
+            markHelloAcknowledged("hello boolean result")
+            return true
+        }
+        return false
+    }
+
+    private fun handleHelloError(root: JsonObject): Boolean {
+        val helloId = pendingHelloId ?: return false
+        val id = root.get("id")?.asString ?: return false
+        if (id != helloId || !root.has("error")) return false
+        val message = root.getAsJsonObject("error")?.get("message")?.asString ?: "hello rejected"
+        Log.w(tag, "runtime hello rejected: $message")
+        pendingHelloId = null
+        diagnostics.onDisconnected("hello rejected: $message", System.currentTimeMillis())
+        setState(ConnectionState.DISCONNECTED)
+        webSocket?.close(1008, "hello rejected")
+        return true
+    }
+
+    private fun markHelloAcknowledged(reason: String) {
+        if (state == ConnectionState.HELLO_SENT) {
+            Log.i(tag, "runtime hello acknowledged: $reason")
+            pendingHelloId = null
+            setState(ConnectionState.ONLINE)
+            reconnectAttempts.set(0)
         }
     }
 

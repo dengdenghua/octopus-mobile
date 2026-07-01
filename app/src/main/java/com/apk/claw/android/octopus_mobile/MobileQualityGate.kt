@@ -33,6 +33,7 @@ object MobileQualityGate {
     fun evaluate(
         registeredTools: Set<String> = registeredToolNames(),
         rpcUrl: String = KVUtils.getOctopusRpcUrl(),
+        allowInsecureRuntime: Boolean = KVUtils.isInsecureOctopusRuntimeAllowed(),
     ): Report {
         val classified = ToolRiskPolicy.HIGH_RISK_TOOLS +
             ToolRiskPolicy.MEDIUM_RISK_TOOLS +
@@ -82,11 +83,15 @@ object MobileQualityGate {
             ),
             Check(
                 id = "remote_runtime_transport",
-                passed = rpcUrl.isBlank() || rpcUrl.startsWith("wss://") ||
-                    rpcUrl.startsWith("ws://127.0.0.1") ||
-                    rpcUrl.startsWith("ws://localhost"),
-                severity = "warning",
-                message = "Configured remote runtime should use wss:// outside local development.",
+                passed = rpcUrl.isBlank() || MobileRuntimeSecurity.isProductionReadyTransport(rpcUrl),
+                severity = "critical",
+                message = "Production Runtime transport must use wss://; local ws:// is for development only.",
+            ),
+            Check(
+                id = "insecure_runtime_override_disabled",
+                passed = !allowInsecureRuntime,
+                severity = "critical",
+                message = "Explicit insecure Runtime override must stay disabled for production readiness.",
             ),
             Check(
                 id = "action_timeline_available",

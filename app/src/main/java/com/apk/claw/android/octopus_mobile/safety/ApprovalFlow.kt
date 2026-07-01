@@ -6,6 +6,7 @@ import android.os.Looper
 import android.util.Log
 import com.apk.claw.android.octopus_mobile.ToolAuditLog
 import com.apk.claw.android.widget.ConfirmDialog
+import com.blankj.utilcode.util.ActivityUtils
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -51,6 +52,7 @@ object ApprovalFlow {
 
         mainHandler.post {
             try {
+                val activityContext = ActivityUtils.getTopActivity() ?: context
                 val displayParams = formatParamsForDisplay(params)
                 val message = buildString {
                     appendLine("工具: $toolName")
@@ -64,7 +66,7 @@ object ApprovalFlow {
                 }
 
                 val dialog = ConfirmDialog.showWarm(
-                    context = context,
+                    context = activityContext,
                     title = "⚠️ 高危操作审批",
                     message = message,
                     actionTitle = "允许执行",
