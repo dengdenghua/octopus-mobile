@@ -310,16 +310,8 @@ private fun DesktopMonitor(
                 modifier = Modifier.fillMaxSize(),
             )
             val idle = currentUrl.isBlank() || currentUrl == "about:blank"
-            if (idle) {
-                DesktopWallpaper(Modifier.fillMaxSize())
-                // 空闲时 Zero 以全息投影立于桌面右侧(黑底已抠除,按亮度半透明)
-                ZeroCompanion(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .fillMaxHeight(0.88f)
-                        .aspectRatio(0.46f, matchHeightConstraintsFirst = true),
-                )
-            }
+            // 空闲 = 全息角色档案面板(信息卡 + 技能/插件配置 + Zero 三视图立绘)
+            if (idle) CharacterHud(Modifier.fillMaxSize())
         }
     }
 }
