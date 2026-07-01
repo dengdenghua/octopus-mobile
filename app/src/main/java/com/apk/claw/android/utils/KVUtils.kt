@@ -513,6 +513,11 @@ object KVUtils {
     fun getVisionModelName(): String = getString(KEY_VISION_MODEL_NAME, "")
     fun setVisionModelName(value: String) = putString(KEY_VISION_MODEL_NAME, value)
 
+    // ── 横屏桌面模式:是否启动即进入(专用设备用) ──
+    private const val KEY_DESKTOP_MODE_DEFAULT = "KEY_DESKTOP_MODE_DEFAULT"
+    fun isDesktopModeDefault(): Boolean = getBoolean(KEY_DESKTOP_MODE_DEFAULT, false)
+    fun setDesktopModeDefault(value: Boolean) = putBoolean(KEY_DESKTOP_MODE_DEFAULT, value)
+
     // ── 脚本工作空间 ──
     private const val KEY_SCRIPT_WORKSPACE = "KEY_SCRIPT_WORKSPACE"
     const val DEFAULT_SCRIPT_WORKSPACE = "/sdcard/Download/Octopus/"

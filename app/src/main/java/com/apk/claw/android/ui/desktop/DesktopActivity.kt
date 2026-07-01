@@ -7,6 +7,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -60,6 +61,7 @@ import com.apk.claw.android.octopus_mobile.browser.BrowserEngineFactory
 import com.apk.claw.android.octopus_mobile.browser.EngineEvent
 import com.apk.claw.android.tool.ToolRegistry
 import com.apk.claw.android.ui.compose.screen.ChatScreen
+import com.apk.claw.android.utils.KVUtils
 import com.apk.claw.android.ui.compose.theme.OctopusBackground
 import com.apk.claw.android.ui.compose.theme.OctopusColors
 import com.apk.claw.android.ui.compose.theme.OctopusTheme
@@ -88,6 +90,8 @@ class DesktopActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // 常亮:桌面模式面向支起来/投显示器的场景,前台时不熄屏(离开 Activity 自动解除)
+        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         val eng = BrowserEngineFactory.selectBest(this)
         engine = eng
         // 注册为当前浏览器引擎:此后 Agent 的 browser_* 工具作用到桌面这块 WebView。
@@ -301,8 +305,34 @@ private fun DesktopWallpaper(modifier: Modifier = Modifier) {
                 "Agent 桌面 · 空闲中,在右侧对话下达指令",
                 color = OctopusColors.TextMuted, fontSize = 12.sp,
             )
+            Spacer(Modifier.height(6.dp))
+            DefaultLaunchToggle()
         }
     }
+}
+
+/** 「启动直达桌面模式」开关(专用设备用):写 KVUtils,SplashActivity 据此在登录后直接进桌面。 */
+@Composable
+private fun DefaultLaunchToggle() {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var pinned by remember { mutableStateOf(KVUtils.isDesktopModeDefault()) }
+    Text(
+        text = if (pinned) "★ 已设为启动直达" else "☆ 设为启动直达桌面",
+        color = if (pinned) OctopusColors.Primary else OctopusColors.TextMuted,
+        fontSize = 11.sp,
+        modifier = Modifier
+            .clip(CircleShape)
+            .clickable {
+                pinned = !pinned
+                KVUtils.setDesktopModeDefault(pinned)
+                android.widget.Toast.makeText(
+                    ctx,
+                    if (pinned) "开机将直接进入桌面模式" else "已取消开机直达",
+                    android.widget.Toast.LENGTH_SHORT,
+                ).show()
+            }
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+    )
 }
 
 @Composable
