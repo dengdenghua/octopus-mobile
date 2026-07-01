@@ -200,19 +200,20 @@ class DefaultAgentService : AgentService {
             return false
         }
 
+        var scaledBitmap: Bitmap? = null  // 缩放产物(需在 finally 回收);null=未缩放
         try {
             // 2. 缩放并压缩为 JPEG base64
-            var scaledBitmap = bitmap
             if (bitmap.width > VISION_MAX_WIDTH) {
                 val scale = VISION_MAX_WIDTH.toFloat() / bitmap.width
                 val newHeight = Math.round(bitmap.height * scale)
                 scaledBitmap = Bitmap.createScaledBitmap(bitmap, VISION_MAX_WIDTH, newHeight, true)
-                if (scaledBitmap !== bitmap) bitmap.recycle()
+                // 原图不再需要,立即回收释放内存;后续只用 scaledBitmap
+                bitmap.recycle()
             }
 
+            val compressTarget = scaledBitmap ?: bitmap
             val baos = ByteArrayOutputStream()
-            scaledBitmap.compress(Bitmap.CompressFormat.JPEG, VISION_JPEG_QUALITY, baos)
-            if (scaledBitmap !== bitmap) scaledBitmap.recycle()
+            compressTarget.compress(Bitmap.CompressFormat.JPEG, VISION_JPEG_QUALITY, baos)
             val base64Str = Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
 
             // 3. 构建包含图片的 UserMessage，让 LLM 分析弹窗
@@ -301,8 +302,12 @@ class DefaultAgentService : AgentService {
 
         } catch (e: Exception) {
             XLog.e(TAG, "Error during VLM analysis", e)
-            if (!bitmap.isRecycled) bitmap.recycle()
             return false
+        } finally {
+            // 回收缩放产物(若产生了);若未缩放,bitmap 在这里统一回收。
+            // 修复:原实现 no-scale 成功路径不回收 bitmap,且 scale 路径异常会泄漏 scaledBitmap。
+            if (scaledBitmap != null && !scaledBitmap!!.isRecycled) scaledBitmap!!.recycle()
+            if (!bitmap.isRecycled) bitmap.recycle()
         }
     }
 

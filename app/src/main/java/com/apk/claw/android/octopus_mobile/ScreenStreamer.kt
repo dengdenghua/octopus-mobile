@@ -51,10 +51,6 @@ class ScreenStreamer(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var sendJob: Job? = null
 
-    /** 待发送的屏幕变化事件 */
-    @Volatile
-    private var pendingEvent: AccessibilityEvent? = null
-
     /**
      * 启动屏幕流.
      */
@@ -71,6 +67,9 @@ class ScreenStreamer(
         running = false
         sendJob?.cancel()
         sendJob = null
+        // 取消整个协程作用域,释放 SupervisorJob + IO 线程;否则 stop 后 scope 仍存活,
+        // flushNow 等仍可调度新协程到已"停止"的 streamer 上。
+        scope.cancel()
         Log.i(tag, "ScreenStreamer stopped")
     }
 
@@ -85,7 +84,6 @@ class ScreenStreamer(
             AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED,
             AccessibilityEvent.TYPE_VIEW_SCROLLED,
             AccessibilityEvent.TYPE_VIEW_CLICKED -> {
-                pendingEvent = event
                 scheduleSend()
             }
         }

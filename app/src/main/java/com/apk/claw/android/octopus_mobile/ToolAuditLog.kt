@@ -40,6 +40,7 @@ object ToolAuditLog {
         val tampered: Boolean = false,
     )
 
+    @Synchronized
     fun record(entry: Entry) {
         runCatching {
             val list = rawEntries().toMutableList()

@@ -338,6 +338,17 @@ class BrowserActivity : BaseActivity() {
         }
     }
 
+    override fun onPause() {
+        super.onPause()
+        // 后台时暂停 WebView 的 JS 定时器 / 网络 / 音频 / GPU 合成,避免持续占电。
+        engine.onPause()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        engine.onResume()
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         engine.destroy()
@@ -1448,12 +1459,18 @@ class BrowserActivity : BaseActivity() {
         val bookmarks = bookmarkManager.getAll()
         val currentUrl = engine.currentUrl()
         val isBookmarked = bookmarkManager.isBookmarked(currentUrl)
+        val isCommonSite = CommonSiteStore.contains(currentUrl)
 
         val items = mutableListOf<String>()
         if (isBookmarked) {
             items.add(getString(R.string.browser_remove_bookmark))
         } else {
             items.add(getString(R.string.browser_bookmark_current))
+        }
+        if (isCommonSite) {
+            items.add(getString(R.string.browser_remove_common_site))
+        } else {
+            items.add(getString(R.string.browser_add_common_site))
         }
         items.add(getString(R.string.browser_saved_bookmarks_header))
         bookmarks.forEach { items.add("${it.title}\n${it.url}") }
@@ -1471,8 +1488,17 @@ class BrowserActivity : BaseActivity() {
                             Toast.makeText(this, getString(R.string.browser_bookmarked), Toast.LENGTH_SHORT).show()
                         }
                     }
-                    which > 1 -> {
-                        val bookmark = bookmarks[which - 2]
+                    which == 1 -> {
+                        if (isCommonSite) {
+                            CommonSiteStore.remove(currentUrl)
+                            Toast.makeText(this, getString(R.string.browser_home_removed_toast), Toast.LENGTH_SHORT).show()
+                        } else {
+                            CommonSiteStore.add(currentUrl, etUrl.text.toString().ifEmpty { currentUrl })
+                            Toast.makeText(this, getString(R.string.browser_common_site_added), Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    which > 2 -> {
+                        val bookmark = bookmarks[which - 3]
                         navigateTo(bookmark.url)
                     }
                 }

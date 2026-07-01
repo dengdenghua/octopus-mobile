@@ -29,6 +29,7 @@ object ToolRegistry {
     var deviceType: DeviceType = DeviceType.TV
         private set
 
+    @Volatile
     private var browserEngine: com.apk.claw.android.octopus_mobile.browser.BrowserEngine? = null
 
     /** 工具调用护栏（重复失败 / 无进展检测） */

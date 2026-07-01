@@ -228,6 +228,17 @@ class SystemWebViewEngine : BrowserEngine {
         }
     }
 
+    override fun onPause() {
+        // 暂停 WebView 的 JS 定时器 / 网络 / 视频 / 音频 / GPU 合成,
+        // 防止 Activity 后台时仍占 CPU/电量(桌面模式常驻场景尤其重要)。
+        activeWebView?.onPause()
+    }
+
+    override fun onResume() {
+        // 恢复 WebView,与 onPause 配对。
+        activeWebView?.onResume()
+    }
+
     override fun isAvailable(): Boolean = true
 
     // 注入 stealth 反检测脚本后,"是否 WebView/headless"类检测基本被打穿,反爬 50→70。

@@ -141,7 +141,7 @@ fun DiscoverScreen(onOpenUrl: ((String?) -> Unit)? = null) {
     }
     val miniApps = remember(refreshTick) { MiniAppRegistry.all() }
     val bookmarks = remember(refreshTick) { BookmarkManager().getAll() }
-    val commonSites = remember(refreshTick) { CommonSiteStore().getAll() }
+    val commonSites = remember(refreshTick) { CommonSiteStore.getAll() }
     var siteToDelete by remember { mutableStateOf<CommonSiteItem?>(null) }
 
     LazyColumn(
@@ -204,7 +204,7 @@ fun DiscoverScreen(onOpenUrl: ((String?) -> Unit)? = null) {
             text = { Text(site.title.ifBlank { site.url }) },
             confirmButton = {
                 TextButton(onClick = {
-                    CommonSiteStore().remove(site.url)
+                    CommonSiteStore.remove(site.url)
                     siteToDelete = null
                     Toast.makeText(context, context.getString(R.string.browser_home_removed_toast), Toast.LENGTH_SHORT).show()
                     refreshTick++
@@ -474,7 +474,8 @@ private fun SearchOptionIcon(option: BrowserSearchOption, modifier: Modifier = M
     }
 }
 
-/** 三个聚合小节共用的单个格子：图标 + 主标题 + 副标题。 */
+/** 三个聚合小节共用的单个格子：图标 + 主标题 + 副标题。onLongClick 非空时才支持长按（目前只有常用网站需要长按删除）。 */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun HomeTile(
     label: String,

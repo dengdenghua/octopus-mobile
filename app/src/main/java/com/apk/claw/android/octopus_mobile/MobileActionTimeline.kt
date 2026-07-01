@@ -66,7 +66,9 @@ object MobileActionTimeline {
         hasImage: Boolean = false,
         hasHtml: Boolean = false,
     ) {
-        runCatching {
+        // @Synchronized:防并发工具执行时 read-modify-write 竞态导致丢条目/链断裂。
+        synchronized(MobileActionTimeline::class.java) {
+            runCatching {
             val risk = ToolRiskPolicy.riskOf(toolName)
             val sanitizedResult = ToolRiskPolicy.summarizeResult(resultText, MAX_FIELD_CHARS)
             val entry = Entry(
@@ -87,6 +89,7 @@ object MobileActionTimeline {
             val list = all().toMutableList()
             list.add(0, entry)
             KVUtils.putString(KEY, gson.toJson(list.take(MAX_KEEP)))
+        }
         }
     }
 

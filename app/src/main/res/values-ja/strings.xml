@@ -415,6 +415,9 @@
     <string name="browser_download_notification">ダウンロード: %1$s</string>
     <string name="browser_remove_bookmark">ブックマークを削除</string>
     <string name="browser_bookmark_current">☆ 現在のページをブックマーク</string>
+    <string name="browser_add_common_site">＋ ホームのよく使うサイトに追加</string>
+    <string name="browser_remove_common_site">よく使うサイトから削除</string>
+    <string name="browser_common_site_added">よく使うサイトに追加しました</string>
     <string name="browser_saved_bookmarks_header">── 保存済みブックマーク ──</string>
     <string name="browser_bookmark_removed">ブックマークを削除しました</string>
     <string name="browser_bookmarked">ブックマークしました</string>

@@ -91,6 +91,14 @@ interface BrowserEngine {
      * Activity/Fragment 销毁时必须调用以避免内存泄漏。
      */
     fun destroy() {}
+
+    // ==================== 生命周期 ====================
+    // 引擎持有 WebView,Activity 需在 onPause/onResume 转发,避免后台时 JS 定时器/
+    // 网络/音频/GPU 合成继续跑(尤其桌面模式常驻 + KEEP_SCREEN_ON 场景)。
+    /** 宿主 Activity onPause 时调用:暂停 WebView 的 JS 定时器、网络、渲染。 */
+    fun onPause() {}
+    /** 宿主 Activity onResume 时调用:恢复 WebView。 */
+    fun onResume() {}
 }
 
 /**

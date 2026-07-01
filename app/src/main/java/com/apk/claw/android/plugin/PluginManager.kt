@@ -7,6 +7,7 @@ import com.apk.claw.android.octopus_mobile.safety.SafetyGate
 import com.apk.claw.android.registry.PluginRegistryStore
 import com.apk.claw.android.tool.ToolRegistry
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * 插件管理器 —— 发现、加载、卸载插件。
@@ -31,11 +32,11 @@ class PluginManager(private val context: Context) {
 
     private val loader = PluginLoader(context)
 
-    /** 已发现的所有插件（含未加载的） */
-    private val discoveredPlugins = mutableMapOf<String, PluginInfo>()
+    /** 已发现的所有插件（含未加载的）。ConcurrentHashMap:discover/load 可能与查询并发。 */
+    private val discoveredPlugins = ConcurrentHashMap<String, PluginInfo>()
 
     /** 已加载的插件 */
-    private val loadedPlugins = mutableMapOf<String, PluginInfo>()
+    private val loadedPlugins = ConcurrentHashMap<String, PluginInfo>()
 
     /**
      * 发现所有可用插件（扫描 assets + filesDir）。

@@ -26,7 +26,12 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.DesktopWindows
+import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.filled.Forum
+import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -62,7 +67,11 @@ import com.apk.claw.android.octopus_mobile.browser.BrowserEngine
 import com.apk.claw.android.octopus_mobile.browser.BrowserEngineFactory
 import com.apk.claw.android.octopus_mobile.browser.EngineEvent
 import com.apk.claw.android.tool.ToolRegistry
+import com.apk.claw.android.plugin.MiniAppRegistry
+import com.apk.claw.android.ui.compose.screen.AgentSquareScreen
 import com.apk.claw.android.ui.compose.screen.ChatScreen
+import com.apk.claw.android.ui.compose.screen.DiscoverScreen
+import com.apk.claw.android.ui.featurescreens.MiniAppListActivity
 import com.apk.claw.android.utils.KVUtils
 import com.apk.claw.android.ui.compose.theme.OctopusBackground
 import com.apk.claw.android.ui.compose.theme.OctopusColors
@@ -104,6 +113,17 @@ class DesktopActivity : AppCompatActivity() {
                 DesktopWorkspace(eng)
             }
         }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        // 桌面模式常驻 + KEEP_SCREEN_ON,后台时尤其需要暂停 WebView 的 JS 定时器 / 网络 / 音频。
+        engine?.onPause()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        engine?.onResume()
     }
 
     override fun onDestroy() {
@@ -150,35 +170,85 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
     var chatExpanded by rememberSaveable { mutableStateOf(true) }
     val chatWidth by animateDpAsState(if (chatExpanded) 340.dp else 0.dp, label = "chatWidth")
 
-    Box(Modifier.fillMaxSize().background(OctopusColors.Background)) {
-        Row(Modifier.fillMaxSize()) {
+    // 桌面内容宿主:左侧工作区在 浏览器 / 发现 / 广场 间切换;底部 Dock 摆图标(含小程序)
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var content by remember { mutableStateOf(DeskContent.Web) }
+
+    // HUD 遥测:母体连接态 + 走秒时钟(等宽,科幻直播条用)
+    val connState by appViewModel.connectionState.collectAsState()
+    val connColor = when (connState) {
+        ConnectionState.ONLINE -> Holo.Accent
+        ConnectionState.CONNECTING, ConnectionState.CONNECTED,
+        ConnectionState.HELLO_SENT, ConnectionState.RECONNECTING -> Color(0xFFFFC24D)
+        else -> Holo.AccentDim
+    }
+    val connLabel = when (connState) {
+        ConnectionState.ONLINE -> "LINK OK"
+        ConnectionState.CONNECTING, ConnectionState.CONNECTED,
+        ConnectionState.HELLO_SENT, ConnectionState.RECONNECTING -> "LINK…"
+        else -> "NO LINK"
+    }
+    var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) { while (true) { nowMs = System.currentTimeMillis(); delay(1000) } }
+    val hudClock = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }.format(Date(nowMs))
+    val webLive = content == DeskContent.Web && currentUrl.isNotBlank() && currentUrl != "about:blank"
+
+    // 全屏科幻壁纸打底,面板悬浮其上(带留白 = 全息漂浮感)
+    Box(Modifier.fillMaxSize()) {
+        HoloBackground(Modifier.fillMaxSize())
+        Row(Modifier.fillMaxSize().padding(10.dp)) {
+            // 左:玻璃「直播间」—— 顶部 HUD 条 + 内容区(浏览器/发现/广场)+ Dock
             Box(Modifier.weight(1f).fillMaxHeight()) {
-                DesktopMonitor(
-                    engine = engine,
-                    currentUrl = currentUrl,
-                    pageTitle = pageTitle,
-                    loading = loading,
-                    progress = progress,
-                    onNavigate = { currentUrl = it; pageTitle = "" },
-                )
-            }
-            if (chatWidth > 0.dp) {
-                Box(Modifier.width(1.dp).fillMaxHeight().background(OctopusColors.Border))
-            }
-            // ChatScreen 常驻组合,只动宽度 → 收起再展开不丢对话/输入/运行状态
-            Box(Modifier.width(chatWidth).fillMaxHeight().clipToBounds()) {
-                Column(Modifier.fillMaxSize()) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().height(30.dp)
-                            .background(OctopusColors.Surface).padding(start = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text("对话", color = OctopusColors.TextMuted, fontSize = 12.sp, modifier = Modifier.weight(1f))
-                        IconButton(onClick = { chatExpanded = false }, modifier = Modifier.size(30.dp)) {
-                            Icon(Icons.Filled.ChevronRight, contentDescription = "收起对话", tint = OctopusColors.TextMuted, modifier = Modifier.size(18.dp))
+                Column(Modifier.fillMaxSize().holoGlass(16.dp)) {
+                    HudStrip(
+                        urlOrIdle = if (webLive) currentUrl else "本地虚拟电脑 · 待命",
+                        live = loading || webLive,
+                        connLabel = connLabel,
+                        connColor = connColor,
+                        timeText = hudClock,
+                    )
+                    Box(Modifier.weight(1f).clipToBounds()) {
+                        when (content) {
+                            DeskContent.Web -> DesktopMonitor(
+                                engine = engine,
+                                currentUrl = currentUrl,
+                                pageTitle = pageTitle,
+                                loading = loading,
+                                progress = progress,
+                                onNavigate = { currentUrl = it; pageTitle = "" },
+                            )
+                            // 发现页里点网站 → 切回浏览器并在桌面里打开(内容留在桌面,不跳走)
+                            DeskContent.Discover -> DiscoverScreen(onOpenUrl = { url ->
+                                content = DeskContent.Web
+                                url?.let { engine.navigate(normalizeUrl(it)) }
+                            })
+                            DeskContent.Square -> AgentSquareScreen(onBack = { content = DeskContent.Web })
                         }
                     }
-                    Box(Modifier.weight(1f)) { ChatScreen() }
+                    DesktopDock(
+                        active = content,
+                        onSelect = { content = it },
+                        onLaunchMiniApp = { id -> MiniAppRegistry.launch(ctx, id) },
+                        onAllApps = { runCatching { ctx.startActivity(android.content.Intent(ctx, MiniAppListActivity::class.java)) } },
+                    )
+                }
+            }
+            if (chatWidth > 0.dp) Spacer(Modifier.width(10.dp))
+            // 右:悬浮玻璃对话面板(透过面板边缘可见壁纸)
+            Box(Modifier.width(chatWidth).fillMaxHeight().clipToBounds()) {
+                if (chatWidth > 0.dp) {
+                    Column(Modifier.fillMaxSize().holoGlass(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().height(30.dp).padding(start = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text("AGENT", color = Holo.Accent, fontSize = 11.sp, modifier = Modifier.weight(1f))
+                            IconButton(onClick = { chatExpanded = false }, modifier = Modifier.size(30.dp)) {
+                                Icon(Icons.Filled.ChevronRight, contentDescription = "收起对话", tint = Holo.TextHud, modifier = Modifier.size(18.dp))
+                            }
+                        }
+                        Box(Modifier.weight(1f)) { ChatScreen() }
+                    }
                 }
             }
         }
@@ -186,10 +256,10 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
         if (!chatExpanded) {
             FloatingActionButton(
                 onClick = { chatExpanded = true },
-                containerColor = OctopusColors.Primary,
+                containerColor = Holo.Accent,
                 modifier = Modifier.align(Alignment.BottomEnd).padding(24.dp),
             ) {
-                Icon(Icons.Filled.ChatBubbleOutline, contentDescription = "展开对话", tint = Color.White)
+                Icon(Icons.Filled.ChatBubbleOutline, contentDescription = "展开对话", tint = Color(0xFF05131A))
             }
         }
     }
@@ -345,6 +415,70 @@ private fun DefaultLaunchToggle() {
 @Composable
 private fun Dot(color: Color) {
     Box(Modifier.size(8.dp).clip(CircleShape).background(color))
+}
+
+/** 桌面左侧内容区可展示的东西。 */
+private enum class DeskContent { Web, Discover, Square }
+
+/**
+ * 桌面底部 Dock(macOS 风):浏览器 / 发现 / 广场 + 已安装小程序 + 全部小程序。
+ * 浏览器/发现/广场在桌面内容区内切换;小程序点击启动([MiniAppActivity])。
+ */
+@Composable
+private fun DesktopDock(
+    active: DeskContent,
+    onSelect: (DeskContent) -> Unit,
+    onLaunchMiniApp: (String) -> Unit,
+    onAllApps: () -> Unit,
+) {
+    val miniApps = remember { MiniAppRegistry.all() }
+    Row(
+        modifier = Modifier.fillMaxWidth()
+            .background(Holo.Glass.copy(alpha = 0.5f))
+            .padding(horizontal = 8.dp, vertical = 5.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        DockItem(Icons.Filled.Language, "浏览器", active == DeskContent.Web) { onSelect(DeskContent.Web) }
+        DockItem(Icons.Filled.Explore, "发现", active == DeskContent.Discover) { onSelect(DeskContent.Discover) }
+        DockItem(Icons.Filled.Forum, "广场", active == DeskContent.Square) { onSelect(DeskContent.Square) }
+        if (miniApps.isNotEmpty()) {
+            Box(Modifier.size(width = 1.dp, height = 26.dp).background(Holo.BorderDim))
+        }
+        miniApps.take(8).forEach { m ->
+            DockItem(Icons.Filled.Apps, m.name.ifBlank { m.id }, false) { onLaunchMiniApp(m.id) }
+        }
+        DockItem(Icons.Filled.GridView, "全部", false, onAllApps)
+    }
+}
+
+@Composable
+private fun DockItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    active: Boolean,
+    onClick: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 3.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Icon(
+            icon,
+            contentDescription = label,
+            tint = if (active) Holo.Accent else Holo.TextHud.copy(alpha = 0.65f),
+            modifier = Modifier.size(22.dp),
+        )
+        Text(
+            label,
+            color = if (active) Holo.Accent else Holo.TextHud.copy(alpha = 0.55f),
+            fontSize = 9.sp,
+            maxLines = 1,
+        )
+    }
 }
 
 /** 从 URL 取 host 作「正在打开 X」的 X;取不到就退回原串。 */

@@ -523,6 +523,9 @@ Shizuku 是安全、开源的本地辅助工具。</string>
     <string name="browser_download_notification">下载：%1$s</string>
     <string name="browser_remove_bookmark">移除书签</string>
     <string name="browser_bookmark_current">☆ 收藏当前页面</string>
+    <string name="browser_add_common_site">＋ 添加到主页常用</string>
+    <string name="browser_remove_common_site">从主页常用移除</string>
+    <string name="browser_common_site_added">已添加到主页常用</string>
     <string name="browser_saved_bookmarks_header">── 已保存书签 ──</string>
     <string name="browser_bookmark_removed">书签已移除</string>
     <string name="browser_bookmarked">已收藏</string>
