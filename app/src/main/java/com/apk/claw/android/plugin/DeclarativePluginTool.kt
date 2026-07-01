@@ -1,10 +1,12 @@
 package com.apk.claw.android.plugin
 
+import com.apk.claw.android.octopus_mobile.safety.SsrfSafeHttp
 import com.apk.claw.android.tool.BaseTool
 import com.apk.claw.android.tool.ToolParameter
 import com.apk.claw.android.tool.ToolResult
 import com.apk.claw.android.utils.OctoHttp
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.net.URLEncoder
@@ -19,6 +21,15 @@ import java.net.URLEncoder
  * 风险:未知工具名在 ToolRiskPolicy 默认 RISK_LOW;HTTP 已被声明+授予的 host 限定,可接受。
  */
 class DeclarativePluginTool(private val manifest: PluginManifest) : BaseTool() {
+
+    companion object {
+        // 禁用自动重定向:allowHost 只校验首跳,若跟随 302 到内网/元数据即 SSRF。
+        // 改由 SsrfSafeHttp 逐跳过 UrlGuard + 手动重定向,并对每一跳重跑 allowHost。
+        private val NO_REDIRECT_CLIENT: OkHttpClient = OctoHttp.shared.newBuilder()
+            .followRedirects(false)
+            .followSslRedirects(false)
+            .build()
+    }
 
     override fun getName(): String = manifest.toolName.ifBlank { "plugin_${manifest.id}" }
     override fun getDisplayName(): String = manifest.name.ifBlank { getName() }
@@ -45,11 +56,17 @@ class DeclarativePluginTool(private val manifest: PluginManifest) : BaseTool() {
                 val mt = (recipe.headers["Content-Type"] ?: "application/json").toMediaTypeOrNull()
                 builder.method(method, bodyStr.toRequestBody(mt))
             }
-            OctoHttp.shared.newCall(builder.build()).execute().use { resp ->
+            // 安全(SSRF):禁用自动重定向,逐跳过 UrlGuard(拒内网/回环/元数据)+ 逐跳重跑
+            // manifest allowHost(重定向目标也必须在声明域内),防 302→内网/越域。
+            SsrfSafeHttp.execute(NO_REDIRECT_CLIENT, builder.build()) { hopUrl ->
+                PermissionGate.allowHost(manifest, hopUrl)
+            }.use { resp ->
                 val body = resp.body?.string().orEmpty()
                 if (resp.isSuccessful) ToolResult.success(body.ifBlank { "OK (${resp.code})" })
                 else ToolResult.error("HTTP ${resp.code}: ${body.take(300)}")
             }
+        } catch (e: SecurityException) {
+            ToolResult.error("plugin tool blocked: ${e.message}")
         } catch (e: Exception) {
             ToolResult.error("plugin tool request failed: ${e.message}")
         }

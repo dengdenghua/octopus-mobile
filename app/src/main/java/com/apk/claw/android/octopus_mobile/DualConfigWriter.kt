@@ -82,11 +82,16 @@ class DualConfigWriter(
         "KEY_REMOTE_HIGH_RISK_ALLOWED",
         "KEY_ADVANCED_AUTOMATION_MODE",
         "KEY_DISABLED_TOOLS",
+        // 代码执行沙箱工作空间 —— 远程改成 "/" 会把脚本沙箱文件白名单放大到任意路径,
+        // 使 run_code 的 readFile/writeFile 越权读写 app 私有目录(见安全审计 config-sync 投毒)。
+        "KEY_SCRIPT_WORKSPACE",
     )
 
     private val SYNC_BLOCKED_SUBSTRINGS = listOf(
         "TOKEN", "SECRET", "API_KEY", "APIKEY", "PASSWORD", "PASSWD", "PWD",
         "CREDENTIAL", "PRIVATE_KEY", "AUTH", "_URL", "BASE_URL",
+        // 影响文件路径/沙箱边界的 key 一律不许远程改写(防护纵深)
+        "WORKSPACE", "SANDBOX",
     )
 
     init {

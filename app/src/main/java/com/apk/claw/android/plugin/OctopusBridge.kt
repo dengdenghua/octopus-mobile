@@ -9,6 +9,7 @@ import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 import java.lang.ref.WeakReference
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -37,7 +38,10 @@ class OctopusBridge(
             val o = JSONObject(argsJson ?: "{}")
             o.keys().asSequence().associateWith { o.get(it) }
         }.getOrElse { emptyMap() }
-        val r = ToolRegistry.executeTool(name, args)
+        // 安全(来源闸门):小程序页面是 registry 下载的不可信内容(manifest 仅字节完整性校验,
+        // allow_tools 由发布者控制),必须标记为不可信来源,让高危工具走审批/BLOCK 闸门,
+        // 与 WS/MCP/agent 等所有其它不可信入口一致(见 ToolRegistry.needsSourceGate)。
+        val r = ToolRegistry.withUntrustedSource { ToolRegistry.executeTool(name, args) }
         return if (r.isSuccess) ok(r.data ?: "") else err(r.error ?: "tool failed")
     }
 
@@ -69,6 +73,8 @@ class OctopusBridge(
         val confirmed = AtomicBoolean(false)
         val latch = CountDownLatch(1)
         activity.runOnUiThread {
+            // Activity 已在销毁中则不再弹窗,直接放行 latch(视为取消),避免泄漏 JS 桥线程
+            if (activity.isFinishing || activity.isDestroyed) { latch.countDown(); return@runOnUiThread }
             AlertDialog.Builder(activity)
                 .setTitle("${manifest.name} 请求支付")
                 .setMessage("「$description」\n扣除 $credits 积分")
@@ -77,7 +83,9 @@ class OctopusBridge(
                 .setOnCancelListener { latch.countDown() }
                 .show()
         }
-        latch.await()
+        // 有超时上限:用户长时间不响应(或 Activity 被杀导致弹窗未展示)时,不无限阻塞 JS 桥线程
+        val responded = latch.await(PAY_CONFIRM_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+        if (!responded) return err("支付确认超时")
         if (!confirmed.get()) return err("用户取消支付")
 
         val result = runBlocking {
@@ -100,7 +108,9 @@ class OctopusBridge(
             val o = JSONObject(argsJson ?: "{}")
             o.keys().asSequence().associateWith { o.get(it) }
         }.getOrElse { emptyMap() }
-        val r = ToolRegistry.executeTool(cap, args)
+        // 安全(来源闸门):一次性授予的设备能力若映射到高危工具名(cap 即工具名),仍须逐次过
+        // 高危来源闸门(不可信内容驱动),不能因一次授予就跳过审批。见 callTool 注释。
+        val r = ToolRegistry.withUntrustedSource { ToolRegistry.executeTool(cap, args) }
         return if (r.isSuccess) ok(r.data ?: "") else err(r.error ?: "device tool failed")
     }
 
@@ -108,6 +118,9 @@ class OctopusBridge(
     private fun err(msg: String) = JSONObject().put("ok", false).put("error", msg).toString()
 
     companion object {
+        /** pay() 等待用户确认的上限,超时视为取消,避免无限阻塞 WebView JS 桥线程。 */
+        private const val PAY_CONFIRM_TIMEOUT_MS = 60_000L
+
         /** 注入页面的 `window.octopus` shim:把同步桥包成易用 API(返回已解析对象)。 */
         const val SHIM_JS = """
 (function () {

@@ -88,4 +88,27 @@ class UrlGuardTest {
     fun `malformed url blocked`() {
         assertFalse(UrlGuard.isSafeUrl("not a url"))
     }
+
+    // ── SSRF 回归:IPv4-mapped / compat IPv6 字面量不得绕过私网判定 ──
+
+    @Test
+    fun `blocks ipv4-mapped ipv6 loopback`() {
+        assertFalse(UrlGuard.isSafeUrl("http://[::ffff:127.0.0.1]/"))
+    }
+
+    @Test
+    fun `blocks ipv4-mapped ipv6 metadata`() {
+        // AWS 元数据端点经 IPv4-mapped IPv6 包装
+        assertFalse(UrlGuard.isSafeUrl("http://[::ffff:169.254.169.254]/latest/meta-data/"))
+    }
+
+    @Test
+    fun `blocks ipv4-mapped ipv6 private`() {
+        assertFalse(UrlGuard.isSafeUrl("http://[::ffff:192.168.1.1]/"))
+    }
+
+    @Test
+    fun `blocks ipv6 loopback literal`() {
+        assertFalse(UrlGuard.isSafeUrl("http://[::1]/"))
+    }
 }

@@ -197,14 +197,22 @@ object PathGuard {
             }
         }
 
-        // Android 特有敏感路径
+        // Android 特有敏感路径:系统配置与凭据目录,文件工具不应触碰。
+        // 注:不做 "/data/data/" 全量拦截 —— 无 Context 无法在此放行本 App 自身的
+        // /data/data/<pkg>,盲目拦截会误伤对自身私有目录的正常访问;跨 App 目录读取的
+        // 收口交由上层来源闸门 + 权限门。这里只拦明确的系统/凭据目录。
         val androidSensitive = listOf(
-            "/data/data/",     // 其他 App 私有目录（不是自己的）
             "/data/system/",
-            "/system/",
+            "/data/misc/",
+            "/system/etc/",
+            "/proc/",
+            "/sys/fs/",
         )
-        // 允许自己的 data 目录
-        // (这个检查在 Android 上比较复杂，暂时只做基本检查)
+        for (prefix in androidSensitive) {
+            if (normalized.startsWith(prefix) || normalizedRaw.startsWith(prefix)) {
+                return "sensitive_android_path: $prefix"
+            }
+        }
 
         return null
     }

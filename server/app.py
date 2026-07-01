@@ -90,6 +90,9 @@ CREDITS_PER_1K_TOKENS = float(os.environ.get("CREDITS_PER_1K_TOKENS", "0.1"))
 # 单次输出 token 上限(成本 + 防跑飞双保险)。请求里更大的 max_tokens 会被压到此值;未指定也设成它。
 # 思考型模型别设太小(否则正文被 reasoning 吃光),默认 8192。
 MAX_OUTPUT_TOKENS = int(os.environ.get("MAX_OUTPUT_TOKENS", "8192"))
+# 单次请求允许的最大并行补全数(n)。防止客户端用 n/best_of 让上游按 n× 成本出多份补全,
+# 而预扣/扣费只按单份封顶 → 平台上游预算被 n× 放大(经济型 DoS)。best_of 一律丢弃。
+MAX_COMPLETIONS = int(os.environ.get("MAX_COMPLETIONS", "4"))
 # 生图/生视频(Agnes 增值,key 走 agnes provider):会员/白名单免费,非会员扣固定积分。
 # Agnes 对平台免费 → 扣多少都是高毛利。视频 Agnes 全账号限流 1/min,故再加每用户每日配额防独占。
 IMAGE_CREDITS = int(os.environ.get("IMAGE_CREDITS", "8"))            # 非会员每张图扣
@@ -2196,6 +2199,24 @@ def dev_plugin_delete(slug: str, u: sqlite3.Row = Depends(actor)) -> dict[str, A
     return {"success": True}
 
 
+# ─────────────────────────── 管理后台(/admin) ───────────────────────────
+# 注:admin_guard 必须定义在所有 @app 装饰的 admin 路由之前 —— Depends(admin_guard) 在
+# 函数定义(装饰器求值)时即被引用,若晚于路由定义会 NameError 导致整个模块无法 import。
+def admin_guard(request: Request, x_admin_token: str = Header(default="")) -> bool:
+    """管理鉴权:未设 ADMIN_TOKEN → 503(默认关闭);口令错 → 401。
+    可信来源 IP 限流防爆破 + 可选 IP 白名单 + 常数时间(字节)比较。"""
+    if not ADMIN_TOKEN:
+        raise HTTPException(status_code=503, detail="管理后台未启用(未设 ADMIN_TOKEN)")
+    ip = client_ip(request)
+    rate_limit(f"admin:{ip}", 120, 60)  # 同 IP 每分钟 120 次(基于不可伪造的可信 IP)
+    if ADMIN_IP_ALLOWLIST and ip not in ADMIN_IP_ALLOWLIST:
+        raise HTTPException(status_code=403, detail="forbidden")
+    # encode 成字节再比:compare_digest 对非 ASCII str 会抛 TypeError(→500),字节则恒定时间且不抛
+    if not hmac.compare_digest(x_admin_token.encode("utf-8"), ADMIN_TOKEN.encode("utf-8")):
+        raise HTTPException(status_code=401, detail="管理口令错误")
+    return True
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Admin — 插件审核
 # ══════════════════════════════════════════════════════════════════════════════
@@ -2256,8 +2277,9 @@ def admin_profit_timeseries(days: int = 30, _: bool = Depends(admin_guard)) -> d
     cutoff = now_ms() - days * 86_400_000
     with closing(db()) as c:
         rev_rows = c.execute(
-            "SELECT date(ts/1000,'unixepoch') d, SUM(amount_fen)/100.0 rev, COUNT(*) n "
-            "FROM orders WHERE status='PAID' AND ts>=? GROUP BY d", (cutoff,)
+            # orders 表无 ts 列,用 created_at(否则整条时序接口恒 500)
+            "SELECT date(created_at/1000,'unixepoch') d, SUM(amount_fen)/100.0 rev, COUNT(*) n "
+            "FROM orders WHERE status='PAID' AND created_at>=? GROUP BY d", (cutoff,)
         ).fetchall()
         usr_rows = c.execute(
             "SELECT date(created_at/1000,'unixepoch') d, COUNT(*) n "
@@ -2332,13 +2354,19 @@ async def chat_completions(body: dict[str, Any], request: Request, u: sqlite3.Ro
     req_max = body.get("max_tokens")
     max_out = min(req_max, MAX_OUTPUT_TOKENS) if isinstance(req_max, int) and req_max > 0 else MAX_OUTPUT_TOKENS
 
-    # ── 预扣(pre-auth reserve):按 worst-case(prompt 估算 + max_out)原子预留积分,不足→402;
+    # ── n(并行补全数)钳制:客户端可传 n>1 让上游按 n× 成本出多份补全,而预扣/扣费按单份封顶
+    # → 平台上游预算被 n× 放大。这里把 n 钳到 [1, MAX_COMPLETIONS] 并计入预扣(worst-case 输出=n×max_out);
+    # best_of 同样驱动上游多路采样计费,一律丢弃(见下方 payload 清洗)。
+    req_n = body.get("n")
+    n = min(req_n, MAX_COMPLETIONS) if isinstance(req_n, int) and req_n > 0 else 1
+
+    # ── 预扣(pre-auth reserve):按 worst-case(prompt 估算 + n×max_out)原子预留积分,不足→402;
     # 并发各自预扣,余额覆盖不了就被拒 → 杜绝超支;真实 usage 出来后结算多退少补。白名单 hold=0、不扣费。
     # 每日免费额度优先抵扣本次预扣,剩余部分才从余额扣。
     prompt_est = sum(
         len(str(m.get("content", ""))) for m in (body.get("messages") or []) if isinstance(m, dict)
     ) // 4
-    hold = 0 if unlimited else max(1, math.ceil((prompt_est + max_out) / 1000 * CREDITS_PER_1K_TOKENS * mult))
+    hold = 0 if unlimited else max(1, math.ceil((prompt_est + max_out * n) / 1000 * CREDITS_PER_1K_TOKENS * mult))
     reserved = {"gift": 0, "daily": 0, "paid": 0} if unlimited else _reserve_usage_credits(user_id, hold, ref_id=request_id)
     if reserved is None:
         raise HTTPException(status_code=402, detail="积分不足,请充值")
@@ -2364,6 +2392,8 @@ async def chat_completions(body: dict[str, Any], request: Request, u: sqlite3.Ro
         payload = dict(body)
         payload["model"] = model
         payload["max_tokens"] = max_out
+        payload["n"] = n              # 钳制后的并行补全数(计费与之对齐)
+        payload.pop("best_of", None)  # best_of 驱动上游多路采样计费,丢弃
         try:
             async with httpx.AsyncClient(timeout=120) as client:
                 resp = await client.post(url, headers=headers, json=payload)
@@ -2387,6 +2417,8 @@ async def chat_completions(body: dict[str, Any], request: Request, u: sqlite3.Ro
     payload = dict(body)
     payload["model"] = model
     payload["max_tokens"] = max_out
+    payload["n"] = n              # 钳制后的并行补全数(计费与之对齐)
+    payload.pop("best_of", None)  # best_of 驱动上游多路采样计费,丢弃
     payload["stream"] = True
     opts = payload.get("stream_options")
     payload["stream_options"] = {**opts, "include_usage": True} if isinstance(opts, dict) else {"include_usage": True}
@@ -2565,22 +2597,6 @@ async def video_poll(video_id: str, u: sqlite3.Row = Depends(actor)) -> Any:
         return JSONResponse(status_code=resp.status_code,
                             content={"error": {"message": "查询失败", "status": resp.status_code}})
     return JSONResponse(content=resp.json())
-
-
-# ─────────────────────────── 管理后台(/admin) ───────────────────────────
-def admin_guard(request: Request, x_admin_token: str = Header(default="")) -> bool:
-    """管理鉴权:未设 ADMIN_TOKEN → 503(默认关闭);口令错 → 401。
-    可信来源 IP 限流防爆破 + 可选 IP 白名单 + 常数时间(字节)比较。"""
-    if not ADMIN_TOKEN:
-        raise HTTPException(status_code=503, detail="管理后台未启用(未设 ADMIN_TOKEN)")
-    ip = client_ip(request)
-    rate_limit(f"admin:{ip}", 120, 60)  # 同 IP 每分钟 120 次(基于不可伪造的可信 IP)
-    if ADMIN_IP_ALLOWLIST and ip not in ADMIN_IP_ALLOWLIST:
-        raise HTTPException(status_code=403, detail="forbidden")
-    # encode 成字节再比:compare_digest 对非 ASCII str 会抛 TypeError(→500),字节则恒定时间且不抛
-    if not hmac.compare_digest(x_admin_token.encode("utf-8"), ADMIN_TOKEN.encode("utf-8")):
-        raise HTTPException(status_code=401, detail="管理口令错误")
-    return True
 
 
 def _admin_log(c: sqlite3.Connection, action: str, target_user: str, detail: str) -> None:

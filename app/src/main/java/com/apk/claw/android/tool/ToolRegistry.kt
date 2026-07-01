@@ -1,5 +1,6 @@
 package com.apk.claw.android.tool
 
+import android.util.Log
 import com.apk.claw.android.tool.impl.*
 import com.apk.claw.android.tool.impl.browser.*
 import com.apk.claw.android.tool.impl.mobile.*
@@ -211,9 +212,17 @@ object ToolRegistry {
 
     /**
      * 注册插件工具（带标记）。
+     *
+     * 安全:拒绝覆盖同名内置工具 —— 否则声明式/registry 插件可用同名工具劫持内置高危工具
+     * (如 file_ops/run_code)的实现或风险语义。仅允许覆盖已存在的「插件」工具(可更新)。
      */
     fun registerPluginTool(tool: BaseTool) {
         val name = tool.getName()
+        val existing = tools[name]
+        if (existing != null && name !in pluginTools) {
+            Log.w("ToolRegistry", "refuse to register plugin tool '$name': collides with built-in tool")
+            return
+        }
         tools[name] = tool
         pluginTools.add(name)
     }

@@ -17,6 +17,12 @@ class ScreenHandler : RouteHandler {
     private val screenCaptureManager = ScreenCaptureManager()
     private val mjpegStreamLock = Semaphore(2) // 限制 2 路并发 MJPEG
 
+    private companion object {
+        const val PIPE_BUFFER_BYTES = 512 * 1024   // 管道缓冲:容纳数帧,吸收客户端短暂抖动
+        const val STALL_TIMEOUT_MS = 10_000L       // 超过此时长无写进展 → 判客户端停读,回收该路
+        const val WATCHDOG_TICK_MS = 2_000L        // 看门狗巡检间隔
+    }
+
     override fun canHandle(uri: String, method: NanoHTTPD.Method): Boolean {
         if (method != NanoHTTPD.Method.GET) return false
         return when (uri) {
@@ -104,13 +110,15 @@ class ScreenHandler : RouteHandler {
         val boundary = "octopus_mjpeg_boundary"
         val contentType = "multipart/x-mixed-replace; boundary=$boundary"
 
-        val pipe = PipedInputStream()
+        val pipe = PipedInputStream(PIPE_BUFFER_BYTES)
         val pipeOut = PipedOutputStream(pipe)
 
         // 后台线程写帧
         val viewerSource = ctx.sourceOf(session)
         RemoteControlIndicator.onViewerStarted(viewerSource)
-        Thread({
+        // 最近一次成功写帧的时刻;看门狗据此判断客户端是否停读(写阻塞)。
+        val lastProgressMs = java.util.concurrent.atomic.AtomicLong(System.currentTimeMillis())
+        val writer = Thread({
             try {
                 while (!Thread.currentThread().isInterrupted) {
                     val jpeg = screenCaptureManager.captureScaledJpeg(maxWidth, quality)
@@ -121,11 +129,12 @@ class ScreenHandler : RouteHandler {
                         pipeOut.write(jpeg)
                         pipeOut.write("\r\n".toByteArray())
                         pipeOut.flush()
+                        lastProgressMs.set(System.currentTimeMillis())
                     }
                     Thread.sleep(frameIntervalMs)
                 }
             } catch (_: java.io.IOException) {
-                // 客户端断开
+                // 客户端断开 / 被看门狗中断(InterruptedIOException)
             } catch (_: InterruptedException) {
                 // 正常停止
             } finally {
@@ -133,10 +142,28 @@ class ScreenHandler : RouteHandler {
                 mjpegStreamLock.release()
                 RemoteControlIndicator.onViewerEnded(viewerSource)
             }
-        }, "MJPEG-Stream").apply {
-            isDaemon = true
-            start()
-        }
+        }, "MJPEG-Stream").apply { isDaemon = true }
+
+        // 卡死看门狗:客户端停读会让 PipedOutputStream.write 永久阻塞,写线程占住信号量许可
+        // 不释放 → 2 路占满后所有后续流恒 429。超过 STALL_TIMEOUT 无写进展则中断写线程
+        // (其阻塞在 Object.wait 上,interrupt 会抛 InterruptedIOException 解除)并关流。
+        val watchdog = Thread({
+            try {
+                while (writer.isAlive) {
+                    Thread.sleep(WATCHDOG_TICK_MS)
+                    if (System.currentTimeMillis() - lastProgressMs.get() > STALL_TIMEOUT_MS) {
+                        writer.interrupt()
+                        try { pipe.close() } catch (_: Exception) {}
+                        break
+                    }
+                }
+            } catch (_: InterruptedException) {
+                // 写线程已结束
+            }
+        }, "MJPEG-Watchdog").apply { isDaemon = true }
+
+        writer.start()
+        watchdog.start()
 
         val response = NanoHTTPD.newFixedLengthResponse(NanoHTTPD.Response.Status.OK, contentType, pipe, Long.MAX_VALUE)
         response.addHeader("Cache-Control", "no-cache, no-store")

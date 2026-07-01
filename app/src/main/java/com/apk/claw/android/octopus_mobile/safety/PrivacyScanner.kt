@@ -83,6 +83,14 @@ object PrivacyScanner {
             Regex("""\bsk-ant-[A-Za-z0-9_\-]{20,}"""),
             "Anthropic API key",
         ),
+        // 新式 OpenAI 密钥(sk-proj-… / sk-svcacct-… / sk-admin-…):body 含连字符,
+        // 通用 sk- 正则(字符类不含 '-')会在首个连字符处截断致 20+ 判定失败 → 漏检。
+        // 单列专门模式(排在通用 sk- 之前),避免放宽通用模式而误吞 sk-ant-(Anthropic)。
+        SecretPattern(
+            "PRIV-4",
+            Regex("""\bsk-(?:proj|svcacct|admin)-[A-Za-z0-9_-]{20,}"""),
+            "OpenAI API key",
+        ),
         // OpenAI / generic sk- API Key
         SecretPattern(
             "PRIV-4",

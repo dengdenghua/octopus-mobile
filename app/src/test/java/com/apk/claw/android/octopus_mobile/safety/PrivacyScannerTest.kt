@@ -34,6 +34,21 @@ class PrivacyScannerTest {
     }
 
     @Test
+    fun `scanSecrets detects modern openai project key`() {
+        // 新式 sk-proj-… 含连字符,旧通用 sk- 正则会漏检
+        val hits = PrivacyScanner.scanSecrets("key: sk-proj-AbCdEf12345_gHiJkLmNoPqR-stUv")
+        assertEquals(1, hits.size)
+        assertEquals("OpenAI API key", hits[0].description)
+    }
+
+    @Test
+    fun `scanSecrets detects openai service account key`() {
+        val hits = PrivacyScanner.scanSecrets("key: sk-svcacct-AbCdEf12345gHiJkLmNoPqRstUv")
+        assertEquals(1, hits.size)
+        assertEquals("OpenAI API key", hits[0].description)
+    }
+
+    @Test
     fun `scanSecrets ignores sk- followed by fewer than 20 chars`() {
         // sk- 后只有 19 个字母数字 → 不命中
         val hits = PrivacyScanner.scanSecrets("my key is sk-abc1234567890abcdef")

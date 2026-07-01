@@ -1,5 +1,6 @@
 package com.apk.claw.android.tool.impl
 
+import com.apk.claw.android.octopus_mobile.safety.SsrfSafeHttp
 import com.apk.claw.android.tool.ToolRegistry
 import com.apk.claw.android.tool.ToolResult
 import com.apk.claw.android.utils.KVUtils
@@ -18,7 +19,7 @@ import java.util.concurrent.TimeUnit
  *  - print(…) / console.log(…)   — 输出捕获，即工具返回值
  *  - readFile(path)               — 读文件，限 Download/Documents 目录
  *  - writeFile(path, content)     — 写文件，同上
- *  - fetch(url, options?)         — 同步 HTTP 请求，返回 {status, ok, body}
+ *  - fetch(url, options?)         — 同步 HTTP 请求(过 UrlGuard 防 SSRF)，返回 {status, ok, body}
  *  - callTool(name, params?)      — 调用已注册 Tool，返回 data 字符串或抛 JS 错误
  *
  * 安全模型:
@@ -31,9 +32,15 @@ class ScriptSandbox {
 
     companion object {
         private const val MAX_OUTPUT_CHARS = 65_536
+        // 禁用自动重定向:由 SsrfSafeHttp 逐跳 UrlGuard 校验后手动跟随,防 302→内网/元数据 SSRF。
+        // callTimeout 为整次调用(含所有重定向跳)的硬上限:指令观察器超时无法中断阻塞的 host
+        // 调用(fetch),这里给 fetch 一个绝对天花板,避免慢速滴流响应把脚本挂死超过 timeoutMs。
         private val HTTP = OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
+            .callTimeout(45, TimeUnit.SECONDS)
+            .followRedirects(false)
+            .followSslRedirects(false)
             .build()
 
         private val BASE_SAFE_PREFIXES = listOf(
@@ -43,14 +50,38 @@ class ScriptSandbox {
             "/storage/emulated/0/Documents/",
         )
 
-        private fun safePrefixes(): List<String> {
+        /**
+         * 危险的工作空间根:即便被写入 KEY_SCRIPT_WORKSPACE 也不接受为安全前缀。
+         * 防御纵深:配合 DualConfigWriter 的 config-sync 黑名单,双保险防止把沙箱白名单
+         * 放大到 "/"、/data、/sdcard 根等,导致越权读写 app 私有目录。
+         * (比较对象为 canonicalPath,/sdcard 会被解析为 /storage/emulated/0。)
+         */
+        private val FORBIDDEN_WORKSPACE_ROOTS = setOf(
+            "/", "/data", "/data/data", "/data/local", "/data/local/tmp",
+            "/system", "/sdcard", "/storage", "/storage/emulated", "/storage/emulated/0",
+        )
+
+        /** 返回经规范化 + 危险根拦截的工作空间前缀(带尾分隔符),不合法则 null。 */
+        private fun sanitizedWorkspacePrefix(): String? {
             val ws = KVUtils.getScriptWorkspace()
-            return if (ws.isNotBlank()) BASE_SAFE_PREFIXES + ws else BASE_SAFE_PREFIXES
+            if (ws.isBlank()) return null
+            val canon = try { File(ws).canonicalPath } catch (_: Exception) { return null }
+            if (canon in FORBIDDEN_WORKSPACE_ROOTS) return null
+            return if (canon.endsWith("/")) canon else "$canon/"
+        }
+
+        private fun safePrefixes(): List<String> {
+            val ws = sanitizedWorkspacePrefix()
+            return if (ws != null) BASE_SAFE_PREFIXES + ws else BASE_SAFE_PREFIXES
         }
 
         fun isSafePath(path: String): Boolean {
             val normalized = try { File(path).canonicalPath } catch (_: Exception) { return false }
-            return safePrefixes().any { normalized.startsWith(it) || normalized == it.trimEnd('/') }
+            return safePrefixes().any { prefix ->
+                // 前缀恒带尾分隔符 → startsWith 具备路径边界,避免 /a/Download 命中 /a/Download_evil
+                val p = if (prefix.endsWith("/")) prefix else "$prefix/"
+                normalized == p.trimEnd('/') || normalized.startsWith(p)
+            }
         }
     }
 
@@ -149,7 +180,11 @@ class ScriptSandbox {
                     else -> reqBuilder.get()
                 }
 
-                val resp = try { HTTP.newCall(reqBuilder.build()).execute() }
+                // 安全(SSRF):走 SsrfSafeHttp,对初始 URL 与每一跳重定向都过 UrlGuard,
+                // 拒绝 http(s) 以外协议、内网/回环/link-local/云元数据目标。沙箱脚本是
+                // Agent/远端生成的不可信代码,不能让它 fetch 到 127.0.0.1/169.254.169.254/内网。
+                val resp = try { SsrfSafeHttp.execute(HTTP, reqBuilder.build()) }
+                catch (e: SecurityException) { throw EvaluatorException("fetch blocked: ${e.message}") }
                 catch (e: Exception) { throw EvaluatorException("fetch: ${e.message}") }
 
                 val result = cx.newObject(scope)

@@ -174,8 +174,11 @@ class ScreenStreamer(
      * 构造树增量（简化版：把全树作为 added 字段，removed/changed 留空）.
      */
     private fun buildTreeDelta(tree: String): Map<String, Any?> {
+        // 安全(隐私):屏幕树文本会推送到远端 agent,可能含验证码/短信/手机号/邮箱/密钥。
+        // 与审计/日志路径一致,先过 SecretRedactor 脱敏(OTP 上下文触发、手机号、邮箱、Bearer/api_key 等)。
+        val safeTree = com.apk.claw.android.utils.SecretRedactor.redact(tree) ?: ""
         return mapOf(
-            "added" to listOf(mapOf("tree" to tree)),
+            "added" to listOf(mapOf("tree" to safeTree)),
             "removed" to emptyList<Any>(),
             "changed" to emptyList<Any>(),
         )

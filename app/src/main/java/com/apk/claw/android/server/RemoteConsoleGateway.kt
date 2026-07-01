@@ -173,6 +173,9 @@ object RemoteConsoleGateway {
 
     private fun performControl(action: String, msg: JsonObject): Boolean {
         val svc = ClawAccessibilityService.getInstance() ?: return false
+        // 远程控制台=不可信来源:每条指令都向用户浮标/审计上报"正被远程控制",
+        // 与 DeviceRouteHandler 的 LAN 控制口径一致(避免静默操控)。
+        RemoteControlIndicator.onControlInput("remote_console")
         return when (action) {
             "tap" -> svc.performTap(msg.int("x"), msg.int("y"))
             "swipe" -> svc.performSwipe(
@@ -182,7 +185,10 @@ object RemoteConsoleGateway {
             )
             "long_press" -> svc.performLongPress(msg.int("x"), msg.int("y"), msg.long("duration", 600L))
             "key" -> svc.sendKeyEvent(msg.int("keyCode"))
-            "text" -> ToolRegistry.executeTool("input_text", mapOf("text" to (msg.get("text")?.asString ?: ""))).isSuccess
+            // input_text 走 ToolRegistry:标记不可信来源,让其经来源闸门/审计(与其它远程入口一致)
+            "text" -> ToolRegistry.withUntrustedSource {
+                ToolRegistry.executeTool("input_text", mapOf("text" to (msg.get("text")?.asString ?: ""))).isSuccess
+            }
             "open_app" -> svc.openApp(msg.get("package")?.asString.orEmpty())
             "back" -> svc.pressBack()
             "home" -> svc.pressHome()

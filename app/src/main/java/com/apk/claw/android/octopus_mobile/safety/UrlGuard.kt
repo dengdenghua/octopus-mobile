@@ -151,29 +151,58 @@ object UrlGuard {
     }
 
     private fun isPrivateIp(ip: String): Boolean {
-        // 10.0.0.0/8
-        if (ip.startsWith("10.")) return true
-        // 172.16.0.0/12
-        if (ip.startsWith("172.")) {
-            val second = ip.split(".").getOrNull(1)?.toIntOrNull() ?: return false
-            if (second in 16..31) return true
+        // 规范化后按字节分类:纯字符串前缀判断会漏掉 IPv4-mapped IPv6
+        // (::ffff:169.254.169.254 / ::ffff:127.0.0.1)、IPv4-compatible(::a.b.c.d)、
+        // 压缩写法和大小写变体 → SSRF 绕过。统一交给 InetAddress 解析后按内建
+        // isLoopback/isLinkLocal/isSiteLocal/isAnyLocal + 显式规则判定。
+        val stripped = ip.trim('[', ']')
+        val addr = try {
+            // 入参恒为 IP 字面量(parseIp 返回的字面量或 resolveHost 返回的 hostAddress),
+            // getByName 对纯数字字面量不触发 DNS,安全。
+            InetAddress.getByName(stripped)
+        } catch (e: Exception) {
+            // 解析失败 → 保守拒绝(fail-closed)
+            return true
         }
-        // 192.168.0.0/16
-        if (ip.startsWith("192.168.")) return true
-        // 127.0.0.0/8 (loopback)
-        if (ip.startsWith("127.")) return true
-        // 169.254.0.0/16 (link-local / AWS metadata)
-        if (ip.startsWith("169.254.")) return true
-        // 0.0.0.0
-        if (ip == "0.0.0.0") return true
-        // ::1 (IPv6 loopback)
-        if (ip == "::1" || ip == "0:0:0:0:0:0:0:1") return true
-        // fe80:: (IPv6 link-local)
-        if (ip.startsWith("fe80:") || ip.lowercase().startsWith("fe80:")) return true
-        // fc00::/7 (IPv6 ULA)
-        if (ip.startsWith("fc") || ip.startsWith("fd")) {
-            if (ip.length > 2 && ip[2] == ':') return true
+        return isPrivateAddress(addr)
+    }
+
+    /** 对已解析的 InetAddress 分类;IPv4-mapped/compat IPv6 先拆出内嵌 IPv4 再按 IPv4 规则判定。 */
+    private fun isPrivateAddress(addr: InetAddress): Boolean {
+        val bytes = addr.address
+        if (bytes.size == 16) {
+            val mappedV4 = extractEmbeddedIpv4(bytes)
+            if (mappedV4 != null) {
+                val v4 = try { InetAddress.getByAddress(mappedV4) } catch (e: Exception) { null }
+                if (v4 != null) return classifyAddress(v4)
+            }
         }
+        return classifyAddress(addr)
+    }
+
+    /** ::ffff:a.b.c.d(mapped)与 ::a.b.c.d(compat)的内嵌 IPv4 字节,否则 null。 */
+    private fun extractEmbeddedIpv4(b: ByteArray): ByteArray? {
+        if (b.size != 16) return null
+        val tail = byteArrayOf(b[12], b[13], b[14], b[15])
+        val leading10Zero = (0..9).all { b[it].toInt() == 0 }
+        val isMapped = leading10Zero && (b[10].toInt() and 0xff) == 0xff && (b[11].toInt() and 0xff) == 0xff
+        // IPv4-compatible(::a.b.c.d):前 12 字节 0 且首个内嵌八位组非 0 —— 借此排除 ::(any-local)
+        // 与 ::1(loopback),它们不是内嵌 IPv4,应交回内建 isLoopback/isAnyLocal 判定。
+        val leading12Zero = (0..11).all { b[it].toInt() == 0 }
+        val isCompat = leading12Zero && (b[12].toInt() and 0xff) != 0
+        return if (isMapped || isCompat) tail else null
+    }
+
+    private fun classifyAddress(addr: InetAddress): Boolean {
+        if (addr.isLoopbackAddress) return true    // 127.0.0.0/8, ::1
+        if (addr.isLinkLocalAddress) return true   // 169.254.0.0/16, fe80::/10
+        if (addr.isSiteLocalAddress) return true   // 10/8, 172.16/12, 192.168/16
+        if (addr.isAnyLocalAddress) return true    // 0.0.0.0, ::
+        if (addr.isMulticastAddress) return true   // 组播不作为请求目标
+        val h = addr.hostAddress?.lowercase() ?: return true
+        // 显式兜底(部分 JVM 对以下不置 flag)
+        if (h.startsWith("169.254.")) return true
+        if ((h.startsWith("fc") || h.startsWith("fd")) && h.length > 2 && h[2] == ':') return true  // fc00::/7 ULA
         return false
     }
 

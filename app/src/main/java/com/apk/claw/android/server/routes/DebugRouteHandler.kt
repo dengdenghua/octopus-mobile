@@ -125,9 +125,15 @@ class DebugRouteHandler(
                 """{"code":-1,"message":"缺少 path 参数"}"""
             )
         )
-        val cacheDir = context.cacheDir.absolutePath
+        // 安全(路径穿越):必须用 canonicalPath 比较 —— absolutePath 不解析 `..`,
+        // "<cache>/../databases/x" 的 absolutePath 仍以 cacheDir 开头,却会读到 app 私有库/prefs。
+        // 规范化后要求严格落在 cacheDir 内(含分隔符边界),否则一律 404。
+        val cacheDirCanon = try { context.cacheDir.canonicalPath } catch (e: Exception) { "" }
         val file = java.io.File(path)
-        if (!file.exists() || !file.absolutePath.startsWith(cacheDir)) {
+        val fileCanon = try { file.canonicalPath } catch (e: Exception) { null }
+        val inCache = fileCanon != null && cacheDirCanon.isNotEmpty() &&
+            (fileCanon == cacheDirCanon || fileCanon.startsWith(cacheDirCanon + java.io.File.separator))
+        if (!inCache || !file.exists()) {
             return ctx.corsResponse(
                 NanoHTTPD.newFixedLengthResponse(
                     NanoHTTPD.Response.Status.NOT_FOUND, MIME_JSON,
