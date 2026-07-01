@@ -70,7 +70,7 @@ class OctopusConnectionManager(
         toolDispatcher?.start()
         heartbeatReporter?.start(coroutineScope)
         screenStreamer?.start()
-        ScreenStreamer.registerListener(screenStreamer!!)
+        screenStreamer?.let { ScreenStreamer.registerListener(it) }
         dualConfigWriter?.initialSync()
 
         // 上传 SKILL.md
@@ -84,6 +84,9 @@ class OctopusConnectionManager(
         toolDispatcher?.stop()
         heartbeatReporter?.stop()
         screenStreamer?.stop()
+        // 注销监听器:ScreenStreamer.listeners 是 companion 静态 CopyOnWriteArrayList,
+        // 不注销会永久持有旧实例(及其引用的 client/heartbeatReporter),阻 GC。
+        screenStreamer?.let { ScreenStreamer.unregisterListener(it) }
         XLog.i(TAG, "Sub-components stopped")
     }
 }

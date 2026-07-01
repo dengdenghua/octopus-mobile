@@ -75,8 +75,7 @@ object FastReplay {
 
     private fun replayStep(svc: ClawAccessibilityService, reg: ToolRegistry, step: ActionCache.Step): Boolean {
         return when (step.tool) {
-            "tap" -> replayTap(svc, step, longPress = false)
-            "long_press" -> replayTap(svc, step, longPress = true)
+            "tap", "long_press" -> replayTap(svc, reg, step, longPress = step.tool == "long_press")
             else -> {
                 // 稳的工具（swipe / input_text / open_app / system_key / scroll_to_find）原样执行。
                 // 走 ToolRegistry.executeTool 而非直接 tool.executeWithWaitAfter:
@@ -88,8 +87,14 @@ object FastReplay {
         }
     }
 
-    /** 点击类：按锚点文字/id 在当前屏重新定位 → 点它现在的位置。找不到 → false（触发回退）。 */
-    private fun replayTap(svc: ClawAccessibilityService, step: ActionCache.Step, longPress: Boolean): Boolean {
+    /**
+     * 点击类：按锚点文字/id 在当前屏重新定位 → 点它现在的位置。找不到 → false（触发回退）。
+     *
+     * 最终点击动作也走 [ToolRegistry.executeTool]（tap/long_press），与 else 分支一致：
+     * 补齐审计(MobileActionTimeline/ToolAuditLog)与安全门(safetyGate/sourceGate)。
+     * 锚点重定位本身是无副作用的读操作（findNodesByText/Id），不需走管线。
+     */
+    private fun replayTap(svc: ClawAccessibilityService, reg: ToolRegistry, step: ActionCache.Step, longPress: Boolean): Boolean {
         val nodes = when {
             step.anchorText.isNotBlank() -> svc.findNodesByText(step.anchorText)
             step.anchorId.isNotBlank() -> svc.findNodesById(step.anchorId)
@@ -99,20 +104,17 @@ object FastReplay {
         // 多个同名节点：挑中心最接近原始坐标的那个
         val node = nodes.minByOrNull { centerDist(it, step.ox, step.oy) } ?: return false
         return try {
-            if (!longPress && svc.clickNode(node)) {
-                true
+            val rect = Rect()
+            node.getBoundsInScreen(rect)
+            val cx = rect.centerX()
+            val cy = rect.centerY()
+            val params = if (longPress) {
+                val dur = num(parse(step.argsJson)["duration_ms"], 1000)
+                mapOf("x" to cx, "y" to cy, "duration_ms" to dur.toLong())
             } else {
-                val rect = Rect()
-                node.getBoundsInScreen(rect)
-                val cx = rect.centerX()
-                val cy = rect.centerY()
-                if (longPress) {
-                    val dur = num(parse(step.argsJson)["duration_ms"], 1000)
-                    svc.performLongPress(cx, cy, dur.toLong())
-                } else {
-                    svc.performTap(cx, cy)
-                }
+                mapOf("x" to cx, "y" to cy)
             }
+            reg.executeTool(if (longPress) "long_press" else "tap", params).isSuccess
         } finally {
             ClawAccessibilityService.recycleNodes(nodes)
         }

@@ -7,7 +7,6 @@ import android.os.Looper
 import com.apk.claw.android.ClawApplication
 import com.apk.claw.android.account.AccountConfig
 import com.apk.claw.android.account.AccountStore
-import com.apk.claw.android.service.ClawAccessibilityService
 import com.apk.claw.android.tool.ToolRegistry
 import com.apk.claw.android.utils.KVUtils
 import com.apk.claw.android.utils.XLog
@@ -172,29 +171,39 @@ object RemoteConsoleGateway {
     }
 
     private fun performControl(action: String, msg: JsonObject): Boolean {
-        val svc = ClawAccessibilityService.getInstance() ?: return false
         // 远程控制台=不可信来源:每条指令都向用户浮标/审计上报"正被远程控制",
-        // 与 DeviceRouteHandler 的 LAN 控制口径一致(避免静默操控)。
+        // 并统一走 ToolRegistry.withUntrustedSource + executeTool,与 DeviceRouteHandler
+        // 的 LAN 控制口径一致(避免静默操控 + 补齐 7 门管线的审计/安全门/来源闸门)。
         RemoteControlIndicator.onControlInput("remote_console")
-        return when (action) {
-            "tap" -> svc.performTap(msg.int("x"), msg.int("y"))
-            "swipe" -> svc.performSwipe(
-                msg.int("x1"), msg.int("y1"),
-                msg.int("x2"), msg.int("y2"),
-                msg.long("duration", 300L),
+        // 与 DeviceRouteHandler 完全对称的 action → tool 映射。
+        val (toolName, params) = when (action) {
+            "tap" -> "tap" to mapOf(
+                "x" to msg.int("x"),
+                "y" to msg.int("y"),
             )
-            "long_press" -> svc.performLongPress(msg.int("x"), msg.int("y"), msg.long("duration", 600L))
-            "key" -> svc.sendKeyEvent(msg.int("keyCode"))
-            // input_text 走 ToolRegistry:标记不可信来源,让其经来源闸门/审计(与其它远程入口一致)
-            "text" -> ToolRegistry.withUntrustedSource {
-                ToolRegistry.executeTool("input_text", mapOf("text" to (msg.get("text")?.asString ?: ""))).isSuccess
-            }
-            "open_app" -> svc.openApp(msg.get("package")?.asString.orEmpty())
-            "back" -> svc.pressBack()
-            "home" -> svc.pressHome()
-            "recent" -> svc.openRecentApps()
-            "notifications" -> svc.expandNotifications()
-            else -> false
+            "swipe" -> "swipe" to mapOf(
+                "start_x" to msg.int("x1"),
+                "start_y" to msg.int("y1"),
+                "end_x" to msg.int("x2"),
+                "end_y" to msg.int("y2"),
+                "duration_ms" to msg.long("duration", 300L),
+            )
+            "long_press" -> "long_press" to mapOf(
+                "x" to msg.int("x"),
+                "y" to msg.int("y"),
+                "duration_ms" to msg.long("duration", 600L),
+            )
+            "key" -> "system_key" to mapOf("key_code" to msg.int("keyCode"))
+            "text" -> "input_text" to mapOf("text" to (msg.get("text")?.asString ?: ""))
+            "open_app" -> "open_app" to mapOf("package_name" to (msg.get("package")?.asString ?: ""))
+            "back" -> "system_key" to mapOf("key" to "back")
+            "home" -> "system_key" to mapOf("key" to "home")
+            "recent" -> "system_key" to mapOf("key" to "recent_apps")
+            "notifications" -> "system_key" to mapOf("key" to "notifications")
+            else -> return false
+        }
+        return ToolRegistry.withUntrustedSource {
+            ToolRegistry.executeTool(toolName, params).isSuccess
         }
     }
 

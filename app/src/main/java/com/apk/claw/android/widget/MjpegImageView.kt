@@ -45,58 +45,61 @@ class MjpegImageView @JvmOverloads constructor(
         streamJob = CoroutineScope(Dispatchers.IO).launch {
             try {
                 val request = Request.Builder().url(url).build()
-                val response = httpClient.newCall(request).execute()
-                if (!response.isSuccessful) {
-                    Log.e(TAG, "MJPEG stream failed: HTTP ${response.code}")
-                    return@launch
-                }
-
-                val body = response.body ?: return@launch
-                val inputStream = BufferedInputStream(body.byteStream())
-
-                // 从 Content-Type 提取 boundary
-                val contentType = response.header("Content-Type") ?: ""
-                val boundary = extractBoundary(contentType) ?: DEFAULT_BOUNDARY
-                val boundaryBytes = "--$boundary".toByteArray()
-
-                Log.i(TAG, "MJPEG stream started, boundary=$boundary")
-
-                val buffer = ByteArray(65536)
-                var frameBuffer = ByteArray(0)
-
-                while (isActive) {
-                    // 读取到 boundary
-                    val headerLine = readLine(inputStream)
-                    if (headerLine == null) {
-                        Log.d(TAG, "Stream ended")
-                        break
+                // 用 .use {} 确保 Response(及其 body/底层 socket)在流结束/取消/异常时
+                // 都被关闭,避免连接池耗尽。原代码裸持有 response,取消时连接泄漏。
+                httpClient.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        Log.e(TAG, "MJPEG stream failed: HTTP ${response.code}")
+                        return@launch
                     }
 
-                    // 跳过边界行
-                    if (headerLine.startsWith("--") && headerLine.contains(boundary)) {
-                        // 读取 headers 直到空行
-                        var contentLength = -1
-                        while (true) {
-                            val header = readLine(inputStream) ?: break
-                            if (header.isEmpty()) break
-                            if (header.startsWith("Content-Length:", ignoreCase = true)) {
-                                contentLength = header.substringAfter(":").trim().toIntOrNull() ?: -1
+                    val body = response.body ?: return@launch
+                    val inputStream = BufferedInputStream(body.byteStream())
+
+                    // 从 Content-Type 提取 boundary
+                    val contentType = response.header("Content-Type") ?: ""
+                    val boundary = extractBoundary(contentType) ?: DEFAULT_BOUNDARY
+                    val boundaryBytes = "--$boundary".toByteArray()
+
+                    Log.i(TAG, "MJPEG stream started, boundary=$boundary")
+
+                    val buffer = ByteArray(65536)
+                    var frameBuffer = ByteArray(0)
+
+                    while (isActive) {
+                        // 读取到 boundary
+                        val headerLine = readLine(inputStream)
+                        if (headerLine == null) {
+                            Log.d(TAG, "Stream ended")
+                            break
+                        }
+
+                        // 跳过边界行
+                        if (headerLine.startsWith("--") && headerLine.contains(boundary)) {
+                            // 读取 headers 直到空行
+                            var contentLength = -1
+                            while (true) {
+                                val header = readLine(inputStream) ?: break
+                                if (header.isEmpty()) break
+                                if (header.startsWith("Content-Length:", ignoreCase = true)) {
+                                    contentLength = header.substringAfter(":").trim().toIntOrNull() ?: -1
+                                }
                             }
-                        }
 
-                        // 读取 JPEG 数据
-                        val jpegBytes = if (contentLength > 0) {
-                            readExact(inputStream, contentLength)
-                        } else {
-                            // 无 Content-Length，读到下一个 boundary
-                            readUntilBoundary(inputStream, boundaryBytes)
-                        }
+                            // 读取 JPEG 数据
+                            val jpegBytes = if (contentLength > 0) {
+                                readExact(inputStream, contentLength)
+                            } else {
+                                // 无 Content-Length，读到下一个 boundary
+                                readUntilBoundary(inputStream, boundaryBytes)
+                            }
 
-                        if (jpegBytes != null && jpegBytes.isNotEmpty()) {
-                            val bitmap = BitmapFactory.decodeByteArray(jpegBytes, 0, jpegBytes.size)
-                            if (bitmap != null) {
-                                withContext(Dispatchers.Main) {
-                                    setImageBitmap(bitmap)
+                            if (jpegBytes != null && jpegBytes.isNotEmpty()) {
+                                val bitmap = BitmapFactory.decodeByteArray(jpegBytes, 0, jpegBytes.size)
+                                if (bitmap != null) {
+                                    withContext(Dispatchers.Main) {
+                                        setImageBitmap(bitmap)
+                                    }
                                 }
                             }
                         }

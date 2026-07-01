@@ -39,16 +39,24 @@ class NavigationRecorder(
         private const val NOTIFICATION_ID = 0x4E41    // "NA"
     }
 
+    // 跨线程字段:recording/passiveMode/onStateChanged 由 UI 线程写、HandlerThread 读;
+    // steps 由 HandlerThread 写(recordStep)、UI 线程读(stopRecording)。均需 @Volatile
+    // 保证可见性;steps 的 read-modify-write 另加 synchronized(steps) 防 CME。
+    @Volatile
     private var recording = false
+    @Volatile
     private var passiveMode = false
     private val steps = mutableListOf<RecordedStep>()
+    @Volatile
     private var lastStateId: String? = null
     private var lastStateTime: Long = 0
 
     /** 录制中的路线名称（主动模式） */
+    @Volatile
     private var routeName: String? = null
 
     /** 回调：录制状态变化 */
+    @Volatile
     var onStateChanged: ((isRecording: Boolean, stepCount: Int) -> Unit)? = null
 
     /** 单线程后台 Handler，避免每次按键都创建新 Thread */
@@ -63,7 +71,7 @@ class NavigationRecorder(
     fun startRecording(name: String) {
         recording = true
         routeName = name
-        steps.clear()
+        synchronized(steps) { steps.clear() }
         lastStateId = null
         XLog.i(TAG, "Recording started: $name")
         onStateChanged?.invoke(true, 0)
@@ -76,8 +84,11 @@ class NavigationRecorder(
      */
     fun stopRecording(): RecordingResult {
         recording = false
-        val savedSteps = steps.toList()
-        steps.clear()
+        val savedSteps = synchronized(steps) {
+            val copy = steps.toList()
+            steps.clear()
+            copy
+        }
 
         if (savedSteps.isEmpty()) {
             XLog.w(TAG, "Recording stopped but no steps captured")
@@ -214,20 +225,24 @@ class NavigationRecorder(
                 timestamp = System.currentTimeMillis(),
                 durationMs = elapsed
             )
-            steps.add(step)
+            // 5. 记录步骤(加锁防与 stopRecording/startRecording 的 toList/clear 并发 CME)
+            val stepCount = synchronized(steps) {
+                steps.add(step)
+                steps.size
+            }
 
             // 6. 添加到图
             graph.addEdge(beforeId, action, afterId, elapsed)
 
             // 7. 主动模式下通知回调
             if (recording) {
-                onStateChanged?.invoke(true, steps.size)
+                onStateChanged?.invoke(true, stepCount)
             }
 
             XLog.d(TAG, "Recorded: $beforeId --[${action.type}]--> $afterId")
 
             // 防止录制过长
-            if (steps.size >= MAX_RECORDING_STEPS) {
+            if (stepCount >= MAX_RECORDING_STEPS) {
                 XLog.w(TAG, "Max steps reached, auto-stopping recording")
                 stopRecording()
             }

@@ -197,11 +197,27 @@ class FileRouteHandler(
 
         return ctx.corsResponse(NanoHTTPD.newFixedLengthResponse(
             NanoHTTPD.Response.Status.OK, mime,
-            cacheFile.inputStream(), cacheFile.length()
+            // 包装 InputStream:NanoHTTPD 读取完毕关闭流时,顺便删除缓存文件,
+            // 避免私有目录 download_* 文件无限堆积(原代码从不删除 cacheFile)。
+            AutoDeletingInputStream(cacheFile.inputStream(), cacheFile),
+            cacheFile.length()
         ).also {
             it.addHeader("Content-Disposition", "attachment; filename=\"${path.substringAfterLast('/')}\"")
             ctx.recordRemoteAccess(session, "file_download", true, "path=$path,mime=$mime,bytes=${cacheFile.length()}", startMs)
         })
+    }
+
+    /** InputStream 关闭时自动删除指定缓存文件,用于下载响应的资源清理。 */
+    private class AutoDeletingInputStream(
+        private val delegate: java.io.InputStream,
+        private val fileToDelete: java.io.File,
+    ) : java.io.InputStream() {
+        override fun read(): Int = delegate.read()
+        override fun read(b: ByteArray, off: Int, len: Int): Int = delegate.read(b, off, len)
+        override fun close() {
+            try { delegate.close() } catch (_: Exception) {}
+            try { fileToDelete.delete() } catch (_: Exception) {}
+        }
     }
 
     /**
