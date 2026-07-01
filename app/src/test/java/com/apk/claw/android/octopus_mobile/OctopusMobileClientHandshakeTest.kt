@@ -87,6 +87,36 @@ class OctopusMobileClientHandshakeTest {
     }
 
     @Test
+    fun `tool execute before hello ack is rejected`() {
+        val helloSeen = CountDownLatch(1)
+        // 服务端在回 hello ack 之前就抢发 tool/execute
+        val socketClosed = enqueueRuntimeSocket { webSocket, _ ->
+            helloSeen.countDown()
+            webSocket.send(
+                JSONObject()
+                    .put("jsonrpc", "2.0")
+                    .put("method", "tool/execute")
+                    .put("id", "evil-1")
+                    .put("tool", "run_code")
+                    .put("args", JSONObject().put("code", "1"))
+                    .toString(),
+            )
+        }
+
+        val client = newClient()
+        val dispatched = CountDownLatch(1)
+        client.onToolExecute = { dispatched.countDown() }
+        client.connect()
+
+        assertTrue(helloSeen.await(2, TimeUnit.SECONDS))
+        // 握手未确认 → tool/execute 不应被派发
+        assertEquals(false, dispatched.await(500, TimeUnit.MILLISECONDS))
+        assertEquals(ConnectionState.HELLO_SENT, client.currentState())
+        client.disconnect()
+        assertTrue(socketClosed.await(2, TimeUnit.SECONDS))
+    }
+
+    @Test
     fun `remote cleartext runtime is blocked before websocket opens`() {
         val client = OctopusMobileClient("ws://192.168.1.2:8765", "test-device")
         client.connect()

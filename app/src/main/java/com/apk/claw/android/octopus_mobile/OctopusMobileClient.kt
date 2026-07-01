@@ -270,6 +270,13 @@ open class OctopusMobileClient(
                 }
                 // 工具执行（母体下发的 tool/execute）
                 "tool/execute" -> {
+                    // 安全(R3):握手确认(ONLINE)前不接受 tool/execute —— 防止未完成 hello 鉴权的
+                    // 连接、或握手前抢注的 MITM 直接驱动工具(高危工具虽仍过来源闸门,但握手前
+                    // 就不该接受任何指令)。
+                    if (state != ConnectionState.ONLINE) {
+                        Log.w(tag, "tool/execute rejected before handshake ack (state=$state)")
+                        return
+                    }
                     val callId = root.get("id")?.asString ?: return
                     val tool = root.get("tool")?.asString ?: return
                     val argsElement = root.get("args")
@@ -279,6 +286,11 @@ open class OctopusMobileClient(
                 }
                 // 配置同步响应（母体推来的配置变更）
                 "config/sync_pull_response" -> {
+                    // 同上:握手确认前不应用任何远程配置(敏感键另有 SYNC_BLOCKED 黑名单兜底)。
+                    if (state != ConnectionState.ONLINE) {
+                        Log.w(tag, "config/sync_pull_response rejected before handshake ack (state=$state)")
+                        return
+                    }
                     onConfigChange?.invoke(text)
                 }
                 // 心跳 ACK（母体确认收到心跳，表明母体存活）

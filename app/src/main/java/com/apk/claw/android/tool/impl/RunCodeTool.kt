@@ -11,11 +11,12 @@ import com.apk.claw.android.tool.ToolResult
  *  - print(…) / console.log(…)   → 输出到工具结果
  *  - readFile(path)               → 读文件（限 Download/Documents）
  *  - writeFile(path, content)     → 写文件（同上）
- *  - fetch(url, options?)         → 同步 HTTP，返回 {status, ok, body}
- *  - callTool(name, params?)      → 调用任意已注册工具
+ *  - fetch(url, options?)         → 同步 HTTP（过 UrlGuard 防 SSRF），返回 {status, ok, body}
+ *  - callTool(name, params?)      → 调用任意已注册工具（沿用 ToolRegistry 策略）
  *
  * 安全模型：登记为 HIGH 风险 → ToolRegistry 高危来源闸门自动拦截不可信来源；
- * 沙箱本身不可调用系统 shell，文件访问限定安全路径，超时强制中断。
+ * 沙箱本身不可调用系统 shell，文件访问限定安全路径，fetch 禁内网/回环/元数据并有硬超时，
+ * CPU 死循环由指令观察器按 timeout 中断。
  */
 class RunCodeTool : BaseTool() {
 

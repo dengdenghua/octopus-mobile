@@ -27,8 +27,9 @@ object ToolRiskPolicy {
         // 若该能力以插件/技能形式重新出现，默认仍按高危闸门处理。见 ToolRiskPolicyCoverageTest。
         "install_app",
         "send_file",
-        // 代码执行:以 shell UID 跑 Agent 生成的 JS(虽是纯计算沙箱,仍是最高危一类)。
-        // 登记 HIGH → 自动获得「不可信来源弹审批 + 全程审计」,无需新增闸门。见 RunCodeTool。
+        // 代码执行:Rhino 进程内沙箱跑 Agent 生成的 JS,具备 fetch(过 UrlGuard 防 SSRF)、
+        // 受限目录文件读写、callTool(回 ToolRegistry)等能力 —— 非纯计算,最高危一类。
+        // 登记 HIGH → 自动获得「不可信来源弹审批 + 全程审计」,无需新增闸门。见 RunCodeTool/ScriptSandbox。
         "run_code",
     )
 
