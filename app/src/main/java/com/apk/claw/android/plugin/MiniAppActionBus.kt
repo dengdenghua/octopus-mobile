@@ -24,41 +24,47 @@ import java.util.concurrent.atomic.AtomicReference
 object MiniAppActionBus {
 
     private class Live(
-        val appId: String,
         val activityRef: WeakReference<Activity>,
         val webViewRef: WeakReference<WebView>,
-    )
+    ) {
+        fun aliveOrNull(): Pair<Activity, WebView>? {
+            val a = activityRef.get() ?: return null
+            val w = webViewRef.get() ?: return null
+            return a to w
+        }
+    }
 
-    @Volatile
-    private var live: Live? = null
+    // 支持多个同时运行的 mini-app(桌面浮动窗口可开多个 + 全屏 Activity)。
+    private val lives = java.util.concurrent.ConcurrentHashMap<String, Live>()
 
     data class ReportedEvent(val appId: String, val actionType: String, val params: String, val ts: Long)
 
     private val reported = ConcurrentLinkedDeque<ReportedEvent>()
     private const val MAX_REPORTED = 50
 
-    /** MiniAppActivity 前台时注册(onResume)。 */
+    /** mini-app 前台/窗口活跃时注册(MiniAppActivity.onResume 或桌面窗口挂载)。 */
     fun registerLive(appId: String, activity: Activity, webView: WebView) {
-        live = Live(appId, WeakReference(activity), WeakReference(webView))
+        lives[appId] = Live(WeakReference(activity), WeakReference(webView))
     }
 
-    /** 退到后台/销毁时注销(onPause/onDestroy)。 */
+    /** 退到后台/销毁/窗口关闭时注销。 */
     fun unregister(appId: String) {
-        if (live?.appId == appId) live = null
+        lives.remove(appId)
     }
 
-    /** 当前前台运行中的 mini-app id(activity/webview 都还活着才算)。 */
-    fun runningAppId(): String? =
-        live?.takeIf { it.activityRef.get() != null && it.webViewRef.get() != null }?.appId
+    /** 该 mini-app 是否有活跃实例(activity+webview 都还在)。 */
+    fun isRunning(appId: String): Boolean = lives[appId]?.aliveOrNull() != null
+
+    /** 所有活跃 mini-app id。 */
+    fun runningAppIds(): Set<String> = lives.entries.filter { it.value.aliveOrNull() != null }.map { it.key }.toSet()
 
     /**
-     * Agent → mini-app 派发一个 action。要求目标 mini-app 前台运行。
+     * Agent → mini-app 派发一个 action。要求目标 mini-app 有活跃实例。
      * @return `{ok, data|error}` JSON 字符串。
      */
     fun dispatch(appId: String, actionType: String, paramsJson: String, timeoutMs: Long = 8000): String {
-        val l = live?.takeIf { it.appId == appId } ?: return err("mini-app '$appId' 未在前台运行")
-        val activity = l.activityRef.get() ?: return err("mini-app activity 已销毁")
-        val webView = l.webViewRef.get() ?: return err("mini-app webview 已销毁")
+        val (activity, webView) = lives[appId]?.aliveOrNull()
+            ?: return err("mini-app '$appId' 未在运行")
 
         val latch = CountDownLatch(1)
         val raw = AtomicReference<String?>(null)

@@ -2,6 +2,7 @@ package com.apk.claw.android.tool.impl
 
 import com.apk.claw.android.plugin.MiniAppActionBus
 import com.apk.claw.android.plugin.MiniAppRegistry
+import com.apk.claw.android.plugin.MiniAppWindowController
 import com.apk.claw.android.tool.BaseTool
 import com.apk.claw.android.tool.ToolParameter
 import com.apk.claw.android.tool.ToolRegistry
@@ -25,7 +26,6 @@ class ListAppsTool : BaseTool() {
     override fun getParameters(): List<ToolParameter> = emptyList()
 
     override fun execute(params: Map<String, Any>): ToolResult {
-        val running = MiniAppActionBus.runningAppId()
         val arr = JSONArray()
         MiniAppRegistry.all().forEach { m ->
             val actions = JSONArray()
@@ -52,7 +52,7 @@ class ListAppsTool : BaseTool() {
                     .put("id", m.id)
                     .put("name", m.name)
                     .put("description", m.description)
-                    .put("running", m.id == running)
+                    .put("running", MiniAppActionBus.isRunning(m.id))
                     .put("actions", actions),
             )
         }
@@ -92,17 +92,21 @@ class AppActionTool : BaseTool() {
 
         MiniAppRegistry.get(appId) ?: return ToolResult.error("未找到小程序: $appId(用 list_apps 查可用 id)")
 
-        // 未在前台运行 → 拉起并等注册(BaseTool.execute 本就在后台线程,可阻塞轮询)
-        if (MiniAppActionBus.runningAppId() != appId) {
-            val ctx = ToolRegistry.getInstance().appContext
-                ?: return ToolResult.error("无法打开小程序:缺少 Context")
-            MiniAppRegistry.launch(ctx, appId)
+        // 未运行 → 优先请桌面开成窗口(在桌面模式时),否则拉起全屏 Activity;再等注册。
+        // (BaseTool.execute 本就在后台线程,可阻塞轮询)
+        if (!MiniAppActionBus.isRunning(appId)) {
+            val openedInDesktop = MiniAppWindowController.open(appId)
+            if (!openedInDesktop) {
+                val ctx = ToolRegistry.getInstance().appContext
+                    ?: return ToolResult.error("无法打开小程序:缺少 Context")
+                MiniAppRegistry.launch(ctx, appId)
+            }
             val deadline = System.currentTimeMillis() + 4000
-            while (MiniAppActionBus.runningAppId() != appId && System.currentTimeMillis() < deadline) {
+            while (!MiniAppActionBus.isRunning(appId) && System.currentTimeMillis() < deadline) {
                 runCatching { Thread.sleep(120) }
             }
-            if (MiniAppActionBus.runningAppId() != appId) {
-                return ToolResult.error("小程序未能进入前台(加载慢或被拦截),请稍后重试")
+            if (!MiniAppActionBus.isRunning(appId)) {
+                return ToolResult.error("小程序未能进入运行(加载慢或被拦截),请稍后重试")
             }
             runCatching { Thread.sleep(400) } // 等页面 JS 注册 onAgentAction
         }

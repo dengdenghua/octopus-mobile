@@ -173,14 +173,23 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
     // OpenRoom 风:对话面板 = avatarSide(Zero 立绘)+ chatSide,需更宽
     val chatWidth by animateDpAsState(if (chatExpanded) 430.dp else 0.dp, label = "chatWidth")
 
-    // 桌面:浏览器是常驻底板;发现/广场以可拖浮动窗口打开(移植 OpenRoom windowManager)。
+    // 桌面:浏览器是常驻底板;发现/广场/mini-app 以可拖浮动窗口打开(移植 OpenRoom windowManager)。
     val ctx = androidx.compose.ui.platform.LocalContext.current
-    val windows = remember { androidx.compose.runtime.mutableStateListOf<Pair<Long, DeskContent>>() }
+    val windows = remember { androidx.compose.runtime.mutableStateListOf<Pair<Long, WinContent>>() }
     var winSeq by remember { mutableLongStateOf(0L) }
-    val openWindow: (DeskContent) -> Unit = { kind ->
+    val openWindow: (WinContent) -> Unit = { kind ->
         val idx = windows.indexOfFirst { it.second == kind }
         if (idx >= 0) { val w = windows.removeAt(idx); windows.add(w) }  // 已开则置顶
         else windows.add((winSeq++) to kind)
+    }
+    // app_action 未运行时请桌面把 mini-app 开成窗口(后台线程 → 切主线程 openWindow)
+    val mainHandler = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        com.apk.claw.android.plugin.MiniAppWindowController.opener = { appId ->
+            val m = MiniAppRegistry.get(appId)
+            if (m == null) false else { mainHandler.post { openWindow(WinContent.Mini(appId, m.name)) }; true }
+        }
+        onDispose { com.apk.claw.android.plugin.MiniAppWindowController.opener = null }
     }
 
     // HUD 遥测:母体连接态 + 走秒时钟(等宽,科幻直播条用)
@@ -226,10 +235,15 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
                             progress = progress,
                             onNavigate = { currentUrl = it; pageTitle = "" },
                         )
-                        // 浮动窗口层:发现/广场,可拖、可关、点击置顶(列表顺序=层级,末尾在最上)
+                        // 浮动窗口层:发现/广场/mini-app,可拖、可缩、可关、点击置顶(末尾在最上)
                         windows.forEachIndexed { i, (id, kind) ->
+                            val title = when (kind) {
+                                WinContent.Discover -> "发现"
+                                WinContent.Square -> "广场"
+                                is WinContent.Mini -> kind.name
+                            }
                             HoloWindow(
-                                title = if (kind == DeskContent.Discover) "发现" else "广场",
+                                title = title,
                                 startX = (24 + i * 26).dp,
                                 startY = (24 + i * 26).dp,
                                 width = 360.dp,
@@ -241,19 +255,25 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
                                 },
                             ) {
                                 when (kind) {
-                                    DeskContent.Discover -> DiscoverScreen(onOpenUrl = { url ->
+                                    WinContent.Discover -> DiscoverScreen(onOpenUrl = { url ->
                                         url?.let { engine.navigate(normalizeUrl(it)) }
                                     })
-                                    DeskContent.Square -> AgentSquareScreen(onBack = { windows.removeAll { it.first == id } })
-                                    else -> {}
+                                    WinContent.Square -> AgentSquareScreen(onBack = { windows.removeAll { it.first == id } })
+                                    is WinContent.Mini -> MiniAppWindow(kind.appId)
                                 }
                             }
                         }
                     }
                     DesktopDock(
                         active = DeskContent.Web,
-                        onSelect = { kind -> if (kind != DeskContent.Web) openWindow(kind) },
-                        onLaunchMiniApp = { id -> MiniAppRegistry.launch(ctx, id) },
+                        onSelect = { kind ->
+                            when (kind) {
+                                DeskContent.Discover -> openWindow(WinContent.Discover)
+                                DeskContent.Square -> openWindow(WinContent.Square)
+                                else -> {}
+                            }
+                        },
+                        onLaunchMiniApp = { id -> MiniAppRegistry.get(id)?.let { openWindow(WinContent.Mini(id, it.name)) } },
                         onAllApps = { runCatching { ctx.startActivity(android.content.Intent(ctx, MiniAppListActivity::class.java)) } },
                     )
                 }
@@ -469,8 +489,42 @@ private fun Dot(color: Color) {
     Box(Modifier.size(8.dp).clip(CircleShape).background(color))
 }
 
-/** 桌面左侧内容区可展示的东西。 */
+/** 桌面左侧内容区可展示的东西(Dock 分类用)。 */
 private enum class DeskContent { Web, Discover, Square }
+
+/** 桌面浮动窗口的内容类型。 */
+private sealed interface WinContent {
+    data object Discover : WinContent
+    data object Square : WinContent
+    data class Mini(val appId: String, val name: String) : WinContent
+}
+
+/**
+ * mini-app 浮动窗口内容 —— 用共享的 [com.apk.claw.android.plugin.MiniAppHost] 造 WebView(与全屏
+ * Activity 同一沙箱),挂载时注册到 [com.apk.claw.android.plugin.MiniAppActionBus](Agent 的 app_action
+ * 可派发到本窗口),关闭时注销并销毁 WebView。
+ */
+@Composable
+private fun MiniAppWindow(appId: String) {
+    val activity = androidx.compose.ui.platform.LocalContext.current as? android.app.Activity ?: return
+    val manifest = remember(appId) { MiniAppRegistry.get(appId) } ?: return
+    androidx.compose.runtime.DisposableEffect(appId) {
+        onDispose { com.apk.claw.android.plugin.MiniAppActionBus.unregister(appId) }
+    }
+    AndroidView(
+        factory = {
+            val wv = com.apk.claw.android.plugin.MiniAppHost.createWebView(activity, manifest)
+            if (wv != null) {
+                com.apk.claw.android.plugin.MiniAppActionBus.registerLive(appId, activity, wv)
+                wv
+            } else {
+                android.view.View(activity)
+            }
+        },
+        onRelease = { v -> if (v is android.webkit.WebView) com.apk.claw.android.plugin.MiniAppHost.destroyWebView(v) },
+        modifier = Modifier.fillMaxSize(),
+    )
+}
 
 /**
  * 桌面底部 Dock(macOS 风):浏览器 / 发现 / 广场 + 已安装小程序 + 全部小程序。
