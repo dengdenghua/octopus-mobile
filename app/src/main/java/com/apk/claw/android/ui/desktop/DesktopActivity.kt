@@ -10,6 +10,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
@@ -171,11 +172,8 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
         }
     }
 
-    // 对话展开/收起:收起时对话面板宽度动画到 0(仍在组合中,不丢上下文/不打断运行中的任务),
-    // 桌面占满;右下角出现悬浮球,点开恢复。
+    // 对话展开/收起:收起时对话卡收成右下悬浮球(仍在组合中,不丢上下文/不打断运行中的任务)。
     var chatExpanded by rememberSaveable { mutableStateOf(true) }
-    // OpenRoom 风:对话面板 = avatarSide(Zero 立绘)+ chatSide,需更宽
-    val chatWidth by animateDpAsState(if (chatExpanded) 430.dp else 0.dp, label = "chatWidth")
 
     // 桌面:浏览器是常驻底板;发现/广场/mini-app 以可拖浮动窗口打开(移植 OpenRoom windowManager)。
     val ctx = androidx.compose.ui.platform.LocalContext.current
@@ -213,24 +211,32 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
     var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) { while (true) { nowMs = System.currentTimeMillis(); delay(1000) } }
     val hudClock = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }.format(Date(nowMs))
-    val webLive = currentUrl.isNotBlank() && currentUrl != "about:blank"
 
-    // 全屏科幻壁纸打底,面板悬浮其上(带留白 = 全息漂浮感)
+    // 对话卡最大化:在「上半屏悬浮」与「近满高」之间切换(参考图右上的 □ 按钮)
+    var chatMaximized by rememberSaveable { mutableStateOf(false) }
+
+    // 布局(对齐 OpenRoom 参考):全宽顶栏 / 左竖排应用栏 | 中间舞台;对话卡悬浮右上,壁纸打底。
     Box(Modifier.fillMaxSize()) {
         HoloBackground(Modifier.fillMaxSize())
-        Row(Modifier.fillMaxSize().padding(10.dp)) {
-            // 左:玻璃「直播间」—— 顶部 HUD 条 + 内容区(浏览器/发现/广场)+ Dock
-            Box(Modifier.weight(1f).fillMaxHeight()) {
-                Column(Modifier.fillMaxSize().holoGlass(16.dp)) {
-                    HudStrip(
-                        urlOrIdle = if (webLive) currentUrl else "本地虚拟电脑 · 待命",
-                        live = loading || webLive,
-                        connLabel = connLabel,
-                        connColor = connColor,
-                        timeText = hudClock,
-                    )
-                    Box(Modifier.weight(1f).clipToBounds()) {
-                        // 底板:浏览器桌面(空闲显角色档案 HUD)
+        Column(Modifier.fillMaxSize()) {
+            DesktopTopBar(
+                connLabel = connLabel,
+                connColor = connColor,
+                timeText = hudClock,
+                onGallery = { runCatching { ctx.startActivity(android.content.Intent(ctx, MiniAppListActivity::class.java)) } },
+                onSkills = { runCatching { ctx.startActivity(android.content.Intent(ctx, com.apk.claw.android.ui.featurescreens.SkillsActivity::class.java)) } },
+            )
+            Row(Modifier.weight(1f).fillMaxWidth()) {
+                // 左:竖排应用栏(浏览器/发现/广场 + 已装小程序 + 全部)
+                LeftAppRail(
+                    onDiscover = { openWindow(WinContent.Discover) },
+                    onSquare = { openWindow(WinContent.Square) },
+                    onLaunchMiniApp = { id -> MiniAppRegistry.get(id)?.let { openWindow(WinContent.Mini(id, it.name)) } },
+                    onAllApps = { runCatching { ctx.startActivity(android.content.Intent(ctx, MiniAppListActivity::class.java)) } },
+                )
+                // 中:玻璃「舞台」—— 浏览器 monitor(空闲显角色档案)+ 浮动窗口层
+                Box(Modifier.weight(1f).fillMaxHeight().padding(10.dp)) {
+                    Box(Modifier.fillMaxSize().holoGlass(16.dp).clipToBounds()) {
                         DesktopMonitor(
                             engine = engine,
                             currentUrl = currentUrl,
@@ -268,61 +274,26 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
                             }
                         }
                     }
-                    DesktopDock(
-                        active = DeskContent.Web,
-                        onSelect = { kind ->
-                            when (kind) {
-                                DeskContent.Discover -> openWindow(WinContent.Discover)
-                                DeskContent.Square -> openWindow(WinContent.Square)
-                                else -> {}
-                            }
-                        },
-                        onLaunchMiniApp = { id -> MiniAppRegistry.get(id)?.let { openWindow(WinContent.Mini(id, it.name)) } },
-                        onAllApps = { runCatching { ctx.startActivity(android.content.Intent(ctx, MiniAppListActivity::class.java)) } },
-                    )
-                }
-            }
-            if (chatWidth > 0.dp) Spacer(Modifier.width(10.dp))
-            // 右:悬浮玻璃对话面板(透过面板边缘可见壁纸)
-            Box(Modifier.width(chatWidth).fillMaxHeight().clipToBounds()) {
-                if (chatWidth > 0.dp) {
-                    // OpenRoom ChatPanel:两栏 avatarSide(角色立绘)| chatSide(header+对话)
-                    Row(Modifier.fillMaxSize().holoGlass(12.dp)) {
-                        // avatarSide:更深底 + 当前角色全息立绘常驻
-                        Box(Modifier.width(104.dp).fillMaxHeight().background(Holo.AvatarBg)) {
-                            HoloFigure(
-                                CharacterRegistry.current.frontRes,
-                                Modifier.align(Alignment.BottomCenter)
-                                    .fillMaxHeight(0.96f)
-                                    .aspectRatio(0.46f, matchHeightConstraintsFirst = true),
-                            )
-                            Text(
-                                CharacterRegistry.current.zh, color = Holo.Accent, fontSize = 22.sp, fontWeight = FontWeight.Bold,
-                                modifier = Modifier.align(Alignment.TopStart).padding(start = 10.dp, top = 6.dp),
-                            )
-                        }
-                        // chatSide:header(角色名 › 点击切角色 + 收起)+ ChatScreen
-                        Column(Modifier.weight(1f)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth().height(34.dp).padding(start = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(
-                                    "${CharacterRegistry.current.name} ›", color = Holo.Accent, fontSize = 12.sp,
-                                    modifier = Modifier.weight(1f).clickable { CharacterRegistry.next() },
-                                )
-                                IconButton(onClick = { chatExpanded = false }, modifier = Modifier.size(30.dp)) {
-                                    Icon(Icons.Filled.ChevronRight, contentDescription = "收起对话", tint = Holo.TextSecondary, modifier = Modifier.size(18.dp))
-                                }
-                            }
-                            Box(Modifier.weight(1f)) { ChatScreen() }
-                        }
-                    }
                 }
             }
         }
-        // 收起态:右下角 Zero 头像悬浮球(青色霓虹环),点开展开对话
-        if (!chatExpanded) {
+        // 右上悬浮对话卡(透明壁纸感):角色名 + 阶段进度 + 最小/最大化,立绘在卡内。
+        if (chatExpanded) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 52.dp, end = 12.dp, bottom = 14.dp)
+                    .width(if (chatMaximized) 400.dp else 360.dp)
+                    .fillMaxHeight(if (chatMaximized) 0.92f else 0.66f),
+            ) {
+                DesktopChatCard(
+                    maximized = chatMaximized,
+                    onToggleMax = { chatMaximized = !chatMaximized },
+                    onMinimize = { chatExpanded = false },
+                )
+            }
+        } else {
+            // 收起态:右下角当前角色头像悬浮球(黄色霓虹环),点开展开对话
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
@@ -337,6 +308,177 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
                 CharacterAvatar(56.dp)
             }
         }
+    }
+}
+
+/**
+ * 右上悬浮对话卡(对齐 OpenRoom):header(角色名 › 切角色 + 阶段进度 + 最小/最大化)+
+ * 主体两栏(左角色立绘 | 右 [ChatScreen] 完整对话,含输入与快捷建议)。
+ */
+@Composable
+private fun DesktopChatCard(maximized: Boolean, onToggleMax: () -> Unit, onMinimize: () -> Unit) {
+    Column(Modifier.fillMaxSize().holoGlass(14.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().height(40.dp).background(Holo.Surface2)
+                .padding(start = 12.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "${CharacterRegistry.current.name} ›", color = Holo.Accent, fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.clickable { CharacterRegistry.next() },
+            )
+            Spacer(Modifier.weight(1f))
+            PhaseDots(current = 1, total = 4)
+            Spacer(Modifier.width(6.dp))
+            // 最小化(收起为悬浮球)
+            Box(Modifier.size(30.dp).clickable(onClick = onMinimize), contentAlignment = Alignment.Center) {
+                Text("—", color = Holo.TextSecondary, fontSize = 16.sp)
+            }
+            // 最大化 / 还原
+            Box(Modifier.size(30.dp).clickable(onClick = onToggleMax), contentAlignment = Alignment.Center) {
+                Text(if (maximized) "▢" else "□", color = Holo.TextSecondary, fontSize = 15.sp)
+            }
+        }
+        Row(Modifier.weight(1f)) {
+            // 左:当前角色全息立绘常驻(更深底)
+            Box(Modifier.width(96.dp).fillMaxHeight().background(Holo.AvatarBg)) {
+                HoloFigure(
+                    CharacterRegistry.current.frontRes,
+                    Modifier.align(Alignment.BottomCenter)
+                        .fillMaxHeight(0.96f)
+                        .aspectRatio(0.46f, matchHeightConstraintsFirst = true),
+                )
+                Text(
+                    CharacterRegistry.current.zh, color = Holo.Accent, fontSize = 20.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.align(Alignment.TopStart).padding(start = 8.dp, top = 6.dp),
+                )
+            }
+            // 右:完整对话(自带输入 + 快捷建议)
+            Box(Modifier.weight(1f)) { ChatScreen() }
+        }
+    }
+}
+
+/** 阶段进度点(参考图右上「阶段 1/4」):首点强调,其余暗;纯视觉章节指示。 */
+@Composable
+private fun PhaseDots(current: Int, total: Int) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+        Text("阶段 $current/$total", color = Holo.TextSecondary, fontSize = 9.sp)
+        Spacer(Modifier.width(3.dp))
+        repeat(total) { i ->
+            Box(
+                Modifier.size(width = 12.dp, height = 3.dp).clip(RoundedCornerShape(2.dp))
+                    .background(if (i < current) Holo.Accent else Holo.BorderStrong),
+            )
+        }
+    }
+}
+
+/**
+ * 顶栏(全宽,对齐 OpenRoom):左 logo +「本地虚拟电脑」,右 模组画廊 / 技能 + 连接态 + 时钟。
+ */
+@Composable
+private fun DesktopTopBar(
+    connLabel: String,
+    connColor: Color,
+    timeText: String,
+    onGallery: () -> Unit,
+    onSkills: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().height(44.dp)
+            .background(Holo.Panel.copy(alpha = 0.9f))
+            .padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Icon(Icons.Filled.DesktopWindows, contentDescription = null, tint = Holo.Accent, modifier = Modifier.size(20.dp))
+        Text("本地虚拟电脑", color = Holo.TextHud, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.weight(1f))
+        TopBarAction("模组画廊", onGallery)
+        TopBarAction("技能", onSkills)
+        Spacer(Modifier.width(4.dp))
+        HoloDot(connColor)
+        Text(connLabel, color = Holo.TextHud, fontSize = 10.sp)
+        Text(timeText, color = Holo.Accent, fontSize = 10.sp)
+    }
+}
+
+@Composable
+private fun TopBarAction(label: String, onClick: () -> Unit) {
+    Text(
+        label, color = Holo.TextSecondary, fontSize = 12.sp,
+        modifier = Modifier.clip(RoundedCornerShape(6.dp)).clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+    )
+}
+
+/**
+ * 左侧竖排应用栏(对齐 OpenRoom 左侧图标栏):浏览器 / 发现 / 广场 + 已装小程序 + 全部。
+ * 浏览器是常驻底板(点它仅高亮);发现/广场/小程序以浮动窗口打开。
+ */
+@Composable
+private fun LeftAppRail(
+    onDiscover: () -> Unit,
+    onSquare: () -> Unit,
+    onLaunchMiniApp: (String) -> Unit,
+    onAllApps: () -> Unit,
+) {
+    val miniApps = remember { MiniAppRegistry.all() }
+    Column(
+        modifier = Modifier.width(78.dp).fillMaxHeight()
+            .background(Holo.Panel.copy(alpha = 0.6f))
+            .verticalScroll(androidx.compose.foundation.rememberScrollState())
+            .padding(vertical = 10.dp, horizontal = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        RailItem(Icons.Filled.Language, "浏览器", active = true) {}
+        RailItem(Icons.Filled.Explore, "发现", active = false, onClick = onDiscover)
+        RailItem(Icons.Filled.Forum, "广场", active = false, onClick = onSquare)
+        if (miniApps.isNotEmpty()) {
+            Box(Modifier.padding(vertical = 2.dp).size(width = 40.dp, height = 1.dp).background(Holo.BorderDim))
+        }
+        miniApps.take(10).forEach { m ->
+            RailItem(Icons.Filled.Apps, m.name.ifBlank { m.id }, active = false) { onLaunchMiniApp(m.id) }
+        }
+        RailItem(Icons.Filled.GridView, "全部", active = false, onClick = onAllApps)
+    }
+}
+
+@Composable
+private fun RailItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    active: Boolean,
+    onClick: () -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (active) Holo.Surface2 else Color.Transparent)
+            .clickable(onClick = onClick)
+            .padding(vertical = 7.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(
+            Modifier.size(40.dp).clip(RoundedCornerShape(11.dp))
+                .background(if (active) Holo.Accent.copy(alpha = 0.14f) else Holo.AvatarBg),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                icon, contentDescription = label,
+                tint = if (active) Holo.Accent else Holo.TextHud.copy(alpha = 0.7f),
+                modifier = Modifier.size(22.dp),
+            )
+        }
+        Spacer(Modifier.height(3.dp))
+        Text(
+            label.take(4),
+            color = if (active) Holo.Accent else Holo.TextHud.copy(alpha = 0.6f),
+            fontSize = 9.sp, maxLines = 1,
+        )
     }
 }
 
@@ -567,9 +709,6 @@ private fun Dot(color: Color) {
     Box(Modifier.size(8.dp).clip(CircleShape).background(color))
 }
 
-/** 桌面左侧内容区可展示的东西(Dock 分类用)。 */
-private enum class DeskContent { Web, Discover, Square }
-
 /** 桌面浮动窗口的内容类型。 */
 private sealed interface WinContent {
     data object Discover : WinContent
@@ -602,67 +741,6 @@ private fun MiniAppWindow(appId: String) {
         onRelease = { v -> if (v is android.webkit.WebView) com.apk.claw.android.plugin.MiniAppHost.destroyWebView(v) },
         modifier = Modifier.fillMaxSize(),
     )
-}
-
-/**
- * 桌面底部 Dock(macOS 风):浏览器 / 发现 / 广场 + 已安装小程序 + 全部小程序。
- * 浏览器/发现/广场在桌面内容区内切换;小程序点击启动([MiniAppActivity])。
- */
-@Composable
-private fun DesktopDock(
-    active: DeskContent,
-    onSelect: (DeskContent) -> Unit,
-    onLaunchMiniApp: (String) -> Unit,
-    onAllApps: () -> Unit,
-) {
-    val miniApps = remember { MiniAppRegistry.all() }
-    Row(
-        modifier = Modifier.fillMaxWidth()
-            .background(Holo.Glass.copy(alpha = 0.5f))
-            .padding(horizontal = 8.dp, vertical = 5.dp),
-        horizontalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterHorizontally),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        DockItem(Icons.Filled.Language, "浏览器", active == DeskContent.Web) { onSelect(DeskContent.Web) }
-        DockItem(Icons.Filled.Explore, "发现", active == DeskContent.Discover) { onSelect(DeskContent.Discover) }
-        DockItem(Icons.Filled.Forum, "广场", active == DeskContent.Square) { onSelect(DeskContent.Square) }
-        if (miniApps.isNotEmpty()) {
-            Box(Modifier.size(width = 1.dp, height = 26.dp).background(Holo.BorderDim))
-        }
-        miniApps.take(8).forEach { m ->
-            DockItem(Icons.Filled.Apps, m.name.ifBlank { m.id }, false) { onLaunchMiniApp(m.id) }
-        }
-        DockItem(Icons.Filled.GridView, "全部", false, onAllApps)
-    }
-}
-
-@Composable
-private fun DockItem(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
-    active: Boolean,
-    onClick: () -> Unit,
-) {
-    Column(
-        modifier = Modifier
-            .clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 3.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Icon(
-            icon,
-            contentDescription = label,
-            tint = if (active) Holo.Accent else Holo.TextHud.copy(alpha = 0.65f),
-            modifier = Modifier.size(22.dp),
-        )
-        Text(
-            label,
-            color = if (active) Holo.Accent else Holo.TextHud.copy(alpha = 0.55f),
-            fontSize = 9.sp,
-            maxLines = 1,
-        )
-    }
 }
 
 /** 从 URL 取 host 作「正在打开 X」的 X;取不到就退回原串。 */
