@@ -60,3 +60,58 @@
 - **async/await 语法**:如需真正支持,只能换引擎(QuickJS + native,见 memory「设备上编程」条),体积/集成成本高,暂不做。
 - **视觉/console 修复轮数**:目前各 1–2 轮,足够多数场景;更难的 App 可让轮数随失败信号自适应。
 - **总结通道命中率**:仅在历史超阈值触发压缩时才走;可按任务类型(长编程 vs 短问答)调整触发点。
+
+## 6. 生成生态:一句话生成 小程序 / 网页脚本 / 工具 / 技能
+
+> 从「有没有生成 skill / 插件 / 小程序」这个问题出发,把「一句话造能力」补全。这条线的价值不在
+> 追全栈 codegen(红海),而在**端侧 + 会干活的产物 + Agent 给自己扩能力**——云端无设备的
+> Base44 类产品结构上做不到。全部改动均在 origin/main,带单测,`:app:testDebugUnitTest` 全绿。
+
+### 6.1 已落地(均在 origin/main)
+
+| 提交 | 改进 | 类别 |
+|---|---|---|
+| `f477217` `feat(codegen)` | generate_app 生成物可**自声明低危设备能力**(agentic mini-app):OCTOPUS_TOOLS 声明 ∩ 白名单 → manifest.allow_tools | 会干活 |
+| `b2fc06c` `feat(skill)` | 端侧**提示词技能 v1**:PromptSkillStore(markdown 技能库)+ generate_skill + 注入 System Prompt(补上 octopus 缺的 loader) | 技能 |
+| `a07c045` `feat(skill)` | 技能 **v1.1**:按任务相关性注入(关键词命中,省 token)+ 接进主对话链路(ChatAgentBridge) | 技能 |
+| `9065894` `feat(skill)` | **导入 Claude skill**(import_skill:解析 SKILL.md + 适配提示)+ 技能页管理(看/开关/删) | 技能 |
+| `054c453` `feat(skill)` | generate_skill **自评自优化一轮**(拿真实工具清单 + 规则让 LLM 复核改一版) | 技能 |
+| `9bb827a` `feat(codegen)` | **generate_plugin**:一句话生成浏览器脚本插件(注入网页的 content script) | 插件 |
+| `b6b4418` `feat(codegen)` | **generate_tool**:一句话把 HTTP API 变成 Agent 可调用的声明式工具(type=tool) | 工具 |
+
+### 6.2 四类插件的生成矩阵
+
+| 插件类型 | 能否一句话生成 | 工具 | 产物「会干活」在哪 |
+|---|---|---|---|
+| mini-app(小程序) | ✅ | `generate_app` | 可调白名单设备能力(generate_image/list_apps/app_action…) |
+| browser-script(网页脚本) | ✅ | `generate_plugin` | 注入匹配网站,页面加载后自动运行 |
+| tool(声明式 HTTP) | ✅ | `generate_tool` | 落 manifest → PluginManager 注册进 ToolRegistry,Agent 直接可调 |
+| dex(原生代码) | ✖ | —— | 原生字节码,不适合 LLM 生成 |
+
+### 6.3 提示词技能 = 把 Claude skill 模型移植到端侧
+
+- **关键认知**:SKILL.md 本质是「给 LLM 的指令包」,LLM 无关 → 内容可移植;搬不动的只有 Claude Code 的
+  **harness plumbing**(Skill 工具、`.claude/skills` 加载器、指向 CLI 自身工具/脚本的引用)。
+- 所以 octopus 需要的是**自己的 loader**:[PromptSkillStore] 存 + `AppViewModel`/`ChatAgentBridge` 把命中技能
+  注入 `dynamicPromptSuffix`。有了它,简单 Claude skill 改改工具名就能 `import_skill` 直接用。
+- skill-creator 本身**最不能照搬**(它 spawn Claude 子 Agent、跑 python eval、打包 .skill,全依赖 CLI harness);
+  能借的只是它的**方法论**(捕获意图→草稿→自评优化),已折进 generate_skill 的自评轮。
+
+### 6.4 安全姿态(生成物各过各的闸门)
+
+- **generate_app / generate_skill / import_skill** → MEDIUM(纳入审计)。技能只影响 Agent 自身推理,不外泄。
+- **generate_plugin / generate_tool** → **HIGH**(不可信来源走来源闸门/审批/BLOCK)。前者注入真实网页能读页面数据、
+  后者对外发 HTTP 可能带用户数据——防远端静默植入「偷数据脚本」或「把数据 POST 到攻击者域名的工具」。
+- mini-app 自声明的 allow_tools 只授白名单低危项;运行时 `OctopusBridge.callTool` 仍过不可信来源闸门,高危照拦。
+- 新增 4 个工具全部在 [ToolRiskPolicy] 归类(HIGH/MEDIUM),`ToolRiskPolicyCoverageTest` 跑活注册表通过——
+  堵住「新工具漏分类 → 静默默认 LOW → 绕过审计/闸门」的漂移。
+
+### 6.5 已知边界 / 后续可做
+
+- **真·eval(v3,未做)**:现在 generate_skill 的「自评」是**静态复核**(按工具清单 + 规则),不是「跑测试
+  prompt、让 Agent 实际执行一遍打分」。真跑一遍要执行真实设备动作、有副作用和成本,是更大的独立立项——
+  可用端侧 run_code(JS)搭一个自测闭环(呼应端侧执行强项)。
+- **import 是逐字导入 + 适配提示**,没做「LLM 自动改写工具名」;需要更贴合时可加一轮 LLM 改写。
+- **相关性注入是关键词级**(ASCII 词 / 中文 2-gram + 停用词过滤);技能多到一定量后可升级为向量/语义匹配。
+- **整机验收**:构建/安装/冷启动/工具注册/风险分类/技能页渲染均已在真机(模拟器)核对;每个 `generate_*`
+  背后的**实际 LLM 生成**需配好模型 + 在对话里驱动,会扣积分,未纳入自动化验收。
