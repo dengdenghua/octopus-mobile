@@ -80,15 +80,39 @@ class GenerateAppTool : BaseTool() {
         // ── 闭环:离屏渲染抓 console error → 有错让 LLM 修复(最多 MAX_REPAIR 轮,只采纳更优版本)──
         // 这是"写-跑-看-改"的最小闭环:agent 不再 one-shot 碰运气,生成后先自检再存。
         var repairRounds = 0
-        var errors = runCatching { HtmlLinter.lint(ClawApplication.instance, html) }.getOrDefault(emptyList())
+        var errors = runCatching { HtmlLinter.lint(ClawApplication.instance, html).errors }.getOrDefault(emptyList())
         while (errors.isNotEmpty() && repairRounds < MAX_REPAIR) {
             repairRounds++
             val fixedRaw = runCatching { callLlm(eff, repairPrompt(html, errors)) }.getOrNull() ?: break
             val fixedHtml = extractHtml(fixedRaw).takeIf { it.isNotBlank() } ?: break
-            val fixedErrors = runCatching { HtmlLinter.lint(ClawApplication.instance, fixedHtml) }.getOrDefault(emptyList())
+            val fixedErrors = runCatching { HtmlLinter.lint(ClawApplication.instance, fixedHtml).errors }.getOrDefault(emptyList())
             if (fixedErrors.size > errors.size) break  // 修得更糟就别采纳,保留上一版
             html = fixedHtml; errors = fixedErrors
             if (errors.isEmpty()) break
+        }
+
+        // ── 视觉验证(VLM):渲染截图 → 判「界面是否实现了用户需求」→ 未达标则按视觉反馈修 1 轮 ──
+        // 补齐 console-error 抓不到的"无报错但功能没实现"。全程 fail-open(GoalVerifier 未配置 VLM
+        // 时判达成,不触发误修)。
+        var visualNote = ""
+        if (com.apk.claw.android.octopus_mobile.VisionAnalyzer.isConfigured()) {
+            val shot = runCatching { HtmlLinter.lint(ClawApplication.instance, html, capture = true).screenshot }.getOrNull()
+            if (shot != null) {
+                val verdict = runCatching {
+                    kotlinx.coroutines.runBlocking {
+                        com.apk.claw.android.octopus_mobile.GoalVerifier.verify(description, shot)
+                    }
+                }.getOrNull()
+                if (verdict != null && !verdict.achieved) {
+                    val fixedRaw = runCatching { callLlm(eff, repairPromptVisual(html, description, verdict.reason)) }.getOrNull()
+                    val fixedHtml = fixedRaw?.let { extractHtml(it) }?.takeIf { it.isNotBlank() }
+                    if (fixedHtml != null) {
+                        val fe = runCatching { HtmlLinter.lint(ClawApplication.instance, fixedHtml).errors }.getOrDefault(emptyList())
+                        if (fe.size <= errors.size) { html = fixedHtml; errors = fe; visualNote = "，并按视觉检查修正了功能实现" }
+                    }
+                }
+                runCatching { shot.recycle() }
+            }
         }
 
         // actions 从最终 html 解析(extractHtml 保留了 </html> 之后的 OCTOPUS_ACTIONS 注释)
@@ -105,7 +129,7 @@ class GenerateAppTool : BaseTool() {
 
         val payload = "$PREVIEW_HEIGHT\n$html"
         return ToolResult.successWithHtml(
-            "已生成应用「$appName」（${html.length} 字符）$lintNote$savedNote。" +
+            "已生成应用「$appName」（${html.length} 字符）$lintNote$visualNote$savedNote。" +
                 "预览已自动推送到控制台，不需要再调用 preview_html 展示同一个应用。",
             payload,
         )
@@ -174,6 +198,19 @@ class GenerateAppTool : BaseTool() {
         - 在 </html> **之后**追加一行 HTML 注释,声明你实现了哪些 action(供宿主发现,数组可为空):
           <!--OCTOPUS_ACTIONS:[{"name":"动作名","description":"一句话说明","params":[{"name":"参数名","type":"string","description":"说明","required":true}]}]-->
         - 只输出 HTML 代码本身(可含上面那行注释)，不要用 markdown 代码块包裹，不要输出任何解释文字
+    """.trimIndent()
+
+    /** 视觉修复 prompt:渲染截图经 VLM 判定"没实现需求"时,把用户需求 + 判定原因喂回让 LLM 修功能。 */
+    private fun repairPromptVisual(html: String, description: String, reason: String) = """
+        你是资深前端工程师。下面这个单文件 HTML 应用渲染出来后,经视觉检查发现没有完整实现用户需求。
+        用户想要：$description
+        视觉检查发现的问题：$reason
+        请修改代码,让界面真正实现用户需求(布局 / 交互 / 内容)。
+        - 只输出完整 HTML(从 <!DOCTYPE html> 到 </html>),保留原有 <!--OCTOPUS_ACTIONS:...--> 注释(若有)。
+        - 不要用 markdown 代码块包裹,不要输出任何解释文字。
+
+        当前代码：
+        $html
     """.trimIndent()
 
     /** 修复 prompt:把当前 HTML + 无头渲染抓到的 console error 一起喂回,让 LLM 只改错不改功能。 */
