@@ -52,10 +52,30 @@ class GenerateSkillTool : BaseTool() {
 
         val obj = runCatching { JSONObject(extractJson(raw)) }
             .getOrElse { return ToolResult.error("技能格式解析失败") }
-        val name = obj.optString("name").trim().ifBlank { wantName.ifBlank { "未命名技能" } }
-        val skillDesc = obj.optString("description").trim().ifBlank { desc.take(80) }
-        val body = obj.optString("body").trim()
+        var name = obj.optString("name").trim().ifBlank { wantName.ifBlank { "未命名技能" } }
+        var skillDesc = obj.optString("description").trim().ifBlank { desc.take(80) }
+        var body = obj.optString("body").trim()
         if (body.isBlank()) return ToolResult.error("技能正文为空")
+
+        // v2 自评自优化(一轮):拿**真实工具清单** + 评判标准让 LLM 复核改一版——把编造的工具名换掉、
+        // 步骤写具体、触发描述收紧。只在产出合法(非空正文)时采纳,避免越改越糟。
+        val toolNames = runCatching {
+            com.apk.claw.android.tool.ToolRegistry.getInstance().getAllTools().map { it.getName() }
+        }.getOrDefault(emptyList())
+        var refined = false
+        if (toolNames.isNotEmpty()) {
+            runCatching { callLlm(eff, refinePrompt(name, skillDesc, body, toolNames)) }.getOrNull()
+                ?.let { runCatching { JSONObject(extractJson(it)) }.getOrNull() }
+                ?.let { r ->
+                    val rb = r.optString("body").trim()
+                    if (rb.isNotBlank()) {
+                        name = r.optString("name").trim().ifBlank { name }
+                        skillDesc = r.optString("description").trim().ifBlank { skillDesc }
+                        body = rb
+                        refined = true
+                    }
+                }
+        }
 
         val id = PromptSkillStore.add(
             PromptSkillStore.PromptSkill(
@@ -68,11 +88,28 @@ class GenerateSkillTool : BaseTool() {
                 source = "generated",
             ),
         )
+        val refineNote = if (refined) "（已自评优化一轮，校对工具引用）" else ""
         return ToolResult.success(
-            "已生成技能「$name」并启用(id=$id)。适用:$skillDesc。" +
+            "已生成技能「$name」$refineNote 并启用(id=$id)。适用:$skillDesc。" +
                 "下次相关任务会自动把它的步骤注入我的上下文;可在「技能」页开关或删除。",
         )
     }
+
+    /** 自评/优化提示:给出**唯一合法工具清单**,让 LLM 复核并改进技能。 */
+    private fun refinePrompt(name: String, desc: String, body: String, toolNames: List<String>) = """
+        复核并改进下面这条给「手机 Agent」用的技能。**硬要求**:body 里出现的工具名必须全部来自这个
+        清单(其它一律换成清单里的等价工具,或删掉那步);清单之外的工具一律视为不存在:
+        ${toolNames.joinToString("、")}
+
+        同时:每步尽量点名要用的工具、写具体可执行;触发描述(description)要具体,别太泛。
+        输出**严格 JSON**(不要代码块、不要多余解释):{"name":"...","description":"...","body":"..."}
+
+        当前技能:
+        name: $name
+        description: $desc
+        body:
+        $body
+    """.trimIndent()
 
     /** 生成提示:让 LLM 产出 {name, description, body},body 里引用**本项目真实工具名**。 */
     private fun skillPrompt(desc: String, wantName: String) = """
