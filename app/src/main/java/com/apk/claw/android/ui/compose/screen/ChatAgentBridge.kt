@@ -174,12 +174,14 @@ object ChatAgentBridge {
         curTask = null
     }
 
-    private fun buildConfig(): AgentConfig {
+    private fun buildConfig(prompt: String? = null): AgentConfig {
         // 与 AppViewModel.getAgentConfig() 一致：默认平台中转(扣积分),会员且显式选择才用 BYO,
         // 未配置中转/未登录时回退到本地 LLM 配置。
         val eff = com.apk.claw.android.account.LlmRouting.effective()
         var baseUrl = eff.baseUrl
         if (baseUrl.isEmpty()) baseUrl = "https://api.deepseek.com/v1"
+        // 注入与本次任务相关的已启用「提示词技能」(见 PromptSkillStore):按 prompt 命中,省 token。
+        val skillSuffix = com.apk.claw.android.octopus_mobile.skill.PromptSkillStore.buildPromptSection(prompt)
         return AgentConfig.Builder()
             .apiKey(eff.apiKey)
             .baseUrl(baseUrl)
@@ -188,6 +190,7 @@ object ChatAgentBridge {
             .maxIterations(40)
             .enableVision(false)
             .streaming(true)   // 逐字流式输出
+            .dynamicPromptSuffix(skillSuffix)
             .build()
     }
 
@@ -218,7 +221,7 @@ object ChatAgentBridge {
             return
         }
         val recorder = recordKey?.let { ActionRecorder() }
-        service.updateConfig(buildConfig())
+        service.updateConfig(buildConfig(prompt))   // prompt 传入以按相关性注入提示词技能
         // 审计采集：开始一次任务
         curTask = prompt
         curTarget = ControlTarget.label()

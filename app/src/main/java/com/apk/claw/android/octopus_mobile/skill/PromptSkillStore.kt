@@ -62,16 +62,57 @@ object PromptSkillStore {
         save(all().map { if (it.id == id) it.copy(enabled = enabled) else it })
     }
 
-    /** 注入 System Prompt 的技能段:拼所有 enabled 技能的正文,封顶字数。 */
-    fun buildPromptSection(): String {
+    /**
+     * 注入 System Prompt 的技能段。
+     * [prompt] 非空时只注入**与当前任务相关**的技能(按 name/description 关键词命中,省 token、
+     * 触发更准);为空(或没有任何命中)时——[prompt] 为 null 退回注入全部 enabled;[prompt] 非空
+     * 但零命中则不注入(避免无关技能污染上下文)。
+     */
+    fun buildPromptSection(prompt: String? = null): String {
         val on = all().filter { it.enabled }
         if (on.isEmpty()) return ""
+        val selected = when {
+            prompt.isNullOrBlank() -> on                 // 无 prompt(如恢复任务)→ 全量 enabled
+            else -> on.filter { relevant(prompt, it) }   // 有 prompt → 只留命中项(可能为空)
+        }
+        if (selected.isEmpty()) return ""
         val sb = StringBuilder("\n\n## 已启用技能（相关时遵循其步骤，用你已有的工具执行）\n")
-        for (s in on) {
+        for (s in selected) {
             val block = "\n### ${s.name}\n适用：${s.description}\n${s.body}\n"
             if (sb.length + block.length > MAX_SECTION_CHARS + 200) break
             sb.append(block)
         }
         return sb.toString().take(MAX_SECTION_CHARS + 400)
+    }
+
+    /** 轻量相关性:prompt 含技能名,或与「名+描述」的关键词有交集(ASCII 词 / 中文 2-gram)。 */
+    private fun relevant(prompt: String, skill: PromptSkill): Boolean {
+        val p = prompt.lowercase()
+        if (skill.name.isNotBlank() && p.contains(skill.name.lowercase())) return true
+        return keywords("${skill.name} ${skill.description}").any { p.contains(it) }
+    }
+
+    // 停用词:太泛的英文词 / 中文 2-gram,做关键词会造成大量误命中,剔掉。
+    private val EN_STOP = setOf(
+        "when", "that", "this", "with", "from", "your", "user", "please", "make", "want",
+        "need", "will", "what", "about", "some", "into", "then", "than", "they", "have",
+        "been", "asks", "create", "does", "would", "should", "when", "then",
+    )
+    private val CN_STOP = setOf(
+        "用户", "一个", "一笔", "怎么", "什么", "时候", "的时", "当用", "户要", "要用",
+        "可以", "帮我", "我要", "我想", "如果", "这个", "那个", "一下", "进行", "需要",
+    )
+
+    private fun keywords(s: String): Set<String> {
+        val out = mutableSetOf<String>()
+        Regex("[a-z][a-z0-9]{3,}").findAll(s.lowercase()).forEach { if (it.value !in EN_STOP) out.add(it.value) }
+        Regex("[\\u4e00-\\u9fa5]{2,}").findAll(s).forEach { seg ->
+            val t = seg.value
+            for (i in 0..t.length - 2) {
+                val g = t.substring(i, i + 2)  // 中文 2-gram
+                if (g !in CN_STOP) out.add(g)
+            }
+        }
+        return out
     }
 }
