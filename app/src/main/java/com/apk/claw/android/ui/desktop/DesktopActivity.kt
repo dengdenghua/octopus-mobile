@@ -170,7 +170,8 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
     // 对话展开/收起:收起时对话面板宽度动画到 0(仍在组合中,不丢上下文/不打断运行中的任务),
     // 桌面占满;右下角出现悬浮球,点开恢复。
     var chatExpanded by rememberSaveable { mutableStateOf(true) }
-    val chatWidth by animateDpAsState(if (chatExpanded) 340.dp else 0.dp, label = "chatWidth")
+    // OpenRoom 风:对话面板 = avatarSide(Zero 立绘)+ chatSide,需更宽
+    val chatWidth by animateDpAsState(if (chatExpanded) 430.dp else 0.dp, label = "chatWidth")
 
     // 桌面内容宿主:左侧工作区在 浏览器 / 发现 / 广场 间切换;底部 Dock 摆图标(含小程序)
     val ctx = androidx.compose.ui.platform.LocalContext.current
@@ -239,19 +240,39 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
             // 右:悬浮玻璃对话面板(透过面板边缘可见壁纸)
             Box(Modifier.width(chatWidth).fillMaxHeight().clipToBounds()) {
                 if (chatWidth > 0.dp) {
-                    Column(Modifier.fillMaxSize().holoGlass(16.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().height(34.dp).padding(start = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            ZeroAvatar(22.dp)
-                            Spacer(Modifier.width(6.dp))
-                            Text("ZERO", color = Holo.Accent, fontSize = 11.sp, modifier = Modifier.weight(1f))
-                            IconButton(onClick = { chatExpanded = false }, modifier = Modifier.size(30.dp)) {
-                                Icon(Icons.Filled.ChevronRight, contentDescription = "收起对话", tint = Holo.TextHud, modifier = Modifier.size(18.dp))
-                            }
+                    // OpenRoom ChatPanel:两栏 avatarSide(角色立绘)| chatSide(header+对话)
+                    Row(Modifier.fillMaxSize().holoGlass(12.dp)) {
+                        // avatarSide:更深底 + Zero 全息立绘常驻
+                        Box(Modifier.width(104.dp).fillMaxHeight().background(Holo.AvatarBg)) {
+                            HoloFigure(
+                                R.drawable.zero_front,
+                                Modifier.align(Alignment.BottomCenter)
+                                    .fillMaxHeight(0.96f)
+                                    .aspectRatio(0.46f, matchHeightConstraintsFirst = true),
+                            )
+                            Text(
+                                "零", color = Holo.Accent, fontSize = 22.sp, fontWeight = FontWeight.Bold,
+                                modifier = Modifier.align(Alignment.TopStart).padding(start = 10.dp, top = 6.dp),
+                            )
                         }
-                        Box(Modifier.weight(1f)) { ChatScreen() }
+                        // chatSide:header(ZERO › 可切角色 + 收起)+ ChatScreen
+                        Column(Modifier.weight(1f)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().height(34.dp).padding(start = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    "ZERO ›", color = Holo.Accent, fontSize = 12.sp,
+                                    modifier = Modifier.weight(1f).clickable {
+                                        android.widget.Toast.makeText(ctx, "更多角色即将到来", android.widget.Toast.LENGTH_SHORT).show()
+                                    },
+                                )
+                                IconButton(onClick = { chatExpanded = false }, modifier = Modifier.size(30.dp)) {
+                                    Icon(Icons.Filled.ChevronRight, contentDescription = "收起对话", tint = Holo.TextSecondary, modifier = Modifier.size(18.dp))
+                                }
+                            }
+                            Box(Modifier.weight(1f)) { ChatScreen() }
+                        }
                     }
                 }
             }
