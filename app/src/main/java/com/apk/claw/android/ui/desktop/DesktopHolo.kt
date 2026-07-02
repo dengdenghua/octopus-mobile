@@ -162,10 +162,11 @@ fun HoloWindow(
 ) {
     val density = LocalDensity.current
     var off by remember { mutableStateOf(with(density) { IntOffset(startX.roundToPx(), startY.roundToPx()) }) }
+    var size by remember { mutableStateOf(androidx.compose.ui.unit.DpSize(width, height)) }
     Box(
         Modifier
             .offset { off }
-            .size(width, height)
+            .size(size)
             .holoGlass(12.dp)
             .pointerInput(Unit) { detectDragGestures(onDragStart = { onFocus() }) { c, _ -> c.consume() } },
     ) {
@@ -192,6 +193,24 @@ fun HoloWindow(
             }
             Box(Modifier.weight(1f)) { content() }
         }
+        // 右下角拖动缩放
+        Box(
+            Modifier
+                .align(Alignment.BottomEnd)
+                .size(22.dp)
+                .pointerInput(Unit) {
+                    detectDragGestures(onDragStart = { onFocus() }) { change, drag ->
+                        change.consume()
+                        val dw = with(density) { drag.x.toDp() }
+                        val dh = with(density) { drag.y.toDp() }
+                        size = androidx.compose.ui.unit.DpSize(
+                            (size.width + dw).coerceAtLeast(240.dp),
+                            (size.height + dh).coerceAtLeast(160.dp),
+                        )
+                    }
+                },
+            contentAlignment = Alignment.Center,
+        ) { Text("⌟", color = Holo.AccentDim, fontSize = 14.sp) }
     }
 }
 
@@ -268,6 +287,16 @@ object CharacterRegistry {
             "luna", "露娜", "LUNA", "Dream Walker", "CHASER", "A", "Dream Walker", "Alive", "—",
             "Dreams are memories wearing masks.", listOf("Dream Dive"),
             R.drawable.luna_avatar, R.drawable.luna_front, R.drawable.luna_side, R.drawable.luna_back,
+        ),
+        CharacterProfile(
+            "eve", "伊芙", "EVE", "Siren", "CHASER", "A", "Emotion Hacker", "Alive", "—",
+            "Feelings are also evidence.", listOf("Emotion Hack"),
+            R.drawable.eve_avatar, R.drawable.eve_front, R.drawable.eve_side, R.drawable.eve_back,
+        ),
+        CharacterProfile(
+            "kane", "凯恩", "KANE", "Paladin", "CHASER", "A", "Vice Captain", "Alive", "—",
+            "Give me ten seconds. Then follow me.", listOf("Combat Download"),
+            R.drawable.kane_avatar, R.drawable.kane_front, R.drawable.kane_side, R.drawable.kane_back,
         ),
     )
 
