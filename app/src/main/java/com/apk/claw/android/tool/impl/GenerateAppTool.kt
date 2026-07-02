@@ -30,8 +30,9 @@ import java.util.concurrent.TimeUnit
  * 通过 [com.apk.claw.android.plugin.PluginManager] 挂进 [com.apk.claw.android.plugin.MiniAppRegistry]，
  * 用户可在「小程序」列表里随时重新打开——不需要再造一个新的"生成应用"列表 UI。
  *
- * 生成的 manifest 默认不声明任何 allow_tools/allow_device/allow_pay（等同零桥权限，纯前端沙箱 +
- * localStorage），刻意不给生成内容任何设备自动化/支付能力——这是有意的最小化范围，不是遗漏。
+ * 生成物默认纯前端沙箱 + localStorage;但可**自声明**要调的低危设备能力(OCTOPUS_TOOLS),
+ * 宿主只授予 [AGENTIC_TOOL_WHITELIST] 内的(生成媒体/预览/联动其它小程序),让"生成物会干活"
+ * 而不越权——这是这版新增的能力。allow_device/allow_pay 仍恒空(不给设备自动化/支付)。
  * 仍然没有云端后端/多设备同步——只适合个人单机使用的小工具/小游戏/可视化。
  */
 class GenerateAppTool : BaseTool() {
@@ -42,6 +43,17 @@ class GenerateAppTool : BaseTool() {
         private const val MANIFEST_VERSION = "1.0.0"
         /** 生成后自动修复的最大轮数(每轮:离屏渲染抓错 → LLM 修 → 再渲染)。 */
         private const val MAX_REPAIR = 2
+
+        /**
+         * 生成物可自动获授的「设备能力」白名单——只放**低危、无隐私读取**的工具:生成媒体、预览、
+         * 联动其它小程序。刻意不含:截图/剪贴板读取/文件/短信/自动化点击等(会读隐私或改设备状态)。
+         * 即便在白名单内,运行时调用仍过 [com.apk.claw.android.tool.ToolRegistry] 的不可信来源闸门,
+         * 高危工具(如 run_code)仍会被拦/审批;这里是「第一道:允许声明」。
+         */
+        private val AGENTIC_TOOL_WHITELIST = setOf(
+            "generate_image", "generate_video", "preview_html",
+            "list_apps", "app_action", "read_app_events",
+        )
     }
 
     private val http = OctoHttp.shared.newBuilder()
@@ -117,10 +129,13 @@ class GenerateAppTool : BaseTool() {
 
         // actions 从最终 html 解析(extractHtml 保留了 </html> 之后的 OCTOPUS_ACTIONS 注释)
         val actions = parseActions(html)
+        // 生成物自声明要调的设备工具(OCTOPUS_TOOLS),只授予白名单内的(安全/低危);其余丢弃。
+        val grantedTools = parseTools(html).filter { it in AGENTIC_TOOL_WHITELIST }
 
         val appId = "gen_" + System.currentTimeMillis()
-        val saved = runCatching { persistAsMiniApp(appId, appName, html, actions) }.getOrDefault(false)
-        val savedNote = if (saved) "，已存为小程序「$appName」，可在「小程序」里随时重新打开" else ""
+        val saved = runCatching { persistAsMiniApp(appId, appName, html, actions, grantedTools) }.getOrDefault(false)
+        val toolNote = if (grantedTools.isNotEmpty()) "，可调用设备能力：${grantedTools.joinToString("、")}" else ""
+        val savedNote = if (saved) "，已存为小程序「$appName」$toolNote，可在「小程序」里随时重新打开" else ""
         val lintNote = when {
             repairRounds == 0 && errors.isEmpty() -> "，自检无控制台错误"
             errors.isEmpty() -> "，自动修复 $repairRounds 轮后无控制台错误"
@@ -144,6 +159,7 @@ class GenerateAppTool : BaseTool() {
         appName: String,
         html: String,
         actions: List<com.apk.claw.android.plugin.PluginActionDef>,
+        allowTools: List<String>,
     ): Boolean {
         val ctx = ClawApplication.instance
         val dir = File(ctx.filesDir, "generated_apps/$appId")
@@ -156,7 +172,10 @@ class GenerateAppTool : BaseTool() {
             type = "mini-app",
             description = "由 Agent 生成",
             page = "index.html",
-            // allow_tools/allow_device/allow_pay 均留空/false 默认值：生成内容零桥权限。
+            // allow_tools:只授予白名单内、生成物自声明要用的低危工具(见 AGENTIC_TOOL_WHITELIST);
+            //   即便授予,调用仍过来源闸门(OctopusBridge.callTool → withUntrustedSource),高危照样拦。
+            // allow_device/allow_pay 仍留空默认:不给设备自动化/支付。
+            allowTools = allowTools,
             // actions:生成的 app 自声明可被 Agent 调用的动作(list_apps 发现 / app_action 派发)。
             actions = actions,
         )
@@ -172,6 +191,16 @@ class GenerateAppTool : BaseTool() {
         return runCatching {
             val type = object : com.google.gson.reflect.TypeToken<List<com.apk.claw.android.plugin.PluginActionDef>>() {}.type
             Gson().fromJson<List<com.apk.claw.android.plugin.PluginActionDef>>(m.groupValues[1], type) ?: emptyList()
+        }.getOrDefault(emptyList())
+    }
+
+    /** 解析 `<!--OCTOPUS_TOOLS:["a","b"]-->` 声明的工具名列表;失败/缺失则空。 */
+    private fun parseTools(raw: String): List<String> {
+        val m = Regex("""<!--\s*OCTOPUS_TOOLS:\s*(\[.*?])\s*-->""", RegexOption.DOT_MATCHES_ALL).find(raw)
+            ?: return emptyList()
+        return runCatching {
+            val type = object : com.google.gson.reflect.TypeToken<List<String>>() {}.type
+            Gson().fromJson<List<String>>(m.groupValues[1], type) ?: emptyList()
         }.getOrDefault(emptyList())
     }
 
@@ -195,9 +224,20 @@ class GenerateAppTool : BaseTool() {
         - **让应用可被 AI 助手操作**:实现 `window.octopus.onAgentAction = function(actionType, params){ ... }`,
           为应用的每个关键操作提供一个 action 分支(处理后 return 一句简短字符串表示结果);在关键的用户
           操作处调用 `octopus.reportAction(actionType, params)` 上报(先判断 `window.octopus` 是否存在)。
+        - **让应用能真正「干活」(可选,按需)**:除了纯前端逻辑,你还可以调用宿主设备能力:
+          `var r = octopus.callTool("工具名", { 参数 });`(同步返回 `{ok:true,data:"..."}` 或 `{ok:false,error:"..."}`;
+          调用前先判断 `window.octopus`)。**只有以下低危工具可用**(用不到就别声明):
+            · generate_image {prompt, size?}    → 文生图,data 内含图片链接(如做「AI 头像/海报」应用)
+            · generate_video {prompt}           → 文生视频
+            · preview_html {html, height?}      → 把一段 HTML 推到控制台预览
+            · list_apps {}                      → 列出已装小程序(做启动器/仪表盘)
+            · app_action {app_id, action, params?} → 调用另一个小程序的动作(跨应用联动)
+            · read_app_events {app_id?}         → 读其它小程序上报的事件
+          用了哪些,就在 </html> **之后**追加一行声明(没用到就省略这行):
+          <!--OCTOPUS_TOOLS:["generate_image","list_apps"]-->
         - 在 </html> **之后**追加一行 HTML 注释,声明你实现了哪些 action(供宿主发现,数组可为空):
           <!--OCTOPUS_ACTIONS:[{"name":"动作名","description":"一句话说明","params":[{"name":"参数名","type":"string","description":"说明","required":true}]}]-->
-        - 只输出 HTML 代码本身(可含上面那行注释)，不要用 markdown 代码块包裹，不要输出任何解释文字
+        - 只输出 HTML 代码本身(可含上面两行注释)，不要用 markdown 代码块包裹，不要输出任何解释文字
     """.trimIndent()
 
     /** 视觉修复 prompt:渲染截图经 VLM 判定"没实现需求"时,把用户需求 + 判定原因喂回让 LLM 修功能。 */
@@ -206,7 +246,7 @@ class GenerateAppTool : BaseTool() {
         用户想要：$description
         视觉检查发现的问题：$reason
         请修改代码,让界面真正实现用户需求(布局 / 交互 / 内容)。
-        - 只输出完整 HTML(从 <!DOCTYPE html> 到 </html>),保留原有 <!--OCTOPUS_ACTIONS:...--> 注释(若有)。
+        - 只输出完整 HTML(从 <!DOCTYPE html> 到 </html>),保留原有 <!--OCTOPUS_ACTIONS:...--> 与 <!--OCTOPUS_TOOLS:...--> 注释(若有)。
         - 不要用 markdown 代码块包裹,不要输出任何解释文字。
 
         当前代码：
@@ -219,7 +259,7 @@ class GenerateAppTool : BaseTool() {
         要求：
         - 只修这些错误,保持原有功能与界面不变。
         - 只输出修复后的完整 HTML(从 <!DOCTYPE html> 到 </html>),并保留原有的
-          <!--OCTOPUS_ACTIONS:...--> 注释(若有)。
+          <!--OCTOPUS_ACTIONS:...--> 与 <!--OCTOPUS_TOOLS:...--> 注释(若有)。
         - 不要用 markdown 代码块包裹,不要输出任何解释文字。
 
         控制台错误：
