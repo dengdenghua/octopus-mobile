@@ -206,6 +206,7 @@ dependencies {
     implementation(libs.compose.navigation)
     implementation(libs.compose.activity)
     implementation(libs.compose.lifecycle)
+    implementation(libs.compose.lifecycle.runtime)
     implementation(libs.compose.runtime)
     implementation(libs.compose.foundation)
     debugImplementation(libs.compose.ui.tooling)
