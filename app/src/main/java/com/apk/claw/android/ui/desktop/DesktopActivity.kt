@@ -274,6 +274,8 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
                 )
                 // 中:玻璃「舞台」直播间 —— 浏览器 monitor(空闲显角色) + 字幕/Live/点赞覆盖 + 浮动窗口
                 //     左右留白 = 壁纸透出(参考图舞台不占满宽)
+                // 舞台右侧被对话框浮窗盖住的宽度:把角色/字幕/点赞挪进「可见舞台」区域,别藏到卡后。
+                val stageInsetEnd = if (dialogOpen) 360.dp else 0.dp
                 Box(Modifier.weight(1f).fillMaxHeight().padding(horizontal = 40.dp, vertical = 12.dp)) {
                     Box(Modifier.fillMaxSize().holoGlass(16.dp).clipToBounds()) {
                         DesktopMonitor(
@@ -282,6 +284,7 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
                             pageTitle = pageTitle,
                             loading = loading,
                             progress = progress,
+                            insetEnd = stageInsetEnd,
                             onNavigate = { currentUrl = it; pageTitle = "" },
                         )
                         // 直播间覆盖层:左上 ● LIVE + 角色名(点开档案);其下飘动观众弹幕;右下 ♥ 点赞;底部字幕
@@ -294,14 +297,15 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
                         StageLikeButton(
                             count = likeCount,
                             onLike = { likeCount++ },
-                            modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp),
+                            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 12.dp + stageInsetEnd, bottom = 12.dp),
                         )
                         if (subtitle.isNotBlank() || running) {
                             StageSubtitle(
                                 text = subtitle,
                                 running = running,
                                 toolNote = toolNote,
-                                modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(bottom = 44.dp),
+                                modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                                    .padding(end = stageInsetEnd, bottom = 44.dp),
                             )
                         }
                         // 浮动窗口层:发现/广场/mini-app,可拖、可缩、可关、点击置顶(末尾在最上)
@@ -739,6 +743,7 @@ private fun DesktopMonitor(
     pageTitle: String,
     loading: Boolean,
     progress: Int,
+    insetEnd: androidx.compose.ui.unit.Dp,
     onNavigate: (String) -> Unit,
 ) {
     Column(Modifier.fillMaxSize()) {
@@ -763,14 +768,34 @@ private fun DesktopMonitor(
             )
         }
         Box(Modifier.fillMaxSize()) {
+            val idle = currentUrl.isBlank() || currentUrl == "about:blank"
+            // WebView 常挂(引擎/Agent browser_* 需要),但空闲时置 GONE:一是 about:blank 白屏不再穿透
+            // 盖住上层 Compose(AndroidView 会画在同层 Compose 之上),二是空闲显直播间角色舞台。
             AndroidView(
                 factory = { ctx -> engine.createView(ctx) },
+                update = { it.visibility = if (idle) android.view.View.GONE else android.view.View.VISIBLE },
                 modifier = Modifier.fillMaxSize(),
             )
-            val idle = currentUrl.isBlank() || currentUrl == "about:blank"
-            // 空闲 = 全息角色档案面板(信息卡 + 技能/插件配置 + Zero 三视图立绘)
-            if (idle) CharacterHud(Modifier.fillMaxSize())
+            // 空闲 = 直播间角色舞台(大立绘,场景感);详细档案在「角色档案」浮窗(CharacterHud)。
+            if (idle) CharacterStage(insetEnd, Modifier.fillMaxSize())
         }
+    }
+}
+
+/**
+ * 直播间空闲舞台:深底 + 当前角色大立绘,底部居中站立(场景感)。[insetEnd] 让立绘避开右侧
+ * 对话框浮窗、落在可见舞台中央。详细档案走「角色档案」浮窗。
+ */
+@Composable
+private fun CharacterStage(insetEnd: androidx.compose.ui.unit.Dp, modifier: Modifier = Modifier) {
+    Box(modifier.background(Holo.bgBrush)) {
+        HoloFigure(
+            CharacterRegistry.current.frontRes,
+            Modifier.align(Alignment.BottomCenter)
+                .padding(end = insetEnd)
+                .fillMaxHeight(0.98f)
+                .aspectRatio(0.5f, matchHeightConstraintsFirst = true),
+        )
     }
 }
 
