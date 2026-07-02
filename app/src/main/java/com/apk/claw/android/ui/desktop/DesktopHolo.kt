@@ -10,6 +10,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +19,8 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -36,15 +39,19 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.roundToInt
 import com.apk.claw.android.R
 import com.apk.claw.android.plugin.MiniAppRegistry
 import com.apk.claw.android.utils.KVUtils
@@ -136,6 +143,56 @@ private fun LiveDot(active: Boolean) {
 @Composable
 fun HoloDot(color: Color) {
     Canvas(Modifier.size(7.dp)) { drawCircle(color) }
+}
+
+/**
+ * 可拖拽浮动窗口(移植 OpenRoom windowManager MVP):玻璃框 + 标题栏(拖动)+ 关闭,固定尺寸。
+ * 标题栏按住拖动移动窗口;点窗口任意处触发 onFocus(供上层置顶)。
+ */
+@Composable
+fun HoloWindow(
+    title: String,
+    startX: Dp,
+    startY: Dp,
+    width: Dp,
+    height: Dp,
+    onClose: () -> Unit,
+    onFocus: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    val density = LocalDensity.current
+    var off by remember { mutableStateOf(with(density) { IntOffset(startX.roundToPx(), startY.roundToPx()) }) }
+    Box(
+        Modifier
+            .offset { off }
+            .size(width, height)
+            .holoGlass(12.dp)
+            .pointerInput(Unit) { detectDragGestures(onDragStart = { onFocus() }) { c, _ -> c.consume() } },
+    ) {
+        Column(Modifier.fillMaxSize()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(30.dp)
+                    .background(Holo.Surface2)
+                    .pointerInput(Unit) {
+                        detectDragGestures(onDragStart = { onFocus() }) { change, drag ->
+                            change.consume()
+                            off = IntOffset(off.x + drag.x.roundToInt(), off.y + drag.y.roundToInt())
+                        }
+                    }
+                    .padding(start = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(title, color = Holo.TextHud, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                Box(
+                    Modifier.size(30.dp).clickable(onClick = onClose),
+                    contentAlignment = Alignment.Center,
+                ) { Text("×", color = Holo.TextSecondary, fontSize = 18.sp) }
+            }
+            Box(Modifier.weight(1f)) { content() }
+        }
+    }
 }
 
 /** Agent 头像 —— 当前角色(Echo 宇宙),圆形裁切;切角色即变。 */

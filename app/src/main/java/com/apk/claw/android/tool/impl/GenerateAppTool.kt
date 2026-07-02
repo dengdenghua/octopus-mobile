@@ -75,8 +75,11 @@ class GenerateAppTool : BaseTool() {
         val html = extractHtml(raw)
         if (html.isBlank()) return ToolResult.error("生成结果为空或不是有效 HTML")
 
+        // 从原始输出解析 OCTOPUS_ACTIONS 声明(在 </html> 之后,extractHtml 会截掉,故从 raw 解析)
+        val actions = parseActions(raw)
+
         val appId = "gen_" + System.currentTimeMillis()
-        val saved = runCatching { persistAsMiniApp(appId, appName, html) }.getOrDefault(false)
+        val saved = runCatching { persistAsMiniApp(appId, appName, html, actions) }.getOrDefault(false)
         val savedNote = if (saved) "，已存为小程序「$appName」，可在「小程序」里随时重新打开" else ""
 
         val payload = "$PREVIEW_HEIGHT\n$html"
@@ -91,7 +94,12 @@ class GenerateAppTool : BaseTool() {
      * 落盘成 mini-app 插件目录，交给 [PluginManager] 认领。目录/manifest 只由这个工具写入，
      * 见 [com.apk.claw.android.plugin.PluginManager] 里对 generated 来源的信任规则注释。
      */
-    private fun persistAsMiniApp(appId: String, appName: String, html: String): Boolean {
+    private fun persistAsMiniApp(
+        appId: String,
+        appName: String,
+        html: String,
+        actions: List<com.apk.claw.android.plugin.PluginActionDef>,
+    ): Boolean {
         val ctx = ClawApplication.instance
         val dir = File(ctx.filesDir, "generated_apps/$appId")
         if (!dir.exists() && !dir.mkdirs()) return false
@@ -104,10 +112,22 @@ class GenerateAppTool : BaseTool() {
             description = "由 Agent 生成",
             page = "index.html",
             // allow_tools/allow_device/allow_pay 均留空/false 默认值：生成内容零桥权限。
+            // actions:生成的 app 自声明可被 Agent 调用的动作(list_apps 发现 / app_action 派发)。
+            actions = actions,
         )
         File(dir, "manifest.json").writeText(Gson().toJson(manifest))
         ctx.pluginManager.refreshNonDexPlugins()
         return true
+    }
+
+    /** 从 LLM 原始输出解析 `<!--OCTOPUS_ACTIONS:[...]-->` 声明;失败/缺失则空。 */
+    private fun parseActions(raw: String): List<com.apk.claw.android.plugin.PluginActionDef> {
+        val m = Regex("""<!--\s*OCTOPUS_ACTIONS:\s*(\[.*?])\s*-->""", RegexOption.DOT_MATCHES_ALL).find(raw)
+            ?: return emptyList()
+        return runCatching {
+            val type = object : com.google.gson.reflect.TypeToken<List<com.apk.claw.android.plugin.PluginActionDef>>() {}.type
+            Gson().fromJson<List<com.apk.claw.android.plugin.PluginActionDef>>(m.groupValues[1], type) ?: emptyList()
+        }.getOrDefault(emptyList())
     }
 
     private fun planPrompt(description: String) = """
@@ -127,7 +147,12 @@ class GenerateAppTool : BaseTool() {
 
         要求：
         - 输出必须是完整可运行的单个 HTML 文档（从 <!DOCTYPE html> 到 </html>），移动端友好、界面美观
-        - 只输出 HTML 代码本身，不要用 markdown 代码块包裹，不要输出任何解释文字
+        - **让应用可被 AI 助手操作**:实现 `window.octopus.onAgentAction = function(actionType, params){ ... }`,
+          为应用的每个关键操作提供一个 action 分支(处理后 return 一句简短字符串表示结果);在关键的用户
+          操作处调用 `octopus.reportAction(actionType, params)` 上报(先判断 `window.octopus` 是否存在)。
+        - 在 </html> **之后**追加一行 HTML 注释,声明你实现了哪些 action(供宿主发现,数组可为空):
+          <!--OCTOPUS_ACTIONS:[{"name":"动作名","description":"一句话说明","params":[{"name":"参数名","type":"string","description":"说明","required":true}]}]-->
+        - 只输出 HTML 代码本身(可含上面那行注释)，不要用 markdown 代码块包裹，不要输出任何解释文字
     """.trimIndent()
 
     private fun callLlm(eff: EffectiveLlm, userPrompt: String): String {

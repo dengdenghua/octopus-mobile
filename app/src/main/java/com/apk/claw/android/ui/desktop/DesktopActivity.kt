@@ -173,9 +173,15 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
     // OpenRoom 风:对话面板 = avatarSide(Zero 立绘)+ chatSide,需更宽
     val chatWidth by animateDpAsState(if (chatExpanded) 430.dp else 0.dp, label = "chatWidth")
 
-    // 桌面内容宿主:左侧工作区在 浏览器 / 发现 / 广场 间切换;底部 Dock 摆图标(含小程序)
+    // 桌面:浏览器是常驻底板;发现/广场以可拖浮动窗口打开(移植 OpenRoom windowManager)。
     val ctx = androidx.compose.ui.platform.LocalContext.current
-    var content by remember { mutableStateOf(DeskContent.Web) }
+    val windows = remember { androidx.compose.runtime.mutableStateListOf<Pair<Long, DeskContent>>() }
+    var winSeq by remember { mutableLongStateOf(0L) }
+    val openWindow: (DeskContent) -> Unit = { kind ->
+        val idx = windows.indexOfFirst { it.second == kind }
+        if (idx >= 0) { val w = windows.removeAt(idx); windows.add(w) }  // 已开则置顶
+        else windows.add((winSeq++) to kind)
+    }
 
     // HUD 遥测:母体连接态 + 走秒时钟(等宽,科幻直播条用)
     val connState by appViewModel.connectionState.collectAsState()
@@ -194,7 +200,7 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
     var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) { while (true) { nowMs = System.currentTimeMillis(); delay(1000) } }
     val hudClock = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }.format(Date(nowMs))
-    val webLive = content == DeskContent.Web && currentUrl.isNotBlank() && currentUrl != "about:blank"
+    val webLive = currentUrl.isNotBlank() && currentUrl != "about:blank"
 
     // 全屏科幻壁纸打底,面板悬浮其上(带留白 = 全息漂浮感)
     Box(Modifier.fillMaxSize()) {
@@ -211,26 +217,42 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
                         timeText = hudClock,
                     )
                     Box(Modifier.weight(1f).clipToBounds()) {
-                        when (content) {
-                            DeskContent.Web -> DesktopMonitor(
-                                engine = engine,
-                                currentUrl = currentUrl,
-                                pageTitle = pageTitle,
-                                loading = loading,
-                                progress = progress,
-                                onNavigate = { currentUrl = it; pageTitle = "" },
-                            )
-                            // 发现页里点网站 → 切回浏览器并在桌面里打开(内容留在桌面,不跳走)
-                            DeskContent.Discover -> DiscoverScreen(onOpenUrl = { url ->
-                                content = DeskContent.Web
-                                url?.let { engine.navigate(normalizeUrl(it)) }
-                            })
-                            DeskContent.Square -> AgentSquareScreen(onBack = { content = DeskContent.Web })
+                        // 底板:浏览器桌面(空闲显角色档案 HUD)
+                        DesktopMonitor(
+                            engine = engine,
+                            currentUrl = currentUrl,
+                            pageTitle = pageTitle,
+                            loading = loading,
+                            progress = progress,
+                            onNavigate = { currentUrl = it; pageTitle = "" },
+                        )
+                        // 浮动窗口层:发现/广场,可拖、可关、点击置顶(列表顺序=层级,末尾在最上)
+                        windows.forEachIndexed { i, (id, kind) ->
+                            HoloWindow(
+                                title = if (kind == DeskContent.Discover) "发现" else "广场",
+                                startX = (24 + i * 26).dp,
+                                startY = (24 + i * 26).dp,
+                                width = 360.dp,
+                                height = 320.dp,
+                                onClose = { windows.removeAll { it.first == id } },
+                                onFocus = {
+                                    val idx = windows.indexOfFirst { it.first == id }
+                                    if (idx in 0 until windows.size - 1) { val w = windows.removeAt(idx); windows.add(w) }
+                                },
+                            ) {
+                                when (kind) {
+                                    DeskContent.Discover -> DiscoverScreen(onOpenUrl = { url ->
+                                        url?.let { engine.navigate(normalizeUrl(it)) }
+                                    })
+                                    DeskContent.Square -> AgentSquareScreen(onBack = { windows.removeAll { it.first == id } })
+                                    else -> {}
+                                }
+                            }
                         }
                     }
                     DesktopDock(
-                        active = content,
-                        onSelect = { content = it },
+                        active = DeskContent.Web,
+                        onSelect = { kind -> if (kind != DeskContent.Web) openWindow(kind) },
                         onLaunchMiniApp = { id -> MiniAppRegistry.launch(ctx, id) },
                         onAllApps = { runCatching { ctx.startActivity(android.content.Intent(ctx, MiniAppListActivity::class.java)) } },
                     )
