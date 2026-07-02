@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -137,15 +138,12 @@ fun HoloDot(color: Color) {
     Canvas(Modifier.size(7.dp)) { drawCircle(color) }
 }
 
-/**
- * Agent 头像 —— Echo 宇宙角色 Zero(银发 + 粉镜片,赛博风,契合科幻皮肤)。圆形裁切。
- * 资产来自 echo-universe-engine/assets/characters/001_zero。
- */
+/** Agent 头像 —— 当前角色(Echo 宇宙),圆形裁切;切角色即变。 */
 @Composable
-fun ZeroAvatar(size: Dp, modifier: Modifier = Modifier) {
+fun CharacterAvatar(size: Dp, modifier: Modifier = Modifier) {
     Image(
-        painter = painterResource(R.drawable.zero_avatar),
-        contentDescription = "Zero",
+        painter = painterResource(CharacterRegistry.current.avatarRes),
+        contentDescription = CharacterRegistry.current.name,
         contentScale = ContentScale.Crop,
         modifier = modifier.size(size).clip(CircleShape),
     )
@@ -180,21 +178,55 @@ fun HoloFigure(resId: Int, modifier: Modifier = Modifier, alpha: Float = 0.9f) {
     )
 }
 
-/** Zero 角色档案(母本 profile.jsonc 摘要)。换角色改这里 + 换四张图即可。 */
-object ZeroProfile {
-    const val zh = "零"
-    const val name = "ZERO"
-    const val codename = "White Ghost"
-    const val faction = "CHASER"
-    const val rank = "S"
-    const val role = "Captain"
-    const val status = "Alive"
-    const val apparentAge = "18"
-    const val quote = "I finally hear everyone's voice."
-    val abilities = listOf("Neural Sync")
-    val frontRes = R.drawable.zero_front
-    val sideRes = R.drawable.zero_side
-    val backRes = R.drawable.zero_back
+/** 角色档案(Echo 母本 profile.jsonc 摘要 + 四视图资产)。加角色:补一条 + 拷四张图。 */
+data class CharacterProfile(
+    val id: String,
+    val zh: String,
+    val name: String,
+    val codename: String,
+    val faction: String,
+    val rank: String,
+    val role: String,
+    val status: String,
+    val apparentAge: String,
+    val quote: String,
+    val abilities: List<String>,
+    val avatarRes: Int,
+    val frontRes: Int,
+    val sideRes: Int,
+    val backRes: Int,
+)
+
+/** 多角色注册表 —— 移植 OpenRoom characterManager(MVP):可切换、选择持久化。 */
+object CharacterRegistry {
+    private const val KEY = "KEY_DESKTOP_CHARACTER"
+
+    val all = listOf(
+        CharacterProfile(
+            "zero", "零", "ZERO", "White Ghost", "CHASER", "S", "Captain", "Alive", "18",
+            "I finally hear everyone's voice.", listOf("Neural Sync"),
+            R.drawable.zero_avatar, R.drawable.zero_front, R.drawable.zero_side, R.drawable.zero_back,
+        ),
+        CharacterProfile(
+            "luna", "露娜", "LUNA", "Dream Walker", "CHASER", "A", "Dream Walker", "Alive", "—",
+            "Dreams are memories wearing masks.", listOf("Dream Dive"),
+            R.drawable.luna_avatar, R.drawable.luna_front, R.drawable.luna_side, R.drawable.luna_back,
+        ),
+    )
+
+    private val idx = mutableIntStateOf(
+        all.indexOfFirst { it.id == KVUtils.getString(KEY, "zero") }.coerceAtLeast(0),
+    )
+
+    /** 当前角色(在 @Composable 内读会被订阅,切换即重组)。 */
+    val current: CharacterProfile get() = all[idx.intValue.coerceIn(0, all.size - 1)]
+
+    /** 切到下一个角色(循环),持久化选择。 */
+    fun next() {
+        val n = (idx.intValue + 1) % all.size
+        idx.intValue = n
+        KVUtils.putString(KEY, all[n].id)
+    }
 }
 
 /** 玻璃小胶囊(可点)。 */
@@ -229,6 +261,7 @@ fun CharacterHud(modifier: Modifier = Modifier) {
     val ctx = LocalContext.current
     val miniCount = remember { MiniAppRegistry.all().size }
     var pinned by remember { mutableStateOf(KVUtils.isDesktopModeDefault()) }
+    val c = CharacterRegistry.current
 
     Box(modifier.background(Holo.bgBrush)) {
         Row(Modifier.fillMaxSize().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -239,19 +272,20 @@ fun CharacterHud(modifier: Modifier = Modifier) {
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text(ZeroProfile.zh, color = Holo.Accent, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+                        Text(c.zh, color = Holo.Accent, fontSize = 30.sp, fontWeight = FontWeight.Bold)
                         Column {
-                            Text("${ZeroProfile.name} · ${ZeroProfile.codename}", color = Holo.TextHud, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
-                            Text("${ZeroProfile.faction}  ${ZeroProfile.rank}级  ${ZeroProfile.role}", color = Holo.AccentDim, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+                            Text("${c.name} · ${c.codename}", color = Holo.TextHud, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
+                            Text("${c.faction}  ${c.rank}级  ${c.role}", color = Holo.AccentDim, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
                         }
                     }
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         HoloDot(Holo.Accent)
-                        Text("${ZeroProfile.status} · 外观 ${ZeroProfile.apparentAge}", color = Holo.TextHud, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+                        Text("${c.status} · 外观 ${c.apparentAge}", color = Holo.TextHud, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
                     }
-                    Text("“${ZeroProfile.quote}”", color = Holo.TextHud.copy(alpha = 0.8f), fontSize = 11.sp)
+                    Text("“${c.quote}”", color = Holo.TextHud.copy(alpha = 0.8f), fontSize = 11.sp)
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        ZeroProfile.abilities.forEach { HoloChip("⚡ $it") }
+                        c.abilities.forEach { HoloChip("⚡ $it") }
+                        HoloChip("切换角色 ›") { CharacterRegistry.next() }
                     }
                 }
                 Column(
@@ -276,7 +310,7 @@ fun CharacterHud(modifier: Modifier = Modifier) {
             // 右:三视图立绘(front 主 + side/back 缩略)
             Box(Modifier.weight(1f).fillMaxHeight()) {
                 HoloFigure(
-                    ZeroProfile.frontRes,
+                    c.frontRes,
                     Modifier.align(Alignment.BottomCenter).fillMaxHeight(0.94f).aspectRatio(0.46f, matchHeightConstraintsFirst = true),
                 )
                 Column(
@@ -284,8 +318,8 @@ fun CharacterHud(modifier: Modifier = Modifier) {
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    ThreeViewThumb("SIDE", ZeroProfile.sideRes)
-                    ThreeViewThumb("BACK", ZeroProfile.backRes)
+                    ThreeViewThumb("SIDE", c.sideRes)
+                    ThreeViewThumb("BACK", c.backRes)
                 }
             }
         }

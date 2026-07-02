@@ -141,6 +141,7 @@ object ToolRegistry {
         // mini-app 双工 action 架构(移植 OpenRoom):两工具间接层,Agent 发现并操作已装 mini-app。
         register(com.apk.claw.android.tool.impl.ListAppsTool())
         register(com.apk.claw.android.tool.impl.AppActionTool())
+        register(com.apk.claw.android.tool.impl.ReadAppEventsTool())
     }
 
     private fun registerTvTools() {

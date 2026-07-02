@@ -242,30 +242,28 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
                 if (chatWidth > 0.dp) {
                     // OpenRoom ChatPanel:两栏 avatarSide(角色立绘)| chatSide(header+对话)
                     Row(Modifier.fillMaxSize().holoGlass(12.dp)) {
-                        // avatarSide:更深底 + Zero 全息立绘常驻
+                        // avatarSide:更深底 + 当前角色全息立绘常驻
                         Box(Modifier.width(104.dp).fillMaxHeight().background(Holo.AvatarBg)) {
                             HoloFigure(
-                                R.drawable.zero_front,
+                                CharacterRegistry.current.frontRes,
                                 Modifier.align(Alignment.BottomCenter)
                                     .fillMaxHeight(0.96f)
                                     .aspectRatio(0.46f, matchHeightConstraintsFirst = true),
                             )
                             Text(
-                                "零", color = Holo.Accent, fontSize = 22.sp, fontWeight = FontWeight.Bold,
+                                CharacterRegistry.current.zh, color = Holo.Accent, fontSize = 22.sp, fontWeight = FontWeight.Bold,
                                 modifier = Modifier.align(Alignment.TopStart).padding(start = 10.dp, top = 6.dp),
                             )
                         }
-                        // chatSide:header(ZERO › 可切角色 + 收起)+ ChatScreen
+                        // chatSide:header(角色名 › 点击切角色 + 收起)+ ChatScreen
                         Column(Modifier.weight(1f)) {
                             Row(
                                 modifier = Modifier.fillMaxWidth().height(34.dp).padding(start = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Text(
-                                    "ZERO ›", color = Holo.Accent, fontSize = 12.sp,
-                                    modifier = Modifier.weight(1f).clickable {
-                                        android.widget.Toast.makeText(ctx, "更多角色即将到来", android.widget.Toast.LENGTH_SHORT).show()
-                                    },
+                                    "${CharacterRegistry.current.name} ›", color = Holo.Accent, fontSize = 12.sp,
+                                    modifier = Modifier.weight(1f).clickable { CharacterRegistry.next() },
                                 )
                                 IconButton(onClick = { chatExpanded = false }, modifier = Modifier.size(30.dp)) {
                                     Icon(Icons.Filled.ChevronRight, contentDescription = "收起对话", tint = Holo.TextSecondary, modifier = Modifier.size(18.dp))
@@ -290,7 +288,7 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
                     .clickable { chatExpanded = true },
                 contentAlignment = Alignment.Center,
             ) {
-                ZeroAvatar(56.dp)
+                CharacterAvatar(56.dp)
             }
         }
     }

@@ -117,3 +117,36 @@ class AppActionTool : BaseTool() {
         }
     }
 }
+
+/**
+ * `read_app_events` —— 读 mini-app 主动上报(`octopus.reportAction`)的最近事件,让 Agent 感知
+ * "用户在小程序里做了什么"(移植 OpenRoom reportAction 的消费侧)。
+ */
+class ReadAppEventsTool : BaseTool() {
+    override fun getName() = "read_app_events"
+    override fun getDisplayName() = "读小程序事件"
+    override fun getDescriptionEN() =
+        "Read recent events reported by mini-apps (user actions inside a mini-app). Use to perceive what happened in an app."
+    override fun getDescriptionCN() =
+        "读取小程序主动上报的最近事件(用户在小程序里的动作),用于感知页面内发生了什么。"
+
+    override fun getParameters(): List<ToolParameter> = listOf(
+        ToolParameter("limit", "number", "返回最近多少条(默认 20)", false),
+    )
+
+    override fun execute(params: Map<String, Any>): ToolResult {
+        val limit = (params["limit"] as? Number)?.toInt()
+            ?: params["limit"]?.toString()?.toIntOrNull() ?: 20
+        val arr = JSONArray()
+        MiniAppActionBus.recentReported(limit.coerceIn(1, 50)).forEach { e ->
+            arr.put(
+                JSONObject()
+                    .put("app_id", e.appId)
+                    .put("action_type", e.actionType)
+                    .put("params", e.params)
+                    .put("ts", e.ts),
+            )
+        }
+        return ToolResult.success(JSONObject().put("events", arr).toString())
+    }
+}
