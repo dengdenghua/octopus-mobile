@@ -89,10 +89,45 @@ fun Modifier.holoGlass(corner: Dp = 12.dp, fillAlpha: Float = 1f): Modifier =
         .background(if (fillAlpha >= 1f) Holo.Panel else Holo.Panel.copy(alpha = fillAlpha))
         .border(1.dp, Holo.Border, RoundedCornerShape(corner))
 
-/** 全屏壁纸:近黑扁平(无网格),面板悬浮其上。 */
+/**
+ * 全屏科幻壁纸:近黑底 + 几道发光霓虹光带(青/品红,多遍描边伪辉光),呼应 OpenRoom 壁纸。
+ * 纯 Canvas 画,无素材依赖。面板悬浮其上。
+ */
 @Composable
 fun HoloBackground(modifier: Modifier = Modifier) {
-    Box(modifier.fillMaxSize().background(Holo.bgBrush))
+    val cyan = Color(0xFF19E3FF)
+    val magenta = Color(0xFFFF3DEB)
+    Box(modifier.fillMaxSize().background(Holo.bgBrush)) {
+        Canvas(Modifier.fillMaxSize()) {
+            val w = size.width
+            val h = size.height
+            fun streak(pts: List<androidx.compose.ui.geometry.Offset>, color: Color, base: Float) {
+                val path = androidx.compose.ui.graphics.Path().apply {
+                    moveTo(pts.first().x, pts.first().y)
+                    for (i in 1 until pts.size) {
+                        val p0 = pts[i - 1]; val p1 = pts[i]
+                        val mx = (p0.x + p1.x) / 2f
+                        cubicTo(mx, p0.y, mx, p1.y, p1.x, p1.y)
+                    }
+                }
+                // 由粗到细多遍描边:粗而淡 = 辉光,细而亮 = 光芯
+                listOf(base * 7f to 0.05f, base * 3.5f to 0.10f, base * 1.6f to 0.45f, base * 0.6f to 0.95f)
+                    .forEach { (wd, a) ->
+                        drawPath(
+                            path, color.copy(alpha = a),
+                            style = androidx.compose.ui.graphics.drawscope.Stroke(
+                                width = wd, cap = androidx.compose.ui.graphics.StrokeCap.Round,
+                            ),
+                        )
+                    }
+            }
+            fun o(fx: Float, fy: Float) = androidx.compose.ui.geometry.Offset(fx * w, fy * h)
+            val u = h * 0.006f
+            streak(listOf(o(-0.05f, 0.58f), o(0.22f, 0.30f), o(0.48f, 0.52f), o(0.80f, 0.18f), o(1.08f, 0.40f)), cyan, u)
+            streak(listOf(o(-0.05f, 0.78f), o(0.28f, 0.62f), o(0.55f, 0.84f), o(0.88f, 0.50f), o(1.08f, 0.70f)), magenta, u)
+            streak(listOf(o(0.35f, 1.06f), o(0.58f, 0.70f), o(0.80f, 0.88f), o(1.06f, 0.55f)), cyan, u * 0.7f)
+        }
+    }
 }
 
 /** 顶部 HUD 直播条:● LIVE(空闲=IDLE)+ 当前 URL + 连接态 + 时钟,等宽字体。 */
