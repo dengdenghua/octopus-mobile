@@ -200,6 +200,77 @@ class ScriptSandboxTest {
         assertTrue(result.data?.contains("张三") == true)
     }
 
+    // ── 异步 / 事件循环 ────────────────────────────────────────────────────
+
+    @Test
+    fun `promise then resolves`() {
+        val result = sandbox.execute("""
+            Promise.resolve(42).then(function(v){ print("got " + v); });
+        """.trimIndent(), timeoutMs = 5_000)
+        assertTrue("Expected success, got: ${result.error}", result.isSuccess)
+        assertEquals("got 42", result.data?.trim())
+    }
+
+    @Test
+    fun `setTimeout fires after main script`() {
+        val result = sandbox.execute("""
+            print("start");
+            setTimeout(function(){ print("later"); }, 20);
+            print("end");
+        """.trimIndent(), timeoutMs = 5_000)
+        assertTrue(result.isSuccess)
+        // 顺序必须是 start, end, later —— setTimeout 回调在主脚本之后
+        assertEquals(listOf("start", "end", "later"), result.data?.trim()?.lines())
+    }
+
+    @Test
+    fun `clearTimeout cancels callback`() {
+        val result = sandbox.execute("""
+            var id = setTimeout(function(){ print("SHOULD NOT RUN"); }, 20);
+            clearTimeout(id);
+            print("ok");
+        """.trimIndent(), timeoutMs = 5_000)
+        assertTrue(result.isSuccess)
+        assertEquals("ok", result.data?.trim())
+    }
+
+    @Test
+    fun `setInterval repeats then cleared`() {
+        val result = sandbox.execute("""
+            var n = 0;
+            var id = setInterval(function(){
+                n++;
+                print("tick " + n);
+                if (n >= 3) clearInterval(id);
+            }, 5);
+        """.trimIndent(), timeoutMs = 5_000)
+        assertTrue(result.isSuccess)
+        assertEquals(listOf("tick 1", "tick 2", "tick 3"), result.data?.trim()?.lines())
+    }
+
+    @Test
+    fun `nested promise inside timeout drains`() {
+        val result = sandbox.execute("""
+            setTimeout(function(){
+                Promise.resolve("inner").then(function(v){ print("nested " + v); });
+            }, 10);
+        """.trimIndent(), timeoutMs = 5_000)
+        assertTrue(result.isSuccess)
+        assertEquals("nested inner", result.data?.trim())
+    }
+
+    @Test
+    fun `promise chain ordering`() {
+        val result = sandbox.execute("""
+            print("A");
+            Promise.resolve().then(function(){ print("C"); }).then(function(){ print("D"); });
+            print("B");
+        """.trimIndent(), timeoutMs = 5_000)
+        assertTrue(result.isSuccess)
+        // 同步 A,B 先,微任务 C 再 D
+        assertEquals(listOf("A", "B", "C", "D"), result.data?.trim()?.lines())
+    }
+
     @Test
     fun `es6 map and filter chaining`() {
         val result = sandbox.execute("""

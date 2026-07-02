@@ -110,10 +110,24 @@ class ScriptSandbox {
         }
     }
 
+    /** 事件循环里的一个定时任务。[intervalMs] >= 0 表示 setInterval,需重复。 */
+    private class Timer(
+        val id: Long,
+        var dueAt: Long,
+        val intervalMs: Long,
+        val fn: org.mozilla.javascript.Function,
+        val args: Array<Any>,
+    )
+
     fun execute(code: String, timeoutMs: Long): ToolResult {
         val deadline = System.currentTimeMillis() + timeoutMs
         val factory = TimedContextFactory(deadline)
         val output = StringBuilder()
+
+        // 事件循环状态:setTimeout/setInterval 注册到 timers,clearTimeout/clearInterval 记到 clearedTimers。
+        val timers = mutableListOf<Timer>()
+        val clearedTimers = mutableSetOf<Long>()
+        var nextTimerId = 1L
 
         val cx = factory.enterContext()
         return try {
@@ -204,6 +218,37 @@ class ScriptSandbox {
                 result
             })
 
+            // --- setTimeout / setInterval / clearTimeout / clearInterval ---
+            // Rhino 1.7.15 有原生 Promise 但没有事件循环:setTimeout 未定义、定时/轮询代码直接
+            // ReferenceError。这里补一个单线程事件循环(见 execute() 尾部 drainEventLoop):
+            // 宿主收集定时任务,主脚本跑完后按到期时间依次执行,每次回调后 processMicrotasks()
+            // 把 Promise 的 .then 也带动起来。注:async/await 语法 Rhino 1.7.15 解析不了(引擎限制),
+            // 但 Promise + .then + setTimeout 这套足够覆盖绝大多数异步代码。
+            val registerTimer: (Array<Any>, Boolean) -> Any = { args, repeating ->
+                val fn = args.getOrNull(0) as? org.mozilla.javascript.Function
+                    ?: throw EvaluatorException("setTimeout/setInterval: first argument must be a function")
+                val delay = args.getOrNull(1)?.let { Context.toNumber(it).toLong() }?.coerceAtLeast(0L) ?: 0L
+                val extra = if (args.size > 2) args.copyOfRange(2, args.size) else emptyArray()
+                val id = nextTimerId++
+                timers.add(Timer(id, System.currentTimeMillis() + delay, if (repeating) delay else -1L, fn, extra))
+                id.toDouble()
+            }
+            ScriptableObject.putProperty(scope, "setTimeout", jsFunc(scope) { registerTimer(it, false) })
+            ScriptableObject.putProperty(scope, "setInterval", jsFunc(scope) { registerTimer(it, true) })
+            val clearTimer: (Array<Any>) -> Any = { args ->
+                args.getOrNull(0)?.let { clearedTimers.add(Context.toNumber(it).toLong()) }
+                Undefined.instance
+            }
+            ScriptableObject.putProperty(scope, "clearTimeout", jsFunc(scope, clearTimer))
+            ScriptableObject.putProperty(scope, "clearInterval", jsFunc(scope, clearTimer))
+            // queueMicrotask(fn):把回调塞进 Promise 微任务队列,drainEventLoop 会带动。
+            ScriptableObject.putProperty(scope, "queueMicrotask", jsFunc(scope) { args ->
+                val fn = args.getOrNull(0) as? org.mozilla.javascript.Function
+                    ?: throw EvaluatorException("queueMicrotask: argument must be a function")
+                cx.enqueueMicrotask { fn.call(cx, scope, scope, emptyArray()) }
+                Undefined.instance
+            })
+
             // --- callTool(name, params?) → data string or throws ---
             ScriptableObject.putProperty(scope, "callTool", jsFunc(scope) { args ->
                 val name = args.getOrNull(0)?.let { Context.toString(it) }
@@ -226,6 +271,10 @@ class ScriptSandbox {
 
             cx.evaluateString(scope, code, "<script>", 1, null)
 
+            // 主脚本跑完 → 驱动事件循环:先把已就绪的 Promise 微任务清空,再按到期时间执行定时器,
+            // 每个回调后再清一遍微任务。整体受同一 deadline 约束(异步等待也算进 timeout)。
+            drainEventLoop(cx, scope, timers, clearedTimers, deadline)
+
             val out = output.toString().trimEnd()
             ToolResult.success(if (out.isBlank()) "(执行成功，无输出)" else out)
 
@@ -245,6 +294,41 @@ class ScriptSandbox {
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────
+
+    /**
+     * 单线程事件循环:主脚本 evaluateString 之后驱动 Promise 微任务 + setTimeout/setInterval。
+     * 每轮取最早到期的定时器;未到期则 sleep 到到期(不超过 deadline)。回调执行后 processMicrotasks()
+     * 把 .then 链带动。全程受 [deadline] 约束——异步等待也计入工具 timeout,超时即停,绝不挂死。
+     * setInterval 到期后按 intervalMs 重排;clearTimeout/clearInterval 命中即丢弃。
+     */
+    private fun drainEventLoop(
+        cx: Context,
+        scope: Scriptable,
+        timers: MutableList<Timer>,
+        cleared: MutableSet<Long>,
+        deadline: Long,
+    ) {
+        runCatching { cx.processMicrotasks() }  // 主脚本遗留的已就绪微任务
+        while (System.currentTimeMillis() < deadline) {
+            timers.removeAll { it.id in cleared }
+            if (timers.isEmpty()) break
+            val next = timers.minByOrNull { it.dueAt } ?: break
+            val now = System.currentTimeMillis()
+            if (next.dueAt > now) {
+                val wait = (next.dueAt - now).coerceAtMost(deadline - now)
+                if (wait > 0) try { Thread.sleep(wait) } catch (_: InterruptedException) { break }
+                continue
+            }
+            timers.remove(next)
+            if (next.id in cleared) continue
+            next.fn.call(cx, scope, scope, next.args)          // 回调内异常向上冒泡 → 外层归类 SCRIPT_ERROR
+            if (next.intervalMs >= 0 && next.id !in cleared) {  // setInterval:重排下一次
+                next.dueAt = System.currentTimeMillis() + next.intervalMs
+                timers.add(next)
+            }
+            runCatching { cx.processMicrotasks() }
+        }
+    }
 
     private fun jsFunc(scope: Scriptable, block: (Array<Any>) -> Any?): BaseFunction =
         object : BaseFunction(scope, ScriptableObject.getFunctionPrototype(scope)) {

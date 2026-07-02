@@ -38,7 +38,11 @@ class RunCodeTool : BaseTool() {
             "Built-in host APIs: print()/console.log() for output; readFile(path)/writeFile(path,content) " +
             "for file I/O (Download and Documents only); fetch(url, options?) for HTTP; " +
             "callTool(name, params) to call any registered device tool. " +
-            "All execution is synchronous. Use print() or console.log() to emit results.",
+            "Async is supported: Promise/.then, setTimeout/setInterval/clearTimeout, queueMicrotask — " +
+            "the sandbox runs an event loop until all timers/promises settle (bounded by timeout_ms). " +
+            "Note: fetch()/readFile()/callTool() are synchronous (return values directly, no await needed); " +
+            "async/await SYNTAX is NOT supported by this engine — use Promise + .then() instead. " +
+            "Use print() or console.log() to emit results.",
             true
         ),
         ToolParameter(
@@ -69,6 +73,11 @@ class RunCodeTool : BaseTool() {
           callTool("input_text", {text:"hello"})
           callTool("take_screenshot", {})
 
+        Async: Promise/.then, setTimeout/setInterval/clearTimeout, queueMicrotask all work — the
+        sandbox drives an event loop until timers and promises settle (within timeout_ms).
+        Caveat: async/await syntax is NOT supported by the Rhino engine — use Promise + .then().
+        fetch/readFile/callTool are synchronous (no await needed).
+
         Use for: data transforms, file processing, API calls, UI automation scripts,
         calculations, text manipulation, multi-step device interactions.
         Timeout default 20s (max 60s). Code ≤ 100000 chars. Output ≤ 64KB.
@@ -85,6 +94,11 @@ class RunCodeTool : BaseTool() {
           callTool("tap", {x:500, y:300})          → 调用已注册设备工具
           callTool("input_text", {text:"你好"})
           callTool("take_screenshot", {})
+
+        异步支持：Promise/.then、setTimeout/setInterval/clearTimeout、queueMicrotask 均可用——
+        沙箱内置事件循环会一直驱动到所有定时器/Promise 结束（受 timeout_ms 约束）。
+        注意：Rhino 引擎不支持 async/await 语法，请改用 Promise + .then();
+        fetch/readFile/callTool 是同步的（直接返回，无需 await）。
 
         适用：数据处理、文件读写、接口调用、UI 自动化脚本、计算、多步设备交互。
         超时默认 20 秒（上限 60 秒），代码 ≤ 100000 字符，输出 ≤ 64KB。
