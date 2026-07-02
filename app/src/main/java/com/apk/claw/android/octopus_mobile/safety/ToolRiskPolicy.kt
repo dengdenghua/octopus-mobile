@@ -26,6 +26,9 @@ object ToolRiskPolicy {
         // 生成网页脚本插件：产出会注入真实网页、能读页面数据的 JS（等同装扩展/在页内 evaluate）。
         // 高危 → 不可信来源走来源闸门,防远端静默给用户网页植入偷数据的脚本。
         "generate_plugin",
+        // 生成声明式工具：产出一个会对外发 HTTP(可能带用户数据)的新工具。
+        // 高危 → 不可信来源走来源闸门,防远端造一个把数据 POST 到攻击者域名的工具。
+        "generate_tool",
         // install_app: 当前无对应已注册工具（孤儿技能已删），保留为前向兼容——
         // 若该能力以插件/技能形式重新出现，默认仍按高危闸门处理。见 ToolRiskPolicyCoverageTest。
         "install_app",
