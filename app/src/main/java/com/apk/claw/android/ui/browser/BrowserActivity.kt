@@ -265,11 +265,8 @@ class BrowserActivity : BaseActivity() {
     private var cachedCustomBitmap: Bitmap? = null
     private var cachedCustomFileTime: Long = 0
 
-    // ── 轻量多窗口(Activity 层维护;切换时按 URL 重载,单引擎)──
-    private data class BrowserWindow(var title: String, var url: String, val id: Long)
-    private val windows = mutableListOf<BrowserWindow>()
-    private var currentWindowId: Long = -1L
-    private var windowSeq: Long = 0L
+    // ── 轻量多窗口 —— 数据走共享 [BrowserTabsStore],与桌面模式浏览器共用同一组标签 ──
+    // (切换时按 URL 重载,单引擎)
     private var windowCountView: TextView? = null
 
     // 图片选择器
@@ -649,7 +646,7 @@ class BrowserActivity : BaseActivity() {
             addView(makeCapsuleIcon("AI", getString(R.string.browser_ask_ai_button), accent = true) { showAiSheet() })
             // 右:窗口数 → 弹出所有窗口
             windowCountView = TextView(this@BrowserActivity).apply {
-                text = windows.size.coerceAtLeast(1).toString()
+                text = BrowserTabsStore.count().coerceAtLeast(1).toString()
                 textSize = 13f
                 gravity = Gravity.CENTER
                 setTypeface(typeface, Typeface.BOLD)
@@ -735,38 +732,30 @@ class BrowserActivity : BaseActivity() {
     // ── 多窗口 ──
 
     private fun ensureWindow() {
-        if (windows.isEmpty()) {
-            val w = BrowserWindow(getString(R.string.browser_new_tab), "", windowSeq++)
-            windows.add(w)
-            currentWindowId = w.id
-        }
+        BrowserTabsStore.ensureAtLeastOne(getString(R.string.browser_new_tab))
         updateWindowCount()
     }
 
-    private fun currentWindow(): BrowserWindow? = windows.firstOrNull { it.id == currentWindowId }
-
     private fun updateWindowCount() {
-        windowCountView?.text = windows.size.coerceAtLeast(1).toString()
+        windowCountView?.text = BrowserTabsStore.count().coerceAtLeast(1).toString()
     }
 
     private fun newWindow() {
-        val w = BrowserWindow(getString(R.string.browser_new_tab), "", windowSeq++)
-        windows.add(w)
-        currentWindowId = w.id
+        BrowserTabsStore.newTab(getString(R.string.browser_new_tab))
         updateWindowCount()
         showHome()
     }
 
-    private fun switchWindow(w: BrowserWindow) {
-        currentWindowId = w.id
+    private fun switchWindow(w: BrowserTabsStore.Tab) {
+        BrowserTabsStore.select(w.id)
         if (w.url.isBlank()) showHome() else navigateTo(w.url)
     }
 
-    private fun closeWindow(w: BrowserWindow) {
-        windows.remove(w)
-        if (windows.isEmpty()) { newWindow(); return }
-        if (w.id == currentWindowId) switchWindow(windows.last())
+    private fun closeWindow(w: BrowserTabsStore.Tab) {
+        val wasCurrent = w.id == BrowserTabsStore.currentId.value
+        BrowserTabsStore.close(w.id, getString(R.string.browser_new_tab))
         updateWindowCount()
+        if (wasCurrent) BrowserTabsStore.current()?.let { switchWindow(it) }
     }
 
     /** 右侧窗口数 → 弹出所有窗口列表 */
@@ -782,7 +771,7 @@ class BrowserActivity : BaseActivity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             addView(TextView(this@BrowserActivity).apply {
-                text = getString(R.string.browser_windows_count, windows.size)
+                text = getString(R.string.browser_windows_count, BrowserTabsStore.count())
                 textSize = 17f
                 setTypeface(typeface, Typeface.BOLD)
                 setTextColor(cText)
@@ -799,12 +788,12 @@ class BrowserActivity : BaseActivity() {
             })
         })
         // 列表
-        windows.forEach { w ->
+        BrowserTabsStore.list().forEach { w ->
             container.addView(LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(dp(SPACING_MD), dp(SPACING_MD), dp(SPACING_SM), dp(SPACING_MD))
-                val active = w.id == currentWindowId
+                val active = w.id == BrowserTabsStore.currentId.value
                 background = if (isGlassStyle) {
                     capsuleBg(
                         if (active) withAlpha(cPrimary, 45) else withAlpha(cSurface, 12), RADIUS_LG,
@@ -1394,11 +1383,8 @@ class BrowserActivity : BaseActivity() {
                             loadingOverlay.visibility = View.GONE
                             btnRefresh.setImageResource(android.R.drawable.ic_menu_rotate)
                             etUrl.setText(SearchEngines.extractQuery(event.url) ?: event.url)
-                            // 记录到当前窗口(供「所有窗口」列表展示)
-                            currentWindow()?.apply {
-                                url = event.url
-                                title = event.title.ifBlank { event.url }
-                            }
+                            // 记录到当前标签(共享 store,桌面模式也看得到)
+                            BrowserTabsStore.updateCurrent(event.url, event.title.ifBlank { event.url })
                         }
                         is EngineEvent.ProgressChanged -> {
                             progressBar.progress = event.percent

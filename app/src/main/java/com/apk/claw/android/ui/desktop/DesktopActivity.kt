@@ -9,6 +9,7 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
@@ -23,6 +24,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -160,6 +162,8 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
                 is EngineEvent.PageFinished -> {
                     loading = false; progress = 100
                     currentUrl = ev.url; pageTitle = ev.title
+                    // 同步到共享标签 store(竖屏浏览器也看得到)
+                    com.apk.claw.android.ui.browser.BrowserTabsStore.updateCurrent(ev.url, ev.title)
                 }
                 is EngineEvent.Error -> loading = false
                 else -> {}
@@ -346,6 +350,7 @@ private fun DesktopMonitor(
     onNavigate: (String) -> Unit,
 ) {
     Column(Modifier.fillMaxSize()) {
+        DesktopTabStrip(engine, onNavigate)
         DesktopAddressBar(currentUrl, pageTitle, loading) { url ->
             engine.navigate(url)
             onNavigate(url)
@@ -408,6 +413,79 @@ private fun DesktopAddressBar(currentUrl: String, pageTitle: String, loading: Bo
                 unfocusedIndicatorColor = Color.Transparent,
             ),
             modifier = Modifier.weight(1f),
+        )
+        // 收藏 ★/☆(数据走共享 BookmarkManager,竖屏浏览器同一份)
+        val isPage = currentUrl.isNotBlank() && currentUrl != "about:blank"
+        if (isPage) {
+            var marked by remember(currentUrl) { mutableStateOf(com.apk.claw.android.ui.browser.BookmarkManager.isBookmarked(currentUrl)) }
+            Spacer(Modifier.width(6.dp))
+            Text(
+                if (marked) "★" else "☆",
+                color = if (marked) Holo.Accent else Holo.TextSecondary,
+                fontSize = 16.sp,
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .clickable {
+                        if (marked) com.apk.claw.android.ui.browser.BookmarkManager.remove(currentUrl)
+                        else com.apk.claw.android.ui.browser.BookmarkManager.add(currentUrl, pageTitle.ifBlank { currentUrl })
+                        marked = !marked
+                    }
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+            )
+        }
+    }
+}
+
+/** 桌面浏览器标签条 —— 读共享 [com.apk.claw.android.ui.browser.BrowserTabsStore],与竖屏浏览器同一组标签。 */
+@Composable
+private fun DesktopTabStrip(engine: BrowserEngine, onNavigate: (String) -> Unit) {
+    val tabsStore = com.apk.claw.android.ui.browser.BrowserTabsStore
+    val tabs by tabsStore.tabs.collectAsState()
+    val curId by tabsStore.currentId.collectAsState()
+    val newTabLabel = stringResource(R.string.browser_new_tab)
+    LaunchedEffect(Unit) { tabsStore.ensureAtLeastOne(newTabLabel) }
+    if (tabs.size <= 1) return  // 单标签时不占地方
+
+    val goto: (com.apk.claw.android.ui.browser.BrowserTabsStore.Tab?) -> Unit = { t ->
+        if (t != null) { tabsStore.select(t.id); engine.navigate(t.url.ifBlank { "about:blank" }); onNavigate(t.url) }
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth().background(Holo.Panel)
+            .horizontalScroll(androidx.compose.foundation.rememberScrollState())
+            .padding(horizontal = 6.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        tabs.forEach { t ->
+            val active = t.id == curId
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(if (active) Holo.Surface2 else Color.Transparent)
+                    .border(1.dp, if (active) Holo.Accent else Holo.Border, RoundedCornerShape(6.dp))
+                    .clickable { tabsStore.select(t.id); engine.navigate(t.url.ifBlank { "about:blank" }); onNavigate(t.url) }
+                    .padding(start = 8.dp, end = 4.dp, top = 3.dp, bottom = 3.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    t.title.ifBlank { newTabLabel }.take(16),
+                    color = if (active) Holo.TextHud else Holo.TextSecondary,
+                    fontSize = 11.sp, maxLines = 1,
+                )
+                Text(
+                    "×", color = Holo.TextSecondary, fontSize = 13.sp,
+                    modifier = Modifier.clip(CircleShape).clickable {
+                        tabsStore.close(t.id, newTabLabel)
+                        if (t.id == curId) goto(tabsStore.current())
+                    }.padding(horizontal = 5.dp),
+                )
+            }
+        }
+        Text(
+            "+", color = Holo.Accent, fontSize = 16.sp,
+            modifier = Modifier.clip(CircleShape).clickable {
+                tabsStore.newTab(newTabLabel); engine.navigate("about:blank"); onNavigate("")
+            }.padding(horizontal = 8.dp),
         )
     }
 }
