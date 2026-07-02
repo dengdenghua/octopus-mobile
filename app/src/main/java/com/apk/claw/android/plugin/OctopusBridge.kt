@@ -30,6 +30,12 @@ class OctopusBridge(
     @JavascriptInterface
     fun pluginId(): String = manifest.id
 
+    /** mini-app → Agent 事件上报(移植 OpenRoom reportAction):记录页面内发生的用户动作。 */
+    @JavascriptInterface
+    fun reportAction(actionType: String, paramsJson: String?) {
+        MiniAppActionBus.onReportedAction(manifest.id, actionType, paramsJson)
+    }
+
     /** 调用一个内置工具(受 allowTools 限制)。argsJson = 参数对象 JSON。 */
     @JavascriptInterface
     fun callTool(name: String, argsJson: String?): String {
@@ -130,7 +136,25 @@ class OctopusBridge(
     id: function () { return octopusNative.pluginId(); },
     callTool: function (name, args) { return parse(octopusNative.callTool(name, JSON.stringify(args || {}))); },
     pay: function (order) { return parse(octopusNative.pay(JSON.stringify(order || {}))); },
-    device: function (cap, args) { return parse(octopusNative.deviceAutomate(cap, JSON.stringify(args || {}))); }
+    device: function (cap, args) { return parse(octopusNative.deviceAutomate(cap, JSON.stringify(args || {}))); },
+    // mini-app 设为 function(actionType, paramsObj) -> string,处理 Agent 派发来的动作(app_action)。
+    onAgentAction: null,
+    // mini-app → Agent 上报页面内发生的动作(Agent 可感知)。
+    reportAction: function (actionType, params) {
+      try { octopusNative.reportAction(actionType, JSON.stringify(params || {})); } catch (e) {}
+    }
+  };
+  // Agent → mini-app 派发入口(由原生 evaluateJavascript 调用):调 onAgentAction 并把结果包成 {ok,data|error}。
+  window.__octopusDispatch = function (actionType, paramsJson) {
+    try {
+      if (typeof window.octopus.onAgentAction !== 'function')
+        return JSON.stringify({ ok: false, error: 'mini-app 未注册 octopus.onAgentAction' });
+      var params = {}; try { params = JSON.parse(paramsJson || '{}'); } catch (e) {}
+      var r = window.octopus.onAgentAction(actionType, params);
+      return JSON.stringify({ ok: true, data: (r == null ? '' : String(r)) });
+    } catch (e) {
+      return JSON.stringify({ ok: false, error: String((e && e.message) || e) });
+    }
   };
 })();
 """

@@ -31,6 +31,7 @@ class MiniAppActivity : AppCompatActivity() {
     }
 
     private var webView: WebView? = null
+    private var appId: String? = null
 
     @SuppressLint("SetJavaScriptEnabled", "JavascriptInterface")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -39,6 +40,7 @@ class MiniAppActivity : AppCompatActivity() {
             val id = intent.getStringExtra(EXTRA_PLUGIN_ID)
             val manifest = id?.let { MiniAppRegistry.get(it) }
             if (manifest == null || manifest.page.isBlank()) { finish(); return }
+            appId = manifest.id
 
             // 页面 URL 解析:
             // 1. filesDir/plugins/<slug>/<page> — registry 校验安装的插件(sha256 已验)
@@ -120,8 +122,21 @@ class MiniAppActivity : AppCompatActivity() {
         return null
     }
 
+    override fun onResume() {
+        super.onResume()
+        // 前台运行 → 注册到动作总线,Agent 的 app_action 可派发到本 mini-app
+        val id = appId; val wv = webView
+        if (id != null && wv != null) MiniAppActionBus.registerLive(id, this, wv)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        appId?.let { MiniAppActionBus.unregister(it) }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
+        appId?.let { MiniAppActionBus.unregister(it) }
         runCatching {
             webView?.removeJavascriptInterface("octopusNative")
             webView?.destroy()

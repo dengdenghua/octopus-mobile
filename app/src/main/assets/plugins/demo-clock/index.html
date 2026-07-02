@@ -22,6 +22,7 @@
     <h1>示例小程序</h1>
     <div class="sub">通过 octopus.callTool 桥调用 get_my_ip</div>
     <div id="ip">…</div>
+    <div id="note" style="margin-top:12px;font-size:13px;color:#ffe27a;min-height:16px;"></div>
     <button onclick="loadIp()">刷新</button>
   </div>
   <script>
@@ -41,7 +42,24 @@
       } catch (e) {
         el.textContent = '异常: ' + e.message;
       }
+      // mini-app → Agent:上报"刷新"发生了(Agent 可感知)
+      if (window.octopus && octopus.reportAction) octopus.reportAction('refreshed', {});
     }
+
+    // Agent → mini-app:处理 app_action 派发来的动作(移植 OpenRoom onAgentAction)
+    function registerAgentActions() {
+      if (!window.octopus) { setTimeout(registerAgentActions, 200); return; }
+      octopus.onAgentAction = function (actionType, params) {
+        if (actionType === 'refresh') { loadIp(); return 'refreshing'; }
+        if (actionType === 'set_note') {
+          document.getElementById('note').textContent = (params && params.text) || '';
+          return 'note updated';
+        }
+        return 'unknown action: ' + actionType;
+      };
+    }
+    registerAgentActions();
+
     // 等 octopus shim 注入后再调
     setTimeout(loadIp, 300);
   </script>

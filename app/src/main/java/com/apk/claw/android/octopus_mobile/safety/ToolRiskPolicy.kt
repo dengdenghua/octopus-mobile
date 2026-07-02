@@ -88,6 +88,9 @@ object ToolRiskPolicy {
         "check_video",
         // 滚动 / 检索（轻量、低危）
         "scroll_to_find", "search_app_in_store",
+        // mini-app 双工 action(移植 OpenRoom):list_apps 只读;app_action 只触发 mini-app 自己的
+        // onAgentAction 处理器,其内部若调 callTool/device 仍走 OctopusBridge 权限门+来源闸门,故 LOW。
+        "list_apps", "app_action",
         // 输入按键事件：TV 遥控导航键，低危且高频，审计价值低于噪音成本，保留 LOW。
         "dpad_up", "dpad_down", "dpad_left", "dpad_right", "dpad_center",
         "press_menu", "press_power", "volume_up", "volume_down",

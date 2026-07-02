@@ -3,8 +3,18 @@
   "type": "mini-app",
   "name": "示例小程序·我的 IP",
   "version": "1.0.0",
-  "description": "mini-app 示例:一个 H5 小程序,通过 octopus.callTool 桥调用 get_my_ip 工具并展示出口 IP。",
+  "description": "mini-app 示例:H5 小程序,通过 octopus.callTool 桥查出口 IP;并声明可被 Agent 调用的动作(refresh / set_note)演示 app_action 双工架构。",
   "author": "Octopus Team",
   "page": "index.html",
-  "allow_tools": ["get_my_ip"]
+  "allow_tools": ["get_my_ip"],
+  "actions": [
+    { "name": "refresh", "description": "重新查询并刷新出口 IP" },
+    {
+      "name": "set_note",
+      "description": "在页面上显示一段提示文字",
+      "params": [
+        { "name": "text", "type": "string", "description": "要显示的文字", "required": true }
+      ]
+    }
+  ]
 }

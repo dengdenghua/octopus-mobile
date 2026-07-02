@@ -137,6 +137,10 @@ object ToolRegistry {
 
         // 代码执行(QuickJS 纯计算沙箱,Shizuku-only,登记为 HIGH)
         register(com.apk.claw.android.tool.impl.RunCodeTool())
+
+        // mini-app 双工 action 架构(移植 OpenRoom):两工具间接层,Agent 发现并操作已装 mini-app。
+        register(com.apk.claw.android.tool.impl.ListAppsTool())
+        register(com.apk.claw.android.tool.impl.AppActionTool())
     }
 
     private fun registerTvTools() {

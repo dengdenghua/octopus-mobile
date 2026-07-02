@@ -68,6 +68,11 @@ data class PluginManifest(
     // ── mini-app ──
     /** 入口页面文件名（相对插件目录，如 index.html） */
     val page: String = "",
+    /**
+     * mini-app 声明的、可被 Agent 调用的动作(移植 OpenRoom action 架构)。
+     * Agent 经 list_apps 发现、经 app_action 派发;mini-app 用 `octopus.onAgentAction` 处理。
+     */
+    val actions: List<PluginActionDef> = emptyList(),
 
     // ── 结构化权限（新类型用；默认 deny，敏感能力需用户授予，见 PermissionGate） ──
     @SerializedName("allow_hosts")
@@ -106,6 +111,7 @@ data class PluginManifest(
             allowHosts = m.allowHosts ?: emptyList(),
             allowTools = m.allowTools ?: emptyList(),
             allowDevice = m.allowDevice ?: emptyList(),
+            actions = (m.actions ?: emptyList()).map { it.copy(params = it.params ?: emptyList()) },
         )
 
         /**
@@ -142,6 +148,16 @@ data class PluginInfo(
 
     /** 加载错误信息 */
     var error: String? = null
+)
+
+/**
+ * mini-app 可被 Agent 调用的动作声明(移植 OpenRoom AppActionDef)。
+ * name=动作类型(如 refresh / set_note),params 复用工具参数声明。
+ */
+data class PluginActionDef(
+    val name: String = "",
+    val description: String = "",
+    val params: List<PluginToolParam> = emptyList(),
 )
 
 /** 声明式工具的参数声明（type=tool）。 */
