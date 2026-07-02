@@ -90,8 +90,6 @@ import com.apk.claw.android.ui.compose.screen.ChatScreen
 import com.apk.claw.android.ui.compose.screen.DiscoverScreen
 import com.apk.claw.android.ui.featurescreens.MiniAppListActivity
 import com.apk.claw.android.utils.KVUtils
-import com.apk.claw.android.ui.compose.theme.OctopusBackground
-import com.apk.claw.android.ui.compose.theme.OctopusColors
 import com.apk.claw.android.ui.compose.theme.OctopusTheme
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
@@ -206,7 +204,7 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
         onDispose { com.apk.claw.android.plugin.MiniAppWindowController.opener = null }
     }
 
-    // HUD 遥测:母体连接态 + 走秒时钟(等宽,科幻直播条用)
+    // HUD 遥测:母体连接态(时钟下沉到 TopBar/Taskbar 各自内部,避免全工作区每秒重组)
     val connState by appViewModel.connectionState.collectAsState()
     val connColor = when (connState) {
         ConnectionState.ONLINE -> Holo.Accent
@@ -220,9 +218,6 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
         ConnectionState.HELLO_SENT, ConnectionState.RECONNECTING -> "LINK…"
         else -> "NO LINK"
     }
-    var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(Unit) { while (true) { nowMs = System.currentTimeMillis(); delay(1000) } }
-    val hudClock = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }.format(Date(nowMs))
 
     // 对话:直播间窗 + 对话窗共用同一条主 Agent 会话([ChatAgentBridge])。
     //   convo = 完整会话;直播间字幕 = convo 里最后一条角色发言(流式)。
@@ -236,6 +231,9 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
     var sceneLoading by remember { mutableStateOf(false) }
     var sceneGen by rememberSaveable { mutableStateOf(true) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
+    // 当前角色:统一读取一次,下传给 windowSpec / 子组件,避免散读 CharacterRegistry.current。
+    // 不用 remember{} —— current 的 getter 订阅 idx 状态,切角色时自动重组(此时才读)。
+    val character = CharacterRegistry.current
     val send: (String) -> Unit = fn@{ raw ->
         val t = raw.trim()
         if (t.isEmpty() || running) return@fn
@@ -246,7 +244,7 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
         }
         // 场景生成:异步、不阻塞对话;失败/未配置则保留上一张(或退回立绘)。
         if (sceneGen) {
-            val c = CharacterRegistry.current
+            val c = character
             scope.launch {
                 sceneLoading = true
                 com.apk.claw.android.media.MediaRepository.generateImage(scenePrompt(c, t), "1280x720").fold(
@@ -292,7 +290,6 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
             DesktopTopBar(
                 connLabel = connLabel,
                 connColor = connColor,
-                timeText = hudClock,
                 sceneOn = sceneGen,
                 onToggleScene = { sceneGen = !sceneGen },
                 onExit = { (ctx as? android.app.Activity)?.finish() },
@@ -320,8 +317,8 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
             }
             DesktopReplyBar(running = running, onSend = send, onStop = stop)
             DesktopTaskbar(
-                timeText = hudClock,
                 minimized = windows.filter { it.first in minimized },
+                charName = character.name,
                 onRestore = { id ->
                     minimized.removeAll { it == id }
                     val idx = windows.indexOfFirst { it.first == id }
@@ -345,7 +342,7 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
         windows.forEachIndexed { i, (id, kind) ->
             if (id in minimized) return@forEachIndexed
             androidx.compose.runtime.key(id) {
-                val spec = windowSpec(kind, i)
+                val spec = windowSpec(kind, i, character.name)
                 HoloWindow(
                     title = spec.title,
                     startX = spec.x,
@@ -387,9 +384,9 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
 /** 每类窗口的标题 + 默认位置/尺寸(dp)。 */
 private data class WinSpec(val title: String, val x: Dp, val y: Dp, val w: Dp, val h: Dp)
 
-private fun windowSpec(kind: WinContent, i: Int): WinSpec {
+private fun windowSpec(kind: WinContent, i: Int, charName: String): WinSpec {
     // 默认尺寸按「横屏手机」的 dp 空间(约 860×390dp)裁,保证底部输入不被盖;大屏可自行拖拽放大。
-    val name = CharacterRegistry.current.name
+    val name = charName
     return when (kind) {
         WinContent.LiveRoom -> WinSpec("直播间 · $name", 92.dp, 40.dp, 380.dp, 246.dp)
         WinContent.Chat -> WinSpec("对话 · $name", 486.dp, 48.dp, 300.dp, 262.dp)
@@ -403,11 +400,16 @@ private fun windowSpec(kind: WinContent, i: Int): WinSpec {
 /** 最底 Windows 式任务栏:开始(全部应用)+ 最小化窗口按钮(点击还原)+ 时钟。 */
 @Composable
 private fun DesktopTaskbar(
-    timeText: String,
     minimized: List<Pair<Long, WinContent>>,
+    charName: String,
     onRestore: (Long) -> Unit,
     onStart: () -> Unit,
 ) {
+    // 时钟内部维护,避免上层每秒重组
+    var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) { while (true) { nowMs = System.currentTimeMillis(); delay(1000) } }
+    val timeText = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }.format(Date(nowMs))
+
     Row(
         modifier = Modifier.fillMaxWidth().height(30.dp).background(Holo.Panel.copy(alpha = 0.85f))
             .padding(horizontal = 10.dp),
@@ -423,7 +425,7 @@ private fun DesktopTaskbar(
         // 最小化的窗口:任务栏按钮,点击还原
         minimized.forEach { (id, kind) ->
             Text(
-                windowSpec(kind, 0).title.substringBefore(" ·").let { if (it.length > 6) it.take(6) else it },
+                windowSpec(kind, 0, charName).title.substringBefore(" ·").let { if (it.length > 6) it.take(6) else it },
                 color = Holo.TextHud, fontSize = 10.sp,
                 modifier = Modifier.clip(RoundedCornerShape(5.dp)).background(Holo.Surface2)
                     .clickable { onRestore(id) }.padding(horizontal = 8.dp, vertical = 3.dp),
@@ -717,11 +719,15 @@ private fun DesktopReplyBar(running: Boolean, onSend: (String) -> Unit, onStop: 
 private fun DesktopTopBar(
     connLabel: String,
     connColor: Color,
-    timeText: String,
     sceneOn: Boolean,
     onToggleScene: () -> Unit,
     onExit: () -> Unit,
 ) {
+    // 时钟内部维护,避免上层每秒重组
+    var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) { while (true) { nowMs = System.currentTimeMillis(); delay(1000) } }
+    val timeText = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }.format(Date(nowMs))
+
     Row(
         modifier = Modifier.fillMaxWidth().height(32.dp)
             .background(Holo.Panel.copy(alpha = 0.85f))
@@ -783,11 +789,11 @@ private fun DesktopIcons(
         RailItem(Icons.Filled.Videocam, "直播间", active = false, onClick = onLiveRoom)
         RailItem(Icons.Filled.ChatBubbleOutline, "对话", active = false, onClick = onChat)
         RailItem(Icons.Filled.Person, "角色", active = false, onClick = onCharacter)
-        Box(Modifier.padding(vertical = 2.dp).size(width = 40.dp, height = 1.dp).background(Holo.BorderDim))
+        Box(Modifier.padding(vertical = 2.dp).size(width = 40.dp, height = 1.dp).background(Holo.Border))
         RailItem(Icons.Filled.Explore, "发现", active = false, onClick = onDiscover)
         RailItem(Icons.Filled.Forum, "广场", active = false, onClick = onSquare)
         if (miniApps.isNotEmpty()) {
-            Box(Modifier.padding(vertical = 2.dp).size(width = 40.dp, height = 1.dp).background(Holo.BorderDim))
+            Box(Modifier.padding(vertical = 2.dp).size(width = 40.dp, height = 1.dp).background(Holo.Border))
         }
         miniApps.take(8).forEach { m ->
             RailItem(Icons.Filled.Apps, m.name.ifBlank { m.id }, active = false) { onLaunchMiniApp(m.id) }
@@ -981,78 +987,6 @@ private fun DesktopTabStrip(engine: BrowserEngine, onNavigate: (String) -> Unit)
             }.padding(horizontal = 8.dp),
         )
     }
-}
-
-@Composable
-private fun DesktopWallpaper(modifier: Modifier = Modifier) {
-    // 实时时钟
-    var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            nowMs = System.currentTimeMillis()
-            delay(1000)
-        }
-    }
-    val timeFmt = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
-    val datePattern = stringResource(R.string.desktop_date_format)
-    val dateFmt = remember(datePattern) { SimpleDateFormat(datePattern, Locale.getDefault()) }
-
-    // 母体连接状态
-    val connState by appViewModel.connectionState.collectAsState()
-    val (connLabel, connColor) = when (connState) {
-        ConnectionState.ONLINE -> stringResource(R.string.desktop_conn_online) to OctopusColors.Success
-        ConnectionState.CONNECTING, ConnectionState.CONNECTED,
-        ConnectionState.HELLO_SENT, ConnectionState.RECONNECTING -> stringResource(R.string.desktop_conn_connecting) to OctopusColors.Warning
-        else -> stringResource(R.string.desktop_conn_disconnected) to OctopusColors.TextMuted
-    }
-
-    Box(modifier = modifier.background(OctopusBackground.pageBrush()), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(timeFmt.format(Date(nowMs)), color = OctopusColors.TextPrimary, fontSize = 48.sp, fontWeight = FontWeight.Light)
-            Text(dateFmt.format(Date(nowMs)), color = OctopusColors.TextMuted, fontSize = 13.sp)
-            Spacer(Modifier.height(10.dp))
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Dot(connColor)
-                Text(connLabel, color = OctopusColors.TextSecondary, fontSize = 12.sp)
-            }
-            Spacer(Modifier.height(14.dp))
-            Icon(Icons.Filled.DesktopWindows, contentDescription = null, tint = OctopusColors.TextMuted, modifier = Modifier.size(40.dp))
-            Text(
-                stringResource(R.string.desktop_idle_hint),
-                color = OctopusColors.TextMuted, fontSize = 12.sp,
-            )
-            Spacer(Modifier.height(6.dp))
-            DefaultLaunchToggle()
-        }
-    }
-}
-
-/** 「启动直达桌面模式」开关(专用设备用):写 KVUtils,SplashActivity 据此在登录后直接进桌面。 */
-@Composable
-private fun DefaultLaunchToggle() {
-    val ctx = androidx.compose.ui.platform.LocalContext.current
-    var pinned by remember { mutableStateOf(KVUtils.isDesktopModeDefault()) }
-    val pinnedText = ctx.getString(R.string.desktop_launch_pinned)
-    val unpinnedText = ctx.getString(R.string.desktop_launch_pin)
-    val pinnedToast = ctx.getString(R.string.desktop_launch_pinned_toast)
-    val unpinnedToast = ctx.getString(R.string.desktop_launch_unpinned_toast)
-    Text(
-        text = if (pinned) pinnedText else unpinnedText,
-        color = if (pinned) OctopusColors.Primary else OctopusColors.TextMuted,
-        fontSize = 11.sp,
-        modifier = Modifier
-            .clip(CircleShape)
-            .clickable {
-                pinned = !pinned
-                KVUtils.setDesktopModeDefault(pinned)
-                android.widget.Toast.makeText(
-                    ctx,
-                    if (pinned) pinnedToast else unpinnedToast,
-                    android.widget.Toast.LENGTH_SHORT,
-                ).show()
-            }
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-    )
 }
 
 @Composable

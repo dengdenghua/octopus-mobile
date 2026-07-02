@@ -69,9 +69,7 @@ internal object Holo {
     val Panel = Color(0xFF1C1D20)           // 面板底(不透明)
     val AvatarBg = Color(0xFF121214)        // 更深(头像/壁纸侧)
     val Surface2 = Color(0xFF282A2A)        // 气泡/输入
-    val Glass = Color(0xFF1C1D20)           // 兼容旧名(现=面板底,配 alpha 用)
     val Border = Color(0x0FFFFFFF)          // 白 0.06 主分隔
-    val BorderDim = Color(0x0FFFFFFF)       // 白 0.06
     val BorderStrong = Color(0x1AFFFFFF)    // 白 0.1
     val TextHud = Color(0xE6FFFFFF)         // 白 0.9 主文本
     val TextSecondary = Color(0x99FFFFFF)   // 白 0.6
@@ -143,7 +141,7 @@ fun HudStrip(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .background(Holo.Glass.copy(alpha = 0.6f))
+            .background(Holo.Panel.copy(alpha = 0.6f))
             .padding(horizontal = 12.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -378,8 +376,8 @@ object CharacterRegistry {
 fun HoloChip(text: String, onClick: (() -> Unit)? = null) {
     val base = Modifier
         .clip(RoundedCornerShape(8.dp))
-        .background(Holo.Glass.copy(alpha = 0.5f))
-        .border(1.dp, Holo.BorderDim, RoundedCornerShape(8.dp))
+        .background(Holo.Panel.copy(alpha = 0.5f))
+        .border(1.dp, Holo.Border, RoundedCornerShape(8.dp))
     val m = if (onClick != null) base.clickable(onClick = onClick) else base
     Text(
         text, color = Holo.Accent, fontSize = 10.sp, fontFamily = FontFamily.Monospace,
