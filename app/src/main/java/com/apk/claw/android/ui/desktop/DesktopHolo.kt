@@ -181,8 +181,10 @@ fun HoloDot(color: Color) {
 }
 
 /**
- * 可拖拽浮动窗口(移植 OpenRoom windowManager MVP):玻璃框 + 标题栏(拖动)+ 关闭,固定尺寸。
+ * 可拖拽浮动窗口(移植 OpenRoom windowManager):玻璃框 + 标题栏(拖动)+ 最小化/最大化/关闭。
  * 标题栏按住拖动移动窗口;点窗口任意处触发 onFocus(供上层置顶)。
+ *  - [onMinimize] 非空时显示「—」:交给上层(收进任务栏)。
+ *  - 「□/❐」最大化 / 还原:窗口内部状态,最大化时铺满桌面区(留顶栏/底部输入空间)。
  */
 @Composable
 fun HoloWindow(
@@ -193,15 +195,22 @@ fun HoloWindow(
     height: Dp,
     onClose: () -> Unit,
     onFocus: () -> Unit,
+    onMinimize: (() -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
     val density = LocalDensity.current
     var off by remember { mutableStateOf(with(density) { IntOffset(startX.roundToPx(), startY.roundToPx()) }) }
     var size by remember { mutableStateOf(androidx.compose.ui.unit.DpSize(width, height)) }
+    var maximized by remember { mutableStateOf(false) }
+
+    // 最大化:铺满桌面区(避开顶栏 ~48dp、底部输入+任务栏 ~150dp);还原回用户的 off/size。
+    val frameMod = if (maximized) {
+        Modifier.fillMaxSize().padding(top = 48.dp, bottom = 150.dp, start = 8.dp, end = 8.dp)
+    } else {
+        Modifier.offset { off }.size(size)
+    }
     Box(
-        Modifier
-            .offset { off }
-            .size(size)
+        frameMod
             .holoGlass(12.dp)
             .pointerInput(Unit) { detectDragGestures(onDragStart = { onFocus() }) { c, _ -> c.consume() } },
     ) {
@@ -211,16 +220,28 @@ fun HoloWindow(
                     .fillMaxWidth()
                     .height(30.dp)
                     .background(Holo.Surface2)
-                    .pointerInput(Unit) {
-                        detectDragGestures(onDragStart = { onFocus() }) { change, drag ->
-                            change.consume()
-                            off = IntOffset(off.x + drag.x.roundToInt(), off.y + drag.y.roundToInt())
+                    .pointerInput(maximized) {
+                        if (!maximized) {
+                            detectDragGestures(onDragStart = { onFocus() }) { change, drag ->
+                                change.consume()
+                                off = IntOffset(off.x + drag.x.roundToInt(), off.y + drag.y.roundToInt())
+                            }
                         }
                     }
                     .padding(start = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(title, color = Holo.TextHud, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                if (onMinimize != null) {
+                    Box(
+                        Modifier.size(30.dp).clickable(onClick = onMinimize),
+                        contentAlignment = Alignment.Center,
+                    ) { Text("—", color = Holo.TextSecondary, fontSize = 15.sp) }
+                }
+                Box(
+                    Modifier.size(30.dp).clickable { maximized = !maximized; onFocus() },
+                    contentAlignment = Alignment.Center,
+                ) { Text(if (maximized) "❐" else "□", color = Holo.TextSecondary, fontSize = 13.sp) }
                 Box(
                     Modifier.size(30.dp).clickable(onClick = onClose),
                     contentAlignment = Alignment.Center,
@@ -228,24 +249,26 @@ fun HoloWindow(
             }
             Box(Modifier.weight(1f)) { content() }
         }
-        // 右下角拖动缩放
-        Box(
-            Modifier
-                .align(Alignment.BottomEnd)
-                .size(22.dp)
-                .pointerInput(Unit) {
-                    detectDragGestures(onDragStart = { onFocus() }) { change, drag ->
-                        change.consume()
-                        val dw = with(density) { drag.x.toDp() }
-                        val dh = with(density) { drag.y.toDp() }
-                        size = androidx.compose.ui.unit.DpSize(
-                            (size.width + dw).coerceAtLeast(240.dp),
-                            (size.height + dh).coerceAtLeast(160.dp),
-                        )
-                    }
-                },
-            contentAlignment = Alignment.Center,
-        ) { Text("⌟", color = Holo.AccentDim, fontSize = 14.sp) }
+        // 右下角拖动缩放(最大化态不显示)
+        if (!maximized) {
+            Box(
+                Modifier
+                    .align(Alignment.BottomEnd)
+                    .size(22.dp)
+                    .pointerInput(Unit) {
+                        detectDragGestures(onDragStart = { onFocus() }) { change, drag ->
+                            change.consume()
+                            val dw = with(density) { drag.x.toDp() }
+                            val dh = with(density) { drag.y.toDp() }
+                            size = androidx.compose.ui.unit.DpSize(
+                                (size.width + dw).coerceAtLeast(240.dp),
+                                (size.height + dh).coerceAtLeast(160.dp),
+                            )
+                        }
+                    },
+                contentAlignment = Alignment.Center,
+            ) { Text("⌟", color = Holo.AccentDim, fontSize = 14.sp) }
+        }
     }
 }
 

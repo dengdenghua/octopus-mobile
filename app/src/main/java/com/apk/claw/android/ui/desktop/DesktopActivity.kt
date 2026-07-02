@@ -186,11 +186,14 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
     // 桌面:浏览器是常驻底板;发现/广场/mini-app 以可拖浮动窗口打开(移植 OpenRoom windowManager)。
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val windows = remember { androidx.compose.runtime.mutableStateListOf<Pair<Long, WinContent>>() }
+    val minimized = remember { androidx.compose.runtime.mutableStateListOf<Long>() }
     var winSeq by remember { mutableLongStateOf(0L) }
     val openWindow: (WinContent) -> Unit = { kind ->
         val idx = windows.indexOfFirst { it.second == kind }
-        if (idx >= 0) { val w = windows.removeAt(idx); windows.add(w) }  // 已开则置顶
-        else windows.add((winSeq++) to kind)
+        if (idx >= 0) {
+            minimized.removeAll { it == windows[idx].first }  // 已开:取消最小化 + 置顶
+            val w = windows.removeAt(idx); windows.add(w)
+        } else windows.add((winSeq++) to kind)
     }
     // app_action 未运行时请桌面把 mini-app 开成窗口(后台线程 → 切主线程 openWindow)
     val mainHandler = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
@@ -329,11 +332,18 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
             DesktopReplyBar(running = running, onSend = send, onStop = stop)
             DesktopTaskbar(
                 timeText = hudClock,
+                minimized = windows.filter { it.first in minimized },
+                onRestore = { id ->
+                    minimized.removeAll { it == id }
+                    val idx = windows.indexOfFirst { it.first == id }
+                    if (idx in 0 until windows.size - 1) { val w = windows.removeAt(idx); windows.add(w) }
+                },
                 onStart = { runCatching { ctx.startActivity(android.content.Intent(ctx, MiniAppListActivity::class.java)) } },
             )
         }
-        // 浮动窗口层(浮于 shell 之上,可拖到桌面任意位置)。默认位置分散,避免叠一起。
+        // 浮动窗口层(浮于 shell 之上,可拖到桌面任意位置)。最小化的不渲染,收进任务栏。
         windows.forEachIndexed { i, (id, kind) ->
+            if (id in minimized) return@forEachIndexed
             androidx.compose.runtime.key(id) {
                 val spec = windowSpec(kind, i)
                 HoloWindow(
@@ -342,7 +352,8 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
                     startY = spec.y,
                     width = spec.w,
                     height = spec.h,
-                    onClose = { windows.removeAll { it.first == id } },
+                    onClose = { windows.removeAll { it.first == id }; minimized.removeAll { it == id } },
+                    onMinimize = { if (id !in minimized) minimized.add(id) },
                     onFocus = {
                         val idx = windows.indexOfFirst { it.first == id }
                         if (idx in 0 until windows.size - 1) { val w = windows.removeAt(idx); windows.add(w) }
@@ -389,19 +400,34 @@ private fun windowSpec(kind: WinContent, i: Int): WinSpec {
     }
 }
 
-/** 最底 Windows 式任务栏:开始(全部应用)+ 时钟。给「虚拟电脑」桌面感。 */
+/** 最底 Windows 式任务栏:开始(全部应用)+ 最小化窗口按钮(点击还原)+ 时钟。 */
 @Composable
-private fun DesktopTaskbar(timeText: String, onStart: () -> Unit) {
+private fun DesktopTaskbar(
+    timeText: String,
+    minimized: List<Pair<Long, WinContent>>,
+    onRestore: (Long) -> Unit,
+    onStart: () -> Unit,
+) {
     Row(
         modifier = Modifier.fillMaxWidth().height(38.dp).background(Holo.Panel.copy(alpha = 0.9f))
             .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Box(
             Modifier.size(28.dp).clip(RoundedCornerShape(8.dp)).clickable(onClick = onStart),
             contentAlignment = Alignment.Center,
         ) {
             Icon(Icons.Filled.GridView, contentDescription = "开始", tint = Holo.Accent, modifier = Modifier.size(18.dp))
+        }
+        // 最小化的窗口:任务栏按钮,点击还原
+        minimized.forEach { (id, kind) ->
+            Text(
+                windowSpec(kind, 0).title.substringBefore(" ·").let { if (it.length > 6) it.take(6) else it },
+                color = Holo.TextHud, fontSize = 11.sp,
+                modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(Holo.Surface2)
+                    .clickable { onRestore(id) }.padding(horizontal = 10.dp, vertical = 4.dp),
+            )
         }
         Spacer(Modifier.weight(1f))
         Text(timeText, color = Holo.TextHud, fontSize = 11.sp)
