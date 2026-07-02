@@ -279,12 +279,7 @@ class DefaultAgentService : AgentService {
                     callback.onToolResult(iterations, toolName, displayName, paramsString, toolResult)
 
                     // 添加工具结果到消息（排除 imageBase64 以节省 token）
-                    val vlmResultForJson = mapOf(
-                        "isSuccess" to toolResult.isSuccess,
-                        "data" to toolResult.data,
-                        "error" to toolResult.error
-                    )
-                    val resultJson = GSON.toJson(vlmResultForJson)
+                    val resultJson = GSON.toJson(toolResultForJson(toolResult))
                     messages.add(ToolExecutionResultMessage.from(toolRequest, resultJson))
 
                     // 如果 LLM 调用了 finish，说明它认为无法处理
@@ -859,13 +854,23 @@ class DefaultAgentService : AgentService {
         }
     }
 
-    private fun AgentLoopState.appendToolResult(toolRequest: ToolExecutionRequest, result: ToolResult) {
-        val resultForJson = mapOf(
+    /**
+     * 序列化工具结果给 LLM 观测(排除 imageBase64 省 token)。errorCode/errorLine 仅在有值时带上——
+     * 给自动修复循环一个机器可读的判据(参数错/超时/脚本第几行崩),而不必去正则解析人类文本。
+     */
+    private fun toolResultForJson(result: ToolResult): Map<String, Any?> {
+        val m = linkedMapOf<String, Any?>(
             "isSuccess" to result.isSuccess,
             "data" to result.data,
-            "error" to result.error
+            "error" to result.error,
         )
-        messages.add(ToolExecutionResultMessage.from(toolRequest, GSON.toJson(resultForJson)))
+        result.errorCode?.let { m["errorCode"] = it }
+        result.errorLine?.let { m["errorLine"] = it }
+        return m
+    }
+
+    private fun AgentLoopState.appendToolResult(toolRequest: ToolExecutionRequest, result: ToolResult) {
+        messages.add(ToolExecutionResultMessage.from(toolRequest, GSON.toJson(toolResultForJson(result))))
 
         // 工具返回图片时（如 preview_html），追加视觉消息供多模态 LLM 直接查看并自迭代。
         val img = result.imageBase64

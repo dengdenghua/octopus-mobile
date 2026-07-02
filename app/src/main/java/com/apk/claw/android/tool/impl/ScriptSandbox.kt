@@ -1,6 +1,7 @@
 package com.apk.claw.android.tool.impl
 
 import com.apk.claw.android.octopus_mobile.safety.SsrfSafeHttp
+import com.apk.claw.android.tool.ToolErr
 import com.apk.claw.android.tool.ToolRegistry
 import com.apk.claw.android.tool.ToolResult
 import com.apk.claw.android.utils.KVUtils
@@ -230,13 +231,14 @@ class ScriptSandbox {
 
         } catch (e: EvaluatorException) {
             if (e.message?.contains("timed out") == true)
-                ToolResult.error("执行超时（>${timeoutMs}ms）")
+                ToolResult.error("执行超时（>${timeoutMs}ms）", ToolErr.TIMEOUT)
             else
-                ToolResult.error("脚本错误: ${e.message}")
+                // EvaluatorException 也带行号(宿主 API 抛的 readFile/fetch 等错误亦经此)。
+                ToolResult.error("脚本错误 [行${e.lineNumber()}]: ${e.message}", ToolErr.SCRIPT_ERROR, e.lineNumber().takeIf { it > 0 })
         } catch (e: RhinoException) {
-            ToolResult.error("JS错误 [行${e.lineNumber()}]: ${e.details()}")
+            ToolResult.error("JS错误 [行${e.lineNumber()}]: ${e.details()}", ToolErr.SCRIPT_ERROR, e.lineNumber().takeIf { it > 0 })
         } catch (e: Exception) {
-            ToolResult.error("执行异常: ${e.message}")
+            ToolResult.error("执行异常: ${e.message}", ToolErr.INTERNAL)
         } finally {
             Context.exit()
         }

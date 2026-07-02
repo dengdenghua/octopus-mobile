@@ -263,7 +263,7 @@ object ToolRegistry {
     }
 
     fun executeTool(name: String, params: Map<String, Any>, cancellationToken: com.apk.claw.android.agent.CancellationToken?): ToolResult {
-        val tool = tools[name] ?: return ToolResult.error("Unknown tool: $name")
+        val tool = tools[name] ?: return ToolResult.error("Unknown tool: $name", ToolErr.NOT_FOUND)
         val auditStartMs = System.currentTimeMillis()
         val auditRisk = ToolRiskPolicy.riskOf(name)
         val auditParams = if (ToolRiskPolicy.shouldAudit(name) && PermissionModeManager.getCurrentPolicy().auditLogEnabled) {
@@ -307,7 +307,7 @@ object ToolRegistry {
 
         if (!isToolEnabled(name)) {
             eventBus?.publish(EventBus.ToolBlockedEvent(name, "tool_disabled", "settings"))
-            return audited(ToolResult.error("工具已停用: $name"), blockedBy = "settings")
+            return audited(ToolResult.error("工具已停用: $name", ToolErr.BLOCKED), blockedBy = "settings")
         }
 
         // ── 权限策略（统一读取 PermissionModeManager）──
@@ -323,7 +323,7 @@ object ToolRegistry {
                 } catch (e: CircuitBreaker.CircuitOpenException) {
                     eventBus?.publish(EventBus.ToolBlockedEvent(name, e.reason, "circuit_breaker"))
                     return audited(
-                        ToolResult.error("工具调用被熔断: ${e.reason}（冷却 ${e.cooldownSeconds}s）"),
+                        ToolResult.error("工具调用被熔断: ${e.reason}（冷却 ${e.cooldownSeconds}s）", ToolErr.BLOCKED),
                         blockedBy = "circuit_breaker",
                     )
                 }
@@ -347,7 +347,7 @@ object ToolRegistry {
                 PermissionPolicy.RiskAction.BLOCK -> {
                     eventBus?.publish(EventBus.ToolBlockedEvent(name, "risk_blocked", "policy"))
                     return audited(
-                        ToolResult.error("${if (isHighRisk) "高危" else "中危"}工具「$name」被安全策略拦截（当前为审批模式）。"),
+                        ToolResult.error("${if (isHighRisk) "高危" else "中危"}工具「$name」被安全策略拦截（当前为审批模式）。", ToolErr.BLOCKED),
                         blockedBy = "policy",
                     )
                 }
@@ -366,7 +366,7 @@ object ToolRegistry {
                     if (!approved) {
                         eventBus?.publish(EventBus.ToolBlockedEvent(name, "approval_denied", "policy"))
                         return audited(
-                            ToolResult.error("${if (isHighRisk) "高危" else "中危"}工具「$name」被用户拒绝或审批超时。"),
+                            ToolResult.error("${if (isHighRisk) "高危" else "中危"}工具「$name」被用户拒绝或审批超时。", ToolErr.PERMISSION),
                             blockedBy = "approval",
                         )
                     }
@@ -387,7 +387,7 @@ object ToolRegistry {
                 val verdict = gate.checkToolCall(name, params)
                 if (verdict.isBlocked) {
                     eventBus?.publish(EventBus.ToolBlockedEvent(name, verdict.reason, "safety"))
-                    return audited(ToolResult.error("安全拦截: ${verdict.reason}"), blockedBy = "safety")
+                    return audited(ToolResult.error("安全拦截: ${verdict.reason}", ToolErr.BLOCKED), blockedBy = "safety")
                 }
             }
         } else if (policy.privacyScannerEnabled) {
@@ -399,7 +399,7 @@ object ToolRegistry {
             if (secretHits.isNotEmpty()) {
                 val desc = secretHits.map { it.description }.toSet().joinToString(", ")
                 eventBus?.publish(EventBus.ToolBlockedEvent(name, "secret_detected: $desc", "safety"))
-                return audited(ToolResult.error("安全拦截: 检测到敏感信息: $desc"), blockedBy = "safety")
+                return audited(ToolResult.error("安全拦截: 检测到敏感信息: $desc", ToolErr.BLOCKED), blockedBy = "safety")
             }
         }
 
@@ -407,7 +407,7 @@ object ToolRegistry {
         val preCheck = guardrail.precheck(name, params)
         if (preCheck.shouldHalt) {
             eventBus?.publish(EventBus.ToolBlockedEvent(name, preCheck.message, "guardrail"))
-            return audited(ToolResult.error("护栏拦截: ${preCheck.message}"), blockedBy = "guardrail")
+            return audited(ToolResult.error("护栏拦截: ${preCheck.message}", ToolErr.BLOCKED), blockedBy = "guardrail")
         }
 
         // ── 执行工具 ──
@@ -415,15 +415,18 @@ object ToolRegistry {
             tool.executeWithWaitAfter(params, cancellationToken)
         } catch (e: Exception) {
             circuitBreaker?.record(success = false)
-            ToolResult.error("Tool execution failed: ${e.message}")
+            // requireString/requireInt 缺参/类型错都抛 IllegalArgumentException → 归类 INVALID_PARAM,
+            // Agent 据此知道该改参数而非原样重试;其余按内部异常。
+            val code = if (e is IllegalArgumentException) ToolErr.INVALID_PARAM else ToolErr.INTERNAL
+            ToolResult.error("Tool execution failed: ${e.message}", code)
         }
 
         // ── 护栏观察结果（每次调用只在此处记录一次，避免重复计数）──
         val finalResult: ToolResult = if (!result.isSuccess) {
             val failCheck = guardrail.observe(name, params, result.data ?: result.error, failed = true)
             if (failCheck.action == GuardrailAction.WARN) {
-                // 警告但不阻止后续执行：保持失败语义，仅把警告附加到错误信息
-                ToolResult.error("${result.error} [⚠️ ${failCheck.message}]")
+                // 警告但不阻止后续执行：保持失败语义，仅把警告附加到错误信息(保留原 errorCode/行号)
+                ToolResult.error("${result.error} [⚠️ ${failCheck.message}]", result.errorCode ?: ToolErr.INTERNAL, result.errorLine)
             } else {
                 result
             }
