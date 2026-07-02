@@ -108,8 +108,9 @@ class AppViewModel : ViewModel() {
         val eff = com.apk.claw.android.account.LlmRouting.effective()
         var baseUrl = eff.baseUrl
         if (baseUrl.isEmpty()) baseUrl = "https://api.deepseek.com/v1"
-        // 从 LessonStore 注入已有教训到 dynamicPromptSuffix
-        val promptSuffix = lessonStore?.buildPromptSection() ?: ""
+        // 从 LessonStore 注入已有教训 + 从 PromptSkillStore 注入已启用技能,一起进 dynamicPromptSuffix
+        val promptSuffix = (lessonStore?.buildPromptSection() ?: "") +
+            com.apk.claw.android.octopus_mobile.skill.PromptSkillStore.buildPromptSection()
         // 从 MemoryStore 注入跨会话记忆到 memoryPromptSuffix
         val memorySuffix = memoryStore?.buildPromptSection() ?: ""
         return AgentConfig.Builder()

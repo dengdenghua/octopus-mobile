@@ -55,6 +55,9 @@ object ToolRiskPolicy {
         // 生成应用：内部自带两次 LLM 调用（消耗积分，与 generate_image/video 同类），
         // 产出走 preview_html 同一 iframe 通道，风险面不比它高，同级归类。
         "generate_app",
+        // 生成技能：一次 LLM 调用产出 markdown 技能并写库（后续会注入 System Prompt）。
+        // 与 generate_app 同类；纳入审计,让不可信源写技能也留痕。
+        "generate_skill",
         // 状态变更 / 外部写入类：纳入审计，避免远程/LAN 不可信源驱动这些操作却无审计轨迹。
         // （仅审计，不新增拦截——HIGH 才会对不可信源走来源闸门。）
         "navigate",            // UI 导航编排（驱动一连串点击）
