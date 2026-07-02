@@ -358,6 +358,8 @@
     <string name="browser_home_favorites">收藏标签</string>
     <string name="browser_home_tools">常用入口</string>
     <string name="browser_home_miniapps">我的小程序</string>
+    <string name="discover_group_apps">我的应用</string>
+    <string name="discover_group_web">网页</string>
     <string name="browser_home_miniapp_tag">小程序</string>
     <string name="browser_home_bookmarks">书签</string>
     <string name="browser_home_common_sites">常用网站</string>

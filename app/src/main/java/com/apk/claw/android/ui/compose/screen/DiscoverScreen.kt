@@ -180,20 +180,29 @@ fun DiscoverScreen(onOpenUrl: ((String?) -> Unit)? = null) {
             )
         }
 
-        item {
-            MiniAppsSection(apps = miniApps) { id -> MiniAppRegistry.launch(context, id) }
+        // ── 我的应用(小程序):agent 可发现并操作的原生 app ──
+        if (miniApps.isNotEmpty()) {
+            item { DiscoverGroupLabel(stringResource(R.string.discover_group_apps)) }
+            item {
+                MiniAppsSection(apps = miniApps) { id -> MiniAppRegistry.launch(context, id) }
+            }
         }
 
-        item {
-            BookmarksSection(bookmarks = bookmarks) { openUrl(it) }
-        }
-
-        item {
-            CommonSitesSection(
-                sites = commonSites,
-                onOpen = { openUrl(it) },
-                onLongPress = { siteToDelete = it },
-            )
+        // ── 网页:书签 + 常用站点(网页世界的入口) ──
+        if (bookmarks.isNotEmpty() || commonSites.isNotEmpty()) {
+            item { DiscoverGroupLabel(stringResource(R.string.discover_group_web)) }
+            if (bookmarks.isNotEmpty()) {
+                item { BookmarksSection(bookmarks = bookmarks) { openUrl(it) } }
+            }
+            if (commonSites.isNotEmpty()) {
+                item {
+                    CommonSitesSection(
+                        sites = commonSites,
+                        onOpen = { openUrl(it) },
+                        onLongPress = { siteToDelete = it },
+                    )
+                }
+            }
         }
     }
 
@@ -266,6 +275,18 @@ private fun BrowserHomeTopBar() {
             )
         }
     }
+}
+
+/** 分组标签(「我的应用」/「网页」)—— 把发现页分成 app 世界与网页世界两个清晰心智。 */
+@Composable
+private fun DiscoverGroupLabel(text: String) {
+    Text(
+        text,
+        color = TextMuted,
+        fontSize = OctopusType.caption,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier.padding(start = OctopusSpacing.xs, top = OctopusSpacing.xs),
+    )
 }
 
 /** 三个聚合小节共用的卡片外壳：标题 + 内容；列表为空时整块不占地方。 */
