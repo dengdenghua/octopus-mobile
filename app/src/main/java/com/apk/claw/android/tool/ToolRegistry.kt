@@ -184,6 +184,7 @@ object ToolRegistry {
         register(GenerateAppTool())
         register(GenerateSkillTool())
         register(ImportSkillTool())
+        register(GenerateBrowserPluginTool())
 
         // AI NAS 文件管理工具（需要 Shizuku）
         register(BrowseFilesTool())
