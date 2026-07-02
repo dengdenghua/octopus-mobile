@@ -447,8 +447,12 @@ class DefaultAgentService : AgentService {
 
     // ==================== 上下文压缩 ====================
 
-    /** ContextCompressor 实例，提供分层压缩策略 */
-    private val contextCompressor = ContextCompressor()
+    /**
+     * ContextCompressor 实例，提供分层压缩策略。
+     * 注入 [ContextSummarizer.summarize] 作为「更早历史」的 LLM 真总结通道——比硬截断更能
+     * 保住「试过 X 因 Y 失败」这类关键历史;调用失败会自动退回硬截断,不阻断主循环。
+     */
+    private val contextCompressor = ContextCompressor(summarizer = ContextSummarizer::summarize)
 
     /** 保护区：最近 N 轮完整保留 */
     private val KEEP_RECENT_ROUNDS = 3
