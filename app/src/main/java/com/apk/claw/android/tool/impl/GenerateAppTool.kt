@@ -40,6 +40,8 @@ class GenerateAppTool : BaseTool() {
         private const val MAX_DESC_LEN = 2000
         private const val PREVIEW_HEIGHT = 700
         private const val MANIFEST_VERSION = "1.0.0"
+        /** 生成后自动修复的最大轮数(每轮:离屏渲染抓错 → LLM 修 → 再渲染)。 */
+        private const val MAX_REPAIR = 2
     }
 
     private val http = OctoHttp.shared.newBuilder()
@@ -72,19 +74,38 @@ class GenerateAppTool : BaseTool() {
         val raw = runCatching { callLlm(eff, codePrompt(appName, description, plan)) }
             .getOrElse { return ToolResult.error("生成代码阶段失败: ${it.message}") }
 
-        val html = extractHtml(raw)
+        var html = extractHtml(raw)
         if (html.isBlank()) return ToolResult.error("生成结果为空或不是有效 HTML")
 
-        // 从原始输出解析 OCTOPUS_ACTIONS 声明(在 </html> 之后,extractHtml 会截掉,故从 raw 解析)
-        val actions = parseActions(raw)
+        // ── 闭环:离屏渲染抓 console error → 有错让 LLM 修复(最多 MAX_REPAIR 轮,只采纳更优版本)──
+        // 这是"写-跑-看-改"的最小闭环:agent 不再 one-shot 碰运气,生成后先自检再存。
+        var repairRounds = 0
+        var errors = runCatching { HtmlLinter.lint(ClawApplication.instance, html) }.getOrDefault(emptyList())
+        while (errors.isNotEmpty() && repairRounds < MAX_REPAIR) {
+            repairRounds++
+            val fixedRaw = runCatching { callLlm(eff, repairPrompt(html, errors)) }.getOrNull() ?: break
+            val fixedHtml = extractHtml(fixedRaw).takeIf { it.isNotBlank() } ?: break
+            val fixedErrors = runCatching { HtmlLinter.lint(ClawApplication.instance, fixedHtml) }.getOrDefault(emptyList())
+            if (fixedErrors.size > errors.size) break  // 修得更糟就别采纳,保留上一版
+            html = fixedHtml; errors = fixedErrors
+            if (errors.isEmpty()) break
+        }
+
+        // actions 从最终 html 解析(extractHtml 保留了 </html> 之后的 OCTOPUS_ACTIONS 注释)
+        val actions = parseActions(html)
 
         val appId = "gen_" + System.currentTimeMillis()
         val saved = runCatching { persistAsMiniApp(appId, appName, html, actions) }.getOrDefault(false)
         val savedNote = if (saved) "，已存为小程序「$appName」，可在「小程序」里随时重新打开" else ""
+        val lintNote = when {
+            repairRounds == 0 && errors.isEmpty() -> "，自检无控制台错误"
+            errors.isEmpty() -> "，自动修复 $repairRounds 轮后无控制台错误"
+            else -> "，自动修复 $repairRounds 轮，仍有 ${errors.size} 处控制台错误(可让我继续修)"
+        }
 
         val payload = "$PREVIEW_HEIGHT\n$html"
         return ToolResult.successWithHtml(
-            "已生成应用「$appName」（${html.length} 字符，规划: ${plan.take(80)}）$savedNote。" +
+            "已生成应用「$appName」（${html.length} 字符）$lintNote$savedNote。" +
                 "预览已自动推送到控制台，不需要再调用 preview_html 展示同一个应用。",
             payload,
         )
@@ -153,6 +174,22 @@ class GenerateAppTool : BaseTool() {
         - 在 </html> **之后**追加一行 HTML 注释,声明你实现了哪些 action(供宿主发现,数组可为空):
           <!--OCTOPUS_ACTIONS:[{"name":"动作名","description":"一句话说明","params":[{"name":"参数名","type":"string","description":"说明","required":true}]}]-->
         - 只输出 HTML 代码本身(可含上面那行注释)，不要用 markdown 代码块包裹，不要输出任何解释文字
+    """.trimIndent()
+
+    /** 修复 prompt:把当前 HTML + 无头渲染抓到的 console error 一起喂回,让 LLM 只改错不改功能。 */
+    private fun repairPrompt(html: String, errors: List<String>) = """
+        你是资深前端工程师。下面这个单文件 HTML 应用在无头浏览器渲染时报了下列 JS 控制台错误,请修复。
+        要求：
+        - 只修这些错误,保持原有功能与界面不变。
+        - 只输出修复后的完整 HTML(从 <!DOCTYPE html> 到 </html>),并保留原有的
+          <!--OCTOPUS_ACTIONS:...--> 注释(若有)。
+        - 不要用 markdown 代码块包裹,不要输出任何解释文字。
+
+        控制台错误：
+        ${errors.joinToString("\n") { "- $it" }}
+
+        当前代码：
+        $html
     """.trimIndent()
 
     private fun callLlm(eff: EffectiveLlm, userPrompt: String): String {
