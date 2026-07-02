@@ -240,7 +240,11 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
     }
     val stop = { com.apk.claw.android.ui.compose.screen.ChatAgentBridge.cancel(); running = false; toolNote = "" }
 
-    // 布局(对齐 OpenRoom 直播间):全宽顶栏 / 左竖排应用栏 | 中间舞台;屏幕正底部输入 + 快捷回复。
+    // 呈现模式(两张参考图):直播间(居住,中间舞台字幕,图2) / 对话框(聊天,右侧立绘对话卡,图1)。
+    // 两模式共用同一条 Agent 会话与屏幕底部输入,只是角色呈现方式不同。
+    var liveRoom by rememberSaveable { mutableStateOf(true) }
+
+    // 布局(对齐 OpenRoom):全宽顶栏 / 左竖排应用栏 | 中间舞台;屏幕正底部输入 + 快捷回复。
     Box(Modifier.fillMaxSize()) {
         HoloBackground(Modifier.fillMaxSize())
         Column(Modifier.fillMaxSize()) {
@@ -271,20 +275,22 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
                             progress = progress,
                             onNavigate = { currentUrl = it; pageTitle = "" },
                         )
-                        // 直播间覆盖层:左上 ● LIVE + 角色名(点切换);右下 ♥ 点赞;底部字幕(最新一句)
-                        StageLiveBadge(Modifier.align(Alignment.TopStart).padding(10.dp))
-                        StageLikeButton(
-                            count = likeCount,
-                            onLike = { likeCount++ },
-                            modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp),
-                        )
-                        if (subtitle.isNotBlank() || running) {
-                            StageSubtitle(
-                                text = subtitle,
-                                running = running,
-                                toolNote = toolNote,
-                                modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(bottom = 44.dp),
+                        // 直播间模式覆盖层:左上 ● LIVE + 角色名(点切换);右下 ♥ 点赞;底部字幕(最新一句)
+                        if (liveRoom) {
+                            StageLiveBadge(Modifier.align(Alignment.TopStart).padding(10.dp))
+                            StageLikeButton(
+                                count = likeCount,
+                                onLike = { likeCount++ },
+                                modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp),
                             )
+                            if (subtitle.isNotBlank() || running) {
+                                StageSubtitle(
+                                    text = subtitle,
+                                    running = running,
+                                    toolNote = toolNote,
+                                    modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(bottom = 44.dp),
+                                )
+                            }
                         }
                         // 浮动窗口层:发现/广场/mini-app,可拖、可缩、可关、点击置顶(末尾在最上)
                         windows.forEachIndexed { i, (id, kind) ->
@@ -320,18 +326,122 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
             // 屏幕正底部:快捷回复气泡 + 输入胶囊(主输入,驱动上面的舞台字幕)
             DesktopReplyBar(running = running, onSend = send, onStop = stop)
         }
-        // 右下角当前角色头像(点击切换角色),对齐参考图右下的用户头像位
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(end = 16.dp, bottom = 78.dp)
-                .size(44.dp)
-                .clip(CircleShape)
-                .border(2.dp, Holo.Accent, CircleShape)
-                .clickable { CharacterRegistry.next() },
-            contentAlignment = Alignment.Center,
+        // 对话框模式(图1):右侧悬浮立绘对话卡(角色名 + 阶段 + 立绘 + 对话文本)。直播间模式则不显。
+        if (!liveRoom) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 52.dp, end = 14.dp, bottom = 118.dp)
+                    .width(360.dp)
+                    .fillMaxHeight(),
+            ) {
+                DesktopDialogCard(text = subtitle, running = running, toolNote = toolNote)
+            }
+        }
+        // 右下角:呈现模式切换(对话框 / 直播间)+ 当前角色头像(点击切角色)
+        Column(
+            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 118.dp),
+            horizontalAlignment = Alignment.End,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            CharacterAvatar(44.dp)
+            ModeToggle(liveRoom = liveRoom, onSelect = { liveRoom = it })
+            Box(
+                modifier = Modifier.size(44.dp).clip(CircleShape).border(2.dp, Holo.Accent, CircleShape)
+                    .clickable { CharacterRegistry.next() },
+                contentAlignment = Alignment.Center,
+            ) { CharacterAvatar(44.dp) }
+        }
+    }
+}
+
+/** 呈现模式切换(对齐首张参考图右下「聊天/居住」):对话框 | 直播间。 */
+@Composable
+private fun ModeToggle(liveRoom: Boolean, onSelect: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier.clip(RoundedCornerShape(18.dp)).background(Holo.Panel.copy(alpha = 0.85f))
+            .border(1.dp, Holo.Border, RoundedCornerShape(18.dp)).padding(3.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        ModeChip("对话框", active = !liveRoom) { onSelect(false) }
+        ModeChip("直播间", active = liveRoom) { onSelect(true) }
+    }
+}
+
+@Composable
+private fun ModeChip(label: String, active: Boolean, onClick: () -> Unit) {
+    Text(
+        label,
+        color = if (active) Color(0xFF1A1A1A) else Holo.TextSecondary,
+        fontSize = 11.sp, fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
+        modifier = Modifier.clip(RoundedCornerShape(15.dp))
+            .background(if (active) Holo.Accent else Color.Transparent)
+            .clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 5.dp),
+    )
+}
+
+/**
+ * 对话框模式卡片(图1):header(角色名 › 切角色 + 阶段进度)+ 主体两栏(左角色立绘 | 右对话文本)。
+ * 对话文本 = 角色最新一句(流式);输入仍在屏幕底部,与直播间模式共用。
+ */
+@Composable
+private fun DesktopDialogCard(text: String, running: Boolean, toolNote: String) {
+    val scroll = androidx.compose.foundation.rememberScrollState()
+    LaunchedEffect(text) { runCatching { scroll.animateScrollTo(scroll.maxValue) } }
+    Column(Modifier.fillMaxSize().holoGlass(14.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().height(40.dp).background(Holo.Surface2)
+                .padding(start = 12.dp, end = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "${CharacterRegistry.current.name} ›", color = Holo.Accent, fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.clickable { CharacterRegistry.next() },
+            )
+            Spacer(Modifier.weight(1f))
+            PhaseDots(current = 1, total = 4)
+        }
+        Row(Modifier.weight(1f)) {
+            // 左:当前角色全息立绘常驻(更深底)
+            Box(Modifier.width(120.dp).fillMaxHeight().background(Holo.AvatarBg)) {
+                HoloFigure(
+                    CharacterRegistry.current.frontRes,
+                    Modifier.align(Alignment.BottomCenter)
+                        .fillMaxHeight(0.96f)
+                        .aspectRatio(0.46f, matchHeightConstraintsFirst = true),
+                )
+                Text(
+                    CharacterRegistry.current.zh, color = Holo.Accent, fontSize = 20.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.align(Alignment.TopStart).padding(start = 8.dp, top = 6.dp),
+                )
+            }
+            // 右:对话文本(最新一句,可上滚)
+            Column(Modifier.weight(1f).padding(14.dp)) {
+                if (running && toolNote.isNotBlank()) {
+                    Text(toolNote, color = Holo.Accent, fontSize = 10.sp, modifier = Modifier.padding(bottom = 6.dp))
+                }
+                Column(Modifier.weight(1f).verticalScroll(scroll)) {
+                    Text(
+                        text.ifBlank { if (running) "……" else "点下面的输入框,和我说点什么。" },
+                        color = Holo.TextHud, fontSize = 15.sp, lineHeight = 22.sp,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** 阶段进度点(参考图右上「阶段 1/4」):首点强调,其余暗;纯视觉章节指示。 */
+@Composable
+private fun PhaseDots(current: Int, total: Int) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+        Text("阶段 $current/$total", color = Holo.TextSecondary, fontSize = 9.sp)
+        Spacer(Modifier.width(3.dp))
+        repeat(total) { i ->
+            Box(
+                Modifier.size(width = 12.dp, height = 3.dp).clip(RoundedCornerShape(2.dp))
+                    .background(if (i < current) Holo.Accent else Holo.BorderStrong),
+            )
         }
     }
 }
