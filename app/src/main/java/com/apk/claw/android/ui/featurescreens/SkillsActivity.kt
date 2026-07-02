@@ -46,13 +46,52 @@ private fun SkillsScreen(onBack: () -> Unit) {
     }
     var rev by remember { mutableStateOf(0) }
 
+    // 提示词技能(generate_skill / import_skill 产物):可开关、可删。
+    var skillRev by remember { mutableStateOf(0) }
+    val promptSkills = remember(skillRev) { com.apk.claw.android.octopus_mobile.skill.PromptSkillStore.all() }
+
     FeatureScaffold(title = stringResource(R.string.skills_screen_title), onBack = onBack) {
-        Text(
-            stringResource(R.string.skills_screen_description, tools.size),
-            color = FMuted, fontSize = 11.sp,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-        )
+        if (promptSkills.isNotEmpty()) {
+            Text(
+                "提示词技能（${promptSkills.size}）· 相关任务时自动注入",
+                color = FMuted, fontSize = 11.sp,
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp),
+            )
+        }
         LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(vertical = 4.dp)) {
+            items(promptSkills, key = { it.id }) { s ->
+                FCard {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(s.name, color = FText, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                            if (s.description.isNotBlank()) {
+                                Spacer(Modifier.height(2.dp))
+                                Text(s.description, color = FSub, fontSize = 12.sp, maxLines = 2)
+                            }
+                        }
+                        Text(
+                            if (s.enabled) stringResource(R.string.extensions_disable_button) else stringResource(R.string.extensions_enable_button),
+                            color = if (s.enabled) FPrimary else FMuted, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier
+                                .clickable { com.apk.claw.android.octopus_mobile.skill.PromptSkillStore.setEnabled(s.id, !s.enabled); skillRev++ }
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                        )
+                        Text(
+                            "删除", color = FMuted, fontSize = 13.sp,
+                            modifier = Modifier
+                                .clickable { com.apk.claw.android.octopus_mobile.skill.PromptSkillStore.delete(s.id); skillRev++ }
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                        )
+                    }
+                }
+            }
+            item(key = "__tools_header__") {
+                Text(
+                    stringResource(R.string.skills_screen_description, tools.size),
+                    color = FMuted, fontSize = 11.sp,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+            }
             items(tools, key = { it.getName() }) { t ->
                 val name = t.getName()
                 val core = name in CORE

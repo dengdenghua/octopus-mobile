@@ -183,6 +183,7 @@ object ToolRegistry {
         // 生成应用（Phase 1：规划+编码两段流水线，产出走 preview_html 同一展示通道，无持久化）
         register(GenerateAppTool())
         register(GenerateSkillTool())
+        register(ImportSkillTool())
 
         // AI NAS 文件管理工具（需要 Shizuku）
         register(BrowseFilesTool())

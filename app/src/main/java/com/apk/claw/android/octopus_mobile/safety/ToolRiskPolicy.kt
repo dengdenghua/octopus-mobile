@@ -58,6 +58,9 @@ object ToolRiskPolicy {
         // 生成技能：一次 LLM 调用产出 markdown 技能并写库（后续会注入 System Prompt）。
         // 与 generate_app 同类；纳入审计,让不可信源写技能也留痕。
         "generate_skill",
+        // 导入技能：把外部 markdown 写进技能库（后续注入 System Prompt);纯本地无 LLM,但同样
+        // 是「持久注入」面,纳入审计——防不可信源静默植入指令。
+        "import_skill",
         // 状态变更 / 外部写入类：纳入审计，避免远程/LAN 不可信源驱动这些操作却无审计轨迹。
         // （仅审计，不新增拦截——HIGH 才会对不可信源走来源闸门。）
         "navigate",            // UI 导航编排（驱动一连串点击）
