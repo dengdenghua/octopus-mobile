@@ -36,6 +36,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.DesktopWindows
@@ -294,39 +295,27 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
                 timeText = hudClock,
                 sceneOn = sceneGen,
                 onToggleScene = { sceneGen = !sceneGen },
-                onGallery = { runCatching { ctx.startActivity(android.content.Intent(ctx, MiniAppListActivity::class.java)) } },
-                onSkills = { runCatching { ctx.startActivity(android.content.Intent(ctx, com.apk.claw.android.ui.featurescreens.SkillsActivity::class.java)) } },
+                onExit = { (ctx as? android.app.Activity)?.finish() },
             )
-            Row(Modifier.weight(1f).fillMaxWidth()) {
-                LeftAppRail(
-                    onLiveRoom = { openWindow(WinContent.LiveRoom) },
-                    onChat = { openWindow(WinContent.Chat) },
-                    onCharacter = { openWindow(WinContent.Character) },
-                    onDiscover = { openWindow(WinContent.Discover) },
-                    onSquare = { openWindow(WinContent.Square) },
-                    onLaunchMiniApp = { id -> MiniAppRegistry.get(id)?.let { openWindow(WinContent.Mini(id, it.name)) } },
-                    onAllApps = { runCatching { ctx.startActivity(android.content.Intent(ctx, MiniAppListActivity::class.java)) } },
-                )
-                // 中:空闲=壁纸透出;浏览网页时=玻璃浏览器盒(DesktopMonitor 常挂,隐藏 WebView)。
+            // 中:全宽。空闲=壁纸透出(桌面图标浮其上);浏览网页时=玻璃浏览器盒。
+            Box(
+                Modifier.weight(1f).fillMaxWidth()
+                    .padding(horizontal = if (browsing) 24.dp else 0.dp, vertical = if (browsing) 12.dp else 0.dp),
+            ) {
                 Box(
-                    Modifier.weight(1f).fillMaxHeight()
-                        .padding(horizontal = if (browsing) 24.dp else 0.dp, vertical = if (browsing) 12.dp else 0.dp),
+                    Modifier.fillMaxSize()
+                        .then(if (browsing) Modifier.holoGlass(16.dp) else Modifier)
+                        .clipToBounds(),
                 ) {
-                    Box(
-                        Modifier.fillMaxSize()
-                            .then(if (browsing) Modifier.holoGlass(16.dp) else Modifier)
-                            .clipToBounds(),
-                    ) {
-                        DesktopMonitor(
-                            engine = engine,
-                            currentUrl = currentUrl,
-                            pageTitle = pageTitle,
-                            loading = loading,
-                            progress = progress,
-                            browsing = browsing,
-                            onNavigate = { currentUrl = it; pageTitle = "" },
-                        )
-                    }
+                    DesktopMonitor(
+                        engine = engine,
+                        currentUrl = currentUrl,
+                        pageTitle = pageTitle,
+                        loading = loading,
+                        progress = progress,
+                        browsing = browsing,
+                        onNavigate = { currentUrl = it; pageTitle = "" },
+                    )
                 }
             }
             DesktopReplyBar(running = running, onSend = send, onStop = stop)
@@ -341,7 +330,18 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
                 onStart = { runCatching { ctx.startActivity(android.content.Intent(ctx, MiniAppListActivity::class.java)) } },
             )
         }
-        // 浮动窗口层(浮于 shell 之上,可拖到桌面任意位置)。最小化的不渲染,收进任务栏。
+        // 桌面图标(直接铺在壁纸上,无侧边栏面板)。在窗口层之下 → 窗口可盖住,像真桌面。
+        DesktopIcons(
+            modifier = Modifier.align(Alignment.TopStart).padding(top = 38.dp, start = 6.dp, bottom = 132.dp),
+            onLiveRoom = { openWindow(WinContent.LiveRoom) },
+            onChat = { openWindow(WinContent.Chat) },
+            onCharacter = { openWindow(WinContent.Character) },
+            onDiscover = { openWindow(WinContent.Discover) },
+            onSquare = { openWindow(WinContent.Square) },
+            onLaunchMiniApp = { id -> MiniAppRegistry.get(id)?.let { openWindow(WinContent.Mini(id, it.name)) } },
+            onAllApps = { runCatching { ctx.startActivity(android.content.Intent(ctx, MiniAppListActivity::class.java)) } },
+        )
+        // 浮动窗口层(浮于 shell + 桌面图标之上,可拖到桌面任意位置)。最小化的不渲染,收进任务栏。
         windows.forEachIndexed { i, (id, kind) ->
             if (id in minimized) return@forEachIndexed
             androidx.compose.runtime.key(id) {
@@ -391,12 +391,12 @@ private fun windowSpec(kind: WinContent, i: Int): WinSpec {
     // 默认尺寸按「横屏手机」的 dp 空间(约 860×390dp)裁,保证底部输入不被盖;大屏可自行拖拽放大。
     val name = CharacterRegistry.current.name
     return when (kind) {
-        WinContent.LiveRoom -> WinSpec("直播间 · $name", 12.dp, 6.dp, 390.dp, 250.dp)
-        WinContent.Chat -> WinSpec("对话 · $name", 412.dp, 14.dp, 300.dp, 268.dp)
-        WinContent.Character -> WinSpec("角色档案 · $name", 70.dp, 24.dp, 430.dp, 270.dp)
-        WinContent.Discover -> WinSpec("发现", (50 + i * 24).dp, (40 + i * 24).dp, 320.dp, 240.dp)
-        WinContent.Square -> WinSpec("广场", (50 + i * 24).dp, (40 + i * 24).dp, 320.dp, 240.dp)
-        is WinContent.Mini -> WinSpec(kind.name, (50 + i * 24).dp, (40 + i * 24).dp, 320.dp, 240.dp)
+        WinContent.LiveRoom -> WinSpec("直播间 · $name", 92.dp, 40.dp, 380.dp, 246.dp)
+        WinContent.Chat -> WinSpec("对话 · $name", 486.dp, 48.dp, 300.dp, 262.dp)
+        WinContent.Character -> WinSpec("角色档案 · $name", 150.dp, 56.dp, 430.dp, 264.dp)
+        WinContent.Discover -> WinSpec("发现", (110 + i * 24).dp, (44 + i * 24).dp, 320.dp, 236.dp)
+        WinContent.Square -> WinSpec("广场", (110 + i * 24).dp, (44 + i * 24).dp, 320.dp, 236.dp)
+        is WinContent.Mini -> WinSpec(kind.name, (110 + i * 24).dp, (44 + i * 24).dp, 320.dp, 236.dp)
     }
 }
 
@@ -409,28 +409,28 @@ private fun DesktopTaskbar(
     onStart: () -> Unit,
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth().height(38.dp).background(Holo.Panel.copy(alpha = 0.9f))
-            .padding(horizontal = 12.dp),
+        modifier = Modifier.fillMaxWidth().height(30.dp).background(Holo.Panel.copy(alpha = 0.85f))
+            .padding(horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Box(
-            Modifier.size(28.dp).clip(RoundedCornerShape(8.dp)).clickable(onClick = onStart),
+            Modifier.size(24.dp).clip(RoundedCornerShape(6.dp)).clickable(onClick = onStart),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Filled.GridView, contentDescription = "开始", tint = Holo.Accent, modifier = Modifier.size(18.dp))
+            Icon(Icons.Filled.GridView, contentDescription = "开始", tint = Holo.Accent.copy(alpha = 0.9f), modifier = Modifier.size(15.dp))
         }
         // 最小化的窗口:任务栏按钮,点击还原
         minimized.forEach { (id, kind) ->
             Text(
                 windowSpec(kind, 0).title.substringBefore(" ·").let { if (it.length > 6) it.take(6) else it },
-                color = Holo.TextHud, fontSize = 11.sp,
-                modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(Holo.Surface2)
-                    .clickable { onRestore(id) }.padding(horizontal = 10.dp, vertical = 4.dp),
+                color = Holo.TextHud, fontSize = 10.sp,
+                modifier = Modifier.clip(RoundedCornerShape(5.dp)).background(Holo.Surface2)
+                    .clickable { onRestore(id) }.padding(horizontal = 8.dp, vertical = 3.dp),
             )
         }
         Spacer(Modifier.weight(1f))
-        Text(timeText, color = Holo.TextHud, fontSize = 11.sp)
+        Text(timeText, color = Holo.TextSecondary, fontSize = 10.sp)
     }
 }
 
@@ -453,7 +453,7 @@ private fun ChatContent(convo: List<DeskMsg>, running: Boolean, toolNote: String
                     .aspectRatio(0.5f, matchHeightConstraintsFirst = true),
             )
             Text(
-                CharacterRegistry.current.zh, color = Holo.Accent, fontSize = 18.sp, fontWeight = FontWeight.Bold,
+                CharacterRegistry.current.zh, color = Holo.Accent, fontSize = 15.sp, fontWeight = FontWeight.Medium,
                 modifier = Modifier.align(Alignment.TopStart).padding(start = 8.dp, top = 6.dp),
             )
         }
@@ -668,42 +668,42 @@ private fun DesktopReplyBar(running: Boolean, onSend: (String) -> Unit, onStop: 
                 }
             }
         }
-        // 输入胶囊(黄):占据中间,最大宽度约束,居中
+        // 输入胶囊(黄):居中紧凑、更薄,窄屏自适应
         Row(
-            modifier = Modifier.fillMaxWidth().widthIn(max = 720.dp)
-                .clip(RoundedCornerShape(24.dp))
+            modifier = Modifier.widthIn(max = 380.dp).fillMaxWidth().height(40.dp)
+                .clip(RoundedCornerShape(20.dp))
                 .background(Holo.Accent)
-                .padding(start = 18.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
+                .padding(start = 16.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             androidx.compose.foundation.text.BasicTextField(
                 value = input,
                 onValueChange = { input = it },
                 singleLine = true,
-                textStyle = androidx.compose.ui.text.TextStyle(color = Color(0xFF1A1A1A), fontSize = 14.sp),
+                textStyle = androidx.compose.ui.text.TextStyle(color = Color(0xFF1A1A1A), fontSize = 13.sp),
                 cursorBrush = androidx.compose.ui.graphics.SolidColor(Color(0xFF1A1A1A)),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                 keyboardActions = KeyboardActions(onSend = { if (input.isNotBlank()) { onSend(input); input = "" } }),
                 modifier = Modifier.weight(1f),
                 decorationBox = { inner ->
                     if (input.isEmpty()) {
-                        Text("$charName 在等你回复…", color = Color(0x991A1A1A), fontSize = 14.sp)
+                        Text("$charName 在等你回复…", color = Color(0x991A1A1A), fontSize = 13.sp, maxLines = 1)
                     }
                     inner()
                 },
             )
-            FloatingActionButton(
-                onClick = {
-                    if (running) onStop()
-                    else if (input.isNotBlank()) { onSend(input); input = "" }
-                },
-                modifier = Modifier.size(40.dp),
-                containerColor = Color(0xFF1A1A1A),
+            Box(
+                Modifier.size(32.dp).clip(CircleShape).background(Color(0xFF1A1A1A))
+                    .clickable {
+                        if (running) onStop()
+                        else if (input.isNotBlank()) { onSend(input); input = "" }
+                    },
+                contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     if (running) Icons.Filled.Stop else Icons.Filled.ArrowUpward,
                     contentDescription = if (running) "停止" else "发送",
-                    tint = Holo.Accent, modifier = Modifier.size(20.dp),
+                    tint = Holo.Accent, modifier = Modifier.size(18.dp),
                 )
             }
         }
@@ -720,42 +720,40 @@ private fun DesktopTopBar(
     timeText: String,
     sceneOn: Boolean,
     onToggleScene: () -> Unit,
-    onGallery: () -> Unit,
-    onSkills: () -> Unit,
+    onExit: () -> Unit,
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth().height(44.dp)
-            .background(Holo.Panel.copy(alpha = 0.9f))
-            .padding(horizontal = 14.dp),
+        modifier = Modifier.fillMaxWidth().height(32.dp)
+            .background(Holo.Panel.copy(alpha = 0.85f))
+            .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Icon(Icons.Filled.DesktopWindows, contentDescription = null, tint = Holo.Accent, modifier = Modifier.size(20.dp))
-        Text("本地虚拟电脑", color = Holo.TextHud, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        Icon(Icons.Filled.DesktopWindows, contentDescription = null, tint = Holo.Accent.copy(alpha = 0.9f), modifier = Modifier.size(14.dp))
+        Text("本地虚拟电脑", color = Holo.TextHud, fontSize = 12.sp)
         Spacer(Modifier.weight(1f))
+        HoloDot(connColor)
+        Text(connLabel, color = Holo.TextSecondary, fontSize = 10.sp)
+        Text(timeText, color = Holo.Accent.copy(alpha = 0.9f), fontSize = 10.sp)
+        Spacer(Modifier.width(2.dp))
         // 场景生成开关(每轮生成会扣积分,给用户一个显式闸门)
         Text(
             if (sceneOn) "场景:开" else "场景:关",
-            color = if (sceneOn) Holo.Accent else Holo.TextSecondary, fontSize = 12.sp,
-            modifier = Modifier.clip(RoundedCornerShape(6.dp)).clickable(onClick = onToggleScene)
-                .padding(horizontal = 8.dp, vertical = 4.dp),
+            color = if (sceneOn) Holo.Accent else Holo.TextSecondary, fontSize = 11.sp,
+            modifier = Modifier.clip(RoundedCornerShape(5.dp)).clickable(onClick = onToggleScene)
+                .padding(horizontal = 6.dp, vertical = 3.dp),
         )
-        TopBarAction("模组画廊", onGallery)
-        TopBarAction("技能", onSkills)
-        Spacer(Modifier.width(4.dp))
-        HoloDot(connColor)
-        Text(connLabel, color = Holo.TextHud, fontSize = 10.sp)
-        Text(timeText, color = Holo.Accent, fontSize = 10.sp)
+        // 退出桌面模式(返回上一界面)
+        Row(
+            modifier = Modifier.clip(RoundedCornerShape(5.dp)).clickable(onClick = onExit)
+                .padding(horizontal = 6.dp, vertical = 3.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            Icon(Icons.Filled.Close, contentDescription = "退出桌面", tint = Holo.TextSecondary, modifier = Modifier.size(13.dp))
+            Text("退出", color = Holo.TextSecondary, fontSize = 11.sp)
+        }
     }
-}
-
-@Composable
-private fun TopBarAction(label: String, onClick: () -> Unit) {
-    Text(
-        label, color = Holo.TextSecondary, fontSize = 12.sp,
-        modifier = Modifier.clip(RoundedCornerShape(6.dp)).clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 4.dp),
-    )
 }
 
 /**
@@ -763,7 +761,8 @@ private fun TopBarAction(label: String, onClick: () -> Unit) {
  * 浏览器是常驻底板(点它仅高亮);发现/广场/小程序以浮动窗口打开。
  */
 @Composable
-private fun LeftAppRail(
+private fun DesktopIcons(
+    modifier: Modifier = Modifier,
     onLiveRoom: () -> Unit,
     onChat: () -> Unit,
     onCharacter: () -> Unit,
@@ -773,11 +772,10 @@ private fun LeftAppRail(
     onAllApps: () -> Unit,
 ) {
     val miniApps = remember { MiniAppRegistry.all() }
+    // 无面板背景:图标直接浮在壁纸上(桌面图标)。
     Column(
-        modifier = Modifier.width(78.dp).fillMaxHeight()
-            .background(Holo.Panel.copy(alpha = 0.6f))
-            .verticalScroll(androidx.compose.foundation.rememberScrollState())
-            .padding(vertical = 10.dp, horizontal = 4.dp),
+        modifier = modifier.width(72.dp)
+            .verticalScroll(androidx.compose.foundation.rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {

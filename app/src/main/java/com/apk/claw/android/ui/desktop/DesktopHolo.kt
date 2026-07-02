@@ -205,7 +205,7 @@ fun HoloWindow(
 
     // 最大化:铺满桌面区(避开顶栏 ~48dp、底部输入+任务栏 ~150dp);还原回用户的 off/size。
     val frameMod = if (maximized) {
-        Modifier.fillMaxSize().padding(top = 48.dp, bottom = 150.dp, start = 8.dp, end = 8.dp)
+        Modifier.fillMaxSize().padding(top = 36.dp, bottom = 138.dp, start = 8.dp, end = 8.dp)
     } else {
         Modifier.offset { off }.size(size)
     }
