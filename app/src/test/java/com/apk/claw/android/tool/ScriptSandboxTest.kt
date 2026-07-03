@@ -1,8 +1,12 @@
 package com.apk.claw.android.tool
 
+import com.apk.claw.android.agent.CancellationToken
 import com.apk.claw.android.tool.impl.ScriptSandbox
 import org.junit.Assert.*
 import org.junit.Test
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * 验证 Rhino 沙箱核心行为（纯 JVM，无 Android 依赖）。
@@ -282,5 +286,54 @@ class ScriptSandboxTest {
         assertTrue(result.isSuccess)
         assertTrue(result.data?.contains("[4,8,12,16,20]") == true)
         assertTrue(result.data?.contains("sum=60") == true)
+    }
+
+    @Test
+    fun `cancellation token interrupts event loop wait`() {
+        val token = CancellationToken()
+        val latch = CountDownLatch(1)
+        val resultRef = AtomicReference<ToolResult>()
+        val thread = Thread {
+            resultRef.set(sandbox.execute(
+                """setTimeout(function(){ print("should not run"); }, 3000);""".trimIndent(),
+                timeoutMs = 10_000,
+                cancellationToken = token,
+            ))
+            latch.countDown()
+        }
+        thread.start()
+        // 让事件循环进入等待状态后再取消
+        Thread.sleep(200)
+        token.cancel("test cancel")
+        assertTrue("sandbox did not return in time", latch.await(2_000, TimeUnit.MILLISECONDS))
+        thread.join(500)
+
+        val result = resultRef.get()
+        assertFalse("Expected failure after cancellation", result.isSuccess)
+        assertTrue("Error should indicate interruption/timeout: ${result.error}",
+            result.error?.contains("中断") == true || result.error?.contains("超时") == true)
+    }
+
+    @Test
+    fun `thread interrupt stops event loop wait without token`() {
+        val latch = CountDownLatch(1)
+        val resultRef = AtomicReference<ToolResult>()
+        val thread = Thread {
+            resultRef.set(sandbox.execute(
+                """setTimeout(function(){ print("should not run"); }, 3000);""".trimIndent(),
+                timeoutMs = 10_000,
+            ))
+            latch.countDown()
+        }
+        thread.start()
+        Thread.sleep(200)
+        thread.interrupt()
+        assertTrue("sandbox did not return in time", latch.await(2_000, TimeUnit.MILLISECONDS))
+        thread.join(500)
+
+        val result = resultRef.get()
+        assertFalse("Expected failure after interrupt", result.isSuccess)
+        assertTrue("Error should indicate interruption/timeout: ${result.error}",
+            result.error?.contains("中断") == true || result.error?.contains("超时") == true)
     }
 }

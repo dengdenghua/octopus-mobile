@@ -58,7 +58,8 @@ class RunCodeTool : BaseTool() {
             return ToolResult.error("代码过长（${code.length} > $MAX_CODE_LEN 字符）。")
         val timeout = optionalLong(params, "timeout_ms", DEFAULT_TIMEOUT_MS)
             .coerceIn(1_000L, MAX_TIMEOUT_MS)
-        return sandbox.execute(code, timeout)
+        // 把当前任务取消令牌传给沙箱,使事件循环等待可被中断,避免 Thread.sleep 阻塞。
+        return sandbox.execute(code, timeout, currentCancellationToken())
     }
 
     override fun getDescriptionEN() = """

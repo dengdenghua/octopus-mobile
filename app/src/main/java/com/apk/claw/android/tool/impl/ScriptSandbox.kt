@@ -1,5 +1,6 @@
 package com.apk.claw.android.tool.impl
 
+import com.apk.claw.android.agent.CancellationToken
 import com.apk.claw.android.octopus_mobile.safety.SsrfSafeHttp
 import com.apk.claw.android.tool.ToolErr
 import com.apk.claw.android.tool.ToolRegistry
@@ -12,6 +13,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.mozilla.javascript.*
 import java.io.File
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.locks.LockSupport
 
 /**
  * Rhino JS 沙箱 —— 在 JVM 内执行 Agent 生成的脚本，无需 Shizuku。
@@ -119,7 +121,11 @@ class ScriptSandbox {
         val args: Array<Any>,
     )
 
-    fun execute(code: String, timeoutMs: Long): ToolResult {
+    fun execute(
+        code: String,
+        timeoutMs: Long,
+        cancellationToken: CancellationToken? = null,
+    ): ToolResult {
         val deadline = System.currentTimeMillis() + timeoutMs
         val factory = TimedContextFactory(deadline)
         val output = StringBuilder()
@@ -273,7 +279,7 @@ class ScriptSandbox {
 
             // 主脚本跑完 → 驱动事件循环:先把已就绪的 Promise 微任务清空,再按到期时间执行定时器,
             // 每个回调后再清一遍微任务。整体受同一 deadline 约束(异步等待也算进 timeout)。
-            drainEventLoop(cx, scope, timers, clearedTimers, deadline)
+            drainEventLoop(cx, scope, timers, clearedTimers, deadline, cancellationToken)
 
             val out = output.toString().trimEnd()
             ToolResult.success(if (out.isBlank()) "(执行成功，无输出)" else out)
@@ -286,6 +292,9 @@ class ScriptSandbox {
                 ToolResult.error("脚本错误 [行${e.lineNumber()}]: ${e.message}", ToolErr.SCRIPT_ERROR, e.lineNumber().takeIf { it > 0 })
         } catch (e: RhinoException) {
             ToolResult.error("JS错误 [行${e.lineNumber()}]: ${e.details()}", ToolErr.SCRIPT_ERROR, e.lineNumber().takeIf { it > 0 })
+        } catch (e: InterruptedException) {
+            // 由 CancellationToken 取消或线程 interrupt 触发,统一视为执行被终止。
+            ToolResult.error("执行被中断", ToolErr.TIMEOUT)
         } catch (e: Exception) {
             ToolResult.error("执行异常: ${e.message}", ToolErr.INTERNAL)
         } finally {
@@ -300,6 +309,9 @@ class ScriptSandbox {
      * 每轮取最早到期的定时器;未到期则 sleep 到到期(不超过 deadline)。回调执行后 processMicrotasks()
      * 把 .then 链带动。全程受 [deadline] 约束——异步等待也计入工具 timeout,超时即停,绝不挂死。
      * setInterval 到期后按 intervalMs 重排;clearTimeout/clearInterval 命中即丢弃。
+     *
+     * 等待使用 [interruptibleSleep],优先响应 [cancellationToken] 取消,无 token 时响应线程 interrupt,
+     * 避免 Thread.sleep 阻塞且无法取消的问题。
      */
     private fun drainEventLoop(
         cx: Context,
@@ -307,16 +319,20 @@ class ScriptSandbox {
         timers: MutableList<Timer>,
         cleared: MutableSet<Long>,
         deadline: Long,
+        cancellationToken: CancellationToken?,
     ) {
         runCatching { cx.processMicrotasks() }  // 主脚本遗留的已就绪微任务
         while (System.currentTimeMillis() < deadline) {
+            cancellationToken?.checkCancelled()
             timers.removeAll { it.id in cleared }
             if (timers.isEmpty()) break
             val next = timers.minByOrNull { it.dueAt } ?: break
             val now = System.currentTimeMillis()
             if (next.dueAt > now) {
                 val wait = (next.dueAt - now).coerceAtMost(deadline - now)
-                if (wait > 0) try { Thread.sleep(wait) } catch (_: InterruptedException) { break }
+                if (wait > 0 && interruptibleSleep(wait, cancellationToken)) {
+                    throw InterruptedException("Event loop interrupted while waiting for timer")
+                }
                 continue
             }
             timers.remove(next)
@@ -328,6 +344,29 @@ class ScriptSandbox {
             }
             runCatching { cx.processMicrotasks() }
         }
+    }
+
+    /**
+     * 可中断等待 [ms] 毫秒。
+     * @return true=被中断/取消,调用方应终止事件循环;false=正常到期。
+     */
+    private fun interruptibleSleep(ms: Long, token: CancellationToken?): Boolean {
+        if (ms <= 0) return false
+        // 优先用 CancellationToken:它内部用 Object.wait,响应取消且不会阻塞到无法唤醒。
+        if (token != null) {
+            val completed = token.sleepInterruptible(ms)
+            token.checkCancelled()
+            return !completed
+        }
+        // 无 token 时:用 LockSupport.parkNanos 替代 Thread.sleep,可被 Thread.interrupt() 唤醒。
+        val deadlineNs = System.nanoTime() + ms * 1_000_000
+        while (System.nanoTime() < deadlineNs) {
+            if (Thread.interrupted()) return true
+            val remainingNs = deadlineNs - System.nanoTime()
+            if (remainingNs <= 0) break
+            LockSupport.parkNanos(remainingNs)
+        }
+        return Thread.interrupted()
     }
 
     private fun jsFunc(scope: Scriptable, block: (Array<Any>) -> Any?): BaseFunction =
