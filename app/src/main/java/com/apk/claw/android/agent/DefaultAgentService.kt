@@ -60,6 +60,12 @@ class DefaultAgentService : AgentService {
         /** VLM 目标校验硬超时(ms):防止 VLM 网络挂起无限阻塞 Agent 执行线程。略高于 VLM HTTP 的 30s callTimeout。 */
         private const val VLM_VERIFY_TIMEOUT_MS = 35_000L
 
+        /** VLM 校验等待轮询间隔(ms):executor 线程每 200ms 检查一次 cancelToken,及时响应取消。 */
+        private const val POLL_INTERVAL_MS = 200L
+
+        /** VLM 校验超时后的宽限时间(ms):给 VLM 线程收尾,避免线程泄漏。 */
+        private const val POLL_GRACE_MS = 2_000L
+
         /** base64 图片最大宽度，超过则等比缩放 */
         private const val VISION_MAX_WIDTH = 720
         /** JPEG 压缩质量，用于 VLM 图片 */
@@ -1063,10 +1069,10 @@ class DefaultAgentService : AgentService {
         }.getOrNull() ?: return null
 
         val verdict = try {
-            // 硬超时 35s(略高于 VLM HTTP 的 30s callTimeout):VLM 网络挂起时不再无限阻塞
-            // Agent 执行线程。超时 → null → 走下方 verdict==null 的 fail-open 分支当作"无法校验",
-            // 绝不拦正常完成。外层 maxIterations 仍兜底。
-            runBlocking { withTimeoutOrNull(VLM_VERIFY_TIMEOUT_MS) { GoalVerifier.verify(goal, bitmap) } }
+            // 在独立线程跑 VLM 校验,executor 线程用 poll 等待 —— 这样 cancelToken 能在
+            // VLM 网络挂起时及时终止等待,不再被 runBlocking 阻塞到 35s 超时才检查取消。
+            // 硬超时 35s(略高于 VLM HTTP 的 30s callTimeout)仍作兜底。
+            verifyGoalWithCancellation(goal, bitmap)
         } catch (e: Exception) {
             XLog.w(TAG, "goal verify failed, fail-open: ${e.message}")
             null
@@ -1081,6 +1087,57 @@ class DefaultAgentService : AgentService {
         callback.onContent(iterations, "[目标校验] 目标尚未达成：${verdict.reason}")
         return "[目标校验] 经看屏确认，目标尚未达成：${verdict.reason}。" +
             "请继续操作直到真正完成；若确实无法完成，再调用 finish 说明原因。"
+    }
+
+    /**
+     * 在独立线程跑 VLM 目标校验,当前(executor)线程 poll 等待结果,每 200ms 检查一次
+     * [cancelToken]。这样 Agent 取消时能及时跳出等待,不被 VLM 网络 RT 阻塞。
+     *
+     * 超时或取消时返回 null(fail-open,不拦正常完成)。bitmap 由调用方 recycle。
+     */
+    @Suppress("ReturnCount", "TooGenericExceptionCaught", "MagicNumber")
+    private fun verifyGoalWithCancellation(goal: String, bitmap: android.graphics.Bitmap): GoalVerifier.Verdict? {
+        val latch = java.util.concurrent.CountDownLatch(1)
+        val result = java.util.concurrent.atomic.AtomicReference<GoalVerifier.Verdict?>(null)
+        val error = java.util.concurrent.atomic.AtomicReference<Throwable?>(null)
+
+        val vlmThread = Thread({
+            try {
+                // 用 runBlocking 在 VLM 线程内驱动 suspend verify;executor 线程不受阻塞。
+                result.set(runBlocking {
+                    withTimeoutOrNull(VLM_VERIFY_TIMEOUT_MS) {
+                        GoalVerifier.verify(goal, bitmap)
+                    }
+                })
+            } catch (e: Throwable) {
+                error.set(e)
+            } finally {
+                latch.countDown()
+            }
+        }, "goal-verifier").apply { isDaemon = true }
+
+        vlmThread.start()
+
+        // executor 线程 poll 等待,每 200ms 检查取消 —— 不再被 runBlocking 钉死。
+        val deadline = System.currentTimeMillis() + VLM_VERIFY_TIMEOUT_MS + POLL_GRACE_MS
+        while (System.currentTimeMillis() < deadline) {
+            if (cancelToken.isCancelled()) {
+                vlmThread.interrupt()
+                XLog.w(TAG, "goal verify cancelled by CancellationToken")
+                return null
+            }
+            if (latch.await(POLL_INTERVAL_MS, java.util.concurrent.TimeUnit.MILLISECONDS)) break
+        }
+
+        // 如果 VLM 线程还在跑(超时未返回),中断它避免线程泄漏。
+        if (vlmThread.isAlive) {
+            vlmThread.interrupt()
+            XLog.w(TAG, "goal verify timed out, VLM thread interrupted")
+            return null
+        }
+
+        error.get()?.let { throw it }
+        return result.get()
     }
 
     private fun finishLoop(state: AgentLoopState, callback: AgentCallback) {
