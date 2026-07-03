@@ -283,15 +283,25 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
     // 头像作为常驻「悬浮桌面 agent」浮在右下角,点开即对话。
     Box(Modifier.fillMaxSize()) {
         HoloBackground(Modifier.fillMaxSize())
-        // Apple TV 式:上部影院级 Hero(角色立绘 + 名字/标语,点进直播间)+ 下部横向彩色图标架。
+        // 响应式:无触屏(TV/盒子)= 3 米外 10-foot 观看 → 图标/字号放大;手机触屏用常规尺寸。
+        // 比例不写死:图标架给自然高度,Hero 用 weight(1f) 吃掉剩余高度,任意屏幕比例(手机 2.2:1 /
+        // 电视 16:9 / 平板)都自动协调。
+        val bigUi = !hasTouch
+        val iconH = if (bigUi) 96.dp else 66.dp
+        val iconW = if (bigUi) 150.dp else 106.dp
+        // Apple TV 式:上部影院级 Hero(场景壁纸 + 名字/标语,点进直播间)+ 下部横向彩色图标架。
         Column(Modifier.fillMaxSize()) {
             TvHero(
                 character = character,
                 sceneUrl = sceneUrl,
-                modifier = Modifier.fillMaxWidth().weight(TV_HERO_WEIGHT),
+                big = bigUi,
+                modifier = Modifier.fillMaxWidth().weight(1f),
                 onClick = { openWindow(WinContent.LiveRoom) },
             )
-            Box(Modifier.fillMaxWidth().weight(TV_SHELF_WEIGHT).background(TvShelfBg)) {
+            Box(
+                Modifier.fillMaxWidth().background(TvShelfBg)
+                    .padding(vertical = if (bigUi) 22.dp else 14.dp),
+            ) {
                 val miniApps = remember { MiniAppRegistry.all() }
                 val apps = buildList {
                     add(TvAppSpec(Icons.Filled.Videocam, TvGradLive) { openWindow(WinContent.LiveRoom) })
@@ -310,7 +320,10 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
                         },
                     )
                 }
-                TvIconShelf(apps, Modifier.align(Alignment.CenterStart), firstIconFocus)
+                TvIconShelf(
+                    apps, Modifier.align(Alignment.CenterStart), firstIconFocus,
+                    androidx.compose.ui.unit.DpSize(iconW, iconH),
+                )
             }
         }
         // 极简顶栏:时间 + 状态点 + 设置菜单(切换角色/场景/退出),浮在 Hero 右上。
@@ -384,8 +397,7 @@ private fun contentTitle(kind: WinContent, name: String): String = when (kind) {
 }
 
 // ── Apple TV 式布局比例 + 配色(top-level 具名常量:满足 MagicNumber 豁免;彩色亮图标) ──
-private const val TV_HERO_WEIGHT = 0.62f   // 上部 Hero 占比
-private const val TV_SHELF_WEIGHT = 0.38f  // 下部图标架占比
+private const val TV_GLYPH_RATIO = 0.44f   // 图标内白色字形相对图标高度的比例
 private val TvShelfBg = Color(0xF20A0B0E)
 private val TvGradLive = listOf(Color(0xFFFF7A8A), Color(0xFFFF2D55))       // 直播间 红
 private val TvGradChat = listOf(Color(0xFF5AD07A), Color(0xFF23A94B))       // 对话 绿
@@ -412,6 +424,7 @@ private data class TvAppSpec(
 private fun TvHero(
     character: CharacterProfile,
     sceneUrl: String?,
+    big: Boolean,
     modifier: Modifier,
     onClick: () -> Unit,
 ) {
@@ -434,25 +447,36 @@ private fun TvHero(
             Modifier.fillMaxSize()
                 .background(androidx.compose.ui.graphics.Brush.verticalGradient(TvHeroScrim)),
         )
-        Column(Modifier.align(Alignment.BottomStart).padding(start = 28.dp, bottom = 20.dp)) {
-            Text(character.zh, color = Color.White, fontSize = 34.sp, fontWeight = FontWeight.Bold)
+        Column(
+            Modifier.align(Alignment.BottomStart)
+                .padding(start = if (big) 40.dp else 28.dp, bottom = if (big) 32.dp else 20.dp),
+        ) {
+            Text(
+                character.zh, color = Color.White,
+                fontSize = if (big) 46.sp else 34.sp, fontWeight = FontWeight.Bold,
+            )
             Spacer(Modifier.height(4.dp))
             Text(
                 "${character.codename} · ${character.role}",
-                color = Color.White.copy(alpha = 0.85f), fontSize = 14.sp,
+                color = Color.White.copy(alpha = 0.85f), fontSize = if (big) 18.sp else 14.sp,
             )
             Spacer(Modifier.height(6.dp))
             Text(
                 "“${character.quote}”",
-                color = Color.White.copy(alpha = 0.72f), fontSize = 13.sp, maxLines = 2,
+                color = Color.White.copy(alpha = 0.72f), fontSize = if (big) 16.sp else 13.sp, maxLines = 2,
             )
         }
     }
 }
 
-/** 横向彩色图标架(Apple TV 式):一排大号玻璃亮图标,焦点放大;超出即横滑。 */
+/** 横向彩色图标架(Apple TV 式):一排大号玻璃亮图标,焦点放大;超出即横滑。[size] 随设备缩放。 */
 @Composable
-private fun TvIconShelf(apps: List<TvAppSpec>, modifier: Modifier, firstFocus: FocusRequester) {
+private fun TvIconShelf(
+    apps: List<TvAppSpec>,
+    modifier: Modifier,
+    firstFocus: FocusRequester,
+    size: androidx.compose.ui.unit.DpSize,
+) {
     androidx.compose.foundation.lazy.LazyRow(
         modifier = modifier.fillMaxWidth(),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 24.dp),
@@ -462,28 +486,34 @@ private fun TvIconShelf(apps: List<TvAppSpec>, modifier: Modifier, firstFocus: F
         items(apps.size) { i ->
             val a = apps[i]
             // 第一个图标挂 FocusRequester:TV 进桌面时默认选中它(D-pad 起点)。
-            TvAppIcon(a.icon, a.grad, a.onClick, if (i == 0) Modifier.focusRequester(firstFocus) else Modifier)
+            TvAppIcon(a.icon, a.grad, a.onClick, if (i == 0) Modifier.focusRequester(firstFocus) else Modifier, size)
         }
     }
 }
 
-/** 单个彩色亮图标(渐变圆角方 + 白色图标 + 焦点高亮)。 */
+/** 单个彩色亮图标(渐变圆角方 + 白色图标 + 焦点高亮)。[size] 随设备缩放,glyph 按比例。 */
 @Composable
 private fun TvAppIcon(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     grad: List<Color>,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier,
+    modifier: Modifier,
+    size: androidx.compose.ui.unit.DpSize,
 ) {
     Box(
         modifier = modifier
-            .size(width = 108.dp, height = 68.dp)
+            .size(size)
             .clip(RoundedCornerShape(16.dp))
             .background(androidx.compose.ui.graphics.Brush.verticalGradient(grad))
             .holoFocus(RoundedCornerShape(16.dp))
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
-    ) { Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(30.dp)) }
+    ) {
+        Icon(
+            icon, contentDescription = null, tint = Color.White,
+            modifier = Modifier.size(size.height * TV_GLYPH_RATIO),
+        )
+    }
 }
 
 /** 极简顶栏:状态点 + 时间 + 头像菜单(切换角色 / 场景开关 / 退出),浮在 Hero 右上。 */
