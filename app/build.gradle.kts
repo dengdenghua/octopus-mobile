@@ -9,6 +9,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.detekt)
+    jacoco
 }
 
 // 静态门禁:detekt 只对「新增」问题失败。存量问题记录在 detekt-baseline.xml,
@@ -37,17 +38,19 @@ android {
             val props = Properties().apply {
                 rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
             }
+            // 优先从环境变量读取(CI 注入),其次 local.properties(本地开发)。
+            // 这样 CI 无需把密钥写进文件,本地开发者仍可用 local.properties。
             // Only configure storeFile when a keystore path is actually provided.
             // Otherwise debug builds fail at configuration time with
             //   "Cannot convert '' to File."
             // because Gradle eagerly resolves signingConfig.storeFile.
-            val keystorePath = props.getProperty("KEYSTORE_FILE", "").trim()
+            val keystorePath = (System.getenv("KEYSTORE_FILE") ?: props.getProperty("KEYSTORE_FILE", "")).trim()
             if (keystorePath.isNotEmpty()) {
                 storeFile = file(keystorePath)
             }
-            storePassword = props.getProperty("KEYSTORE_PASSWORD", "")
-            keyAlias = props.getProperty("KEY_ALIAS", "")
-            keyPassword = props.getProperty("KEY_PASSWORD", "")
+            storePassword = System.getenv("KEYSTORE_PASSWORD") ?: props.getProperty("KEYSTORE_PASSWORD", "")
+            keyAlias = System.getenv("KEY_ALIAS") ?: props.getProperty("KEY_ALIAS", "")
+            keyPassword = System.getenv("KEY_PASSWORD") ?: props.getProperty("KEY_PASSWORD", "")
         }
     }
 
@@ -84,6 +87,9 @@ android {
         getByName("debug") {
             isMinifyEnabled = false
             isShrinkResources = false
+            // 启用 JaCoCo 字节码插桩,供 jacocoTestReport 生成覆盖率报告。
+            // 仅 debug 开启,避免影响 release 性能/包体。
+            enableUnitTestCoverage = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -306,4 +312,43 @@ fun getParameter(key: String, defaultValue: String): String {
     }
     println("get property[$key] from default:$value")
     return value
+}
+
+// ── JaCoCo 覆盖率报告 ──────────────────────────────────────────────
+// 用法:./gradlew :app:jacocoTestReport
+// 报告:app/build/reports/jacoco/jacocoTestReport/html/index.html
+// 排除:生成的 BuildConfig、R 类、Compose UI、Activity 等(无 JVM 单测价值)
+val jacocoExcludes = listOf(
+    "**/BuildConfig.*",
+    "**/R.class",
+    "**/R\$*",
+    "**/*\$Companion*",
+    "**/*\$Lambda*",
+    "**/com/apk/claw/android/ui/compose/**",  // Compose UI 无 JVM 单测
+    "**/*Activity*",                            // Activity 需 instrumentation
+    "**/*Application*",                         // Application 启动需 Android 环境
+)
+
+tasks.register<JacocoReport>("jacocoTestReport") {
+    group = "verification"
+    description = "Generates JaCoCo coverage report for debug unit tests"
+    dependsOn("testDebugUnitTest")
+
+    reports {
+        xml.required.set(true)
+        html.required.set(true)
+        csv.required.set(false)
+    }
+
+    sourceDirectories.setFrom(files("${project.projectDir}/src/main/java"))
+
+    classDirectories.setFrom(
+        fileTree("${project.layout.buildDirectory.get()}/intermediates/built_in_kotlinc/debug/compileDebugKotlin/classes") {
+            exclude(jacocoExcludes)
+        }
+    )
+
+    executionData.setFrom(
+        fileTree("${project.layout.buildDirectory.get()}/outputs/unit_test_code_coverage").include("**/*.exec")
+    )
 }
