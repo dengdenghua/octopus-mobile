@@ -49,6 +49,7 @@ import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -186,8 +187,10 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
 
     // 桌面:浏览器是常驻底板;发现/广场/mini-app 以可拖浮动窗口打开(移植 OpenRoom windowManager)。
     val ctx = androidx.compose.ui.platform.LocalContext.current
-    // TV 首页:同一时刻只聚焦一件内容(选中磁贴/头像 → 全屏内容层);null = 停在首页磁贴网格。
+    // TV 首页:同一时刻只聚焦一件内容(选中磁贴/头像 → 内容层);null = 停在首页磁贴网格。
     var openContent by remember { mutableStateOf<WinContent?>(null) }
+    // 钉住:内容层从居中浮层切到右侧停靠面板(Copilot 式:左桌面 + 右对话)。记住用户偏好,不随开关重置。
+    var pinned by remember { mutableStateOf(false) }
     val openWindow: (WinContent) -> Unit = { kind -> openContent = kind }
     // app_action 未运行时请桌面把 mini-app 开成窗口(后台线程 → 切主线程 openWindow)
     val mainHandler = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
@@ -345,6 +348,8 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
             TvContentOverlay(
                 title = contentTitle(kind, character.name),
                 onClose = { openContent = null },
+                pinned = pinned,
+                onTogglePin = { pinned = !pinned },
                 bottomBar = if (kind == WinContent.LiveRoom || kind == WinContent.Chat) {
                     @Composable { DesktopReplyBar(running = running, onSend = send, onStop = stop) }
                 } else {
@@ -370,6 +375,8 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
             TvContentOverlay(
                 title = pageTitle.ifBlank { currentUrl },
                 onClose = { engine.navigate("about:blank"); currentUrl = "about:blank"; pageTitle = "" },
+                pinned = pinned,
+                onTogglePin = { pinned = !pinned },
                 bottomBar = null,
             ) {
                 DesktopMonitor(
@@ -586,32 +593,55 @@ private fun FloatingAgentAvatar(
 /** 全屏内容层的半透明遮罩底色(压暗壁纸,突出内容)。 */
 private val TvOverlayScrim = Color(0xE6060810)
 
-/** 全屏内容层:顶部返回 + 标题,中间玻璃内容盒,可选底部输入条。 */
+/** 内容层顶栏小圆按钮(返回 / 钉);active=true 高亮。 */
+@Composable
+private fun TvIconBtn(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    desc: String,
+    onClick: () -> Unit,
+    active: Boolean = false,
+) {
+    Box(
+        Modifier.size(30.dp).clip(RoundedCornerShape(8.dp))
+            .background(if (active) Holo.Accent.copy(alpha = 0.22f) else Color.Transparent)
+            .holoFocus(RoundedCornerShape(8.dp)).clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            icon, contentDescription = desc,
+            tint = if (active) Holo.Accent else Holo.TextHud, modifier = Modifier.size(16.dp),
+        )
+    }
+}
+
+/**
+ * 内容层:未钉 = 居中较窄浮层(带遮罩,更紧凑);钉住 = 右侧停靠面板(左侧桌面仍可见可点,类似 Copilot)。
+ * 顶栏:返回 + 标题 + 钉按钮(切换停靠)。
+ */
 @Composable
 private fun TvContentOverlay(
     title: String,
     onClose: () -> Unit,
+    pinned: Boolean,
+    onTogglePin: () -> Unit,
     bottomBar: (@Composable () -> Unit)?,
     content: @Composable () -> Unit,
 ) {
-    Box(Modifier.fillMaxSize().background(TvOverlayScrim)) {
-        Column(Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 12.dp)) {
+    val panel = @Composable {
+        Column(Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 12.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth().height(34.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Box(
-                    Modifier.size(30.dp).clip(RoundedCornerShape(8.dp))
-                        .holoFocus(RoundedCornerShape(8.dp)).clickable(onClick = onClose),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        Icons.Filled.Close, contentDescription = "返回",
-                        tint = Holo.TextHud, modifier = Modifier.size(16.dp),
-                    )
-                }
-                Spacer(Modifier.width(10.dp))
+                TvIconBtn(Icons.Filled.Close, "返回", onClose)
+                Spacer(Modifier.width(8.dp))
                 Text(title, color = Holo.TextHud, fontSize = 14.sp, maxLines = 1, modifier = Modifier.weight(1f))
+                TvIconBtn(
+                    Icons.Filled.PushPin,
+                    if (pinned) "取消停靠" else "停靠右侧",
+                    onTogglePin,
+                    active = pinned,
+                )
             }
             Spacer(Modifier.height(10.dp))
             Box(
@@ -620,6 +650,24 @@ private fun TvContentOverlay(
             bottomBar?.let {
                 Spacer(Modifier.height(8.dp))
                 it()
+            }
+        }
+    }
+    if (pinned) {
+        // 右侧停靠:整层透明(左侧桌面可点),仅右面板不透明。
+        Box(Modifier.fillMaxSize()) {
+            Box(
+                Modifier.align(Alignment.CenterEnd).fillMaxHeight().width(400.dp).background(TvOverlayScrim),
+            ) { panel() }
+        }
+    } else {
+        // 居中较窄浮层 + 遮罩(缩宽,不再铺满)。
+        Box(Modifier.fillMaxSize().background(TvOverlayScrim), contentAlignment = Alignment.Center) {
+            Box(
+                Modifier.fillMaxHeight(fraction = 0.92f)
+                    .fillMaxWidth(fraction = 0.58f).widthIn(min = 360.dp, max = 620.dp),
+            ) {
+                panel()
             }
         }
     }

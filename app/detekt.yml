@@ -10,3 +10,9 @@ style:
     # 已提取到具名常量声明(如 val ScrimColor = Color(0x..))的字面量视为合规——
     # 否则"提成命名常量"这条 detekt 自己的建议反而无法满足。
     ignorePropertyDeclaration: true
+
+complexity:
+  LongParameterList:
+    # @Composable 因状态提升 + slot(内容/回调 lambda)天然参数多,豁免;
+    # 与官方 Compose 实践一致,避免把可读的 UI 组件硬拆。
+    ignoreAnnotated: ['Composable']
