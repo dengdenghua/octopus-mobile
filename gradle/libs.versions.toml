@@ -37,7 +37,7 @@ nanohttpd = "2.3.1"
 mpvAndroidLib = "0.1.12"
 composeBom = "2025.05.01"
 composeNavigation = "2.9.0"
-kotlin = "2.1.20"
+kotlin = "2.4.0"
 detekt = "1.23.8"
 
 [libraries]
