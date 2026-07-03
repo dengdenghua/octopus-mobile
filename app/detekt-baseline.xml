@@ -49,6 +49,7 @@
     <ID>CyclomaticComplexMethod:MjpegImageView.kt$MjpegImageView$fun start(url: String)</ID>
     <ID>CyclomaticComplexMethod:NavigateTool.kt$NavigateTool$override fun execute(params: Map&lt;String, Any&gt;): ToolResult</ID>
     <ID>CyclomaticComplexMethod:OctopusMobileClient.kt$OctopusMobileClient$internal fun handleIncomingMessage(text: String)</ID>
+    <ID>CyclomaticComplexMethod:OctopusMobileClient.kt$OctopusMobileClient$private fun handleHelloAck(root: JsonObject): Boolean</ID>
     <ID>CyclomaticComplexMethod:PathFinder.kt$PathFinder$fun findPath( graph: NavigationGraph, startNodeId: String, goalNodeId: String ): NavigationPath?</ID>
     <ID>CyclomaticComplexMethod:PcRemoteActivity.kt$@Composable private fun PcRemoteScreen(onBack: () -&gt; Unit)</ID>
     <ID>CyclomaticComplexMethod:PluginManager.kt$PluginManager$fun loadAndRegister(pluginId: String): Boolean</ID>
@@ -87,206 +88,6 @@
     <ID>ForEachOnRange:ChatScreen.kt$0..2</ID>
     <ID>ForbiddenComment:MpvController.kt$MpvController$* mpv 播放控制器 —— STUB 版本. * * 原本依赖 `is.xyz.mpv.MPVLib`(老 mpv-android JNI 接口),但项目使用的 * `io.github.abdallahmehiz:mpv-android-lib:0.1.12` 已经把类重命名为 `MPV`, * API 也从静态包装改成了 instance + Kotlin Flow 封装(详见 * https://central.sonatype.com/artifact/io.github.abdallahmehiz/mpv-android-lib). * * 这个 stub 保留所有 PlayerActivity 调用的 API 签名,但所有方法都是 noop — * 调用时只 log warning。这样 build 能跑通,PlayerActivity 不会编译错。 * * TODO: 按 abdallahmehiz/mpvKt 源码重写,使用 `is.xyz.mpv.MPV` instance * 形式 (val mpv = MPV(); mpv.create(); mpv.observeProperty(...) etc.).</ID>
     <ID>ForbiddenComment:TaskOrchestrator.kt$TaskOrchestrator$// TODO: 当 currentMode() == EXECUTOR_ONLY 且母体可达时，</ID>
-    <ID>FunctionNaming:ActivityActivity.kt$@Composable fun ActivityScreen(onBack: () -&gt; Unit)</ID>
-    <ID>FunctionNaming:AgentSquareScreen.kt$@Composable fun AgentSquareScreen( onBack: () -&gt; Unit, onOpenSearch: () -&gt; Unit = {}, onCreatePost: () -&gt; Unit = {}, )</ID>
-    <ID>FunctionNaming:AgentSquareScreen.kt$@Composable private fun AgentFeed(remote: List&lt;AgentPost&gt;?, local: List&lt;AgentPost&gt;)</ID>
-    <ID>FunctionNaming:AgentSquareScreen.kt$@Composable private fun AgentPostCard(post: AgentPost)</ID>
-    <ID>FunctionNaming:AgentSquareScreen.kt$@Composable private fun AgentSquareTopBar( onBack: () -&gt; Unit, onOpenSearch: () -&gt; Unit, onCreatePost: () -&gt; Unit, )</ID>
-    <ID>FunctionNaming:AgentSquareScreen.kt$@Composable private fun CategoryTabs()</ID>
-    <ID>FunctionNaming:AuditLogActivity.kt$@Composable fun AuditLogScreen(onBack: () -&gt; Unit)</ID>
-    <ID>FunctionNaming:AuditLogActivity.kt$@Composable private fun AuditEntryCard(entry: ToolAuditLog.Entry)</ID>
-    <ID>FunctionNaming:AuditLogActivity.kt$@Composable private fun FilterChip(label: String, selected: Boolean, onClick: () -&gt; Unit)</ID>
-    <ID>FunctionNaming:BrowserScreen.kt$@Composable fun BrowserScreen( initialUrl: String? = null, onClose: () -&gt; Unit = {}, )</ID>
-    <ID>FunctionNaming:BrowserScreen.kt$@Composable private fun AiChip(label: String, onClick: () -&gt; Unit)</ID>
-    <ID>FunctionNaming:BrowserScreen.kt$@Composable private fun BrowserBookmarkDialog( currentUrl: String, currentTitle: String, onDismiss: () -&gt; Unit, onNavigate: (String) -&gt; Unit, )</ID>
-    <ID>FunctionNaming:BrowserScreen.kt$@Composable private fun BrowserBottomBar( windowCount: Int, onSettingsClick: () -&gt; Unit, onAiClick: () -&gt; Unit, onWindowsClick: () -&gt; Unit, modifier: Modifier = Modifier, )</ID>
-    <ID>FunctionNaming:BrowserScreen.kt$@Composable private fun BrowserCapsuleButton( onClick: () -&gt; Unit, modifier: Modifier = Modifier, backgroundColor: Color = Color.Transparent, content: @Composable () -&gt; Unit, )</ID>
-    <ID>FunctionNaming:BrowserScreen.kt$@Composable private fun BrowserHomeLayer( onOpenUrl: (String?) -&gt; Unit, onClose: () -&gt; Unit, )</ID>
-    <ID>FunctionNaming:BrowserScreen.kt$@Composable private fun BrowserTopBar( urlText: String, onUrlTextChange: (String) -&gt; Unit, aiMode: Boolean, onToggleAiMode: () -&gt; Unit, isHomeVisible: Boolean, isLoading: Boolean, onClose: () -&gt; Unit, onHomeClick: () -&gt; Unit, onWallpaperClick: () -&gt; Unit, onRefreshClick: () -&gt; Unit, onSubmit: () -&gt; Unit, modifier: Modifier = Modifier, )</ID>
-    <ID>FunctionNaming:BrowserScreen.kt$@Composable private fun BrowserWallpaper( wallpaperIndex: Int, useCustomWallpaper: Boolean, customBitmap: Bitmap?, )</ID>
-    <ID>FunctionNaming:BrowserScreen.kt$@Composable private fun BrowserWebViewContainer(engine: BrowserEngine)</ID>
-    <ID>FunctionNaming:BrowserScreen.kt$@Composable private fun BrowserWebViewWithHome( engine: BrowserEngine, isHomeVisible: Boolean, onOpenUrl: (String?) -&gt; Unit, onClose: () -&gt; Unit, modifier: Modifier = Modifier, )</ID>
-    <ID>FunctionNaming:BrowserScreen.kt$@Composable private fun SettingsRow(title: String, onClick: () -&gt; Unit)</ID>
-    <ID>FunctionNaming:BrowserScreen.kt$@OptIn(ExperimentalMaterial3Api::class) @Composable private fun BrowserAiSheet( onDismiss: () -&gt; Unit, onRunAi: (String, (String) -&gt; Unit) -&gt; Unit, onRunAgent: (String) -&gt; Unit, onReader: (String?) -&gt; Unit, onSpeak: (String?, MutableState&lt;TextToSpeech?&gt;) -&gt; Unit, tts: MutableState&lt;TextToSpeech?&gt;, )</ID>
-    <ID>FunctionNaming:BrowserScreen.kt$@OptIn(ExperimentalMaterial3Api::class) @Composable private fun BrowserSettingsSheet( onDismiss: () -&gt; Unit, onRefresh: () -&gt; Unit, onWallpaper: () -&gt; Unit, onBookmarks: () -&gt; Unit, onCopyLink: () -&gt; Unit, onOpenInSystem: () -&gt; Unit, onEngineSettings: () -&gt; Unit, )</ID>
-    <ID>FunctionNaming:BrowserScreen.kt$@OptIn(ExperimentalMaterial3Api::class) @Composable private fun BrowserWallpaperSheet( wallpaperIndex: Int, useCustomWallpaper: Boolean, onDismiss: () -&gt; Unit, onSelectPreset: (Int) -&gt; Unit, onUpload: () -&gt; Unit, onRemoveCustom: () -&gt; Unit, )</ID>
-    <ID>FunctionNaming:BrowserScreen.kt$@OptIn(ExperimentalMaterial3Api::class) @Composable private fun BrowserWindowsSheet( onDismiss: () -&gt; Unit, onSwitch: (BrowserTabsStore.Tab) -&gt; Unit, onClose: (BrowserTabsStore.Tab) -&gt; Unit, onNewWindow: () -&gt; Unit, )</ID>
-    <ID>FunctionNaming:BrowserSettingsActivity.kt$@Composable private fun BrowserSettingsScreen(onBack: () -&gt; Unit)</ID>
-    <ID>FunctionNaming:BrowserSettingsActivity.kt$@Composable private fun EngineRow(tag: String, name: String, selected: Boolean, onClick: () -&gt; Unit)</ID>
-    <ID>FunctionNaming:BrowserSettingsActivity.kt$@Composable private fun GroupCard(content: @Composable ColumnScope.() -&gt; Unit)</ID>
-    <ID>FunctionNaming:BrowserSettingsActivity.kt$@Composable private fun RowDivider()</ID>
-    <ID>FunctionNaming:ChannelAclActivity.kt$@Composable fun ChannelAclScreen(onBack: () -&gt; Unit)</ID>
-    <ID>FunctionNaming:ChannelAclActivity.kt$@Composable private fun ChannelAclCard( channelLabel: String, senders: List&lt;String&gt;, onRemove: (String) -&gt; Unit, onReset: () -&gt; Unit, )</ID>
-    <ID>FunctionNaming:ChannelsActivity.kt$@Composable private fun ChannelRow(nameRes: Int, configured: Boolean, onClick: () -&gt; Unit)</ID>
-    <ID>FunctionNaming:ChannelsActivity.kt$@Composable private fun ChannelsScreen(onBack: () -&gt; Unit)</ID>
-    <ID>FunctionNaming:ChatScreen.kt$@Composable @OptIn(ExperimentalFoundationApi::class) private fun UserBubble(text: String)</ID>
-    <ID>FunctionNaming:ChatScreen.kt$@Composable private fun AgentBubble(text: String)</ID>
-    <ID>FunctionNaming:ChatScreen.kt$@Composable private fun AgentHomeStatusCard( llmOk: Boolean, a11yOk: Boolean, isRunning: Boolean, target: String, deviceCount: Int, )</ID>
-    <ID>FunctionNaming:ChatScreen.kt$@Composable private fun ChatSessionDrawer( sessions: List&lt;SessionStore.SessionMeta&gt;, currentId: String, isRunning: Boolean, llmOk: Boolean, a11yOk: Boolean, deviceCount: Int, onNewChat: () -&gt; Unit, onSwitch: (String) -&gt; Unit, onDelete: (String) -&gt; Unit, )</ID>
-    <ID>FunctionNaming:ChatScreen.kt$@Composable private fun ColumnScope.ChatHomeWorkbench( llmOk: Boolean, a11yOk: Boolean, isRunning: Boolean, target: String, deviceCount: Int, onUsePrompt: (String) -&gt; Unit, )</ID>
-    <ID>FunctionNaming:ChatScreen.kt$@Composable private fun DevicePreviewPanel(device: DeviceInfo, onEnter: () -&gt; Unit, onClose: () -&gt; Unit)</ID>
-    <ID>FunctionNaming:ChatScreen.kt$@Composable private fun DrawerSectionTitle(text: String)</ID>
-    <ID>FunctionNaming:ChatScreen.kt$@Composable private fun DrawerStatusPanel(llmOk: Boolean, a11yOk: Boolean, deviceCount: Int)</ID>
-    <ID>FunctionNaming:ChatScreen.kt$@Composable private fun DrawerStatusRow(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, ok: Boolean)</ID>
-    <ID>FunctionNaming:ChatScreen.kt$@Composable private fun HomeTinyStat(label: String, value: String, ok: Boolean, modifier: Modifier = Modifier, onClick: (() -&gt; Unit)? = null)</ID>
-    <ID>FunctionNaming:ChatScreen.kt$@Composable private fun InlineVideo(url: String)</ID>
-    <ID>FunctionNaming:ChatScreen.kt$@Composable private fun MarkdownText(text: String)</ID>
-    <ID>FunctionNaming:ChatScreen.kt$@Composable private fun MiniMetric(label: String, value: String, ok: Boolean, modifier: Modifier = Modifier)</ID>
-    <ID>FunctionNaming:ChatScreen.kt$@Composable private fun PromptSuggestion(prompt: HomePrompt, onClick: () -&gt; Unit)</ID>
-    <ID>FunctionNaming:ChatScreen.kt$@Composable private fun ScrollToBottomButton(visible: Boolean, onClick: () -&gt; Unit)</ID>
-    <ID>FunctionNaming:ChatScreen.kt$@Composable private fun SessionDrawerRow( session: SessionStore.SessionMeta, selected: Boolean, onSwitch: (String) -&gt; Unit, onDelete: (String) -&gt; Unit, )</ID>
-    <ID>FunctionNaming:ChatScreen.kt$@Composable private fun SetupGuideCard( llmOk: Boolean, a11yOk: Boolean, onConfigLlm: () -&gt; Unit, onEnableA11y: () -&gt; Unit, )</ID>
-    <ID>FunctionNaming:ChatScreen.kt$@Composable private fun SetupRow(label: String, done: Boolean, onClick: () -&gt; Unit)</ID>
-    <ID>FunctionNaming:ChatScreen.kt$@Composable private fun StatusDot(color: Color)</ID>
-    <ID>FunctionNaming:ChatScreen.kt$@Composable private fun TargetSelector(onPreview: (DeviceInfo?) -&gt; Unit = {})</ID>
-    <ID>FunctionNaming:ChatScreen.kt$@Composable private fun ThinkingItem(text: String)</ID>
-    <ID>FunctionNaming:ChatScreen.kt$@Composable private fun ToolCallItem(msg: ChatMessage.ToolCall)</ID>
-    <ID>FunctionNaming:ChatScreen.kt$@Composable private fun ToolColorBar(color: Color)</ID>
-    <ID>FunctionNaming:ChatScreen.kt$@Composable private fun ToolGroupItem(tools: List&lt;ChatMessage.ToolCall&gt;, expanded: Boolean, onToggle: (Long) -&gt; Unit)</ID>
-    <ID>FunctionNaming:ChatScreen.kt$@OptIn(ExperimentalMaterial3Api::class) @Composable fun ChatScreen()</ID>
-    <ID>FunctionNaming:CloudDriveActivity.kt$@Composable fun CloudDriveScreen(onBack: () -&gt; Unit)</ID>
-    <ID>FunctionNaming:CloudDriveActivity.kt$@Composable private fun AddMountDialog( onDismiss: () -&gt; Unit, onSave: (String, String, String, String, String) -&gt; Unit, )</ID>
-    <ID>FunctionNaming:DesktopActivity.kt$@Composable private fun ChatContent(convo: List&lt;DeskMsg&gt;, running: Boolean, toolNote: String)</ID>
-    <ID>FunctionNaming:DesktopActivity.kt$@Composable private fun DesktopAddressBar(currentUrl: String, pageTitle: String, loading: Boolean, onGo: (String) -&gt; Unit)</ID>
-    <ID>FunctionNaming:DesktopActivity.kt$@Composable private fun DesktopIcons( modifier: Modifier = Modifier, onLiveRoom: () -&gt; Unit, onChat: () -&gt; Unit, onCharacter: () -&gt; Unit, onDiscover: () -&gt; Unit, onSquare: () -&gt; Unit, onLaunchMiniApp: (String) -&gt; Unit, onAllApps: () -&gt; Unit, )</ID>
-    <ID>FunctionNaming:DesktopActivity.kt$@Composable private fun DesktopMonitor( engine: BrowserEngine, currentUrl: String, pageTitle: String, loading: Boolean, progress: Int, browsing: Boolean, onNavigate: (String) -&gt; Unit, )</ID>
-    <ID>FunctionNaming:DesktopActivity.kt$@Composable private fun DesktopReplyBar(running: Boolean, onSend: (String) -&gt; Unit, onStop: () -&gt; Unit)</ID>
-    <ID>FunctionNaming:DesktopActivity.kt$@Composable private fun DesktopTabStrip(engine: BrowserEngine, onNavigate: (String) -&gt; Unit)</ID>
-    <ID>FunctionNaming:DesktopActivity.kt$@Composable private fun DesktopTaskbar( minimized: List&lt;Pair&lt;Long, WinContent&gt;&gt;, charName: String, onRestore: (Long) -&gt; Unit, onStart: () -&gt; Unit, )</ID>
-    <ID>FunctionNaming:DesktopActivity.kt$@Composable private fun DesktopTopBar( connLabel: String, connColor: Color, sceneOn: Boolean, onToggleScene: () -&gt; Unit, onExit: () -&gt; Unit, )</ID>
-    <ID>FunctionNaming:DesktopActivity.kt$@Composable private fun DesktopWorkspace(engine: BrowserEngine)</ID>
-    <ID>FunctionNaming:DesktopActivity.kt$@Composable private fun DialogBubble(m: DeskMsg)</ID>
-    <ID>FunctionNaming:DesktopActivity.kt$@Composable private fun Dot(color: Color)</ID>
-    <ID>FunctionNaming:DesktopActivity.kt$@Composable private fun LiveRoomContent( sceneUrl: String?, sceneLoading: Boolean, sceneOn: Boolean, subtitle: String, running: Boolean, toolNote: String, likeCount: Int, onLike: () -&gt; Unit, )</ID>
-    <ID>FunctionNaming:DesktopActivity.kt$@Composable private fun MiniAppWindow(appId: String)</ID>
-    <ID>FunctionNaming:DesktopActivity.kt$@Composable private fun PhaseDots(current: Int, total: Int)</ID>
-    <ID>FunctionNaming:DesktopActivity.kt$@Composable private fun RailItem( icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, active: Boolean, onClick: () -&gt; Unit, )</ID>
-    <ID>FunctionNaming:DesktopActivity.kt$@Composable private fun Waveform(active: Boolean)</ID>
-    <ID>FunctionNaming:DesktopHolo.kt$@Composable fun CharacterAvatar(size: Dp, modifier: Modifier = Modifier)</ID>
-    <ID>FunctionNaming:DesktopHolo.kt$@Composable fun CharacterHud(modifier: Modifier = Modifier)</ID>
-    <ID>FunctionNaming:DesktopHolo.kt$@Composable fun HoloBackground(modifier: Modifier = Modifier)</ID>
-    <ID>FunctionNaming:DesktopHolo.kt$@Composable fun HoloChip(text: String, onClick: (() -&gt; Unit)? = null)</ID>
-    <ID>FunctionNaming:DesktopHolo.kt$@Composable fun HoloDot(color: Color)</ID>
-    <ID>FunctionNaming:DesktopHolo.kt$@Composable fun HoloFigure(resId: Int, modifier: Modifier = Modifier, alpha: Float = 0.9f)</ID>
-    <ID>FunctionNaming:DesktopHolo.kt$@Composable fun HoloWindow( title: String, startX: Dp, startY: Dp, width: Dp, height: Dp, onClose: () -&gt; Unit, onFocus: () -&gt; Unit, onMinimize: (() -&gt; Unit)? = null, content: @Composable () -&gt; Unit, )</ID>
-    <ID>FunctionNaming:DesktopHolo.kt$@Composable fun HudStrip( urlOrIdle: String, live: Boolean, connLabel: String, connColor: Color, timeText: String, modifier: Modifier = Modifier, )</ID>
-    <ID>FunctionNaming:DesktopHolo.kt$@Composable private fun LiveDot(active: Boolean)</ID>
-    <ID>FunctionNaming:DesktopHolo.kt$@Composable private fun ThreeViewThumb(label: String, resId: Int)</ID>
-    <ID>FunctionNaming:DiscoverScreen.kt$@Composable fun DiscoverScreen(onOpenUrl: ((String?) -&gt; Unit)? = null)</ID>
-    <ID>FunctionNaming:DiscoverScreen.kt$@Composable private fun &lt;T&gt; TwoColumnTiles(items: List&lt;T&gt;, tile: @Composable (T, Modifier) -&gt; Unit)</ID>
-    <ID>FunctionNaming:DiscoverScreen.kt$@Composable private fun BookmarksSection(bookmarks: List&lt;BookmarkItem&gt;, onOpen: (String) -&gt; Unit)</ID>
-    <ID>FunctionNaming:DiscoverScreen.kt$@Composable private fun BrowserHomeMutedTextColor(): Color</ID>
-    <ID>FunctionNaming:DiscoverScreen.kt$@Composable private fun BrowserHomeTextColor(): Color</ID>
-    <ID>FunctionNaming:DiscoverScreen.kt$@Composable private fun BrowserHomeTopBar()</ID>
-    <ID>FunctionNaming:DiscoverScreen.kt$@Composable private fun BrowserOmnibox( value: String, onValueChange: (String) -&gt; Unit, selectedOption: BrowserSearchOption, options: List&lt;BrowserSearchOption&gt;, engineMenuOpen: Boolean, onEngineMenuChange: (Boolean) -&gt; Unit, onEngineSelected: (BrowserSearchOption) -&gt; Unit, onSubmit: () -&gt; Unit, )</ID>
-    <ID>FunctionNaming:DiscoverScreen.kt$@Composable private fun CommonSitesSection( sites: List&lt;CommonSiteItem&gt;, onOpen: (String) -&gt; Unit, onLongPress: (CommonSiteItem) -&gt; Unit, )</ID>
-    <ID>FunctionNaming:DiscoverScreen.kt$@Composable private fun DiscoverGroupLabel(text: String)</ID>
-    <ID>FunctionNaming:DiscoverScreen.kt$@Composable private fun FaviconIcon(url: String?, tint: Color, fallback: ImageVector, contentDescription: String?)</ID>
-    <ID>FunctionNaming:DiscoverScreen.kt$@Composable private fun GlassPanel( modifier: Modifier = Modifier, shape: RoundedCornerShape, backgroundColor: Color = OctopusBackground.cardSurface, contentPadding: androidx.compose.ui.unit.Dp = OctopusSpacing.md, content: @Composable () -&gt; Unit, )</ID>
-    <ID>FunctionNaming:DiscoverScreen.kt$@Composable private fun HomeSectionCard(title: String, isEmpty: Boolean, content: @Composable ColumnScope.() -&gt; Unit)</ID>
-    <ID>FunctionNaming:DiscoverScreen.kt$@Composable private fun MiniAppsSection(apps: List&lt;PluginManifest&gt;, onLaunch: (String) -&gt; Unit)</ID>
-    <ID>FunctionNaming:DiscoverScreen.kt$@Composable private fun SearchOptionIcon(option: BrowserSearchOption, modifier: Modifier = Modifier)</ID>
-    <ID>FunctionNaming:DiscoverScreen.kt$@OptIn(ExperimentalFoundationApi::class) @Composable private fun HomeTile( label: String, subtitle: String, modifier: Modifier = Modifier, onClick: () -&gt; Unit, onLongClick: (() -&gt; Unit)? = null, icon: @Composable () -&gt; Unit, )</ID>
-    <ID>FunctionNaming:EvolutionActivity.kt$@Composable fun EvolutionScreen(onBack: () -&gt; Unit)</ID>
-    <ID>FunctionNaming:EvolutionActivity.kt$@Composable private fun EffBar(value: Double)</ID>
-    <ID>FunctionNaming:FeatureHubScreen.kt$@Composable fun FeatureHubScreen( onNavigateToAgentSquare: () -&gt; Unit = {}, onNavigateToUniverse: () -&gt; Unit = {}, onNavigateToSkillMarketplace: () -&gt; Unit = {}, onNavigateToPluginMarketplace: () -&gt; Unit = {}, )</ID>
-    <ID>FunctionNaming:FeatureHubScreen.kt$@Composable private fun AgentActionPill( icon: ImageVector, text: String, tint: Color, modifier: Modifier, onClick: () -&gt; Unit, )</ID>
-    <ID>FunctionNaming:FeatureHubScreen.kt$@Composable private fun AgentDiscoveryCard(post: AgentDiscoveryPost, onClick: () -&gt; Unit)</ID>
-    <ID>FunctionNaming:FeatureHubScreen.kt$@Composable private fun AgentDiscoveryDetail( post: AgentDiscoveryPost, onDismiss: () -&gt; Unit, onRun: () -&gt; Unit, )</ID>
-    <ID>FunctionNaming:FeatureHubScreen.kt$@Composable private fun AgentDiscoveryHeader( header: DiscoveryHeader?, onSearch: () -&gt; Unit, onUniverse: () -&gt; Unit, onCreate: () -&gt; Unit, )</ID>
-    <ID>FunctionNaming:FeatureHubScreen.kt$@Composable private fun AgentTopicChips( topics: List&lt;DiscoveryTopic&gt;?, selectedTopic: String, onSelect: (String) -&gt; Unit, )</ID>
-    <ID>FunctionNaming:FeatureHubScreen.kt$@Composable private fun CircleCard( circle: CirclePreview, index: Int, onOpenActivity: (Class&lt;*&gt;) -&gt; Unit, )</ID>
-    <ID>FunctionNaming:FeatureHubScreen.kt$@Composable private fun DetailMetric(label: String, value: String, tint: Color, modifier: Modifier = Modifier)</ID>
-    <ID>FunctionNaming:FeatureHubScreen.kt$@Composable private fun DetailSection(title: String, lines: List&lt;String&gt;)</ID>
-    <ID>FunctionNaming:FeatureHubScreen.kt$@Composable private fun ExploreEntryCard(icon: ImageVector, tint: Color, title: String, desc: String, onClick: () -&gt; Unit)</ID>
-    <ID>FunctionNaming:FeatureHubScreen.kt$@Composable private fun ExploreTab( onOpenActivity: (Class&lt;*&gt;) -&gt; Unit, onNavigateToAgentSquare: () -&gt; Unit, onNavigateToUniverse: () -&gt; Unit, onOpenPost: (AgentDiscoveryPost) -&gt; Unit, )</ID>
-    <ID>FunctionNaming:FeatureHubScreen.kt$@Composable private fun PermissionChips(title: String, permissions: List&lt;String&gt;, tint: Color)</ID>
-    <ID>FunctionNaming:FeatureHubScreen.kt$@Composable private fun SectionHeader(text: String)</ID>
-    <ID>FunctionNaming:FeatureHubScreen.kt$@Composable private fun SectionHeaderWithAction(text: String, icon: ImageVector, tint: Color)</ID>
-    <ID>FunctionNaming:FeatureHubScreen.kt$@Composable private fun TabLabel(text: String, selected: Boolean, onClick: () -&gt; Unit)</ID>
-    <ID>FunctionNaming:FeatureHubScreen.kt$@Composable private fun ToolCard(item: FeatureItem, onClick: () -&gt; Unit)</ID>
-    <ID>FunctionNaming:FeatureHubScreen.kt$@Composable private fun ToolboxTab( sections: List&lt;Pair&lt;Int, List&lt;FeatureItem&gt;&gt;&gt;, onMarket: () -&gt; Unit, onPluginMarket: () -&gt; Unit, onClick: (FeatureItem) -&gt; Unit, )</ID>
-    <ID>FunctionNaming:FeatureUi.kt$@Composable fun FCard(content: @Composable ColumnScope.() -&gt; Unit)</ID>
-    <ID>FunctionNaming:FeatureUi.kt$@Composable fun FEmpty(text: String)</ID>
-    <ID>FunctionNaming:FeatureUi.kt$@Composable fun FPill(text: String, color: Color)</ID>
-    <ID>FunctionNaming:FeatureUi.kt$@Composable fun FSectionTitle(text: String)</ID>
-    <ID>FunctionNaming:FeatureUi.kt$@Composable fun FeatureScaffold( title: String, onBack: () -&gt; Unit, action: (@Composable () -&gt; Unit)? = null, content: @Composable ColumnScope.() -&gt; Unit, )</ID>
-    <ID>FunctionNaming:GlassSettingsActivity.kt$@Composable private fun AnimationToggleCard()</ID>
-    <ID>FunctionNaming:GlassSettingsActivity.kt$@Composable private fun BlurRadiusCard()</ID>
-    <ID>FunctionNaming:GlassSettingsActivity.kt$@Composable private fun GlassTuningSlider( title: String, value: Float, valueText: String, onValueChange: (Float) -&gt; Unit, onValueChangeFinished: () -&gt; Unit, )</ID>
-    <ID>FunctionNaming:GlassSettingsActivity.kt$@Composable private fun QualitySelectorCard()</ID>
-    <ID>FunctionNaming:GlassSettingsActivity.kt$@Composable private fun SectionHeader(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String)</ID>
-    <ID>FunctionNaming:GlassSettingsActivity.kt$@Composable private fun SurfaceCard(content: @Composable ColumnScope.() -&gt; Unit)</ID>
-    <ID>FunctionNaming:GlassSettingsActivity.kt$@Composable private fun TuningSlidersCard()</ID>
-    <ID>FunctionNaming:GlassSettingsActivity.kt$@OptIn(ExperimentalMaterial3Api::class) @Composable private fun GlassSettingsScreen(onBack: () -&gt; Unit)</ID>
-    <ID>FunctionNaming:MemoryActivity.kt$@Composable fun MemoryScreen(onBack: () -&gt; Unit)</ID>
-    <ID>FunctionNaming:MemoryActivity.kt$@Composable private fun AddMemoryDialog(onDismiss: () -&gt; Unit, onConfirm: (String, MemoryType) -&gt; Unit)</ID>
-    <ID>FunctionNaming:MiniAppListActivity.kt$@Composable private fun MiniAppCard( m: PluginManifest, expanded: Boolean, onToggleExpand: () -&gt; Unit, onLaunch: () -&gt; Unit, )</ID>
-    <ID>FunctionNaming:MiniAppListActivity.kt$@Composable private fun MiniAppListScreen(onBack: () -&gt; Unit)</ID>
-    <ID>FunctionNaming:MiniAppListActivity.kt$@Composable private fun PermRow(label: String, trailing: @Composable () -&gt; Unit)</ID>
-    <ID>FunctionNaming:MultiWindowActivity.kt$@Composable fun MultiWindowScreen(onBack: () -&gt; Unit)</ID>
-    <ID>FunctionNaming:NavigationGraph.kt$@Composable fun OctopusNavHost( navController: androidx.navigation.NavHostController, showMessage: (String) -&gt; Unit = {}, modifier: Modifier = Modifier )</ID>
-    <ID>FunctionNaming:NavigationGraph.kt$@Composable private fun BottomTabItem( screen: Screen, selected: Boolean, modifier: Modifier = Modifier, onClick: () -&gt; Unit, )</ID>
-    <ID>FunctionNaming:NavigationGraph.kt$@Composable private fun CompactBottomBar( currentRoute: String?, onSelect: (Screen) -&gt; Unit, )</ID>
-    <ID>FunctionNaming:NavigationGraph.kt$@OptIn(ExperimentalMaterial3Api::class) @Composable fun OctopusApp()</ID>
-    <ID>FunctionNaming:OctopusComponents.kt$@Composable fun &lt;T&gt; AnimatedListItem( index: Int, item: T, content: @Composable (T) -&gt; Unit, )</ID>
-    <ID>FunctionNaming:OctopusComponents.kt$@Composable fun AppCard( emoji: String, title: String, subtitle: String? = null, onClick: () -&gt; Unit, modifier: Modifier = Modifier, )</ID>
-    <ID>FunctionNaming:OctopusComponents.kt$@Composable fun CapsuleButton( text: String, onClick: () -&gt; Unit, modifier: Modifier = Modifier, accent: Boolean = false, icon: ImageVector? = null, )</ID>
-    <ID>FunctionNaming:OctopusComponents.kt$@Composable fun GlassBottomSheet( modifier: Modifier = Modifier, maxHeight: Dp? = null, content: @Composable ColumnScope.() -&gt; Unit, )</ID>
-    <ID>FunctionNaming:OctopusComponents.kt$@Composable fun GlassCard( modifier: Modifier = Modifier, onClick: (() -&gt; Unit)? = null, blurRadius: Dp = OctopusGlass.blurRadius, content: @Composable BoxScope.() -&gt; Unit, )</ID>
-    <ID>FunctionNaming:OctopusComponents.kt$@Composable fun GlassPill( icon: ImageVector, text: String, tint: Color, modifier: Modifier = Modifier, selected: Boolean = false, onClick: () -&gt; Unit, )</ID>
-    <ID>FunctionNaming:OctopusComponents.kt$@Composable fun GlassTextPill( text: String, tint: Color, modifier: Modifier = Modifier, selected: Boolean = false, onClick: () -&gt; Unit, )</ID>
-    <ID>FunctionNaming:OctopusComponents.kt$@Composable fun LoadingDots( modifier: Modifier = Modifier, color: Color = OctopusColors.Primary, )</ID>
-    <ID>FunctionNaming:OctopusComponents.kt$@Composable fun SectionHeader( title: String, action: String? = null, onAction: (() -&gt; Unit)? = null, modifier: Modifier = Modifier, )</ID>
-    <ID>FunctionNaming:OctopusComponents.kt$@Composable fun StatusChip( text: String, color: Color = OctopusColors.Primary, modifier: Modifier = Modifier, )</ID>
-    <ID>FunctionNaming:OctopusComponents.kt$@Composable fun TopBarBackButton( onClick: () -&gt; Unit, modifier: Modifier = Modifier, )</ID>
-    <ID>FunctionNaming:PcRemoteActivity.kt$@Composable private fun PcRemoteScreen(onBack: () -&gt; Unit)</ID>
-    <ID>FunctionNaming:PluginMarketplaceScreen.kt$@Composable fun PluginMarketplaceScreen(onBack: () -&gt; Unit)</ID>
-    <ID>FunctionNaming:PluginMarketplaceScreen.kt$@Composable private fun PluginInstallButton( tint: Color, installed: Boolean, installing: Boolean, onInstall: () -&gt; Unit, onUninstall: () -&gt; Unit, )</ID>
-    <ID>FunctionNaming:PluginMarketplaceScreen.kt$@Composable private fun PluginSearchField(query: String, onQuery: (String) -&gt; Unit, modifier: Modifier = Modifier)</ID>
-    <ID>FunctionNaming:PluginMarketplaceScreen.kt$@Composable private fun PluginStoreCard( asset: RegistryAsset, tint: Color, installed: Boolean, installing: Boolean, onInstall: () -&gt; Unit, onUninstall: () -&gt; Unit, )</ID>
-    <ID>FunctionNaming:RoutinesActivity.kt$@Composable private fun RoutineCard( routine: RoutineStore.Routine, onForgetFastPath: () -&gt; Unit, onSchedule: () -&gt; Unit, onParameterize: () -&gt; Unit, onViewSteps: () -&gt; Unit, onRun: () -&gt; Unit, onDelete: () -&gt; Unit, )</ID>
-    <ID>FunctionNaming:RoutinesActivity.kt$@Composable private fun RoutineIconAction( icon: androidx.compose.ui.graphics.vector.ImageVector, tint: Color, onClick: () -&gt; Unit, modifier: Modifier = Modifier, label: String? = null, )</ID>
-    <ID>FunctionNaming:RoutinesActivity.kt$@Composable private fun RoutineIconAction( text: String, tint: Color, onClick: () -&gt; Unit, )</ID>
-    <ID>FunctionNaming:RoutinesActivity.kt$@Composable private fun RoutinesScreen(onBack: () -&gt; Unit)</ID>
-    <ID>FunctionNaming:RoutinesActivity.kt$@Composable private fun RoutinesSummaryCard(items: List&lt;RoutineStore.Routine&gt;)</ID>
-    <ID>FunctionNaming:RoutinesActivity.kt$@Composable private fun SummaryMetric(label: String, value: String, tint: Color, modifier: Modifier = Modifier)</ID>
-    <ID>FunctionNaming:SettingsScreen.kt$@Composable fun SettingsScreen(onMessage: (String) -&gt; Unit = {})</ID>
-    <ID>FunctionNaming:SettingsScreen.kt$@Composable private fun ClickableSettingsRow(icon: ImageVector, title: String, subtitle: String, onClick: () -&gt; Unit)</ID>
-    <ID>FunctionNaming:SettingsScreen.kt$@Composable private fun HeroMetric(label: String, value: String, ok: Boolean, modifier: Modifier = Modifier)</ID>
-    <ID>FunctionNaming:SettingsScreen.kt$@Composable private fun IconBubble(icon: ImageVector, tint: Color)</ID>
-    <ID>FunctionNaming:SettingsScreen.kt$@Composable private fun PermissionItemRow(permission: PermissionUi, onClick: () -&gt; Unit)</ID>
-    <ID>FunctionNaming:SettingsScreen.kt$@Composable private fun PermissionSummaryRow(readyCount: Int, perms: List&lt;PermissionUi&gt;)</ID>
-    <ID>FunctionNaming:SettingsScreen.kt$@Composable private fun SettingsCard( title: String, icon: ImageVector, onClick: (() -&gt; Unit)? = null, compact: Boolean = false, content: @Composable ColumnScope.() -&gt; Unit, )</ID>
-    <ID>FunctionNaming:SettingsScreen.kt$@Composable private fun SettingsDivider()</ID>
-    <ID>FunctionNaming:SettingsScreen.kt$@Composable private fun SettingsHeader(readyCount: Int, lanAddr: String?)</ID>
-    <ID>FunctionNaming:SettingsScreen.kt$@Composable private fun SettingsRow(icon: ImageVector, title: String, subtitle: String, trailing: String? = null)</ID>
-    <ID>FunctionNaming:SkillMarketplaceScreen.kt$@Composable fun SkillMarketplaceScreen(onBack: () -&gt; Unit)</ID>
-    <ID>FunctionNaming:SkillMarketplaceScreen.kt$@Composable private fun InstallButton( tint: Color, installed: Boolean, installing: Boolean, onInstall: () -&gt; Unit, onUninstall: () -&gt; Unit, )</ID>
-    <ID>FunctionNaming:SkillMarketplaceScreen.kt$@Composable private fun SearchField(query: String, onQuery: (String) -&gt; Unit, modifier: Modifier = Modifier)</ID>
-    <ID>FunctionNaming:SkillMarketplaceScreen.kt$@Composable private fun SkillStoreCard( asset: RegistryAsset, tint: Color, installed: Boolean, installing: Boolean, onInstall: () -&gt; Unit, onUninstall: () -&gt; Unit, )</ID>
-    <ID>FunctionNaming:SkillsActivity.kt$@Composable private fun SkillsScreen(onBack: () -&gt; Unit)</ID>
-    <ID>FunctionNaming:Theme.kt$@Composable fun OctopusTheme( content: @Composable () -&gt; Unit )</ID>
-    <ID>FunctionNaming:TrustCenterActivity.kt$@Composable fun TrustCenterScreen(onBack: () -&gt; Unit)</ID>
-    <ID>FunctionNaming:TrustCenterActivity.kt$@Composable private fun CapabilityRow(icon: ImageVector, name: String, desc: String, granted: Boolean, onManage: () -&gt; Unit)</ID>
-    <ID>FunctionNaming:TrustCenterActivity.kt$@Composable private fun NavRow(title: String, desc: String, onClick: () -&gt; Unit)</ID>
-    <ID>FunctionNaming:TrustCenterActivity.kt$@Composable private fun ReadinessCard(r: SetupReadiness.Result)</ID>
-    <ID>FunctionNaming:UniverseScreen.kt$@Composable internal fun UniverseScreen( onBack: () -&gt; Unit, onOpenGhostChat: (UniverseFeedDto) -&gt; Unit = {}, )</ID>
-    <ID>FunctionNaming:UniverseScreen.kt$@Composable private fun CharacterBindCard( characters: List&lt;EchoCharacterOption&gt;, selectedCharacterId: String, onSelect: (String) -&gt; Unit, loading: Boolean, onBind: () -&gt; Unit, )</ID>
-    <ID>FunctionNaming:UniverseScreen.kt$@Composable private fun DayBadge(day: Int)</ID>
-    <ID>FunctionNaming:UniverseScreen.kt$@Composable private fun EmptyUniverseCard(message: String)</ID>
-    <ID>FunctionNaming:UniverseScreen.kt$@Composable private fun GhostChatPanel( input: String, onInputChange: (String) -&gt; Unit, history: List&lt;GhostChatMessage&gt;, running: Boolean, onSend: () -&gt; Unit, )</ID>
-    <ID>FunctionNaming:UniverseScreen.kt$@Composable private fun IdentityBadge( text: String, tint: Color, modifier: Modifier = Modifier, )</ID>
-    <ID>FunctionNaming:UniverseScreen.kt$@Composable private fun LoadingCard()</ID>
-    <ID>FunctionNaming:UniverseScreen.kt$@Composable private fun StatLine(label: String, value: String)</ID>
-    <ID>FunctionNaming:UniverseScreen.kt$@Composable private fun UniverseEconomyCard( products: List&lt;EconomyProductDto&gt;, economy: EconomySummaryDto?, loading: Boolean, onGrantCredits: () -&gt; Unit, onBuyGhostLife: () -&gt; Unit, onBuyAtlasPass: () -&gt; Unit, onBuyGhostCourtPass: () -&gt; Unit, )</ID>
-    <ID>FunctionNaming:UniverseScreen.kt$@Composable private fun UniverseEndpointCard( echoValue: String, onEchoValueChange: (String) -&gt; Unit, runtimeValue: String, onRuntimeValueChange: (String) -&gt; Unit, onSave: () -&gt; Unit, )</ID>
-    <ID>FunctionNaming:UniverseScreen.kt$@Composable private fun UniverseFeedCard( feed: UniverseFeedDto, loading: Boolean, onTick: () -&gt; Unit, onOpenChat: () -&gt; Unit, ghostInput: String, onGhostInputChange: (String) -&gt; Unit, ghostChatHistory: List&lt;GhostChatMessage&gt;, ghostChatRunning: Boolean, onGhostSend: () -&gt; Unit, )</ID>
-    <ID>FunctionNaming:UniverseScreen.kt$@Composable private fun UniverseIdentityCard( identity: UniverseIdentityDto?, atlasAccess: AccessDecisionDto?, loading: Boolean, onRefresh: () -&gt; Unit, )</ID>
-    <ID>FunctionNaming:UniverseScreen.kt$@Composable private fun UniverseTopBar( onBack: () -&gt; Unit, loading: Boolean, onRefresh: () -&gt; Unit, )</ID>
-    <ID>FunctionNaming:VideoLibraryActivity.kt$@Composable fun VideoLibraryScreen(onBack: () -&gt; Unit)</ID>
-    <ID>FunctionNaming:WeChatLoginActivity.kt$@Composable private fun PrimaryButton(text: String, onClick: () -&gt; Unit)</ID>
-    <ID>FunctionNaming:WeChatLoginActivity.kt$@Composable private fun WeChatLoginScreen(onBack: () -&gt; Unit)</ID>
     <ID>FunctionOnlyReturningConstant:AccountActivity.kt$AccountActivity$private fun selectedCurrency(): String</ID>
     <ID>FunctionOnlyReturningConstant:MpvController.kt$MpvController$fun getDurationMs(): Long</ID>
     <ID>FunctionOnlyReturningConstant:MpvController.kt$MpvController$fun getPositionMs(): Long</ID>
@@ -318,7 +119,6 @@
     <ID>LongMethod:DefaultAgentService.kt$DefaultAgentService$private fun handleSystemDialogWithVision( messages: MutableList&lt;ChatMessage&gt;, callback: AgentCallback, iterations: Int ): Boolean</ID>
     <ID>LongMethod:DesktopActivity.kt$@Composable private fun DesktopReplyBar(running: Boolean, onSend: (String) -&gt; Unit, onStop: () -&gt; Unit)</ID>
     <ID>LongMethod:DesktopActivity.kt$@Composable private fun DesktopWorkspace(engine: BrowserEngine)</ID>
-    <ID>LongMethod:DesktopActivity.kt$@Composable private fun LiveRoomContent( sceneUrl: String?, sceneLoading: Boolean, sceneOn: Boolean, subtitle: String, running: Boolean, toolNote: String, likeCount: Int, onLike: () -&gt; Unit, )</ID>
     <ID>LongMethod:DesktopHolo.kt$@Composable fun CharacterHud(modifier: Modifier = Modifier)</ID>
     <ID>LongMethod:DesktopHolo.kt$@Composable fun HoloWindow( title: String, startX: Dp, startY: Dp, width: Dp, height: Dp, onClose: () -&gt; Unit, onFocus: () -&gt; Unit, onMinimize: (() -&gt; Unit)? = null, content: @Composable () -&gt; Unit, )</ID>
     <ID>LongMethod:DeviceDetailActivity.kt$DeviceDetailActivity$private fun buildLayout(): ScrollView</ID>
@@ -375,44 +175,25 @@
     <ID>LongParameterList:AccountGateway.kt$AccountGateway$( token: String, deviceId: String? = null, deviceName: String? = null, pushToken: String? = null, osVersion: String? = null, appVersion: String? = null, deviceModel: String? = null, )</ID>
     <ID>LongParameterList:AlertDialog.kt$AlertDialog.Companion$( context: Context, title: String, message: String = "", actionTitle: String = context.getString(R.string.common_confirm), cancelTitle: String = context.getString(R.string.common_cancel), isDismissible: Boolean = true, onAction: (() -&gt; Unit)? = null, onCancel: (() -&gt; Unit)? = null )</ID>
     <ID>LongParameterList:AlertDialog.kt$AlertDialog.Companion$( context: Context, title: String, message: String = "", actionTitle: String = context.getString(R.string.common_confirm), cancelTitle: String? = null, @ColorInt actionBgColor: Int? = null, @ColorInt actionTextColor: Int? = null, @ColorInt actionBorderColor: Int? = null, @ColorInt cancelBgColor: Int? = null, @ColorInt cancelTextColor: Int? = null, @ColorInt cancelBorderColor: Int? = null, isDismissible: Boolean = true, onAction: (() -&gt; Unit)? = null, onCancel: (() -&gt; Unit)? = null )</ID>
-    <ID>LongParameterList:BrowserScreen.kt$( onDismiss: () -&gt; Unit, onRefresh: () -&gt; Unit, onWallpaper: () -&gt; Unit, onBookmarks: () -&gt; Unit, onCopyLink: () -&gt; Unit, onOpenInSystem: () -&gt; Unit, onEngineSettings: () -&gt; Unit, )</ID>
-    <ID>LongParameterList:BrowserScreen.kt$( onDismiss: () -&gt; Unit, onRunAi: (String, (String) -&gt; Unit) -&gt; Unit, onRunAgent: (String) -&gt; Unit, onReader: (String?) -&gt; Unit, onSpeak: (String?, MutableState&lt;TextToSpeech?&gt;) -&gt; Unit, tts: MutableState&lt;TextToSpeech?&gt;, )</ID>
-    <ID>LongParameterList:BrowserScreen.kt$( urlText: String, onUrlTextChange: (String) -&gt; Unit, aiMode: Boolean, onToggleAiMode: () -&gt; Unit, isHomeVisible: Boolean, isLoading: Boolean, onClose: () -&gt; Unit, onHomeClick: () -&gt; Unit, onWallpaperClick: () -&gt; Unit, onRefreshClick: () -&gt; Unit, onSubmit: () -&gt; Unit, modifier: Modifier = Modifier, )</ID>
-    <ID>LongParameterList:BrowserScreen.kt$( wallpaperIndex: Int, useCustomWallpaper: Boolean, onDismiss: () -&gt; Unit, onSelectPreset: (Int) -&gt; Unit, onUpload: () -&gt; Unit, onRemoveCustom: () -&gt; Unit, )</ID>
     <ID>LongParameterList:ChannelManager.kt$ChannelManager$( dingtalkAppKey: String? = null, dingtalkAppSecret: String? = null, feishuAppId: String? = null, feishuAppSecret: String? = null, qqAppId: String? = null, qqAppSecret: String? = null, discordBotToken: String? = null, telegramBotToken: String? = null, wechatBotToken: String? = null, wechatApiBaseUrl: String? = null )</ID>
     <ID>LongParameterList:ChatAgentBridge.kt$ChatAgentBridge$( prompt: String, onTool: (icon: String, name: String, args: String, result: String?) -&gt; Unit, onText: (String) -&gt; Unit, onDone: (String) -&gt; Unit, onError: (String) -&gt; Unit, recordKey: String? = null, untrusted: Boolean = false, onImage: ((toolName: String, imageBase64: String) -&gt; Unit)? = null, onHtml: ((toolName: String, htmlContent: String) -&gt; Unit)? = null, )</ID>
-    <ID>LongParameterList:ChatScreen.kt$( llmOk: Boolean, a11yOk: Boolean, isRunning: Boolean, target: String, deviceCount: Int, onUsePrompt: (String) -&gt; Unit, )</ID>
-    <ID>LongParameterList:ChatScreen.kt$( sessions: List&lt;SessionStore.SessionMeta&gt;, currentId: String, isRunning: Boolean, llmOk: Boolean, a11yOk: Boolean, deviceCount: Int, onNewChat: () -&gt; Unit, onSwitch: (String) -&gt; Unit, onDelete: (String) -&gt; Unit, )</ID>
     <ID>LongParameterList:ConfirmDialog.kt$ConfirmDialog.Companion$( context: Context, title: String, message: CharSequence = "", actionTitle: String = context.getString(R.string.common_confirm), cancelTitle: String = context.getString(R.string.common_cancel), checkboxLabel: String? = null, checkboxHint: String? = null, checkboxDefault: Boolean = false, isDismissible: Boolean = true, onAction: ((isChecked: Boolean) -&gt; Unit)? = null, onCancel: (() -&gt; Unit)? = null )</ID>
     <ID>LongParameterList:ConfirmDialog.kt$ConfirmDialog.Companion$( context: Context, title: String, message: CharSequence = "", actionTitle: String = context.getString(R.string.common_confirm), cancelTitle: String? = null, checkboxLabel: String? = null, checkboxHint: String? = null, checkboxDefault: Boolean = false, isDismissible: Boolean = true, onAction: ((isChecked: Boolean) -&gt; Unit)? = null, onCancel: (() -&gt; Unit)? = null )</ID>
-    <ID>LongParameterList:DesktopActivity.kt$( engine: BrowserEngine, currentUrl: String, pageTitle: String, loading: Boolean, progress: Int, browsing: Boolean, onNavigate: (String) -&gt; Unit, )</ID>
-    <ID>LongParameterList:DesktopActivity.kt$( modifier: Modifier = Modifier, onLiveRoom: () -&gt; Unit, onChat: () -&gt; Unit, onCharacter: () -&gt; Unit, onDiscover: () -&gt; Unit, onSquare: () -&gt; Unit, onLaunchMiniApp: (String) -&gt; Unit, onAllApps: () -&gt; Unit, )</ID>
-    <ID>LongParameterList:DesktopActivity.kt$( sceneUrl: String?, sceneLoading: Boolean, sceneOn: Boolean, subtitle: String, running: Boolean, toolNote: String, likeCount: Int, onLike: () -&gt; Unit, )</ID>
-    <ID>LongParameterList:DesktopHolo.kt$( title: String, startX: Dp, startY: Dp, width: Dp, height: Dp, onClose: () -&gt; Unit, onFocus: () -&gt; Unit, onMinimize: (() -&gt; Unit)? = null, content: @Composable () -&gt; Unit, )</ID>
-    <ID>LongParameterList:DesktopHolo.kt$( urlOrIdle: String, live: Boolean, connLabel: String, connColor: Color, timeText: String, modifier: Modifier = Modifier, )</ID>
     <ID>LongParameterList:DeviceRemoteControl.kt$DeviceRemoteControl$( device: DeviceInfo, x1: Int, y1: Int, x2: Int, y2: Int, durationMs: Long = 300 )</ID>
-    <ID>LongParameterList:DiscoverScreen.kt$( label: String, subtitle: String, modifier: Modifier = Modifier, onClick: () -&gt; Unit, onLongClick: (() -&gt; Unit)? = null, icon: @Composable () -&gt; Unit, )</ID>
-    <ID>LongParameterList:DiscoverScreen.kt$( value: String, onValueChange: (String) -&gt; Unit, selectedOption: BrowserSearchOption, options: List&lt;BrowserSearchOption&gt;, engineMenuOpen: Boolean, onEngineMenuChange: (Boolean) -&gt; Unit, onEngineSelected: (BrowserSearchOption) -&gt; Unit, onSubmit: () -&gt; Unit, )</ID>
     <ID>LongParameterList:FeatureHubScreen.kt$(title: String, desc: String, reproducePrefix: String, reproduceTarget: String, reproduceSuffix: String, targetLabel: String)</ID>
     <ID>LongParameterList:InputDialog.kt$InputDialog.Companion$( context: Context, title: String, presetText: String = "", hint: String = "", minLength: Int = -1, maxLength: Int = -1, numberOnly: Boolean = false, canZero: Boolean = true, confirmText: String? = null, inputValidate: ((String) -&gt; ValidateResult)? = null, onComplete: (String) -&gt; Unit )</ID>
     <ID>LongParameterList:LightweightReAct.kt$LightweightReAct$( task: String, skills: List&lt;SkillSpec&gt;, systemPrompt: String = DEFAULT_SYSTEM_PROMPT, onStep: ((ReActStep) -&gt; Unit)? = null, // 可选:返回当前屏幕,供 VLM 目标自校验。null → 不校验(向后兼容)。 captureScreen: (suspend () -&gt; android.graphics.Bitmap?)? = null, // 可选:额外系统上下文(如技能商城已安装技能的指令注入)。空 → 行为不变。 extraSystemContext: String = "", )</ID>
     <ID>LongParameterList:McpRouteHandler.kt$McpServerCore$( method: String, id: JsonElement, params: JsonObject, provider: McpToolProvider, serverName: String, serverVersion: String, )</ID>
     <ID>LongParameterList:MenuGroup.kt$MenuGroup$( leadingIcon: Int, title: String, onClick: () -&gt; Unit, trailingText: String? = null, trailingIcon: Int? = null, showTrailingIcon: Boolean = true, showDivider: Boolean = true )</ID>
     <ID>LongParameterList:MobileActionTimeline.kt$MobileActionTimeline$( toolName: String, params: Map&lt;String, Any&gt;, success: Boolean, resultText: String?, blockedBy: String?, durationMs: Long, source: String, hasImage: Boolean = false, hasHtml: Boolean = false, )</ID>
-    <ID>LongParameterList:OctopusComponents.kt$( icon: ImageVector, text: String, tint: Color, modifier: Modifier = Modifier, selected: Boolean = false, onClick: () -&gt; Unit, )</ID>
     <ID>LongParameterList:OctopusMobileClient.kt$OctopusMobileClient$( callId: String, success: Boolean, data: String? = null, error: String? = null, errorCode: Int? = null, durationMs: Int = 0, screenHashAfter: String? = null, )</ID>
     <ID>LongParameterList:PcRemoteActivity.kt$(client: OctopusMobileClient?, size: IntSize, x: Float, y: Float, action: String, clamp: Boolean = false)</ID>
-    <ID>LongParameterList:PluginMarketplaceScreen.kt$( asset: RegistryAsset, tint: Color, installed: Boolean, installing: Boolean, onInstall: () -&gt; Unit, onUninstall: () -&gt; Unit, )</ID>
     <ID>LongParameterList:Protocol.kt$EnvelopeFactory$( callId: String, success: Boolean, data: Any? = null, errorCode: Int? = null, errorMessage: String? = null, durationMs: Int = 0, screenHashAfter: String? = null )</ID>
     <ID>LongParameterList:RemoteActions.kt$RemoteActions$(d: DeviceInfo, x1: Int, y1: Int, x2: Int, y2: Int, durationMs: Long)</ID>
     <ID>LongParameterList:RoutineStoreTest.kt$RoutineStoreTest$( id: String, name: String = "n", prompt: String = "p", createdAt: Long = 0L, variables: List&lt;String&gt; = emptyList(), hour: Int? = null, minute: Int? = null, )</ID>
-    <ID>LongParameterList:RoutinesActivity.kt$( routine: RoutineStore.Routine, onForgetFastPath: () -&gt; Unit, onSchedule: () -&gt; Unit, onParameterize: () -&gt; Unit, onViewSteps: () -&gt; Unit, onRun: () -&gt; Unit, onDelete: () -&gt; Unit, )</ID>
     <ID>LongParameterList:ScriptSandbox.kt$ScriptSandbox$( cx: Context, scope: Scriptable, timers: MutableList&lt;Timer&gt;, cleared: MutableSet&lt;Long&gt;, deadline: Long, cancellationToken: CancellationToken?, )</ID>
     <ID>LongParameterList:ShizukuShellService.kt$ShizukuShellService$( packageName: String, displayId: Int, x: Int = 100, y: Int = 100, width: Int = 800, height: Int = 600 )</ID>
-    <ID>LongParameterList:SkillMarketplaceScreen.kt$( asset: RegistryAsset, tint: Color, installed: Boolean, installing: Boolean, onInstall: () -&gt; Unit, onUninstall: () -&gt; Unit, )</ID>
     <ID>LongParameterList:ToolResult.kt$ToolResult$( val isSuccess: Boolean, val data: String?, val error: String?, /** 截图的 base64 编码数据（JPEG格式），用于 VLM 视觉理解 */ val imageBase64: String?, /** HTML 预览内容，直接推送到 Web 控制台用 &lt;iframe&gt; 渲染 */ val htmlContent: String? = null, /** * 机器可读的错误分类（见 [ToolErr]）。给 Agent 自动修复循环一个稳定的判据: * 是参数错了(改参数重试)、目标不存在(先探测)、超时(缩小任务/加时限)还是权限不足(放弃/提示授权)。 * null 表示未分类——旧的纯文本 error 依旧照常返回，向后兼容。 */ val errorCode: String? = null, /** 出错源码行号（run_code / 脚本类工具可用），无则 null。 */ val errorLine: Int? = null, )</ID>
-    <ID>LongParameterList:UniverseScreen.kt$( feed: UniverseFeedDto, loading: Boolean, onTick: () -&gt; Unit, onOpenChat: () -&gt; Unit, ghostInput: String, onGhostInputChange: (String) -&gt; Unit, ghostChatHistory: List&lt;GhostChatMessage&gt;, ghostChatRunning: Boolean, onGhostSend: () -&gt; Unit, )</ID>
-    <ID>LongParameterList:UniverseScreen.kt$( products: List&lt;EconomyProductDto&gt;, economy: EconomySummaryDto?, loading: Boolean, onGrantCredits: () -&gt; Unit, onBuyGhostLife: () -&gt; Unit, onBuyAtlasPass: () -&gt; Unit, onBuyGhostCourtPass: () -&gt; Unit, )</ID>
     <ID>LongParameterList:WeChatApiClient.kt$WeChatApiClient$( filekey: String, mediaType: Int, toUserId: String, rawsize: Int, rawfilemd5: String, filesize: Int, aeskeyHex: String )</ID>
     <ID>LoopWithTooManyJumpStatements:CloudDriveManager.kt$CloudDriveManager$for</ID>
     <ID>LoopWithTooManyJumpStatements:DeviceDiscoveryManager.kt$DeviceDiscoveryManager$while</ID>
@@ -442,13 +223,10 @@
     <ID>MagicNumber:AccountActivity.kt$AccountActivity$100</ID>
     <ID>MagicNumber:AccountActivity.kt$AccountActivity$100.0</ID>
     <ID>MagicNumber:AccountActivity.kt$AccountActivity$1000</ID>
-    <ID>MagicNumber:ActivityActivity.kt$0xFFFF453B</ID>
     <ID>MagicNumber:ActivityActivity.kt$3_600_000</ID>
     <ID>MagicNumber:ActivityActivity.kt$60_000</ID>
     <ID>MagicNumber:ActivityActivity.kt$86_400_000</ID>
     <ID>MagicNumber:AdvancedPermissionDialog.kt$AdvancedPermissionDialog$0.88</ID>
-    <ID>MagicNumber:AgentConfig.kt$AgentConfig.Builder$0.1</ID>
-    <ID>MagicNumber:AgentConfig.kt$AgentConfig.Builder$60</ID>
     <ID>MagicNumber:AgentPresentation.kt$AgentPresentation$12</ID>
     <ID>MagicNumber:AgentPresentation.kt$AgentPresentation$14f</ID>
     <ID>MagicNumber:AgentPresentation.kt$AgentPresentation$16</ID>
@@ -475,7 +253,6 @@
     <ID>MagicNumber:BrowserScreen.kt$3000</ID>
     <ID>MagicNumber:BrowserScreen.kt$4000</ID>
     <ID>MagicNumber:BrowserScreen.kt$90</ID>
-    <ID>MagicNumber:BrowserSettingsActivity.kt$0xFF1A2029</ID>
     <ID>MagicNumber:BrowserTools.kt$BrowserClickTool$300</ID>
     <ID>MagicNumber:BrowserTools.kt$BrowserClickTool$3000</ID>
     <ID>MagicNumber:BrowserTools.kt$BrowserClickTool$50</ID>
@@ -499,7 +276,6 @@
     <ID>MagicNumber:CanaryManager.kt$CanaryManager.Phase$40</ID>
     <ID>MagicNumber:CanaryManager.kt$CanaryManager.Phase$60</ID>
     <ID>MagicNumber:CancellationToken.kt$CancellationToken$200</ID>
-    <ID>MagicNumber:CastApprovalManager.kt$CastApprovalManager$9600</ID>
     <ID>MagicNumber:CastRouteHandler.kt$CastRouteHandler$100</ID>
     <ID>MagicNumber:CastRouteHandler.kt$CastRouteHandler$600</ID>
     <ID>MagicNumber:CastRouteHandler.kt$CastRouteHandler$800</ID>
@@ -562,7 +338,6 @@
     <ID>MagicNumber:ContextCompressor.kt$ContextCompressor$100</ID>
     <ID>MagicNumber:ContextSummarizer.kt$ContextSummarizer$0.2</ID>
     <ID>MagicNumber:ContextSummarizer.kt$ContextSummarizer$160</ID>
-    <ID>MagicNumber:ContextSummarizer.kt$ContextSummarizer$30</ID>
     <ID>MagicNumber:ContextSummarizer.kt$ContextSummarizer$900</ID>
     <ID>MagicNumber:DeclarativePluginTool.kt$DeclarativePluginTool$300</ID>
     <ID>MagicNumber:DefaultAgentService.kt$DefaultAgentService$0.97</ID>
@@ -581,26 +356,19 @@
     <ID>MagicNumber:DesktopActivity.kt$0.7f</ID>
     <ID>MagicNumber:DesktopActivity.kt$0.82f</ID>
     <ID>MagicNumber:DesktopActivity.kt$0.8f</ID>
-    <ID>MagicNumber:DesktopActivity.kt$0.96f</ID>
     <ID>MagicNumber:DesktopActivity.kt$0.98f</ID>
     <ID>MagicNumber:DesktopActivity.kt$0x991A1A1A</ID>
-    <ID>MagicNumber:DesktopActivity.kt$0xCC0E0F12</ID>
+    <ID>MagicNumber:DesktopActivity.kt$0xCC1A1A1A</ID>
     <ID>MagicNumber:DesktopActivity.kt$0xFF1A1A1A</ID>
+    <ID>MagicNumber:DesktopActivity.kt$0xFF24272F</ID>
     <ID>MagicNumber:DesktopActivity.kt$0xFFFFC24D</ID>
     <ID>MagicNumber:DesktopActivity.kt$100</ID>
     <ID>MagicNumber:DesktopActivity.kt$1000</ID>
-    <ID>MagicNumber:DesktopActivity.kt$110</ID>
-    <ID>MagicNumber:DesktopActivity.kt$119</ID>
     <ID>MagicNumber:DesktopActivity.kt$120</ID>
     <ID>MagicNumber:DesktopActivity.kt$14</ID>
     <ID>MagicNumber:DesktopActivity.kt$16</ID>
-    <ID>MagicNumber:DesktopActivity.kt$24</ID>
     <ID>MagicNumber:DesktopActivity.kt$360</ID>
-    <ID>MagicNumber:DesktopActivity.kt$4</ID>
-    <ID>MagicNumber:DesktopActivity.kt$44</ID>
     <ID>MagicNumber:DesktopActivity.kt$5</ID>
-    <ID>MagicNumber:DesktopActivity.kt$6</ID>
-    <ID>MagicNumber:DesktopActivity.kt$8</ID>
     <ID>MagicNumber:DesktopActivity.kt$90</ID>
     <ID>MagicNumber:DesktopActivity.kt$99</ID>
     <ID>MagicNumber:DesktopHolo.kt$0.006f</ID>
@@ -635,23 +403,12 @@
     <ID>MagicNumber:DesktopHolo.kt$0.95f</ID>
     <ID>MagicNumber:DesktopHolo.kt$0xFF19E3FF</ID>
     <ID>MagicNumber:DesktopHolo.kt$0xFFFF3DEB</ID>
-    <ID>MagicNumber:DesktopHolo.kt$1.03f</ID>
     <ID>MagicNumber:DesktopHolo.kt$1.06f</ID>
     <ID>MagicNumber:DesktopHolo.kt$1.08f</ID>
     <ID>MagicNumber:DesktopHolo.kt$1.6f</ID>
     <ID>MagicNumber:DesktopHolo.kt$3.5f</ID>
     <ID>MagicNumber:DesktopHolo.kt$700</ID>
     <ID>MagicNumber:DesktopHolo.kt$7f</ID>
-    <ID>MagicNumber:DesktopHolo.kt$Holo$0x0FFFFFFF</ID>
-    <ID>MagicNumber:DesktopHolo.kt$Holo$0x1AFFFFFF</ID>
-    <ID>MagicNumber:DesktopHolo.kt$Holo$0x80FAEA5F</ID>
-    <ID>MagicNumber:DesktopHolo.kt$Holo$0x99FFFFFF</ID>
-    <ID>MagicNumber:DesktopHolo.kt$Holo$0xE6FFFFFF</ID>
-    <ID>MagicNumber:DesktopHolo.kt$Holo$0xFF121214</ID>
-    <ID>MagicNumber:DesktopHolo.kt$Holo$0xFF1C1D20</ID>
-    <ID>MagicNumber:DesktopHolo.kt$Holo$0xFF282A2A</ID>
-    <ID>MagicNumber:DesktopHolo.kt$Holo$0xFFFAEA5F</ID>
-    <ID>MagicNumber:DesktopHolo.kt$Holo$0xFFFF4D6A</ID>
     <ID>MagicNumber:DeviceDetailActivity.kt$DeviceDetailActivity$12</ID>
     <ID>MagicNumber:DeviceDetailActivity.kt$DeviceDetailActivity$14f</ID>
     <ID>MagicNumber:DeviceDetailActivity.kt$DeviceDetailActivity$16</ID>
@@ -667,28 +424,19 @@
     <ID>MagicNumber:DeviceListActivity.kt$DeviceListActivity$16</ID>
     <ID>MagicNumber:DeviceListActivity.kt$DeviceListActivity$40</ID>
     <ID>MagicNumber:DeviceListActivity.kt$DeviceListActivity$8</ID>
-    <ID>MagicNumber:DeviceRemoteControl.kt$DeviceRemoteControl$10</ID>
-    <ID>MagicNumber:DeviceRemoteControl.kt$DeviceRemoteControl$5</ID>
     <ID>MagicNumber:DeviceRouteHandler.kt$DeviceRouteHandler$300L</ID>
     <ID>MagicNumber:DeviceRouteHandler.kt$DeviceRouteHandler$600L</ID>
     <ID>MagicNumber:DingTalkChannelHandler.kt$DingTalkChannelHandler$1000</ID>
     <ID>MagicNumber:DingTalkChannelHandler.kt$DingTalkChannelHandler$300</ID>
     <ID>MagicNumber:DingTalkChannelHandler.kt$DingTalkChannelHandler$7200</ID>
-    <ID>MagicNumber:DiscordApiClient.kt$DiscordApiClient$10</ID>
-    <ID>MagicNumber:DiscordApiClient.kt$DiscordApiClient$30</ID>
     <ID>MagicNumber:DiscordApiClient.kt$DiscordApiClient.&lt;no name provided&gt;$1000L</ID>
-    <ID>MagicNumber:DiscordChannelHandler.kt$DiscordChannelHandler.&lt;no name provided&gt;$120</ID>
-    <ID>MagicNumber:DiscordGatewayClient.kt$DiscordGatewayClient$10</ID>
     <ID>MagicNumber:DiscordGatewayClient.kt$DiscordGatewayClient$1000</ID>
     <ID>MagicNumber:DiscordGatewayClient.kt$DiscordGatewayClient$2000</ID>
     <ID>MagicNumber:DiscordGatewayClient.kt$DiscordGatewayClient$3000</ID>
     <ID>MagicNumber:DiscordGatewayClient.kt$DiscordGatewayClient$5000</ID>
-    <ID>MagicNumber:DiscordGatewayClient.kt$DiscordGatewayClient$60</ID>
     <ID>MagicNumber:DiscordGatewayClient.kt$DiscordGatewayClient.&lt;no name provided&gt;$1000</ID>
     <ID>MagicNumber:DiscordGatewayClient.kt$DiscordGatewayClient.&lt;no name provided&gt;$5000</ID>
     <ID>MagicNumber:DiscoverScreen.kt$6</ID>
-    <ID>MagicNumber:EchoUniverseTools.kt$EchoUniverseTools.Net$15</ID>
-    <ID>MagicNumber:EchoUniverseTools.kt$EchoUniverseTools.Net$8</ID>
     <ID>MagicNumber:EchoUniverseTools.kt$EchoUniverseTools.ObserveTool$10</ID>
     <ID>MagicNumber:EchoUniverseTools.kt$EchoUniverseTools.ObserveTool$120</ID>
     <ID>MagicNumber:EchoUniverseTools.kt$EchoUniverseTools.ObserveTool$200</ID>
@@ -745,28 +493,20 @@
     <ID>MagicNumber:FloatingCircleManager.kt$FloatingCircleManager$8</ID>
     <ID>MagicNumber:ForegroundService.kt$ForegroundService$3000</ID>
     <ID>MagicNumber:GenerateAppTool.kt$GenerateAppTool$0.3</ID>
-    <ID>MagicNumber:GenerateAppTool.kt$GenerateAppTool$15</ID>
     <ID>MagicNumber:GenerateAppTool.kt$GenerateAppTool$200</ID>
-    <ID>MagicNumber:GenerateAppTool.kt$GenerateAppTool$90</ID>
     <ID>MagicNumber:GenerateBrowserPluginTool.kt$GenerateBrowserPluginTool$0.3</ID>
-    <ID>MagicNumber:GenerateBrowserPluginTool.kt$GenerateBrowserPluginTool$15</ID>
     <ID>MagicNumber:GenerateBrowserPluginTool.kt$GenerateBrowserPluginTool$200</ID>
     <ID>MagicNumber:GenerateBrowserPluginTool.kt$GenerateBrowserPluginTool$2000</ID>
     <ID>MagicNumber:GenerateBrowserPluginTool.kt$GenerateBrowserPluginTool$40</ID>
-    <ID>MagicNumber:GenerateBrowserPluginTool.kt$GenerateBrowserPluginTool$90</ID>
     <ID>MagicNumber:GenerateSkillTool.kt$GenerateSkillTool$0.3</ID>
-    <ID>MagicNumber:GenerateSkillTool.kt$GenerateSkillTool$15</ID>
     <ID>MagicNumber:GenerateSkillTool.kt$GenerateSkillTool$200</ID>
     <ID>MagicNumber:GenerateSkillTool.kt$GenerateSkillTool$2000</ID>
-    <ID>MagicNumber:GenerateSkillTool.kt$GenerateSkillTool$60</ID>
     <ID>MagicNumber:GenerateSkillTool.kt$GenerateSkillTool$80</ID>
     <ID>MagicNumber:GenerateToolTool.kt$GenerateToolTool$0.2</ID>
     <ID>MagicNumber:GenerateToolTool.kt$GenerateToolTool$120</ID>
-    <ID>MagicNumber:GenerateToolTool.kt$GenerateToolTool$15</ID>
     <ID>MagicNumber:GenerateToolTool.kt$GenerateToolTool$200</ID>
     <ID>MagicNumber:GenerateToolTool.kt$GenerateToolTool$2000</ID>
     <ID>MagicNumber:GenerateToolTool.kt$GenerateToolTool$40</ID>
-    <ID>MagicNumber:GenerateToolTool.kt$GenerateToolTool$90</ID>
     <ID>MagicNumber:GhostChatSessionStore.kt$GhostChatSessionStore$24</ID>
     <ID>MagicNumber:H264Decoder.kt$H264Decoder$0xFF</ID>
     <ID>MagicNumber:H264Decoder.kt$H264Decoder$100</ID>
@@ -774,10 +514,8 @@
     <ID>MagicNumber:H264Decoder.kt$H264Decoder$110</ID>
     <ID>MagicNumber:H264Decoder.kt$H264Decoder$118</ID>
     <ID>MagicNumber:H264Decoder.kt$H264Decoder$12</ID>
-    <ID>MagicNumber:H264Decoder.kt$H264Decoder$120</ID>
     <ID>MagicNumber:H264Decoder.kt$H264Decoder$122</ID>
     <ID>MagicNumber:H264Decoder.kt$H264Decoder$128</ID>
-    <ID>MagicNumber:H264Decoder.kt$H264Decoder$1280</ID>
     <ID>MagicNumber:H264Decoder.kt$H264Decoder$15</ID>
     <ID>MagicNumber:H264Decoder.kt$H264Decoder$16</ID>
     <ID>MagicNumber:H264Decoder.kt$H264Decoder$1_000_000L</ID>
@@ -792,18 +530,14 @@
     <ID>MagicNumber:H264Decoder.kt$H264Decoder$6</ID>
     <ID>MagicNumber:H264Decoder.kt$H264Decoder$64</ID>
     <ID>MagicNumber:H264Decoder.kt$H264Decoder$7</ID>
-    <ID>MagicNumber:H264Decoder.kt$H264Decoder$720</ID>
     <ID>MagicNumber:H264Decoder.kt$H264Decoder$8</ID>
     <ID>MagicNumber:H264Decoder.kt$H264Decoder$8192</ID>
     <ID>MagicNumber:H264Decoder.kt$H264Decoder$83</ID>
     <ID>MagicNumber:H264Decoder.kt$H264Decoder$86</ID>
-    <ID>MagicNumber:HeartbeatReporter.kt$HeartbeatReporter$3</ID>
     <ID>MagicNumber:HtmlLinter.kt$HtmlLinter$1280</ID>
     <ID>MagicNumber:HtmlLinter.kt$HtmlLinter$720</ID>
     <ID>MagicNumber:HtmlLinter.kt$HtmlLinter.&lt;no name provided&gt;$12</ID>
     <ID>MagicNumber:HtmlLinter.kt$HtmlLinter.&lt;no name provided&gt;$300</ID>
-    <ID>MagicNumber:HttpAccountGateway.kt$HttpAccountGateway$15</ID>
-    <ID>MagicNumber:HttpAccountGateway.kt$HttpAccountGateway$20</ID>
     <ID>MagicNumber:HttpAccountGateway.kt$HttpAccountGateway$200</ID>
     <ID>MagicNumber:ImportSkillTool.kt$ImportSkillTool$200</ID>
     <ID>MagicNumber:ImportSkillTool.kt$ImportSkillTool$3</ID>
@@ -812,9 +546,7 @@
     <ID>MagicNumber:IntentClassifier.kt$IntentClassifier$0.15</ID>
     <ID>MagicNumber:IntentClassifier.kt$IntentClassifier$0.5</ID>
     <ID>MagicNumber:IntentClassifier.kt$IntentClassifier$0.95</ID>
-    <ID>MagicNumber:KButton.kt$KButton$12f</ID>
     <ID>MagicNumber:KButton.kt$KButton$16f</ID>
-    <ID>MagicNumber:KIconButton.kt$KIconButton$12f</ID>
     <ID>MagicNumber:KIconButton.kt$KIconButton$16f</ID>
     <ID>MagicNumber:KIconButton.kt$KIconButton$24f</ID>
     <ID>MagicNumber:KIconButton.kt$KIconButton$8f</ID>
@@ -846,8 +578,6 @@
     <ID>MagicNumber:McpRouteHandler.kt$McpRouteHandler$32603</ID>
     <ID>MagicNumber:McpRouteHandler.kt$McpRouteHandler$32700</ID>
     <ID>MagicNumber:McpRouteHandler.kt$McpServerCore$32601</ID>
-    <ID>MagicNumber:MediaRepository.kt$MediaRepository$130</ID>
-    <ID>MagicNumber:MediaRepository.kt$MediaRepository$15</ID>
     <ID>MagicNumber:MediaRepository.kt$MediaRepository$200</ID>
     <ID>MagicNumber:MediaRepository.kt$MediaRepository$3_000</ID>
     <ID>MagicNumber:MediaRepository.kt$MediaRepository$60</ID>
@@ -874,7 +604,6 @@
     <ID>MagicNumber:MiniAppActionTools.kt$ReadAppEventsTool$50</ID>
     <ID>MagicNumber:MiniAppListActivity.kt$0.8f</ID>
     <ID>MagicNumber:MjpegImageView.kt$MjpegImageView$0xFF</ID>
-    <ID>MagicNumber:MjpegImageView.kt$MjpegImageView$10</ID>
     <ID>MagicNumber:MjpegImageView.kt$MjpegImageView$65536</ID>
     <ID>MagicNumber:MobileActionTimeline.kt$MobileActionTimeline$0xff</ID>
     <ID>MagicNumber:MobileActionTimeline.kt$MobileActionTimeline$5</ID>
@@ -904,126 +633,17 @@
     <ID>MagicNumber:OctopusComponents.kt$1.22f</ID>
     <ID>MagicNumber:OctopusComponents.kt$3</ID>
     <ID>MagicNumber:OctopusComponents.kt$600</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusBackground$0x14000000</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusBackground$0x1AFFFFFF</ID>
     <ID>MagicNumber:OctopusDesign.kt$OctopusBackground$0xFF17151D</ID>
     <ID>MagicNumber:OctopusDesign.kt$OctopusBackground$0xFF211C24</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusBackground$0xFF222225</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusBackground$0xFF272729</ID>
     <ID>MagicNumber:OctopusDesign.kt$OctopusBackground$0xFF2B2421</ID>
     <ID>MagicNumber:OctopusDesign.kt$OctopusBackground$0xFF91A3B7</ID>
     <ID>MagicNumber:OctopusDesign.kt$OctopusBackground$0xFFADA9B8</ID>
     <ID>MagicNumber:OctopusDesign.kt$OctopusBackground$0xFFC0A197</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0x05FFFFFF</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0x0A000000</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0x0DFFFFFF</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0x0F000000</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0x14787880</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0x1F000000</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0x1F787880</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0x29787880</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0x2E787880</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0x33000000</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0x33787880</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0x33FFFFFF</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0x3D787880</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0x52000000</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0x52787880</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0x5C787880</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0x80000000</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0x8A000000</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0x8AFFFFFF</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0x99FFFFFF</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xA3FFFFFF</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xAD000000</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xE6FFFFFF</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xEBFFFFFF</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xF5000000</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFF000000</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFF002515</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFF003552</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFF006C45</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFF007BBE</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFF009CF0</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFF0E0E0E</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFF1AAFFF</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFF1D1D1F</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFF202021</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFF292933</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFF2BA471</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFF2C2C2E</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFF2F2D84</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFF31313D</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFF333335</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFF35343E</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFF363638</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFF383838</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFF3A3A3C</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFF3B1700</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFF490002</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFF53538A</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFF56C08D</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFF5856D6</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFF7E7DB2</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFF8A88F4</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFF92DAB2</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFFAFE3FF</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFFBE5A00</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFFD1D1D6</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFFD54941</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFFE0E0EA</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFFE37318</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFFE3F9E9</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFFE5E4FF</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFFE5E5EA</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFFEEF9FF</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFFF2F2F7</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFFF6685D</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFFF7F7FF</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFFF8F8FC</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFFFA9550</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFFFF9285</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFFFFD8D2</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFFFFD9C2</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFFFFF8F7</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFFFFF9F6</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusColors$0xFFFFFFFF</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusGlass$0.02f</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusGlass$0.035f</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusGlass$0.055f</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusGlass$0.14f</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusGlass$0.17f</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusGlass$0.18f</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusGlass$0.30f</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusGlass$0.34f</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusGlass$0.35f</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusGlass$0.38f</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusGlass$0.40f</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusGlass$0.58f</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusGlass$0.68f</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusGlass$0.70f</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusGlass$0.88f</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusGlass$0.95f</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusGlass$1.25f</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusShape$50</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusTints$0xFF30B889</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusTints$0xFF34C7A8</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusTints$0xFF42C893</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusTints$0xFF5AA0FF</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusTints$0xFF5B9BFF</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusTints$0xFF5DBCD8</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusTints$0xFF74A7FF</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusTints$0xFF7C6BFF</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusTints$0xFF8FD8B1</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusTints$0xFF9B8CFF</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusTints$0xFFEAB85C</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusTints$0xFFFF6B6B</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusTints$0xFFFF6B7A</ID>
-    <ID>MagicNumber:OctopusDesign.kt$OctopusTints$0xFFFF9F5A</ID>
     <ID>MagicNumber:OctopusMobileClient.kt$OctopusMobileClient$10</ID>
     <ID>MagicNumber:OctopusMobileClient.kt$OctopusMobileClient$1000</ID>
     <ID>MagicNumber:OctopusMobileClient.kt$OctopusMobileClient$1001</ID>
     <ID>MagicNumber:OctopusMobileClient.kt$OctopusMobileClient$1008</ID>
+    <ID>MagicNumber:OctopusMobileClient.kt$OctopusMobileClient$16</ID>
     <ID>MagicNumber:OctopusMobileClient.kt$OctopusMobileClient$2000L</ID>
     <ID>MagicNumber:OctopusMobileClient.kt$OctopusMobileClient$30</ID>
     <ID>MagicNumber:OctopusMobileClient.kt$OctopusMobileClient$30_000L</ID>
@@ -1076,19 +696,14 @@
     <ID>MagicNumber:PrivacyScanner.kt$PrivacyScanner$6</ID>
     <ID>MagicNumber:PromptSkillStore.kt$PromptSkillStore$200</ID>
     <ID>MagicNumber:PromptSkillStore.kt$PromptSkillStore$400</ID>
-    <ID>MagicNumber:QQChannelHandler.kt$QQChannelHandler.&lt;no name provided&gt;$120</ID>
     <ID>MagicNumber:QRCodeDialog.kt$QRCodeDialog$0.9</ID>
     <ID>MagicNumber:ReflexRouter.kt$ReflexRouter$3600_000.0</ID>
     <ID>MagicNumber:ReflexRouter.kt$ReflexRouter.CacheMatcher$1000L</ID>
     <ID>MagicNumber:ReflexRouter.kt$ReflexRouter.CacheMatcher$1_000_000.0</ID>
     <ID>MagicNumber:ReflexRouter.kt$ReflexRouter.CacheMatcher.Companion$16</ID>
     <ID>MagicNumber:ReflexRouter.kt$ReflexRouter.RegexMatcher$1_000_000.0</ID>
-    <ID>MagicNumber:RegistryClient.kt$RegistryClient$10</ID>
-    <ID>MagicNumber:RegistryClient.kt$RegistryClient$30</ID>
     <ID>MagicNumber:RemoteConsoleGateway.kt$RemoteConsoleGateway$1000</ID>
-    <ID>MagicNumber:RemoteConsoleGateway.kt$RemoteConsoleGateway$12</ID>
     <ID>MagicNumber:RemoteConsoleGateway.kt$RemoteConsoleGateway$16</ID>
-    <ID>MagicNumber:RemoteConsoleGateway.kt$RemoteConsoleGateway$2_000L</ID>
     <ID>MagicNumber:RemoteConsoleGateway.kt$RemoteConsoleGateway$300L</ID>
     <ID>MagicNumber:RemoteConsoleGateway.kt$RemoteConsoleGateway$600L</ID>
     <ID>MagicNumber:RemoteConsoleGateway.kt$RemoteConsoleGateway$60_000L</ID>
@@ -1143,8 +758,6 @@
     <ID>MagicNumber:ScriptSandbox.kt$ScriptSandbox$1_000_000</ID>
     <ID>MagicNumber:ScriptSandbox.kt$ScriptSandbox.TimedContextFactory$5_000</ID>
     <ID>MagicNumber:SearchFilesTool.kt$SearchFilesTool$30</ID>
-    <ID>MagicNumber:SemanticSkillRanker.kt$SemanticSkillRanker$3</ID>
-    <ID>MagicNumber:SemanticSkillRanker.kt$SemanticSkillRanker$8</ID>
     <ID>MagicNumber:SettingsScreen.kt$3</ID>
     <ID>MagicNumber:SettingsScreen.kt$4</ID>
     <ID>MagicNumber:SettingsScreen.kt$5</ID>
@@ -1153,83 +766,25 @@
     <ID>MagicNumber:SettingsViewModel.kt$SettingsViewModel$1500</ID>
     <ID>MagicNumber:SettingsViewModel.kt$SettingsViewModel$2000</ID>
     <ID>MagicNumber:SettingsViewModel.kt$SettingsViewModel$512</ID>
-    <ID>MagicNumber:SetupReadiness.kt$SetupReadiness.Result$100</ID>
     <ID>MagicNumber:ShizukuInstaller.kt$ShizukuInstaller$1024</ID>
-    <ID>MagicNumber:ShizukuInstaller.kt$ShizukuInstaller$120</ID>
-    <ID>MagicNumber:ShizukuInstaller.kt$ShizukuInstaller$15</ID>
     <ID>MagicNumber:ShizukuShellService.kt$ShizukuShellService$1000</ID>
     <ID>MagicNumber:ShizukuShellService.kt$ShizukuShellService$4096</ID>
     <ID>MagicNumber:ShizukuShellService.kt$ShizukuShellService$500</ID>
-    <ID>MagicNumber:SkillExporter.kt$SkillExporter$10_000</ID>
-    <ID>MagicNumber:SkillExporter.kt$SkillExporter$120_000</ID>
     <ID>MagicNumber:SkillExporter.kt$SkillExporter$15_000</ID>
     <ID>MagicNumber:SkillExporter.kt$SkillExporter$200</ID>
-    <ID>MagicNumber:SkillExporter.kt$SkillExporter$20_000</ID>
-    <ID>MagicNumber:SkillExporter.kt$SkillExporter$30_000</ID>
-    <ID>MagicNumber:SkillExporter.kt$SkillExporter$60_000</ID>
     <ID>MagicNumber:SkillManifest.kt$SkillManifest$200</ID>
     <ID>MagicNumber:SkillManifest.kt$SkillManifest$3</ID>
     <ID>MagicNumber:SquareCatalog.kt$0xFF667EEA</ID>
     <ID>MagicNumber:SquareCatalog.kt$0xFF764BA2</ID>
     <ID>MagicNumber:SquareCatalog.kt$120</ID>
     <ID>MagicNumber:SquareCatalog.kt$240</ID>
-    <ID>MagicNumber:SquareCatalog.kt$DiscoveryRepository$0xFF0072FF</ID>
-    <ID>MagicNumber:SquareCatalog.kt$DiscoveryRepository$0xFF00C6FF</ID>
-    <ID>MagicNumber:SquareCatalog.kt$DiscoveryRepository$0xFF134E5E</ID>
-    <ID>MagicNumber:SquareCatalog.kt$DiscoveryRepository$0xFF667EEA</ID>
-    <ID>MagicNumber:SquareCatalog.kt$DiscoveryRepository$0xFF71B280</ID>
-    <ID>MagicNumber:SquareCatalog.kt$DiscoveryRepository$0xFF764BA2</ID>
-    <ID>MagicNumber:SquareCatalog.kt$DiscoveryRepository$0xFFD1913C</ID>
-    <ID>MagicNumber:SquareCatalog.kt$DiscoveryRepository$0xFFF2994A</ID>
-    <ID>MagicNumber:SquareCatalog.kt$DiscoveryRepository$0xFFF2C94C</ID>
-    <ID>MagicNumber:SquareCatalog.kt$DiscoveryRepository$0xFFFF0844</ID>
-    <ID>MagicNumber:SquareCatalog.kt$DiscoveryRepository$0xFFFFB199</ID>
-    <ID>MagicNumber:SquareCatalog.kt$DiscoveryRepository$0xFFFFD194</ID>
-    <ID>MagicNumber:SquareCatalog.kt$DiscoveryRepository$10</ID>
-    <ID>MagicNumber:SquareCatalog.kt$DiscoveryRepository$138</ID>
-    <ID>MagicNumber:SquareCatalog.kt$DiscoveryRepository$146</ID>
-    <ID>MagicNumber:SquareCatalog.kt$DiscoveryRepository$15</ID>
-    <ID>MagicNumber:SquareCatalog.kt$DiscoveryRepository$156</ID>
-    <ID>MagicNumber:SquareCatalog.kt$DiscoveryRepository$168</ID>
-    <ID>MagicNumber:SquareCatalog.kt$DiscoveryRepository$176</ID>
-    <ID>MagicNumber:SquareCatalog.kt$DiscoveryRepository$190</ID>
     <ID>MagicNumber:SquareCatalog.kt$LocalSkillRegistry$0xFF11998E</ID>
     <ID>MagicNumber:SquareCatalog.kt$LocalSkillRegistry$0xFF38EF7D</ID>
     <ID>MagicNumber:SquareCatalog.kt$LocalSkillRegistry$0xFF667EEA</ID>
     <ID>MagicNumber:SquareCatalog.kt$LocalSkillRegistry$0xFF764BA2</ID>
-    <ID>MagicNumber:SquareCatalog.kt$RemoteConfig$10</ID>
-    <ID>MagicNumber:SquareCatalog.kt$RemoteConfig$8</ID>
-    <ID>MagicNumber:SquareCatalog.kt$SquareRepository$0xFF0072FF</ID>
-    <ID>MagicNumber:SquareCatalog.kt$SquareRepository$0xFF00C6FF</ID>
-    <ID>MagicNumber:SquareCatalog.kt$SquareRepository$0xFF11998E</ID>
-    <ID>MagicNumber:SquareCatalog.kt$SquareRepository$0xFF134E5E</ID>
-    <ID>MagicNumber:SquareCatalog.kt$SquareRepository$0xFF38EF7D</ID>
-    <ID>MagicNumber:SquareCatalog.kt$SquareRepository$0xFF3F5EFB</ID>
-    <ID>MagicNumber:SquareCatalog.kt$SquareRepository$0xFF4A00E0</ID>
-    <ID>MagicNumber:SquareCatalog.kt$SquareRepository$0xFF667EEA</ID>
-    <ID>MagicNumber:SquareCatalog.kt$SquareRepository$0xFF71B280</ID>
-    <ID>MagicNumber:SquareCatalog.kt$SquareRepository$0xFF764BA2</ID>
-    <ID>MagicNumber:SquareCatalog.kt$SquareRepository$0xFF8E2DE2</ID>
-    <ID>MagicNumber:SquareCatalog.kt$SquareRepository$0xFFEE9CA7</ID>
-    <ID>MagicNumber:SquareCatalog.kt$SquareRepository$0xFFF2994A</ID>
-    <ID>MagicNumber:SquareCatalog.kt$SquareRepository$0xFFF2C94C</ID>
-    <ID>MagicNumber:SquareCatalog.kt$SquareRepository$0xFFFC466B</ID>
-    <ID>MagicNumber:SquareCatalog.kt$SquareRepository$0xFFFFDDE1</ID>
-    <ID>MagicNumber:SquareCatalog.kt$SquareRepository$10</ID>
-    <ID>MagicNumber:SquareCatalog.kt$SquareRepository$140</ID>
-    <ID>MagicNumber:SquareCatalog.kt$SquareRepository$145</ID>
-    <ID>MagicNumber:SquareCatalog.kt$SquareRepository$15</ID>
-    <ID>MagicNumber:SquareCatalog.kt$SquareRepository$150</ID>
-    <ID>MagicNumber:SquareCatalog.kt$SquareRepository$160</ID>
-    <ID>MagicNumber:SquareCatalog.kt$SquareRepository$170</ID>
-    <ID>MagicNumber:SquareCatalog.kt$SquareRepository$180</ID>
-    <ID>MagicNumber:SquareCatalog.kt$SquareRepository$190</ID>
-    <ID>MagicNumber:SquareCatalog.kt$SquareRepository$200</ID>
     <ID>MagicNumber:SsrfSafeHttp.kt$SsrfSafeHttp$301</ID>
     <ID>MagicNumber:SsrfSafeHttp.kt$SsrfSafeHttp$302</ID>
     <ID>MagicNumber:SsrfSafeHttp.kt$SsrfSafeHttp$303</ID>
-    <ID>MagicNumber:SsrfSafeHttp.kt$SsrfSafeHttp$307</ID>
-    <ID>MagicNumber:SsrfSafeHttp.kt$SsrfSafeHttp$308</ID>
     <ID>MagicNumber:StateDetector.kt$StateDetector$0.2</ID>
     <ID>MagicNumber:StateDetector.kt$StateDetector$0.3</ID>
     <ID>MagicNumber:StateDetector.kt$StateDetector$0.5</ID>
@@ -1237,23 +792,15 @@
     <ID>MagicNumber:StateDetector.kt$StateDetector$12</ID>
     <ID>MagicNumber:StateDetector.kt$StateDetector$20</ID>
     <ID>MagicNumber:StateDetector.kt$StateDetector$5</ID>
-    <ID>MagicNumber:StateDetector.kt$StateFingerprint$16</ID>
     <ID>MagicNumber:SystemWebViewEngine.kt$SystemWebViewEngine$100</ID>
-    <ID>MagicNumber:SystemWebViewEngine.kt$SystemWebViewEngine$70</ID>
     <ID>MagicNumber:TaskCheckpoint.kt$TaskCheckpoint$40</ID>
-    <ID>MagicNumber:TaskOrchestrator.kt$TaskOrchestrator$1000</ID>
-    <ID>MagicNumber:TaskOrchestrator.kt$TaskOrchestrator$3</ID>
-    <ID>MagicNumber:TaskOrchestrator.kt$TaskOrchestrator$5</ID>
-    <ID>MagicNumber:TaskOrchestrator.kt$TaskOrchestrator$60</ID>
     <ID>MagicNumber:TaskOrchestrator.kt$TaskOrchestrator.&lt;no name provided&gt;$300</ID>
     <ID>MagicNumber:TaskOrchestrator.kt$TaskOrchestrator.&lt;no name provided&gt;$5000</ID>
     <ID>MagicNumber:TaskOrchestrator.kt$TaskOrchestrator.&lt;no name provided&gt;$80</ID>
     <ID>MagicNumber:TaskQueue.kt$TaskQueue.TaskPriority.URGENT$3</ID>
-    <ID>MagicNumber:TelegramChannelHandler.kt$TelegramChannelHandler$15</ID>
     <ID>MagicNumber:TelegramChannelHandler.kt$TelegramChannelHandler$200</ID>
     <ID>MagicNumber:TelegramChannelHandler.kt$TelegramChannelHandler$299</ID>
     <ID>MagicNumber:TelegramChannelHandler.kt$TelegramChannelHandler$30</ID>
-    <ID>MagicNumber:TelegramChannelHandler.kt$TelegramChannelHandler$40</ID>
     <ID>MagicNumber:TelegramChannelHandler.kt$TelegramChannelHandler$401</ID>
     <ID>MagicNumber:TelegramChannelHandler.kt$TelegramChannelHandler$404</ID>
     <ID>MagicNumber:TelegramChannelHandler.kt$TelegramChannelHandler$5000</ID>
@@ -1279,7 +826,6 @@
     <ID>MagicNumber:TurnScorer.kt$TurnScorer$1000</ID>
     <ID>MagicNumber:TurnScorer.kt$TurnScorer$4</ID>
     <ID>MagicNumber:TurnScorer.kt$TurnScorer$5</ID>
-    <ID>MagicNumber:UniverseRepository.kt$UniverseRepository$15</ID>
     <ID>MagicNumber:UniverseRepository.kt$UniverseRepository$3</ID>
     <ID>MagicNumber:UniverseRepository.kt$UniverseRepository$8</ID>
     <ID>MagicNumber:UniverseScreen.kt$10</ID>
@@ -1303,29 +849,23 @@
     <ID>MagicNumber:VisionMarkersTool.kt$VisionMarkersTool$8</ID>
     <ID>MagicNumber:WaitTool.kt$WaitTool$30000</ID>
     <ID>MagicNumber:WeChatApiClient.kt$WeChatApiClient$0xFF</ID>
-    <ID>MagicNumber:WeChatApiClient.kt$WeChatApiClient$10</ID>
-    <ID>MagicNumber:WeChatApiClient.kt$WeChatApiClient$15</ID>
     <ID>MagicNumber:WeChatApiClient.kt$WeChatApiClient$16</ID>
     <ID>MagicNumber:WeChatApiClient.kt$WeChatApiClient$200</ID>
     <ID>MagicNumber:WeChatApiClient.kt$WeChatApiClient$24</ID>
     <ID>MagicNumber:WeChatApiClient.kt$WeChatApiClient$299</ID>
     <ID>MagicNumber:WeChatApiClient.kt$WeChatApiClient$3</ID>
     <ID>MagicNumber:WeChatApiClient.kt$WeChatApiClient$4</ID>
-    <ID>MagicNumber:WeChatApiClient.kt$WeChatApiClient$40</ID>
     <ID>MagicNumber:WeChatApiClient.kt$WeChatApiClient$8</ID>
     <ID>MagicNumber:WeChatApiClient.kt$WeChatApiClient.Companion$1000</ID>
     <ID>MagicNumber:WeChatCdn.kt$WeChatCdn$15</ID>
     <ID>MagicNumber:WeChatCdn.kt$WeChatCdn$16</ID>
     <ID>MagicNumber:WeChatCdn.kt$WeChatCdn$200</ID>
-    <ID>MagicNumber:WeChatCdn.kt$WeChatCdn$30</ID>
     <ID>MagicNumber:WeChatCdn.kt$WeChatCdn$32</ID>
     <ID>MagicNumber:WeChatCdn.kt$WeChatCdn$4</ID>
     <ID>MagicNumber:WeChatCdn.kt$WeChatCdn$400</ID>
     <ID>MagicNumber:WeChatCdn.kt$WeChatCdn$499</ID>
-    <ID>MagicNumber:WeChatCdn.kt$WeChatCdn$60</ID>
     <ID>MagicNumber:WeChatChannelHandler.kt$WeChatChannelHandler$1000</ID>
     <ID>MagicNumber:WeChatChannelHandler.kt$WeChatChannelHandler$12</ID>
-    <ID>MagicNumber:WeChatChannelHandler.kt$WeChatChannelHandler$12000L</ID>
     <ID>MagicNumber:WeChatChannelHandler.kt$WeChatChannelHandler$16</ID>
     <ID>MagicNumber:WeChatChannelHandler.kt$WeChatChannelHandler$20</ID>
     <ID>MagicNumber:WeChatChannelHandler.kt$WeChatChannelHandler$30_000</ID>
@@ -1333,12 +873,9 @@
     <ID>MagicNumber:WeChatChannelHandler.kt$WeChatChannelHandler$5000</ID>
     <ID>MagicNumber:WeChatChannelHandler.kt$WeChatChannelHandler$60</ID>
     <ID>MagicNumber:WeChatChannelHandler.kt$WeChatChannelHandler$60_000</ID>
-    <ID>MagicNumber:WeChatChannelHandler.kt$WeChatChannelHandler$8</ID>
     <ID>MagicNumber:WeChatChannelHandler.kt$WeChatChannelHandler$80</ID>
     <ID>MagicNumber:WeChatLoginActivity.kt$40</ID>
     <ID>MagicNumber:WebActivity.kt$WebActivity.&lt;no name provided&gt;$100</ID>
-    <ID>MagicNumber:WebDAVScanner.kt$WebDAVScanner$10</ID>
-    <ID>MagicNumber:WebDAVScanner.kt$WebDAVScanner$30</ID>
     <ID>MaxLineLength:AccountActivity.kt$AccountActivity$val (sym, cents) = if (selectedCurrency() == "USD" &amp;&amp; g.priceUsdCents &gt; 0) "$" to g.priceUsdCents else "¥" to g.priceFen</ID>
     <ID>MaxLineLength:ActivityActivity.kt$FPill(e.target, if (e.target == stringResource(R.string.control_target_local)) FPrimary else FWarning)</ID>
     <ID>MaxLineLength:ActivityActivity.kt$Text(e.task, color = FText, fontSize = 14.sp, fontWeight = FontWeight.Medium, lineHeight = 19.sp, maxLines = 2)</ID>
@@ -1484,17 +1021,11 @@
     <ID>MaxLineLength:DefaultAgentService.kt$DefaultAgentService$is AiMessage -&gt; (msg.text()?.length ?: 0) + (msg.toolExecutionRequests()?.sumOf { it.arguments()?.length ?: 0 } ?: 0)</ID>
     <ID>MaxLineLength:DefaultAgentService.kt$DefaultAgentService$private</ID>
     <ID>MaxLineLength:DefaultAgentService.kt$DefaultAgentService$val fullSystemPrompt = config.systemPrompt + buildDeviceContext() + config.dynamicPromptSuffix + config.memoryPromptSuffix</ID>
+    <ID>MaxLineLength:DesktopActivity.kt$)</ID>
     <ID>MaxLineLength:DesktopActivity.kt$.</ID>
-    <ID>MaxLineLength:DesktopActivity.kt$Icon(Icons.Filled.Close, contentDescription = "退出桌面", tint = Holo.TextSecondary, modifier = Modifier.size(15.dp))</ID>
-    <ID>MaxLineLength:DesktopActivity.kt$Icon(Icons.Filled.DesktopWindows, contentDescription = null, tint = Holo.Accent.copy(alpha = 0.9f), modifier = Modifier.size(16.dp))</ID>
-    <ID>MaxLineLength:DesktopActivity.kt$Icon(Icons.Filled.GridView, contentDescription = "开始", tint = Holo.Accent.copy(alpha = 0.9f), modifier = Modifier.size(17.dp))</ID>
-    <ID>MaxLineLength:DesktopActivity.kt$Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(start = 12.dp, end = 60.dp, bottom = 12.dp)</ID>
-    <ID>MaxLineLength:DesktopActivity.kt$Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).holoFocus(RoundedCornerShape(6.dp)).clickable(onClick = onStart)</ID>
     <ID>MaxLineLength:DesktopActivity.kt$WinContent.Discover -&gt; DiscoverScreen(onOpenUrl = { url -&gt; url?.let { engine.navigate(normalizeUrl(it)) } })</ID>
     <ID>MaxLineLength:DesktopActivity.kt$else</ID>
-    <ID>MaxLineLength:DesktopActivity.kt$modifier</ID>
-    <ID>MaxLineLength:DesktopActivity.kt$onAllApps = { runCatching { ctx.startActivity(android.content.Intent(ctx, MiniAppListActivity::class.java)) } }</ID>
-    <ID>MaxLineLength:DesktopActivity.kt$onStart = { runCatching { ctx.startActivity(android.content.Intent(ctx, MiniAppListActivity::class.java)) } }</ID>
+    <ID>MaxLineLength:DesktopActivity.kt$keyboardActions = KeyboardActions(onSend = { if (input.isNotBlank()) { onSend(input); input = "" } })</ID>
     <ID>MaxLineLength:DesktopActivity.kt$placeholder = { Text(pageTitle.ifBlank { stringResource(R.string.desktop_address_placeholder) }, fontSize = 13.sp, maxLines = 1, color = Holo.TextSecondary) }</ID>
     <ID>MaxLineLength:DesktopActivity.kt$var marked by remember(currentUrl) { mutableStateOf(com.apk.claw.android.ui.browser.BookmarkManager.isBookmarked(currentUrl)) }</ID>
     <ID>MaxLineLength:DesktopHolo.kt$Modifier.align(Alignment.BottomCenter).fillMaxHeight(0.94f).aspectRatio(0.46f, matchHeightConstraintsFirst = true)</ID>
@@ -1671,6 +1202,7 @@
     <ID>MaxLineLength:NavigationGraph.kt$if (selectedBottomRoute == screen.route &amp;&amp; currentDestination?.route == screen.route) return@CompactBottomBar</ID>
     <ID>MaxLineLength:NavigationRecorder.kt$NavigationRecorder$KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -&gt; RemoteAction.dpadCenter()</ID>
     <ID>MaxLineLength:OctopusComponents.kt$if</ID>
+    <ID>MaxLineLength:OctopusMobileClient.kt$OctopusMobileClient$Log.w(tag, "⚠️ connecting to runtime over plaintext ws:// — auth token is exposed to network MITM. Use wss:// in production.")</ID>
     <ID>MaxLineLength:PcRemoteActivity.kt$Text("Esc", color = Color.White, fontSize = 13.sp, modifier = Modifier.pointerInput(Unit) { detectTapGestures { client?.sendRemoteInput("key", text = "esc") } })</ID>
     <ID>MaxLineLength:PcRemoteActivity.kt$Text("⌨", color = Color.White, fontSize = 18.sp, modifier = Modifier.pointerInput(Unit) { detectTapGestures { showKeyboard = true } })</ID>
     <ID>MaxLineLength:PcRemoteActivity.kt$Text("⌫", color = Color.White, fontSize = 16.sp, modifier = Modifier.pointerInput(Unit) { detectTapGestures { client?.sendRemoteInput("key", text = "backspace") } })</ID>
@@ -2237,6 +1769,7 @@
     <ID>SwallowedException:MjpegImageView.kt$MjpegImageView$e: CancellationException</ID>
     <ID>SwallowedException:MockAccountGatewayTest.kt$MockAccountGatewayTest$e: IllegalArgumentException</ID>
     <ID>SwallowedException:NavigationRecorder.kt$NavigationRecorder$e: Exception</ID>
+    <ID>SwallowedException:OctopusMobileClient.kt$OctopusMobileClient$e: Exception</ID>
     <ID>SwallowedException:OctopusMobileClient.kt$OctopusMobileClient$e: TimeoutCancellationException</ID>
     <ID>SwallowedException:PathGuard.kt$PathGuard$e: Exception</ID>
     <ID>SwallowedException:PluginManifest.kt$PluginManifest.Companion$e: Exception</ID>
