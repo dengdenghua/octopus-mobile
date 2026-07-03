@@ -176,34 +176,42 @@ class NavigateTool : BaseTool() {
     }
 
     override fun getDescriptionEN(): String = """
-        UI Navigation Knowledge Graph — learn, store, and auto-navigate TV interfaces.
-        
+        UI Navigation Knowledge Graph — learn, store, and auto-navigate TV and mobile interfaces.
+
+        Supports both D-pad (TV) and touch (mobile) navigation:
+        - TV: D-pad operations (dpad_up/down/left/right/center) recorded from remote key events
+        - Mobile: Touch operations (tap/swipe/long_press) recorded from agent tool calls
+
         Actions:
-        - record_start + record_stop: Teach the agent a navigation route by using the remote
+        - record_start + record_stop: Teach the agent a navigation route
         - navigate: Auto-navigate to a target app/page using A* pathfinding
         - list_nodes: List all known UI states in the graph
         - graph_stats: Show graph statistics
         - passive_on/passive_off: Enable/disable background learning from daily usage
         - current_state: Detect current UI state fingerprint
-        
+
         Example workflow:
         1. passive_on (start learning from daily usage)
-        2. After some days: navigate(app_package="com.netflix.ninja", name="search")
+        2. After some days: navigate(app_package="com.tencent.mm", name="chat")
     """.trimIndent()
 
     override fun getDescriptionCN(): String = """
-        UI 导航知识图谱 —— 学习、存储和自动导航 TV 界面。
-        
+        UI 导航知识图谱 —— 学习、存储和自动导航 TV 和手机界面。
+
+        同时支持 D-pad（TV）和触屏（手机）导航：
+        - TV: 遥控器 D-pad 操作，从按键事件录制
+        - 手机: 触屏操作（tap/swipe/long_press），从 Agent 工具调用录制
+
         操作：
-        - record_start + record_stop: 录制操作路线（正常使用遥控器即可）
+        - record_start + record_stop: 录制操作路线
         - navigate: 自动导航到目标 App/页面（A* 寻路 + checkpoint 校验）
         - list_nodes: 列出图谱中已知的所有 UI 状态
         - graph_stats: 图谱统计信息
         - passive_on/passive_off: 开启/关闭被动学习（后台自动从日常使用中学习）
         - current_state: 检测当前 UI 状态指纹
-        
+
         示例流程：
         1. passive_on（开始被动学习）
-        2. 日常使用几天后：navigate(app_package="com.netflix.ninja", name="搜索")
+        2. 日常使用几天后：navigate(app_package="com.tencent.mm", name="聊天")
     """.trimIndent()
 }

@@ -4,10 +4,10 @@ import com.apk.claw.android.tool.ToolRegistry
 import com.apk.claw.android.utils.XLog
 
 /**
- * 导航执行器 —— 按路径执行遥控操作，带 checkpoint 校验和自适应修正。
+ * 导航执行器 —— 按路径执行 UI 操作（D-pad / 触屏），带 checkpoint 校验和自适应修正。
  *
  * 执行流程：
- * 1. 逐步执行路径中的边（D-pad 动作）
+ * 1. 逐步执行路径中的边（D-pad 动作或 tap/swipe 等触屏动作）
  * 2. 每步执行后：检测当前 UI 状态 → 与预期节点指纹比对
  * 3. 匹配（相似度 >= 0.7）→ 继续下一步
  * 4. 不匹配 → 重新 A* 搜索（从当前节点到目标节点）

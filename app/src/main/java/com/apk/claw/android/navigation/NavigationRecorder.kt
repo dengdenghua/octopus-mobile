@@ -176,7 +176,7 @@ class NavigationRecorder(
     }
 
     /**
-     * 处理按键事件 —— 核心方法。
+     * 处理按键事件 —— TV 场景核心方法。
      *
      * 由 ClawAccessibilityService 的 onKeyEvent 调用。
      *
@@ -192,6 +192,82 @@ class NavigationRecorder(
         handler.post { recordStep(action) }
 
         return false  // 不消费按键，让系统继续处理
+    }
+
+    /**
+     * 录制 Agent 工具调用 —— Mobile 场景核心方法。
+     *
+     * 由 DefaultAgentService 在工具执行后调用，用于被动学习触屏操作路径。
+     * 仅录制有 UI 副作用的操作（tap/swipe/long_press/input_text/system_key），
+     * 跳过纯读取类工具（get_screen_info/take_screenshot 等）。
+     *
+     * @param toolName 工具名（如 "tap", "swipe", "input_text"）
+     * @param params 工具参数
+     * @return true 如果该工具被录制器接受
+     */
+    fun onToolExecuted(toolName: String, params: Map<String, Any>): Boolean {
+        if (!recording && !passiveMode) return false
+
+        val action = toolCallToRemoteAction(toolName, params) ?: return false
+
+        handler.post { recordStep(action) }
+        return true
+    }
+
+    /**
+     * 工具调用转 RemoteAction。
+     * 仅映射有 UI 副作用的触屏/按键操作。
+     */
+    private fun toolCallToRemoteAction(toolName: String, params: Map<String, Any>): RemoteAction? {
+        return when (toolName) {
+            "tap" -> {
+                val x = (params["x"] as? Number)?.toInt() ?: return null
+                val y = (params["y"] as? Number)?.toInt() ?: return null
+                RemoteAction.tap(x, y)
+            }
+            "long_press" -> {
+                val x = (params["x"] as? Number)?.toInt() ?: return null
+                val y = (params["y"] as? Number)?.toInt() ?: return null
+                RemoteAction.longPress(x, y)
+            }
+            "swipe" -> {
+                val startX = (params["start_x"] as? Number)?.toInt() ?: return null
+                val startY = (params["start_y"] as? Number)?.toInt() ?: return null
+                val endX = (params["end_x"] as? Number)?.toInt() ?: return null
+                val endY = (params["end_y"] as? Number)?.toInt() ?: return null
+                val duration = (params["duration_ms"] as? Number)?.toInt() ?: 500
+                RemoteAction.swipe(startX, startY, endX, endY, duration)
+            }
+            "input_text" -> {
+                val text = params["text"] as? String ?: return null
+                RemoteAction.inputText(text)
+            }
+            "system_key" -> {
+                val key = params["key"] as? String ?: return null
+                val keycode = when (key) {
+                    "back" -> 4
+                    "home" -> 3
+                    "menu" -> 82
+                    "power" -> 26
+                    "volume_up" -> 24
+                    "volume_down" -> 25
+                    else -> return null
+                }
+                RemoteAction.systemKey(keycode)
+            }
+            // dpad 工具（TV 场景 Agent 调用时也走这里）
+            "dpad_up", "dpad_down", "dpad_left", "dpad_right", "dpad_center" -> {
+                val repeat = (params["repeat"] as? Number)?.toInt() ?: 1
+                when (toolName) {
+                    "dpad_up" -> RemoteAction.dpadUp(repeat)
+                    "dpad_down" -> RemoteAction.dpadDown(repeat)
+                    "dpad_left" -> RemoteAction.dpadLeft(repeat)
+                    "dpad_right" -> RemoteAction.dpadRight(repeat)
+                    else -> RemoteAction.dpadCenter(repeat)
+                }
+            }
+            else -> null  // 纯读取类工具不录制
+        }
     }
 
     /**

@@ -869,6 +869,13 @@ class DefaultAgentService : AgentService {
         // ── 动作录制：工具执行后记录成功/失败 ──
         actionRecorder?.onToolResult(toolName, rawResult.isSuccess)
 
+        // ── 导航图谱被动学习：有 UI 副作用的工具执行后通知 recorder ──
+        if (rawResult.isSuccess) {
+            runCatching {
+                com.apk.claw.android.tool.impl.NavigateTool.recorder.onToolExecuted(toolName, params)
+            }
+        }
+
         var result = rawResult
 
         if (!rawResult.isSuccess) {

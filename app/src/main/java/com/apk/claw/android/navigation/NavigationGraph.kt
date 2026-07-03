@@ -261,13 +261,14 @@ data class NavEdge(
 )
 
 /**
- * 遥控器动作。
+ * UI 动作（D-pad 遥控器 + 触屏）。
  */
 data class RemoteAction(
-    val type: String,       // "dpad_up", "dpad_down", "dpad_left", "dpad_right", "dpad_center", "input_text", "system_key"
-    val params: Map<String, Any> = emptyMap()  // repeat, text, keycode 等
+    val type: String,       // "dpad_up", "dpad_down", "dpad_left", "dpad_right", "dpad_center", "input_text", "system_key", "tap", "long_press", "swipe"
+    val params: Map<String, Any> = emptyMap()  // repeat, text, keycode, x, y, start_x, start_y, end_x, end_y, duration_ms 等
 ) {
     companion object {
+        // D-pad（TV）
         fun dpadUp(repeat: Int = 1) = RemoteAction("dpad_up", mapOf("repeat" to repeat))
         fun dpadDown(repeat: Int = 1) = RemoteAction("dpad_down", mapOf("repeat" to repeat))
         fun dpadLeft(repeat: Int = 1) = RemoteAction("dpad_left", mapOf("repeat" to repeat))
@@ -277,6 +278,12 @@ data class RemoteAction(
         fun systemKey(keycode: Int) = RemoteAction("system_key", mapOf("keycode" to keycode))
         fun back() = RemoteAction("system_key", mapOf("keycode" to 4)) // KEYCODE_BACK
         fun home() = RemoteAction("system_key", mapOf("keycode" to 3)) // KEYCODE_HOME
+
+        // 触屏（Mobile）
+        fun tap(x: Int, y: Int) = RemoteAction("tap", mapOf("x" to x, "y" to y))
+        fun longPress(x: Int, y: Int) = RemoteAction("long_press", mapOf("x" to x, "y" to y))
+        fun swipe(startX: Int, startY: Int, endX: Int, endY: Int, durationMs: Int = 500) =
+            RemoteAction("swipe", mapOf("start_x" to startX, "start_y" to startY, "end_x" to endX, "end_y" to endY, "duration_ms" to durationMs))
     }
 
     /** 转换为 ToolRegistry 的工具名和参数 */
@@ -285,6 +292,7 @@ data class RemoteAction(
             "dpad_up", "dpad_down", "dpad_left", "dpad_right", "dpad_center" -> type to params
             "input_text" -> "input_text" to params
             "system_key" -> "system_key" to params
+            "tap", "long_press", "swipe" -> type to params
             else -> type to params
         }
     }
