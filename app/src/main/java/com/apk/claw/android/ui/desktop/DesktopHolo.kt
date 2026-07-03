@@ -250,7 +250,7 @@ fun HoloWindow(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(34.dp)
+                    .height(30.dp)
                     .background(Holo.Surface2.copy(alpha = 0.7f))
                     .pointerInput(maximized) {
                         if (!maximized) {
@@ -263,21 +263,21 @@ fun HoloWindow(
                     .padding(start = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(title, color = Holo.TextHud, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                Text(title, color = Holo.TextHud, fontSize = 12.sp, modifier = Modifier.weight(1f))
                 if (onMinimize != null) {
                     Box(
-                        Modifier.size(32.dp).clickable(onClick = onMinimize),
+                        Modifier.size(28.dp).clickable(onClick = onMinimize),
                         contentAlignment = Alignment.Center,
-                    ) { Text("—", color = Holo.TextSecondary, fontSize = 16.sp) }
+                    ) { Text("—", color = Holo.TextSecondary, fontSize = 14.sp) }
                 }
                 Box(
-                    Modifier.size(32.dp).clickable { maximized = !maximized; onFocus() },
+                    Modifier.size(28.dp).clickable { maximized = !maximized; onFocus() },
                     contentAlignment = Alignment.Center,
-                ) { Text(if (maximized) "❐" else "□", color = Holo.TextSecondary, fontSize = 14.sp) }
+                ) { Text(if (maximized) "❐" else "□", color = Holo.TextSecondary, fontSize = 13.sp) }
                 Box(
-                    Modifier.size(32.dp).clickable(onClick = onClose),
+                    Modifier.size(28.dp).clickable(onClick = onClose),
                     contentAlignment = Alignment.Center,
-                ) { Text("×", color = Holo.TextSecondary, fontSize = 20.sp) }
+                ) { Text("×", color = Holo.TextSecondary, fontSize = 18.sp) }
             }
             Box(Modifier.weight(1f)) { content() }
         }

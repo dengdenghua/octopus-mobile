@@ -183,16 +183,9 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
 
     // 桌面:浏览器是常驻底板;发现/广场/mini-app 以可拖浮动窗口打开(移植 OpenRoom windowManager)。
     val ctx = androidx.compose.ui.platform.LocalContext.current
-    val windows = remember { androidx.compose.runtime.mutableStateListOf<Pair<Long, WinContent>>() }
-    val minimized = remember { androidx.compose.runtime.mutableStateListOf<Long>() }
-    var winSeq by remember { mutableLongStateOf(0L) }
-    val openWindow: (WinContent) -> Unit = { kind ->
-        val idx = windows.indexOfFirst { it.second == kind }
-        if (idx >= 0) {
-            minimized.removeAll { it == windows[idx].first }  // 已开:取消最小化 + 置顶
-            val w = windows.removeAt(idx); windows.add(w)
-        } else windows.add((winSeq++) to kind)
-    }
+    // TV 首页:同一时刻只聚焦一件内容(选中磁贴/头像 → 全屏内容层);null = 停在首页磁贴网格。
+    var openContent by remember { mutableStateOf<WinContent?>(null) }
+    val openWindow: (WinContent) -> Unit = { kind -> openContent = kind }
     // app_action 未运行时请桌面把 mini-app 开成窗口(后台线程 → 切主线程 openWindow)
     val mainHandler = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
     androidx.compose.runtime.DisposableEffect(Unit) {
@@ -275,165 +268,236 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
     // 是否在浏览网页:是则中间显玻璃浏览器盒,否则中间就是壁纸 + 浮动窗口
     val browsing = currentUrl.isNotBlank() && currentUrl != "about:blank"
 
-    // 默认开「直播间」「对话」两个平级窗口(对齐 OpenRoom 全景:并列可拖窗口)
-    LaunchedEffect(Unit) {
-        if (windows.none { it.second == WinContent.LiveRoom }) openWindow(WinContent.LiveRoom)
-        if (windows.none { it.second == WinContent.Chat }) openWindow(WinContent.Chat)
-    }
-
-    // 布局(对齐 OpenRoom 全景):壁纸打底 + 全宽顶栏 / 左应用栏 | 中间(壁纸 / 浏览器);
-    // 直播间/对话/档案等一律为平级可拖浮动窗口,浮于 shell 之上;屏幕底部输入 + 任务栏。
-    // overscan: TV 投屏安全区(四边 48dp),手机上也不顶到边。
-    Box(Modifier.fillMaxSize().padding(48.dp)) {
+    // Apple TV 式首页:壁纸全出血打底 + 顶栏 + 大图焦点磁贴网格;选中磁贴/头像 → 全屏内容层。
+    // 头像作为常驻「悬浮桌面 agent」浮在右下角,点开即对话。
+    Box(Modifier.fillMaxSize()) {
         HoloBackground(Modifier.fillMaxSize())
-        Column(Modifier.fillMaxSize()) {
-            DesktopTopBar(
-                connLabel = connLabel,
-                connColor = connColor,
-                sceneOn = sceneGen,
-                onToggleScene = { sceneGen = !sceneGen },
-                onExit = { (ctx as? android.app.Activity)?.finish() },
+        // 内容层安全边(投屏 overscan);首页顶栏 + 焦点磁贴网格,悬浮头像浮其上。
+        Box(Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 12.dp)) {
+            // 常用磁贴(核心 5 项)+ 更多应用(已装小程序 + 全部)。
+            val miniApps = remember { MiniAppRegistry.all() }
+            val mainTiles = listOf(
+                TvTileSpec(Icons.Filled.Videocam, "直播间", Holo.Live) { openWindow(WinContent.LiveRoom) },
+                TvTileSpec(Icons.Filled.ChatBubbleOutline, "对话", Holo.Accent) { openWindow(WinContent.Chat) },
+                TvTileSpec(Icons.Filled.Person, "角色", Holo.AccentDim) { openWindow(WinContent.Character) },
+                TvTileSpec(Icons.Filled.Explore, "发现", Holo.Accent) { openWindow(WinContent.Discover) },
+                TvTileSpec(Icons.Filled.Forum, "广场", Holo.Live) { openWindow(WinContent.Square) },
             )
-            // 中:全宽。空闲=壁纸透出(桌面图标浮其上);浏览网页时=玻璃浏览器盒。
-            Box(
-                Modifier.weight(1f).fillMaxWidth()
-                    .padding(horizontal = if (browsing) 24.dp else 0.dp, vertical = if (browsing) 12.dp else 0.dp),
+            val moreTiles = miniApps.map { m ->
+                TvTileSpec(Icons.Filled.Apps, m.name.ifBlank { m.id }, Holo.AccentDim) {
+                    openWindow(WinContent.Mini(m.id, m.name))
+                }
+            } + TvTileSpec(Icons.Filled.GridView, "全部", Holo.AccentDim) {
+                runCatching { ctx.startActivity(android.content.Intent(ctx, MiniAppListActivity::class.java)) }
+            }
+            // 竖向整页:首屏直接停在主磁贴(item 1)。上滑 → 快捷设置栏(退出/切换/场景);下滑 → 更多应用。
+            val listState = androidx.compose.foundation.lazy.rememberLazyListState(initialFirstVisibleItemIndex = 1)
+            androidx.compose.foundation.lazy.LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                Box(
-                    Modifier.fillMaxSize()
-                        .then(if (browsing) Modifier.holoGlass(16.dp) else Modifier)
-                        .clipToBounds(),
-                ) {
-                    DesktopMonitor(
-                        engine = engine,
-                        currentUrl = currentUrl,
-                        pageTitle = pageTitle,
-                        loading = loading,
-                        progress = progress,
-                        browsing = browsing,
-                        onNavigate = { currentUrl = it; pageTitle = "" },
+                item {
+                    DesktopTopBar(
+                        connLabel = connLabel,
+                        connColor = connColor,
+                        sceneOn = sceneGen,
+                        onToggleScene = { sceneGen = !sceneGen },
+                        onExit = { (ctx as? android.app.Activity)?.finish() },
                     )
                 }
+                item { TvTileGrid(mainTiles) }
+                item { TvSectionHeader("更多应用 ▾") }
+                item { TvTileGrid(moreTiles) }
             }
-            DesktopReplyBar(running = running, onSend = send, onStop = stop)
-            DesktopTaskbar(
-                minimized = windows.filter { it.first in minimized },
-                charName = character.name,
-                onRestore = { id ->
-                    minimized.removeAll { it == id }
-                    val idx = windows.indexOfFirst { it.first == id }
-                    if (idx in 0 until windows.size - 1) { val w = windows.removeAt(idx); windows.add(w) }
-                },
-                onStart = { runCatching { ctx.startActivity(android.content.Intent(ctx, MiniAppListActivity::class.java)) } },
+            // 头像悬浮桌面 agent:常驻右下,点开即对话(主 Agent 会话)。
+            FloatingAgentAvatar(
+                modifier = Modifier.align(Alignment.BottomEnd),
+                running = running,
+                onClick = { openWindow(WinContent.Chat) },
             )
         }
-        // 桌面图标(直接铺在壁纸上,无侧边栏面板)。在窗口层之下 → 窗口可盖住,像真桌面。
-        DesktopIcons(
-            modifier = Modifier.align(Alignment.TopStart).padding(top = 38.dp, start = 6.dp, bottom = 132.dp),
-            onLiveRoom = { openWindow(WinContent.LiveRoom) },
-            onChat = { openWindow(WinContent.Chat) },
-            onCharacter = { openWindow(WinContent.Character) },
-            onDiscover = { openWindow(WinContent.Discover) },
-            onSquare = { openWindow(WinContent.Square) },
-            onLaunchMiniApp = { id -> MiniAppRegistry.get(id)?.let { openWindow(WinContent.Mini(id, it.name)) } },
-            onAllApps = { runCatching { ctx.startActivity(android.content.Intent(ctx, MiniAppListActivity::class.java)) } },
-        )
-        // 浮动窗口层(浮于 shell + 桌面图标之上,可拖到桌面任意位置)。最小化的不渲染,收进任务栏。
-        windows.forEachIndexed { i, (id, kind) ->
-            if (id in minimized) return@forEachIndexed
-            androidx.compose.runtime.key(id) {
-                val spec = windowSpec(kind, i, character.name)
-                HoloWindow(
-                    title = spec.title,
-                    startX = spec.x,
-                    startY = spec.y,
-                    width = spec.w,
-                    height = spec.h,
-                    onClose = { windows.removeAll { it.first == id }; minimized.removeAll { it == id } },
-                    onMinimize = { if (id !in minimized) minimized.add(id) },
-                    onFocus = {
-                        val idx = windows.indexOfFirst { it.first == id }
-                        if (idx in 0 until windows.size - 1) { val w = windows.removeAt(idx); windows.add(w) }
-                    },
-                ) {
-                    when (kind) {
-                        WinContent.LiveRoom -> LiveRoomContent(
-                            sceneUrl = sceneUrl, sceneLoading = sceneLoading, sceneOn = sceneGen,
-                            subtitle = subtitle, running = running, toolNote = toolNote,
-                            likeCount = likeCount, onLike = { likeCount++ },
-                        )
-                        WinContent.Chat -> ChatContent(convo = convo, running = running, toolNote = toolNote)
-                        WinContent.Character -> CharacterHud(Modifier.fillMaxSize())
-                        WinContent.Discover -> DiscoverScreen(onOpenUrl = { url -> url?.let { engine.navigate(normalizeUrl(it)) } })
-                        WinContent.Square -> AgentSquareScreen(onBack = { windows.removeAll { it.first == id } })
-                        is WinContent.Mini -> MiniAppWindow(kind.appId)
-                    }
+        // 全屏内容层(全出血,盖过安全边):选中磁贴/头像后铺满;直播间/对话带底部输入。
+        openContent?.let { kind ->
+            TvContentOverlay(
+                title = contentTitle(kind, character.name),
+                onClose = { openContent = null },
+                bottomBar = if (kind == WinContent.LiveRoom || kind == WinContent.Chat) {
+                    @Composable { DesktopReplyBar(running = running, onSend = send, onStop = stop) }
+                } else {
+                    null
+                },
+            ) {
+                when (kind) {
+                    WinContent.LiveRoom -> LiveRoomContent(
+                        sceneUrl = sceneUrl, sceneLoading = sceneLoading, sceneOn = sceneGen,
+                        subtitle = subtitle, running = running, toolNote = toolNote,
+                        likeCount = likeCount, onLike = { likeCount++ },
+                    )
+                    WinContent.Chat -> ChatContent(convo = convo, running = running, toolNote = toolNote)
+                    WinContent.Character -> CharacterHud(Modifier.fillMaxSize())
+                    WinContent.Discover -> DiscoverScreen(onOpenUrl = { url -> url?.let { engine.navigate(normalizeUrl(it)) } })
+                    WinContent.Square -> AgentSquareScreen(onBack = { openContent = null })
+                    is WinContent.Mini -> MiniAppWindow(kind.appId)
                 }
             }
         }
-        // 右下角:当前角色头像(点击打开角色档案窗)
-        Box(
-            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 54.dp)
-                .size(48.dp).clip(CircleShape).border(2.dp, Holo.Accent, CircleShape)
-                .holoFocus(CircleShape)
-                .clickable { openWindow(WinContent.Character) },
-            contentAlignment = Alignment.Center,
-        ) { CharacterAvatar(48.dp) }
+        // 浏览网页:玻璃浏览器盒铺满最上层,返回=导航回 about:blank。
+        if (browsing) {
+            TvContentOverlay(
+                title = pageTitle.ifBlank { currentUrl },
+                onClose = { engine.navigate("about:blank"); currentUrl = "about:blank"; pageTitle = "" },
+                bottomBar = null,
+            ) {
+                DesktopMonitor(
+                    engine = engine,
+                    currentUrl = currentUrl,
+                    pageTitle = pageTitle,
+                    loading = loading,
+                    progress = progress,
+                    browsing = true,
+                    onNavigate = { currentUrl = it; pageTitle = "" },
+                )
+            }
+        }
     }
 }
 
-/** 每类窗口的标题 + 默认位置/尺寸(dp)。 */
-private data class WinSpec(val title: String, val x: Dp, val y: Dp, val w: Dp, val h: Dp)
-
-private fun windowSpec(kind: WinContent, i: Int, charName: String): WinSpec {
-    // 默认尺寸按「横屏手机」的 dp 空间(约 860×390dp)裁,保证底部输入不被盖;大屏可自行拖拽放大。
-    val name = charName
-    return when (kind) {
-        WinContent.LiveRoom -> WinSpec("直播间 · $name", 92.dp, 40.dp, 380.dp, 246.dp)
-        WinContent.Chat -> WinSpec("对话 · $name", 486.dp, 48.dp, 300.dp, 262.dp)
-        WinContent.Character -> WinSpec("角色档案 · $name", 150.dp, 56.dp, 430.dp, 264.dp)
-        WinContent.Discover -> WinSpec("发现", (110 + i * 24).dp, (44 + i * 24).dp, 320.dp, 236.dp)
-        WinContent.Square -> WinSpec("广场", (110 + i * 24).dp, (44 + i * 24).dp, 320.dp, 236.dp)
-        is WinContent.Mini -> WinSpec(kind.name, (110 + i * 24).dp, (44 + i * 24).dp, 320.dp, 236.dp)
-    }
+/** 全屏内容层的标题。 */
+private fun contentTitle(kind: WinContent, name: String): String = when (kind) {
+    WinContent.LiveRoom -> "直播间 · $name"
+    WinContent.Chat -> "对话 · $name"
+    WinContent.Character -> "角色档案 · $name"
+    WinContent.Discover -> "发现"
+    WinContent.Square -> "广场"
+    is WinContent.Mini -> kind.name
 }
 
-/** 最底 Windows 式任务栏:开始(全部应用)+ 最小化窗口按钮(点击还原)+ 时钟。 */
+/** 焦点磁贴规格(下发到 [TvTileGrid] 渲染)。 */
+private data class TvTileSpec(
+    val icon: androidx.compose.ui.graphics.vector.ImageVector,
+    val label: String,
+    val tint: Color,
+    val onClick: () -> Unit,
+)
+
+/** 一段焦点磁贴网格:每行 4 个,末行补空位保持对齐。 */
 @Composable
-private fun DesktopTaskbar(
-    minimized: List<Pair<Long, WinContent>>,
-    charName: String,
-    onRestore: (Long) -> Unit,
-    onStart: () -> Unit,
-) {
-    // 时钟内部维护,避免上层每秒重组
-    var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(Unit) { while (true) { nowMs = System.currentTimeMillis(); delay(1000) } }
-    val timeText = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }.format(Date(nowMs))
+private fun TvTileGrid(tiles: List<TvTileSpec>) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        tiles.chunked(4).forEach { row ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                row.forEach { t -> TvTile(t.icon, t.label, t.tint, Modifier.weight(1f), t.onClick) }
+                repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
+    }
+}
 
-    Row(
-        modifier = Modifier.fillMaxWidth().height(36.dp).background(Holo.Panel.copy(alpha = 0.8f))
-            .padding(horizontal = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+/** 分区小标题(常用 / 更多应用)。 */
+@Composable
+private fun TvSectionHeader(text: String) {
+    Text(
+        text,
+        color = Holo.TextSecondary,
+        fontSize = 12.sp,
+        fontWeight = FontWeight.Medium,
+        modifier = Modifier.padding(start = 4.dp, top = 2.dp, bottom = 2.dp),
+    )
+}
+
+/** 单个焦点磁贴(玻璃大卡 + 焦点高亮)。 */
+@Composable
+private fun TvTile(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    tint: Color,
+    modifier: Modifier,
+    onClick: () -> Unit,
+) {
+    Column(
+        modifier = modifier
+            .height(92.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .holoGlass(16.dp)
+            .holoFocus(RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
+            .padding(12.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(
-            Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).holoFocus(RoundedCornerShape(6.dp)).clickable(onClick = onStart),
+            Modifier.size(40.dp).clip(RoundedCornerShape(11.dp)).background(tint.copy(alpha = 0.16f)),
             contentAlignment = Alignment.Center,
-        ) {
-            Icon(Icons.Filled.GridView, contentDescription = "开始", tint = Holo.Accent.copy(alpha = 0.9f), modifier = Modifier.size(17.dp))
+        ) { Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(22.dp)) }
+        Spacer(Modifier.height(8.dp))
+        Text(label.take(6), color = Holo.TextHud, fontSize = 12.sp, maxLines = 1)
+    }
+}
+
+/** 头像悬浮桌面 agent:常驻角落,运行时描边转红;点击打开对话。 */
+@Composable
+private fun FloatingAgentAvatar(
+    modifier: Modifier,
+    running: Boolean,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = modifier
+            .size(72.dp)
+            .clip(CircleShape)
+            .border(2.dp, if (running) Holo.Live else Holo.Accent, CircleShape)
+            .holoFocus(CircleShape)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) { CharacterAvatar(72.dp) }
+}
+
+/** 全屏内容层的半透明遮罩底色(压暗壁纸,突出内容)。 */
+private val TvOverlayScrim = Color(0xE6060810)
+
+/** 全屏内容层:顶部返回 + 标题,中间玻璃内容盒,可选底部输入条。 */
+@Composable
+private fun TvContentOverlay(
+    title: String,
+    onClose: () -> Unit,
+    bottomBar: (@Composable () -> Unit)?,
+    content: @Composable () -> Unit,
+) {
+    Box(Modifier.fillMaxSize().background(TvOverlayScrim)) {
+        Column(Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth().height(34.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    Modifier.size(30.dp).clip(RoundedCornerShape(8.dp))
+                        .holoFocus(RoundedCornerShape(8.dp)).clickable(onClick = onClose),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Filled.Close, contentDescription = "返回",
+                        tint = Holo.TextHud, modifier = Modifier.size(16.dp),
+                    )
+                }
+                Spacer(Modifier.width(10.dp))
+                Text(title, color = Holo.TextHud, fontSize = 14.sp, maxLines = 1, modifier = Modifier.weight(1f))
+            }
+            Spacer(Modifier.height(10.dp))
+            Box(
+                Modifier.weight(1f).fillMaxWidth().clip(RoundedCornerShape(16.dp)).holoGlass(16.dp).clipToBounds(),
+            ) { content() }
+            bottomBar?.let {
+                Spacer(Modifier.height(8.dp))
+                it()
+            }
         }
-        // 最小化的窗口:任务栏按钮,点击还原
-        minimized.forEach { (id, kind) ->
-            Text(
-                windowSpec(kind, 0, charName).title.substringBefore(" ·").let { if (it.length > 6) it.take(6) else it },
-                color = Holo.TextHud, fontSize = 12.sp,
-                modifier = Modifier.clip(RoundedCornerShape(5.dp)).background(Holo.Surface2.copy(alpha = 0.7f))
-                    .holoFocus(RoundedCornerShape(5.dp)).clickable { onRestore(id) }.padding(horizontal = 10.dp, vertical = 4.dp),
-            )
-        }
-        Spacer(Modifier.weight(1f))
-        Text(timeText, color = Holo.TextSecondary, fontSize = 12.sp)
     }
 }
 
@@ -745,6 +809,13 @@ private fun DesktopTopBar(
         Text(connLabel, color = Holo.TextSecondary, fontSize = 12.sp)
         Text(timeText, color = Holo.Accent.copy(alpha = 0.9f), fontSize = 12.sp)
         Spacer(Modifier.width(4.dp))
+        // 切换角色(循环下一个数字生命)
+        Text(
+            "切换角色",
+            color = Holo.TextSecondary, fontSize = 13.sp,
+            modifier = Modifier.clip(RoundedCornerShape(6.dp)).holoFocus(RoundedCornerShape(6.dp))
+                .clickable { CharacterRegistry.next() }.padding(horizontal = 8.dp, vertical = 4.dp),
+        )
         // 场景生成开关(每轮生成会扣积分,给用户一个显式闸门)
         Text(
             if (sceneOn) "场景:开" else "场景:关",
@@ -762,82 +833,6 @@ private fun DesktopTopBar(
             Icon(Icons.Filled.Close, contentDescription = "退出桌面", tint = Holo.TextSecondary, modifier = Modifier.size(15.dp))
             Text("退出", color = Holo.TextSecondary, fontSize = 13.sp)
         }
-    }
-}
-
-/**
- * 左侧竖排应用栏(对齐 OpenRoom 左侧图标栏):浏览器 / 发现 / 广场 + 已装小程序 + 全部。
- * 浏览器是常驻底板(点它仅高亮);发现/广场/小程序以浮动窗口打开。
- */
-@Composable
-private fun DesktopIcons(
-    modifier: Modifier = Modifier,
-    onLiveRoom: () -> Unit,
-    onChat: () -> Unit,
-    onCharacter: () -> Unit,
-    onDiscover: () -> Unit,
-    onSquare: () -> Unit,
-    onLaunchMiniApp: (String) -> Unit,
-    onAllApps: () -> Unit,
-) {
-    val miniApps = remember { MiniAppRegistry.all() }
-    // 无面板背景:图标直接浮在壁纸上(桌面图标)。
-    Column(
-        modifier = modifier.width(72.dp)
-            .verticalScroll(androidx.compose.foundation.rememberScrollState()),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        // 角色三窗(直播间/对话/档案)—— 平级可拖窗口,点开或置顶
-        RailItem(Icons.Filled.Videocam, "直播间", active = false, onClick = onLiveRoom)
-        RailItem(Icons.Filled.ChatBubbleOutline, "对话", active = false, onClick = onChat)
-        RailItem(Icons.Filled.Person, "角色", active = false, onClick = onCharacter)
-        Box(Modifier.padding(vertical = 2.dp).size(width = 40.dp, height = 1.dp).background(Holo.Border))
-        RailItem(Icons.Filled.Explore, "发现", active = false, onClick = onDiscover)
-        RailItem(Icons.Filled.Forum, "广场", active = false, onClick = onSquare)
-        if (miniApps.isNotEmpty()) {
-            Box(Modifier.padding(vertical = 2.dp).size(width = 40.dp, height = 1.dp).background(Holo.Border))
-        }
-        miniApps.take(8).forEach { m ->
-            RailItem(Icons.Filled.Apps, m.name.ifBlank { m.id }, active = false) { onLaunchMiniApp(m.id) }
-        }
-        RailItem(Icons.Filled.GridView, "全部", active = false, onClick = onAllApps)
-    }
-}
-
-@Composable
-private fun RailItem(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
-    active: Boolean,
-    onClick: () -> Unit,
-) {
-    Column(
-        modifier = Modifier.fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(if (active) Holo.Surface2 else Color.Transparent)
-            .holoFocus(RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
-            .padding(vertical = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Box(
-            Modifier.size(44.dp).clip(RoundedCornerShape(11.dp))
-                .background(if (active) Holo.Accent.copy(alpha = 0.14f) else Holo.AvatarBg),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                icon, contentDescription = label,
-                tint = if (active) Holo.Accent else Holo.TextHud.copy(alpha = 0.7f),
-                modifier = Modifier.size(24.dp),
-            )
-        }
-        Spacer(Modifier.height(4.dp))
-        Text(
-            label.take(4),
-            color = if (active) Holo.Accent else Holo.TextHud.copy(alpha = 0.6f),
-            fontSize = 11.sp, maxLines = 1,
-        )
     }
 }
 

@@ -17,6 +17,8 @@ detekt {
     buildUponDefaultConfig = true
     baseline = file("detekt-baseline.xml")
     parallel = true
+    // 覆盖配置(合并到默认之上):豁免 @Composable 的 PascalCase 命名。
+    config.setFrom(files("detekt.yml"))
     // Kotlin 源码放在 src/main/java 下(非默认 src/main/kotlin),需显式指向。
     source.setFrom(files("src/main/java", "src/test/java"))
 }

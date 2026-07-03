@@ -7,6 +7,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
@@ -365,7 +366,6 @@ private fun AgentDiscoveryHeader(
     onCreate: () -> Unit,
 ) {
     val title = header?.title?.takeIf { it.isNotBlank() } ?: stringResource(R.string.agent_inspiration_plaza)
-    val desc = header?.desc?.takeIf { it.isNotBlank() } ?: stringResource(R.string.agent_inspiration_desc)
     val icon = iconKeyToVector(header?.icon ?: "AutoAwesome")
     val tint = header?.tint ?: BrowserTint
     val actions = header?.actions?.takeIf { it.isNotEmpty() } ?: listOf(
@@ -374,36 +374,27 @@ private fun AgentDiscoveryHeader(
         DiscoveryAction("Add", "", "publish", SkillTint),
     )
     GlassCard(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(OctopusSpacing.lg)) {
+        Column(modifier = Modifier.padding(OctopusSpacing.md)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier
-                        .size(42.dp)
+                        .size(34.dp)
                         .background(tint.copy(alpha = 0.18f), CircleShape),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(22.dp))
+                    Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
                 }
-                Spacer(Modifier.width(OctopusSpacing.md))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        title,
-                        color = OctopusColors.TextPrimary,
-                        fontSize = OctopusType.title,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                    )
-                    Spacer(Modifier.height(OctopusSpacing.xs))
-                    Text(
-                        desc,
-                        color = OctopusColors.TextMuted,
-                        fontSize = OctopusType.caption,
-                        lineHeight = 15.sp,
-                        maxLines = 2,
-                    )
-                }
+                Spacer(Modifier.width(OctopusSpacing.sm))
+                Text(
+                    title,
+                    color = OctopusColors.TextPrimary,
+                    fontSize = OctopusType.body,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    modifier = Modifier.weight(1f),
+                )
             }
-            Spacer(Modifier.height(OctopusSpacing.md))
+            Spacer(Modifier.height(OctopusSpacing.sm))
             Row(horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.sm), modifier = Modifier.fillMaxWidth()) {
                 actions.forEach { action ->
                     val label = action.text.takeIf { it.isNotBlank() } ?: actionLabel(action.action)
@@ -467,26 +458,21 @@ private fun AgentTopicChips(
         DiscoveryTopic("learning", "", MemoryTint),
         DiscoveryTopic("device", "", WindowTint),
     )
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(OctopusSpacing.sm),
+    // 单行横向滑动:比 2 行网格更矮,省掉一整行高度(胶囊按内容自适应宽度,超出即横滑)。
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.sm),
     ) {
-        list.chunked(3).forEach { row ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.sm),
-            ) {
-                row.forEach { topic ->
-                    val label = topic.label.takeIf { it.isNotBlank() } ?: topicLabel(topic.key)
-                    GlassTextPill(
-                        text = label,
-                        tint = topic.tint,
-                        selected = selectedTopic == topic.key,
-                        onClick = { onSelect(topic.key) },
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-            }
+        list.forEach { topic ->
+            val label = topic.label.takeIf { it.isNotBlank() } ?: topicLabel(topic.key)
+            GlassTextPill(
+                text = label,
+                tint = topic.tint,
+                selected = selectedTopic == topic.key,
+                onClick = { onSelect(topic.key) },
+            )
         }
     }
 }
