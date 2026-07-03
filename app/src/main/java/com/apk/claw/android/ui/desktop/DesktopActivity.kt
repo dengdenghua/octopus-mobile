@@ -2,8 +2,11 @@ package com.apk.claw.android.ui.desktop
 
 import android.net.Uri
 import android.os.Bundle
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
@@ -204,13 +207,6 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
         ConnectionState.HELLO_SENT, ConnectionState.RECONNECTING -> Color(0xFFFFC24D)
         else -> Holo.AccentDim
     }
-    val connLabel = when (connState) {
-        ConnectionState.ONLINE -> "LINK OK"
-        ConnectionState.CONNECTING, ConnectionState.CONNECTED,
-        ConnectionState.HELLO_SENT, ConnectionState.RECONNECTING -> "LINK…"
-        else -> "NO LINK"
-    }
-
     // 对话:直播间窗 + 对话窗共用同一条主 Agent 会话([ChatAgentBridge])。
     //   convo = 完整会话;直播间字幕 = convo 里最后一条角色发言(流式)。
     val convo = remember { androidx.compose.runtime.mutableStateListOf<DeskMsg>() }
@@ -268,55 +264,69 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
     // 是否在浏览网页:是则中间显玻璃浏览器盒,否则中间就是壁纸 + 浮动窗口
     val browsing = currentUrl.isNotBlank() && currentUrl != "about:blank"
 
+    // TV 遥控兼容:无触屏设备(TV 盒子)进桌面时,把焦点落到第一个图标,D-pad 立即可用;
+    // 手机有触屏 → 不抢焦点(触屏直接点,避免无端高亮)。
+    val firstIconFocus = remember { FocusRequester() }
+    val hasTouch = remember {
+        ctx.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_TOUCHSCREEN)
+    }
+    LaunchedEffect(Unit) { if (!hasTouch) runCatching { firstIconFocus.requestFocus() } }
+    // 遥控/系统返回键:有全屏内容层/浏览器时先关掉,否则才退出桌面。
+    BackHandler(enabled = browsing || openContent != null) {
+        when {
+            browsing -> { engine.navigate("about:blank"); currentUrl = "about:blank"; pageTitle = "" }
+            else -> openContent = null
+        }
+    }
+
     // Apple TV 式首页:壁纸全出血打底 + 顶栏 + 大图焦点磁贴网格;选中磁贴/头像 → 全屏内容层。
     // 头像作为常驻「悬浮桌面 agent」浮在右下角,点开即对话。
     Box(Modifier.fillMaxSize()) {
         HoloBackground(Modifier.fillMaxSize())
-        // 内容层安全边(投屏 overscan);首页顶栏 + 焦点磁贴网格,悬浮头像浮其上。
-        Box(Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 12.dp)) {
-            // 常用磁贴(核心 5 项)+ 更多应用(已装小程序 + 全部)。
-            val miniApps = remember { MiniAppRegistry.all() }
-            val mainTiles = listOf(
-                TvTileSpec(Icons.Filled.Videocam, "直播间", Holo.Live) { openWindow(WinContent.LiveRoom) },
-                TvTileSpec(Icons.Filled.ChatBubbleOutline, "对话", Holo.Accent) { openWindow(WinContent.Chat) },
-                TvTileSpec(Icons.Filled.Person, "角色", Holo.AccentDim) { openWindow(WinContent.Character) },
-                TvTileSpec(Icons.Filled.Explore, "发现", Holo.Accent) { openWindow(WinContent.Discover) },
-                TvTileSpec(Icons.Filled.Forum, "广场", Holo.Live) { openWindow(WinContent.Square) },
+        // Apple TV 式:上部影院级 Hero(角色立绘 + 名字/标语,点进直播间)+ 下部横向彩色图标架。
+        Column(Modifier.fillMaxSize()) {
+            TvHero(
+                character = character,
+                sceneUrl = sceneUrl,
+                modifier = Modifier.fillMaxWidth().weight(TV_HERO_WEIGHT),
+                onClick = { openWindow(WinContent.LiveRoom) },
             )
-            val moreTiles = miniApps.map { m ->
-                TvTileSpec(Icons.Filled.Apps, m.name.ifBlank { m.id }, Holo.AccentDim) {
-                    openWindow(WinContent.Mini(m.id, m.name))
-                }
-            } + TvTileSpec(Icons.Filled.GridView, "全部", Holo.AccentDim) {
-                runCatching { ctx.startActivity(android.content.Intent(ctx, MiniAppListActivity::class.java)) }
-            }
-            // 竖向整页:首屏直接停在主磁贴(item 1)。上滑 → 快捷设置栏(退出/切换/场景);下滑 → 更多应用。
-            val listState = androidx.compose.foundation.lazy.rememberLazyListState(initialFirstVisibleItemIndex = 1)
-            androidx.compose.foundation.lazy.LazyColumn(
-                state = listState,
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                item {
-                    DesktopTopBar(
-                        connLabel = connLabel,
-                        connColor = connColor,
-                        sceneOn = sceneGen,
-                        onToggleScene = { sceneGen = !sceneGen },
-                        onExit = { (ctx as? android.app.Activity)?.finish() },
+            Box(Modifier.fillMaxWidth().weight(TV_SHELF_WEIGHT).background(TvShelfBg)) {
+                val miniApps = remember { MiniAppRegistry.all() }
+                val apps = buildList {
+                    add(TvAppSpec(Icons.Filled.Videocam, TvGradLive) { openWindow(WinContent.LiveRoom) })
+                    add(TvAppSpec(Icons.Filled.ChatBubbleOutline, TvGradChat) { openWindow(WinContent.Chat) })
+                    add(TvAppSpec(Icons.Filled.Person, TvGradChar) { openWindow(WinContent.Character) })
+                    add(TvAppSpec(Icons.Filled.Explore, TvGradDiscover) { openWindow(WinContent.Discover) })
+                    add(TvAppSpec(Icons.Filled.Forum, TvGradSquare) { openWindow(WinContent.Square) })
+                    miniApps.forEach { m ->
+                        add(TvAppSpec(Icons.Filled.Apps, TvGradMini) { openWindow(WinContent.Mini(m.id, m.name)) })
+                    }
+                    add(
+                        TvAppSpec(Icons.Filled.GridView, TvGradAll) {
+                            runCatching {
+                                ctx.startActivity(android.content.Intent(ctx, MiniAppListActivity::class.java))
+                            }
+                        },
                     )
                 }
-                item { TvTileGrid(mainTiles) }
-                item { TvSectionHeader("更多应用 ▾") }
-                item { TvTileGrid(moreTiles) }
+                TvIconShelf(apps, Modifier.align(Alignment.CenterStart), firstIconFocus)
             }
-            // 头像悬浮桌面 agent:常驻右下,点开即对话(主 Agent 会话)。
-            FloatingAgentAvatar(
-                modifier = Modifier.align(Alignment.BottomEnd),
-                running = running,
-                onClick = { openWindow(WinContent.Chat) },
-            )
         }
+        // 极简顶栏:时间 + 状态点 + 设置菜单(切换角色/场景/退出),浮在 Hero 右上。
+        TvTopChrome(
+            modifier = Modifier.align(Alignment.TopEnd).padding(top = 12.dp, end = 16.dp),
+            connColor = connColor,
+            sceneOn = sceneGen,
+            onToggleScene = { sceneGen = !sceneGen },
+            onExit = { (ctx as? android.app.Activity)?.finish() },
+        )
+        // 头像悬浮桌面 agent:常驻右下,点开即对话(主 Agent 会话)。
+        FloatingAgentAvatar(
+            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 20.dp, bottom = 18.dp),
+            running = running,
+            onClick = { openWindow(WinContent.Chat) },
+        )
         // 全屏内容层(全出血,盖过安全边):选中磁贴/头像后铺满;直播间/对话带底部输入。
         openContent?.let { kind ->
             TvContentOverlay(
@@ -373,71 +383,155 @@ private fun contentTitle(kind: WinContent, name: String): String = when (kind) {
     is WinContent.Mini -> kind.name
 }
 
-/** 焦点磁贴规格(下发到 [TvTileGrid] 渲染)。 */
-private data class TvTileSpec(
+// ── Apple TV 式布局比例 + 配色(top-level 具名常量:满足 MagicNumber 豁免;彩色亮图标) ──
+private const val TV_HERO_WEIGHT = 0.62f   // 上部 Hero 占比
+private const val TV_SHELF_WEIGHT = 0.38f  // 下部图标架占比
+private val TvShelfBg = Color(0xF20A0B0E)
+private val TvGradLive = listOf(Color(0xFFFF7A8A), Color(0xFFFF2D55))       // 直播间 红
+private val TvGradChat = listOf(Color(0xFF5AD07A), Color(0xFF23A94B))       // 对话 绿
+private val TvGradChar = listOf(Color(0xFFB18CFF), Color(0xFF6B4BFF))       // 角色 紫
+private val TvGradDiscover = listOf(Color(0xFF5AB0FF), Color(0xFF0A84FF))   // 发现 蓝
+private val TvGradSquare = listOf(Color(0xFFFFC24D), Color(0xFFFF9500))     // 广场 橙
+private val TvGradMini = listOf(Color(0xFF3DE0D0), Color(0xFF16B8A6))       // 小程序 青
+private val TvGradAll = listOf(Color(0xFF8E97E6), Color(0xFF4A55B8))        // 全部 靛
+private val TvHeroScrim = listOf(Color(0x00000000), Color(0x33000000), Color(0xF0070810))
+private val TvHeroFallback = listOf(Color(0xFF1B1230), Color(0xFF0A0B12))
+
+/** 焦点图标规格(下发到 [TvIconShelf] 渲染)。 */
+private data class TvAppSpec(
     val icon: androidx.compose.ui.graphics.vector.ImageVector,
-    val label: String,
-    val tint: Color,
+    val grad: List<Color>,
     val onClick: () -> Unit,
 )
 
-/** 一段焦点磁贴网格:每行 4 个,末行补空位保持对齐。 */
+/**
+ * 影院级 Hero:用生成的场景图 [sceneUrl] 当全铺壁纸(没有则暗色渐变兜底),
+ * 底部渐隐压出角色名/代号/标语(像影片标题),点击进入直播间。
+ */
 @Composable
-private fun TvTileGrid(tiles: List<TvTileSpec>) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        tiles.chunked(4).forEach { row ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                row.forEach { t -> TvTile(t.icon, t.label, t.tint, Modifier.weight(1f), t.onClick) }
-                repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
-            }
+private fun TvHero(
+    character: CharacterProfile,
+    sceneUrl: String?,
+    modifier: Modifier,
+    onClick: () -> Unit,
+) {
+    Box(modifier.clickable(onClick = onClick)) {
+        if (sceneUrl != null) {
+            coil.compose.AsyncImage(
+                model = sceneUrl,
+                contentDescription = character.zh,
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            Box(
+                Modifier.fillMaxSize()
+                    .background(androidx.compose.ui.graphics.Brush.verticalGradient(TvHeroFallback)),
+            )
+        }
+        // 底部渐隐,压出标题
+        Box(
+            Modifier.fillMaxSize()
+                .background(androidx.compose.ui.graphics.Brush.verticalGradient(TvHeroScrim)),
+        )
+        Column(Modifier.align(Alignment.BottomStart).padding(start = 28.dp, bottom = 20.dp)) {
+            Text(character.zh, color = Color.White, fontSize = 34.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "${character.codename} · ${character.role}",
+                color = Color.White.copy(alpha = 0.85f), fontSize = 14.sp,
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "“${character.quote}”",
+                color = Color.White.copy(alpha = 0.72f), fontSize = 13.sp, maxLines = 2,
+            )
         }
     }
 }
 
-/** 分区小标题(常用 / 更多应用)。 */
+/** 横向彩色图标架(Apple TV 式):一排大号玻璃亮图标,焦点放大;超出即横滑。 */
 @Composable
-private fun TvSectionHeader(text: String) {
-    Text(
-        text,
-        color = Holo.TextSecondary,
-        fontSize = 12.sp,
-        fontWeight = FontWeight.Medium,
-        modifier = Modifier.padding(start = 4.dp, top = 2.dp, bottom = 2.dp),
-    )
+private fun TvIconShelf(apps: List<TvAppSpec>, modifier: Modifier, firstFocus: FocusRequester) {
+    androidx.compose.foundation.lazy.LazyRow(
+        modifier = modifier.fillMaxWidth(),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 24.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        items(apps.size) { i ->
+            val a = apps[i]
+            // 第一个图标挂 FocusRequester:TV 进桌面时默认选中它(D-pad 起点)。
+            TvAppIcon(a.icon, a.grad, a.onClick, if (i == 0) Modifier.focusRequester(firstFocus) else Modifier)
+        }
+    }
 }
 
-/** 单个焦点磁贴(玻璃大卡 + 焦点高亮)。 */
+/** 单个彩色亮图标(渐变圆角方 + 白色图标 + 焦点高亮)。 */
 @Composable
-private fun TvTile(
+private fun TvAppIcon(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
-    tint: Color,
-    modifier: Modifier,
+    grad: List<Color>,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    Column(
+    Box(
         modifier = modifier
-            .height(92.dp)
+            .size(width = 108.dp, height = 68.dp)
             .clip(RoundedCornerShape(16.dp))
-            .holoGlass(16.dp)
+            .background(androidx.compose.ui.graphics.Brush.verticalGradient(grad))
             .holoFocus(RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick)
-            .padding(12.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) { Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(30.dp)) }
+}
+
+/** 极简顶栏:状态点 + 时间 + 头像菜单(切换角色 / 场景开关 / 退出),浮在 Hero 右上。 */
+@Composable
+private fun TvTopChrome(
+    connColor: Color,
+    sceneOn: Boolean,
+    onToggleScene: () -> Unit,
+    onExit: () -> Unit,
+    modifier: Modifier,
+) {
+    var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) { while (true) { nowMs = System.currentTimeMillis(); delay(1000) } }
+    val timeText = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }.format(Date(nowMs))
+    var menu by remember { mutableStateOf(false) }
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Box(
-            Modifier.size(40.dp).clip(RoundedCornerShape(11.dp)).background(tint.copy(alpha = 0.16f)),
-            contentAlignment = Alignment.Center,
-        ) { Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(22.dp)) }
-        Spacer(Modifier.height(8.dp))
-        Text(label.take(6), color = Holo.TextHud, fontSize = 12.sp, maxLines = 1)
+        HoloDot(connColor)
+        Text(timeText, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+        Box {
+            Box(
+                Modifier.size(32.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.16f))
+                    .holoFocus(CircleShape).clickable { menu = true },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Filled.Person, contentDescription = "菜单",
+                    tint = Color.White, modifier = Modifier.size(18.dp),
+                )
+            }
+            androidx.compose.material3.DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                androidx.compose.material3.DropdownMenuItem(
+                    text = { Text("切换角色") },
+                    onClick = { CharacterRegistry.next(); menu = false },
+                )
+                androidx.compose.material3.DropdownMenuItem(
+                    text = { Text(if (sceneOn) "场景生成:开" else "场景生成:关") },
+                    onClick = { onToggleScene(); menu = false },
+                )
+                androidx.compose.material3.DropdownMenuItem(
+                    text = { Text("退出桌面") },
+                    onClick = { onExit(); menu = false },
+                )
+            }
+        }
     }
 }
 
@@ -775,63 +869,6 @@ private fun DesktopReplyBar(running: Boolean, onSend: (String) -> Unit, onStop: 
                     tint = Holo.Accent, modifier = Modifier.size(20.dp),
                 )
             }
-        }
-    }
-}
-
-/**
- * 顶栏(全宽,对齐 OpenRoom):左 logo +「本地虚拟电脑」,右 模组画廊 / 技能 + 连接态 + 时钟。
- */
-@Composable
-private fun DesktopTopBar(
-    connLabel: String,
-    connColor: Color,
-    sceneOn: Boolean,
-    onToggleScene: () -> Unit,
-    onExit: () -> Unit,
-) {
-    // 时钟内部维护,避免上层每秒重组
-    var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(Unit) { while (true) { nowMs = System.currentTimeMillis(); delay(1000) } }
-    val timeText = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }.format(Date(nowMs))
-
-    Row(
-        modifier = Modifier.fillMaxWidth().height(38.dp)
-            .background(Holo.Panel.copy(alpha = 0.8f))
-            .padding(horizontal = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Icon(Icons.Filled.DesktopWindows, contentDescription = null, tint = Holo.Accent.copy(alpha = 0.9f), modifier = Modifier.size(16.dp))
-        Text("数字管家", color = Holo.TextHud, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-        Spacer(Modifier.weight(1f))
-        HoloDot(connColor)
-        Text(connLabel, color = Holo.TextSecondary, fontSize = 12.sp)
-        Text(timeText, color = Holo.Accent.copy(alpha = 0.9f), fontSize = 12.sp)
-        Spacer(Modifier.width(4.dp))
-        // 切换角色(循环下一个数字生命)
-        Text(
-            "切换角色",
-            color = Holo.TextSecondary, fontSize = 13.sp,
-            modifier = Modifier.clip(RoundedCornerShape(6.dp)).holoFocus(RoundedCornerShape(6.dp))
-                .clickable { CharacterRegistry.next() }.padding(horizontal = 8.dp, vertical = 4.dp),
-        )
-        // 场景生成开关(每轮生成会扣积分,给用户一个显式闸门)
-        Text(
-            if (sceneOn) "场景:开" else "场景:关",
-            color = if (sceneOn) Holo.Accent else Holo.TextSecondary, fontSize = 13.sp,
-            modifier = Modifier.clip(RoundedCornerShape(6.dp)).holoFocus(RoundedCornerShape(6.dp)).clickable(onClick = onToggleScene)
-                .padding(horizontal = 8.dp, vertical = 4.dp),
-        )
-        // 退出桌面模式(返回上一界面)
-        Row(
-            modifier = Modifier.clip(RoundedCornerShape(6.dp)).holoFocus(RoundedCornerShape(6.dp)).clickable(onClick = onExit)
-                .padding(horizontal = 8.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Icon(Icons.Filled.Close, contentDescription = "退出桌面", tint = Holo.TextSecondary, modifier = Modifier.size(15.dp))
-            Text("退出", color = Holo.TextSecondary, fontSize = 13.sp)
         }
     }
 }

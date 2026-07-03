@@ -97,15 +97,25 @@ fun Modifier.holoGlass(corner: Dp = 12.dp, fillAlpha: Float = 1f): Modifier =
  * 聚焦 = 柔黄 2dp 边框 + 轻微放大(1.03x);失焦 = 原样。
  * 触屏点击同样触发 focus,视觉一致。
  */
+private const val FOCUS_SCALE = 1.10f   // 焦点放大倍数(TV 遥控可见)
+private const val FOCUS_SHADOW = 18f     // 焦点投影高度(浮起感)
+
 @Composable
 fun Modifier.holoFocus(shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(12.dp)): Modifier {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (focused) 1.03f else 1f, label = "focusScale")
-    val bw by animateDpAsState(if (focused) 2.dp else 1.dp, label = "focusBorder")
+    // 焦点放大 + 投影「浮起」,3 米外电视遥控导航也能一眼看清当前选中。
+    val scale by animateFloatAsState(if (focused) FOCUS_SCALE else 1f, label = "focusScale")
+    val bw by animateDpAsState(if (focused) 3.dp else 1.dp, label = "focusBorder")
     return this
         .onFocusChanged { focused = it.isFocused }
         .focusable()
-        .graphicsLayer { scaleX = scale; scaleY = scale }
+        .graphicsLayer {
+            scaleX = scale
+            scaleY = scale
+            shadowElevation = if (focused) FOCUS_SHADOW else 0f
+            this.shape = shape
+            clip = false
+        }
         .border(bw, if (focused) Holo.Accent else Holo.Border, shape)
 }
 
