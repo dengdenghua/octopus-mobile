@@ -8,6 +8,17 @@ import java.util.Properties
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.detekt)
+}
+
+// 静态门禁:detekt 只对「新增」问题失败。存量问题记录在 detekt-baseline.xml,
+// 与 lint-baseline.xml 的棘轮策略一致 —— 见 README「构建/发布」。
+detekt {
+    buildUponDefaultConfig = true
+    baseline = file("detekt-baseline.xml")
+    parallel = true
+    // Kotlin 源码放在 src/main/java 下(非默认 src/main/kotlin),需显式指向。
+    source.setFrom(files("src/main/java", "src/test/java"))
 }
 
 

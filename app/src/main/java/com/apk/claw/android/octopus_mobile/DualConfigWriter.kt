@@ -82,6 +82,9 @@ class DualConfigWriter(
         "KEY_REMOTE_HIGH_RISK_ALLOWED",
         "KEY_ADVANCED_AUTOMATION_MODE",
         "KEY_DISABLED_TOOLS",
+        // 母体传输安全开关 —— 远程翻成 true 会让 MobileRuntimeSecurity 放行明文 ws://,
+        // 构成 TLS 降级(恶意/被 MITM 的母体自我提权到明文链路)。必须本地手动开。
+        "KEY_OCTOPUS_ALLOW_INSECURE_RUNTIME",
         // 代码执行沙箱工作空间 —— 远程改成 "/" 会把脚本沙箱文件白名单放大到任意路径,
         // 使 run_code 的 readFile/writeFile 越权读写 app 私有目录(见安全审计 config-sync 投毒)。
         "KEY_SCRIPT_WORKSPACE",

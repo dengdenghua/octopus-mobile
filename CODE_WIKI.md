@@ -27,9 +27,9 @@ Octopus Mobile 是一款 **AI 驱动的 Android 自动化应用**。用户通过
 - **多渠道接入**：6 种 IM 平台统一抽象，支持优先级任务队列与抢占。
 - **可插拔 LLM 后端**：OpenAI 兼容 / Anthropic，流式与非流式，OkHttp 适配 Android。
 - **工具系统**：通过无障碍服务（AccessibilityService）执行手势、读屏、截图；Shizuku 提供 shell 级增强。
-- **Octopus Mobile 触手层**：将设备变为 octopus-agent Runtime 的物理触手，支持远程控制、屏幕串流、自进化。
-- **安全护栏**：SafetyGate（PII/密钥扫描）、ToolCallGuardrail、断路器、审批流、来源信任闸门。
-- **自进化**：TurnScorer 打分 + EvolutionEngine 反思，教训持久化并注入系统提示词。
+- **Octopus Mobile 触手层**：将设备变为 octopus-agent Runtime 的物理触手。**入站**远程控制(母体下发 `tool/execute`)已真实接线并经安全闸门;屏幕串流「可用但未完;**出站**任务委托给 Runtime 尚未接线(见 §2.3 步骤 6 与 README 实现状态表)。
+- **安全护栏**：SafetyGate（密钥正则扫描;LLM 宪法判官以 judge=null 构造,当前不运行）、ToolCallGuardrail、断路器、审批流、来源信任闸门。
+- **自进化**：TurnScorer 打分 + EvolutionEngine 反思，教训持久化并注入系统提示词(**B1/B2 活跃;B3 deepEvolve 已实现未接线**)。
 
 ---
 
@@ -93,9 +93,8 @@ Octopus Mobile 是一款 **AI 驱动的 Android 自动化应用**。用户通过
 3. `ChannelSetup` 校验无障碍服务 + `ChannelAccessControl` 鉴权（TOFU 白名单）
 4. `TaskOrchestrator.startNewTask`：先尝试 `ReflexRouter` 关键词反射；否则入优先级队列
 5. 任务执行前按 Home 键重置设备状态
-6. `BrainModeSelector.decide` 决策本地/远程：
-   - **远程**：`OctopusMobileClient.executeRemoteTask` 委托 Runtime
-   - **本地**：`DefaultAgentService` 进入 Agent 循环
+6. 进入 `DefaultAgentService` 本地 Agent 循环。
+   > ⚠️ **实际接线状态：本地执行是唯一活跃路径。** `BrainModeSelector.decide` 已构造并注入 `TaskOrchestrator`，但其本地/远程裁决目前**仅记录日志**，`startNewTask` 中的远程委托是一个字面 `TODO`（见 `TaskOrchestrator.kt`）。"出站任务委托给 Runtime"尚未接线；真正活跃的远程方向是**入站**——母体经 WebSocket 下发 `tool/execute`（走 `withUntrustedSource{}` 安全闸门）。参见 README 实现状态表。
 7. Agent 循环：构建系统提示词 → 调用 LLM → 提取工具调用 → `ToolRegistry.executeTool`（经过安全管线）→ 结果反馈 → 上下文压缩 → 死循环检测 → 直到 `finish` 或达上限
 8. 结果通过同一渠道回复用户；触发自进化反思 + 记忆提取
 
@@ -451,9 +450,10 @@ MMKV ↔ Runtime 配置双写。**安全 blocklist**：Runtime URL/authToken/LLM
 
 #### `EvolutionEngine` — [octopus_mobile/evolution/EvolutionEngine.kt](app/src/main/java/com/apk/claw/android/octopus_mobile/evolution/EvolutionEngine.kt)
 三层自进化：
-- **B1**（免费）：`TurnScorer` 启发式打分 + 趋势
-- **B2 deepReflect**（廉价）：单次 LLM 调用评估近 N 轮 → JSON 裁决 → 自动存教训
+- **B1**（免费，✅ 活跃）：`TurnScorer` 启发式打分 + 趋势
+- **B2 deepReflect**（廉价，✅ 活跃）：单次 LLM 调用评估近 N 轮 → JSON 裁决 → 自动存教训
 - **B3 deepEvolve**（昂贵，手动）：提 K 候选 → LLM 评判 → 应用胜出者
+  > ⚠️ **B3 目前无生产调用入口**（`deepEvolve` 无调用方、`CanaryManager` 灰度晋级仅由 `EvolutionActivity` 只读展示,无写入端）。只有 B1/B2 的教训闭环是真正活跃的。参见 README 实现状态表(💤 已实现未接线)。
 
 教训写入 `LessonStore`，经 `TaskOrchestrator` 注入 `AgentConfig.dynamicPromptSuffix`。
 

@@ -148,5 +148,8 @@ uvicorn app:app --host 127.0.0.1 --port 8081
 - **真支付**:`PAYMENT_PROVIDER=wechat/alipay` 的收银台 + `/billing/webhook` 验签。
 - **真短信**:`SMS_PROVIDER` 接阿里云/腾讯云,实现 `send_sms()`。
 - **JWT 吊销**:无状态 JWT 改密码/登出无法立即失效;需要的话加一张吊销表或短期 token+refresh。
-- **限流/并发**:按用户限流;高并发再加 gunicorn 多 worker / 拆机。
+- **限流/并发**:按用户限流。⚠️ **当前部署必须是单 worker**(`uvicorn app:app`,默认单进程)——
+  限流表 `_rl`(app.py:492 的进程内 dict)与远程中继 `RemoteRelayHub`(app.py:570,进程内)都是**内存态**,
+  一旦加 gunicorn 多 worker / 多机,每个 worker 各持一份状态,**限流会按 worker 数被放大、中继会跨 worker 丢失**。
+  要横向扩展**先把这两处状态外置到 Redis**(限流用 Redis 计数、中继用 Redis pub/sub 或消息队列),再开多 worker。
 - **流式扣费兜底**:若上游不返回 usage,当前不扣费(只 log);可补 token 估算。

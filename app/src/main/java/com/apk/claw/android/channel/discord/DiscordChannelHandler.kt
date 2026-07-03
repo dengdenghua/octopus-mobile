@@ -34,10 +34,16 @@ class DiscordChannelHandler(
         DiscordApiClient.getInstance().init(botToken)
         DiscordGatewayClient.getInstance().setOnDiscordMessageListener(
             object : DiscordGatewayClient.OnDiscordMessageListener {
-                override fun onDiscordMessage(channelId: String, messageId: String, content: String) {
-                    lastChannelId = channelId
-                    XLog.i(TAG, "[${channel.displayName}] 收到消息: $content, channelId=$channelId")
-                    ChannelManager.dispatchMessage(channel, content, messageId)
+                override fun onDiscordMessage(
+                    channelId: String,
+                    messageId: String,
+                    content: String,
+                    authorId: String?,
+                ) {
+                    lastChannelId = channelId  // 回复路由用频道 id
+                    XLog.i(TAG, "[${channel.displayName}] 收到消息: $content, channelId=$channelId, authorId=$authorId")
+                    // ACL 授权主体用作者 id(按人),不再用频道 id(否则群内任意成员都能过 ACL)。
+                    ChannelManager.dispatchMessage(channel, content, messageId, authorId)
                 }
             }
         )

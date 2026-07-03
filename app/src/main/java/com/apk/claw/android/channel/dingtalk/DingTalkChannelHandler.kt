@@ -68,7 +68,9 @@ class DingTalkChannelHandler(
                         lastConversationType = message.conversationType
                         lastConversationId = message.conversationId
                         lastMsgId = message.msgId
-                        ChannelManager.dispatchMessage(channel, text, lastMsgId ?: "")
+                        // ACL 授权主体原子捕获后传入(1:1 用 staffId,群用 group:convId),消除 TOCTOU。
+                        // 注:群聊仍按会话授权(convId)——群内成员粒度是独立残留项,见 CHANGELOG。
+                        ChannelManager.dispatchMessage(channel, text, lastMsgId ?: "", getLastSenderId())
                         return null
                     }
                 }

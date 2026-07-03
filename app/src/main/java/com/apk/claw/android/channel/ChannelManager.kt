@@ -34,10 +34,14 @@ object ChannelManager {
     private var messageListener: OnMessageReceivedListener? = null
 
     /**
-     * 收到消息的回调接口
+     * 收到消息的回调接口。
+     *
+     * [senderId] 是**本条消息**的授权主体(作者)标识,由各 handler 在解析时随消息原子传入,
+     * 不再由监听器回读共享字段(`getLastSenderId`)——后者在并发消息下存在 TOCTOU:
+     * 授权时读到的可能是另一条消息刚覆盖的发送者。用于 ACL 鉴权;为空表示无法识别(fail-closed)。
      */
     interface OnMessageReceivedListener {
-        fun onMessageReceived(channel: Channel, message: String, messageID: String)
+        fun onMessageReceived(channel: Channel, message: String, messageID: String, senderId: String?)
     }
 
     @JvmStatic
@@ -234,9 +238,13 @@ object ChannelManager {
 
     /**
      * 供各 ChannelHandler 内部调用，将收到的消息分发给注册的监听器。
+     *
+     * [senderId] 必须是**本条消息**解析出的作者标识(用于 ACL),由 handler 原子传入,
+     * 避免监听器事后回读共享字段导致的 TOCTOU。回复路由仍走各 handler 的会话上下文
+     * (`getLastSenderId`/messageID),与授权主体解耦。
      */
     @JvmStatic
-    fun dispatchMessage(channel: Channel, message: String, messageID: String) {
-        messageListener?.onMessageReceived(channel, message, messageID)
+    fun dispatchMessage(channel: Channel, message: String, messageID: String, senderId: String?) {
+        messageListener?.onMessageReceived(channel, message, messageID, senderId)
     }
 }

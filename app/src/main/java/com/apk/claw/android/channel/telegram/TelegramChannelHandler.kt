@@ -96,10 +96,13 @@ class TelegramChannelHandler(
 
                         val chatId = message.getJSONObject("chat").getLong("id")
                         val messageId = message.getInt("message_id")
-                        lastChatId = chatId
+                        lastChatId = chatId  // 回复路由用 chat id
+                        // ACL 授权主体用发送者 from.id(按人),不用 chat id
+                        // (否则群聊里任意成员都能过 ACL)。私聊时 from.id 与 chat.id 相同。
+                        val fromId = message.optJSONObject("from")?.optLong("id")?.takeIf { it != 0L }
 
-                        XLog.i(TAG, "[${channel.displayName}] 收到消息: $text, chatId=$chatId")
-                        ChannelManager.dispatchMessage(channel, text, messageId.toString())
+                        XLog.i(TAG, "[${channel.displayName}] 收到消息: $text, chatId=$chatId, fromId=$fromId")
+                        ChannelManager.dispatchMessage(channel, text, messageId.toString(), fromId?.toString())
                     }
                 } catch (_: java.net.SocketTimeoutException) {
                     XLog.d(TAG, "Telegram polling 超时，继续轮询")

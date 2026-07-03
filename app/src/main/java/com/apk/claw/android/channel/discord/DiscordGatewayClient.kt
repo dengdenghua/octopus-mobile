@@ -66,7 +66,7 @@ class DiscordGatewayClient private constructor() {
     private val connectionStateListeners = CopyOnWriteArrayList<ConnectionStateListener>()
 
     interface OnDiscordMessageListener {
-        fun onDiscordMessage(channelId: String, messageId: String, content: String)
+        fun onDiscordMessage(channelId: String, messageId: String, content: String, authorId: String?)
     }
 
     interface ConnectionStateListener {
@@ -259,10 +259,12 @@ class DiscordGatewayClient private constructor() {
             val channelId = d.get("channel_id").asString
             val messageId = d.get("id").asString
             val content = d.get("content")?.takeIf { !it.isJsonNull }?.asString ?: ""
+            // 作者标识:群频道内每个成员的 user id,用于 ACL 按人授权(而非按频道)。
+            val authorId = author?.get("id")?.takeIf { !it.isJsonNull }?.asString
 
-            XLog.d(TAG, "收到消息: channelId=$channelId, messageId=$messageId, content=$content")
+            XLog.d(TAG, "收到消息: channelId=$channelId, messageId=$messageId, authorId=$authorId, content=$content")
 
-            messageListener?.onDiscordMessage(channelId, messageId, content)
+            messageListener?.onDiscordMessage(channelId, messageId, content, authorId)
         } catch (e: Exception) {
             XLog.e(TAG, "处理 MESSAGE_CREATE 失败: ${e.message}", e)
         }

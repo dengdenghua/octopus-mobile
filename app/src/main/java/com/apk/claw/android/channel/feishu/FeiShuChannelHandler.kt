@@ -61,8 +61,10 @@ class FeiShuChannelHandler(
                                 rawContent
                             }
                             lastMessageId = messageId
-                            lastSenderOpenId = runCatching { event.event.sender?.senderId?.openId }.getOrNull()
-                            ChannelManager.dispatchMessage(channel, text, messageId)
+                            val senderOpenId = runCatching { event.event.sender?.senderId?.openId }.getOrNull()
+                            lastSenderOpenId = senderOpenId
+                            // ACL 授权主体用发送者 openId(按人),随消息原子传入,消除 TOCTOU。
+                            ChannelManager.dispatchMessage(channel, text, messageId, senderOpenId)
                         }
                     } catch (e: Exception) {
                         e.printStackTrace()

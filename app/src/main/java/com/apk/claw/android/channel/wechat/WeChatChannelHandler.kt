@@ -232,7 +232,8 @@ class WeChatChannelHandler(
 
         XLog.i(TAG, "[${channel.displayName}] 收到消息: ${body.take(80)}, from=${fromUserId.takeLast(16)}")
         lastFromUserId = fromUserId
-        ChannelManager.dispatchMessage(channel, body, msg.contextToken ?: "")
+        // ACL 授权主体用发送者 fromUserId(按人),随消息原子传入,消除 TOCTOU。
+        ChannelManager.dispatchMessage(channel, body, msg.contextToken ?: "", fromUserId)
     }
 
     // ==================== ChannelHandler 接口实现 ====================

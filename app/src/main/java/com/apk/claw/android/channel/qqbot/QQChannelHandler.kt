@@ -46,7 +46,8 @@ class QQChannelHandler(
             lastMessageId = messageId
             lastMsgSeq = 0
             XLog.i(TAG, "[${channel.displayName}] 收到消息: $content, isGroup=$isGroup, openId=$openId")
-            ChannelManager.dispatchMessage(channel, content, messageId)
+            // ACL 授权主体用发送者 openId(getLastSenderId 已按 group/c2c 前缀区分),原子捕获后传入,消除 TOCTOU。
+            ChannelManager.dispatchMessage(channel, content, messageId, getLastSenderId())
         }
         scope.launch {
             try {

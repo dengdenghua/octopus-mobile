@@ -3,6 +3,55 @@
 All notable changes to Octopus Mobile are documented here.
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Added
+- **detekt static-analysis gate** (`io.gitlab.arturbosch.detekt` 1.23.8): Kotlin
+  static analysis wired as a **baseline ratchet** — the 2,631 pre-existing findings
+  are grandfathered in `app/detekt-baseline.xml`, and only *new* issues fail the
+  build. Added to CI (`ci.yml`) alongside the existing Android Lint ratchet.
+  Verified on the current Gradle 9.3.1 / AGP 9.1 / Kotlin 2.1.20 toolchain, and
+  proven to actually fail on a newly-introduced empty-catch-block.
+
+### Changed
+- **Docs honesty pass** (`CODE_WIKI.md`): the top-level feature blurbs and the
+  core-execution-flow narrative previously described `BrainModeSelector` local/remote
+  routing, outbound task delegation to the Runtime, and B3 `deepEvolve`/`CanaryManager`
+  self-evolution as if live. They are now marked with their real wiring status
+  (inbound remote control is real & gated; outbound delegation is an unwired `TODO`;
+  only B1/B2 evolution is active) to match the README implementation-status table.
+
+### Security
+- **Channel ACL now authorizes by message author, not by conversation, and is
+  race-free** (`ChannelManager`/`ChannelSetup` + all 6 handlers). The authorization
+  subject (`senderId`) now travels atomically *with* each message through
+  `dispatchMessage(...)` instead of being re-read from a shared `getLastSenderId()`
+  field after the fact — closing a TOCTOU where concurrent messages could authorize
+  the wrong sender. Discord (`author.id`) and Telegram (`from.id`) previously
+  authorized by **channel/chat id**, so *any* group member passed ACL once the
+  conversation was bound; they now authorize by the actual author. Reply routing
+  still uses the conversation id (correctly decoupled from the auth subject).
+  Regression test: `ChannelDispatchSenderIdTest`. *Residual:* DingTalk-group and
+  QQ-group member-level granularity is unchanged (still conversation-scoped for
+  groups) — tracked as a follow-up.
+- **Mother-brain insecure-transport toggle can no longer be flipped remotely**
+  (`DualConfigWriter`): `KEY_OCTOPUS_ALLOW_INSECURE_RUNTIME` was missing from the
+  remote-write blocklist, so a malicious/MITM'd Runtime could set it to `true` and
+  downgrade the WebSocket to cleartext `ws://` (bypassing `MobileRuntimeSecurity`,
+  which otherwise blocks remote cleartext). It is now blocked alongside the other
+  security-policy switches — the flag must be enabled locally.
+
+### Reliability
+- **VLM goal-verification can no longer hang the agent loop**
+  (`DefaultAgentService.shouldRepairForGoal`): the `runBlocking { GoalVerifier.verify() }`
+  call is now wrapped in `withTimeoutOrNull(35s)`. A stuck VLM network call previously
+  blocked the single execution thread indefinitely; it now falls back to the existing
+  fail-open path (treat as "can't verify", never blocks completion) after a hard ceiling.
+- **Server multi-worker footgun documented** (`server/README.md`): the previous advice
+  to "add gunicorn workers for high concurrency" silently breaks the in-process rate
+  limiter (`_rl`) and `RemoteRelayHub` — each worker holds its own copy. The note now
+  requires externalizing both to Redis *before* scaling horizontally.
+
 ## [0.0.2] — 2026-06-14
 
 A round focused on **messaging channels, feature discoverability, an iOS-flavored

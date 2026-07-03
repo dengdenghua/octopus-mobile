@@ -28,7 +28,7 @@ class ChannelSetup(
             wechatApiBaseUrl = KVUtils.getWechatApiBaseUrl().ifEmpty { null }
         )
         ChannelManager.setOnMessageReceivedListener(object : ChannelManager.OnMessageReceivedListener {
-            override fun onMessageReceived(channel: Channel, message: String, messageID: String) {
+            override fun onMessageReceived(channel: Channel, message: String, messageID: String, senderId: String?) {
                 val app = ClawApplication.instance
                 if (!ClawAccessibilityService.isRunning()) {
                     ChannelManager.sendMessage(channel, app.getString(R.string.channel_msg_no_accessibility), messageID)
@@ -37,7 +37,7 @@ class ChannelSetup(
                 }
                 // 安全：发送者鉴权（ACL）—— 仅授权用户可驱动 Agent 控制设备。
                 // 默认 TOFU：首个发送者自动绑定为该通道 owner，其后未授权发送者一律拒绝。
-                val senderId = ChannelManager.getLastSenderId(channel)
+                // senderId 随消息原子传入(作者标识),不再回读 getLastSenderId 共享字段 → 消除 TOCTOU。
                 if (ChannelAccessControl.authorize(channel, senderId) == ChannelAccessControl.Decision.DENY) {
                     ChannelManager.sendMessage(
                         channel,
