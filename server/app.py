@@ -662,6 +662,15 @@ def _user(c: sqlite3.Connection, user_id: str) -> sqlite3.Row:
     return c.execute("SELECT * FROM users WHERE user_id = ?", (user_id,)).fetchone()
 
 
+def _total_available(c: sqlite3.Connection, user_id: str) -> int:
+    """返回用户当前总可用额度(永久积分 + 当月赠送 + 今日免费额度)。"""
+    row = _user(c, user_id)
+    paid = int(row["credits"] or 0)
+    gift = _gift_available(c, user_id)
+    daily = _daily_free_available(c, user_id)
+    return paid + gift + daily
+
+
 def _record_credit_txn(
     c: sqlite3.Connection,
     user_id: str,
@@ -669,9 +678,14 @@ def _record_credit_txn(
     source: str,
     detail: str = "",
     ref_id: str = "",
+    balance_after: int | None = None,
 ) -> int:
-    """Record a credit change in the ledger and return the new balance."""
-    bal = _user(c, user_id)["credits"]
+    """Record a credit change in the ledger and return the new balance.
+
+    balance_after 默认取总可用额度(paid + gift + daily),使流水能反映用户真实可用余额。
+    调用方也可显式传入固定值(例如只想记录永久积分余额)。
+    """
+    bal = _total_available(c, user_id) if balance_after is None else balance_after
     c.execute(
         "INSERT INTO credit_transactions(user_id, delta, balance_after, source, detail, ref_id, ts) "
         "VALUES(?,?,?,?,?,?,?)",
@@ -1610,9 +1624,13 @@ def _settle(c: sqlite3.Connection, order: sqlite3.Row) -> int:
     currency = _normalize_currency(order["currency"] or "CNY")
     paid, gift = _goods_credits(g, currency)
     if PAYMENT_PROVIDER == "mock":
-        granted = _grant_free(c, uid, paid, source="order",
-                              detail=f"订单 {order['order_no']} {g['title']}",
-                              ref_id=order["order_no"])  # 内测免费充值:受每账号上限约束
+        # mock 订单模拟真实付费,应按商品全额发放永久积分,不受 FREE_CAP 限制。
+        # 否则 query_order 返回的 credits 会与商品权益对不上,造成前端/测试困惑。
+        c.execute("UPDATE users SET credits = credits + ? WHERE user_id = ?", (paid, uid))
+        _record_credit_txn(c, uid, paid, source="order",
+                           detail=f"订单 {order['order_no']} {g['title']}",
+                           ref_id=order["order_no"])
+        granted = paid
     else:
         c.execute("UPDATE users SET credits = credits + ? WHERE user_id = ?", (paid, uid))
         _record_credit_txn(c, uid, paid, source="order",
@@ -1857,6 +1875,8 @@ def _consume_daily_free(c: sqlite3.Connection, user_id: str, want: int) -> int:
             "daily_free_date = ? WHERE user_id = ?",
             (_today_str(), take, take, _today_str(), user_id),
         )
+        _record_credit_txn(c, user_id, -take, source="daily_consume",
+                           detail="每日免费额度抵扣", ref_id="")
     return take
 
 
@@ -1873,6 +1893,8 @@ def _refund_daily_free(c: sqlite3.Connection, user_id: str, amount: int) -> int:
     refund = min(used, amount)
     if refund:
         c.execute("UPDATE users SET daily_free_used = daily_free_used - ? WHERE user_id = ?", (refund, user_id))
+        _record_credit_txn(c, user_id, refund, source="daily_refund",
+                           detail="每日免费额度退还", ref_id="")
     return refund
 
 
@@ -1895,6 +1917,8 @@ def _consume_gift(c: sqlite3.Connection, user_id: str, want: int) -> int:
     if take:
         c.execute("UPDATE users SET gift_credits = gift_credits - ?, gift_month = ? WHERE user_id = ?",
                   (take, _this_month(), user_id))
+        _record_credit_txn(c, user_id, -take, source="gift_consume",
+                           detail="月度赠送积分抵扣", ref_id="")
     return take
 
 
@@ -1907,6 +1931,8 @@ def _refund_gift(c: sqlite3.Connection, user_id: str, amount: int) -> int:
         return 0
     c.execute("UPDATE users SET gift_credits = gift_credits + ?, gift_month = ? WHERE user_id = ?",
               (amount, _this_month(), user_id))
+    _record_credit_txn(c, user_id, amount, source="gift_refund",
+                       detail="月度赠送积分退还", ref_id="")
     return amount
 
 

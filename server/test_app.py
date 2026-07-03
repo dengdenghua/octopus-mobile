@@ -71,6 +71,8 @@ def clean_state():
             c.execute(f"DELETE FROM {t}")
         c.commit()
     app_module._rl.clear()
+    # 生产模型目录已移除 agnes chat 模型,但部分旧测试仍依赖它;在每个测试里临时注入,避免改生产默认配置。
+    _inject_agnes_chat_model()
     yield
     app_module._rl.clear()
 
@@ -85,6 +87,20 @@ def client():
 # ─────────────────────────── helpers ───────────────────────────
 def _now_ms() -> int:
     return int(time.time() * 1000)
+
+
+def _inject_agnes_chat_model():
+    """把 agnes-2.0-flash 临时注入测试用模型目录,保持旧测试兼容。"""
+    spec = {"provider": "agnes", "multiplier": 0.2, "display_name": "Agnes", "tier": "fast"}
+    app_module.MODEL_SPEC.setdefault("agnes-2.0-flash", spec)
+    if not any(m.get("id") == "agnes-2.0-flash" for m in app_module.MODELS):
+        app_module.MODELS.append({
+            "id": "agnes-2.0-flash",
+            "display_name": "Agnes",
+            "tier": "fast",
+            "multiplier": 0.2,
+            "provider": "agnes",
+        })
 
 
 def _email_register(client, email="alice@example.com"):
@@ -1242,6 +1258,41 @@ class TestCreditLedger:
         d = r.json()
         assert len(d["items"]) == 1
         assert d["total"] >= 1
+
+    def test_gift_and_daily_usage_recorded_in_ledger(self, client, monkeypatch):
+        """月度赠送/每日免费额度的抵扣与退还都必须写入 credit_transactions,解决账本不平。"""
+        monkeypatch.setattr(app_module, "FREE_DAILY_CREDITS", 5)
+        monkeypatch.setattr(app_module, "CREDITS_PER_1K_TOKENS", 1.0)
+        token, uid = _email_register(client, "ledger6@example.com")
+        with closing(db()) as c:
+            c.execute(
+                "UPDATE users SET credits = 10, gift_credits = 3, gift_month = ?, daily_free_used = 0, daily_free_date = ? "
+                "WHERE user_id = ?",
+                (app_module._this_month(), app_module._today_str(), uid),
+            )
+            c.commit()
+
+        reserved = app_module._reserve_usage_credits(uid, 10, ref_id="ledger_hold")
+        assert reserved == {"gift": 3, "daily": 5, "paid": 2}
+        # 实际只产生 1 积分成本,会触发 gift/daily/paid 全部退回
+        actual = app_module._reconcile_usage(uid, "agnes-2.0-flash", 1000, 0, 1.0, 10,
+                                              ref_id="ledger_hold", reserved=reserved)
+        assert actual == 1
+
+        r = client.get("/account/credits/transactions", headers={"Authorization": f"Bearer {token}"})
+        assert r.status_code == 200
+        items = r.json()["items"]
+        sources = {tx["source"]: tx for tx in items}
+        # 抵扣
+        assert sources["gift_consume"]["delta"] == -3
+        assert sources["daily_consume"]["delta"] == -5
+        assert sources["usage_hold"]["delta"] == -2
+        # 退还:实际只消耗 1 积分且优先走 gift,因此 gift 退 2,其余全额退。
+        assert sources["gift_refund"]["delta"] == 2
+        assert sources["daily_refund"]["delta"] == 5
+        assert sources["usage_refund"]["delta"] == 2
+        # 关键:balanceAfter 反映总可用额度,而不是仅永久积分
+        assert sources["usage_hold"]["balanceAfter"] == 8  # 18-10
 
 
 class TestAccountUsage:
