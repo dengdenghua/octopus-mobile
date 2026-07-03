@@ -2,14 +2,17 @@ package com.apk.claw.android.ui.desktop
 
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -39,6 +42,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -51,6 +55,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.focus.onFocusChanged
 import kotlin.math.roundToInt
 import com.apk.claw.android.R
 import com.apk.claw.android.plugin.MiniAppRegistry
@@ -86,6 +91,23 @@ fun Modifier.holoGlass(corner: Dp = 12.dp, fillAlpha: Float = 1f): Modifier =
     this.clip(RoundedCornerShape(corner))
         .background(if (fillAlpha >= 1f) Holo.Panel else Holo.Panel.copy(alpha = fillAlpha))
         .border(1.dp, Holo.Border, RoundedCornerShape(corner))
+
+/**
+ * 全息焦点修饰器 —— D-pad/方向键导航时,焦点元素自动高亮:
+ * 聚焦 = 柔黄 2dp 边框 + 轻微放大(1.03x);失焦 = 原样。
+ * 触屏点击同样触发 focus,视觉一致。
+ */
+@Composable
+fun Modifier.holoFocus(shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(12.dp)): Modifier {
+    var focused by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(if (focused) 1.03f else 1f, label = "focusScale")
+    val bw by animateDpAsState(if (focused) 2.dp else 1.dp, label = "focusBorder")
+    return this
+        .onFocusChanged { focused = it.isFocused }
+        .focusable()
+        .graphicsLayer { scaleX = scale; scaleY = scale }
+        .border(bw, if (focused) Holo.Accent else Holo.Border, shape)
+}
 
 /**
  * 全屏科幻壁纸:近黑底 + 几道发光霓虹光带(青/品红,多遍描边伪辉光),呼应 OpenRoom 壁纸。
@@ -179,7 +201,8 @@ fun HoloDot(color: Color) {
 }
 
 /**
- * 可拖拽浮动窗口(移植 OpenRoom windowManager):玻璃框 + 标题栏(拖动)+ 最小化/最大化/关闭。
+ * 可拖拽全息浮动窗口:半透明玻璃框 + 标题栏(拖动)+ 最小化/最大化/关闭。
+ * 焦点高亮:聚焦时柔黄边框 + 轻微放大,呼应科幻 HUD。
  * 标题栏按住拖动移动窗口;点窗口任意处触发 onFocus(供上层置顶)。
  *  - [onMinimize] 非空时显示「—」:交给上层(收进任务栏)。
  *  - 「□/❐」最大化 / 还原:窗口内部状态,最大化时铺满桌面区(留顶栏/底部输入空间)。
@@ -200,6 +223,13 @@ fun HoloWindow(
     var off by remember { mutableStateOf(with(density) { IntOffset(startX.roundToPx(), startY.roundToPx()) }) }
     var size by remember { mutableStateOf(androidx.compose.ui.unit.DpSize(width, height)) }
     var maximized by remember { mutableStateOf(false) }
+    var focused by remember { mutableStateOf(false) }
+
+    // 全息透明度:聚焦时更实(0.72),失焦更透(0.55)
+    val glassAlpha by animateFloatAsState(if (focused) 0.72f else 0.55f, label = "glassAlpha")
+    // 焦点边框宽度
+    val borderWidth by animateDpAsState(if (focused) 2.dp else 1.dp, label = "winBorder")
+    val borderColor = if (focused) Holo.Accent else Holo.Border
 
     // 最大化:铺满桌面区(避开顶栏 ~48dp、底部输入+任务栏 ~150dp);还原回用户的 off/size。
     val frameMod = if (maximized) {
@@ -209,15 +239,19 @@ fun HoloWindow(
     }
     Box(
         frameMod
-            .holoGlass(12.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(Holo.Panel.copy(alpha = glassAlpha))
+            .border(borderWidth, borderColor, RoundedCornerShape(14.dp))
+            .onFocusChanged { focused = it.isFocused }
+            .focusable()
             .pointerInput(Unit) { detectDragGestures(onDragStart = { onFocus() }) { c, _ -> c.consume() } },
     ) {
         Column(Modifier.fillMaxSize()) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(30.dp)
-                    .background(Holo.Surface2)
+                    .height(34.dp)
+                    .background(Holo.Surface2.copy(alpha = 0.7f))
                     .pointerInput(maximized) {
                         if (!maximized) {
                             detectDragGestures(onDragStart = { onFocus() }) { change, drag ->
@@ -226,24 +260,24 @@ fun HoloWindow(
                             }
                         }
                     }
-                    .padding(start = 10.dp),
+                    .padding(start = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(title, color = Holo.TextHud, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                Text(title, color = Holo.TextHud, fontSize = 13.sp, modifier = Modifier.weight(1f))
                 if (onMinimize != null) {
                     Box(
-                        Modifier.size(30.dp).clickable(onClick = onMinimize),
+                        Modifier.size(32.dp).clickable(onClick = onMinimize),
                         contentAlignment = Alignment.Center,
-                    ) { Text("—", color = Holo.TextSecondary, fontSize = 15.sp) }
+                    ) { Text("—", color = Holo.TextSecondary, fontSize = 16.sp) }
                 }
                 Box(
-                    Modifier.size(30.dp).clickable { maximized = !maximized; onFocus() },
+                    Modifier.size(32.dp).clickable { maximized = !maximized; onFocus() },
                     contentAlignment = Alignment.Center,
-                ) { Text(if (maximized) "❐" else "□", color = Holo.TextSecondary, fontSize = 13.sp) }
+                ) { Text(if (maximized) "❐" else "□", color = Holo.TextSecondary, fontSize = 14.sp) }
                 Box(
-                    Modifier.size(30.dp).clickable(onClick = onClose),
+                    Modifier.size(32.dp).clickable(onClick = onClose),
                     contentAlignment = Alignment.Center,
-                ) { Text("×", color = Holo.TextSecondary, fontSize = 18.sp) }
+                ) { Text("×", color = Holo.TextSecondary, fontSize = 20.sp) }
             }
             Box(Modifier.weight(1f)) { content() }
         }
@@ -252,7 +286,7 @@ fun HoloWindow(
             Box(
                 Modifier
                     .align(Alignment.BottomEnd)
-                    .size(22.dp)
+                    .size(24.dp)
                     .pointerInput(Unit) {
                         detectDragGestures(onDragStart = { onFocus() }) { change, drag ->
                             change.consume()
@@ -265,7 +299,7 @@ fun HoloWindow(
                         }
                     },
                 contentAlignment = Alignment.Center,
-            ) { Text("⌟", color = Holo.AccentDim, fontSize = 14.sp) }
+            ) { Text("⌟", color = Holo.AccentDim, fontSize = 16.sp) }
         }
     }
 }

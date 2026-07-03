@@ -97,15 +97,14 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * 横屏「桌面模式」——「一台 Agent 的电脑」(v1)。
+ * 「数字管家桌面」—— 科幻全息交互桌面(v2)。
  *
- *  - **左**:一块可预览网页的浏览器桌面(复用 [BrowserEngine]/`SystemWebViewEngine`),并把该引擎
- *    注册为 [ToolRegistry] 的当前引擎 —— Agent 的 `browser_navigate`/`browser_evaluate` 等即作用于
- *    这块 WebView。空闲(无 URL)显示壁纸(时钟 + 母体连接状态)。
- *  - **右**:现有 [ChatScreen] 对话区,在右侧下达指令。
- *
- * v1:接入引擎事件 —— 加载进度条、「正在打开 X」提示、地址栏跟随 Agent 导航;壁纸活起来
- * (实时时钟 + 连接状态)。后续:对话收起为悬浮球、专用设备默认启动/常亮。
+ * 统一触屏 + D-pad 焦点导航,适配手机/平板/TV 投屏:
+ *  - 全息半透明浮动窗口(聚焦时更实、失焦更透,柔黄边框高亮)
+ *  - 所有交互元素可 D-pad 聚焦,方向键遍历
+ *  - overscan 安全区(四边 48dp),TV 投屏不裁切
+ *  - 放大字号(3m 观看距离可读)
+ *  - 复用 [BrowserEngine] + [ChatAgentBridge],触屏与遥控器同一套交互
  *
  * 锁横屏 + `configChanges` 防旋转 recreate 闪断 WebView(见 AndroidManifest)。
  */
@@ -284,7 +283,8 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
 
     // 布局(对齐 OpenRoom 全景):壁纸打底 + 全宽顶栏 / 左应用栏 | 中间(壁纸 / 浏览器);
     // 直播间/对话/档案等一律为平级可拖浮动窗口,浮于 shell 之上;屏幕底部输入 + 任务栏。
-    Box(Modifier.fillMaxSize()) {
+    // overscan: TV 投屏安全区(四边 48dp),手机上也不顶到边。
+    Box(Modifier.fillMaxSize().padding(48.dp)) {
         HoloBackground(Modifier.fillMaxSize())
         Column(Modifier.fillMaxSize()) {
             DesktopTopBar(
@@ -374,10 +374,11 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
         // 右下角:当前角色头像(点击打开角色档案窗)
         Box(
             modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 54.dp)
-                .size(44.dp).clip(CircleShape).border(2.dp, Holo.Accent, CircleShape)
+                .size(48.dp).clip(CircleShape).border(2.dp, Holo.Accent, CircleShape)
+                .holoFocus(CircleShape)
                 .clickable { openWindow(WinContent.Character) },
             contentAlignment = Alignment.Center,
-        ) { CharacterAvatar(44.dp) }
+        ) { CharacterAvatar(48.dp) }
     }
 }
 
@@ -411,28 +412,28 @@ private fun DesktopTaskbar(
     val timeText = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }.format(Date(nowMs))
 
     Row(
-        modifier = Modifier.fillMaxWidth().height(30.dp).background(Holo.Panel.copy(alpha = 0.85f))
-            .padding(horizontal = 10.dp),
+        modifier = Modifier.fillMaxWidth().height(36.dp).background(Holo.Panel.copy(alpha = 0.8f))
+            .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Box(
-            Modifier.size(24.dp).clip(RoundedCornerShape(6.dp)).clickable(onClick = onStart),
+            Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).holoFocus(RoundedCornerShape(6.dp)).clickable(onClick = onStart),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Filled.GridView, contentDescription = "开始", tint = Holo.Accent.copy(alpha = 0.9f), modifier = Modifier.size(15.dp))
+            Icon(Icons.Filled.GridView, contentDescription = "开始", tint = Holo.Accent.copy(alpha = 0.9f), modifier = Modifier.size(17.dp))
         }
         // 最小化的窗口:任务栏按钮,点击还原
         minimized.forEach { (id, kind) ->
             Text(
                 windowSpec(kind, 0, charName).title.substringBefore(" ·").let { if (it.length > 6) it.take(6) else it },
-                color = Holo.TextHud, fontSize = 10.sp,
-                modifier = Modifier.clip(RoundedCornerShape(5.dp)).background(Holo.Surface2)
-                    .clickable { onRestore(id) }.padding(horizontal = 8.dp, vertical = 3.dp),
+                color = Holo.TextHud, fontSize = 12.sp,
+                modifier = Modifier.clip(RoundedCornerShape(5.dp)).background(Holo.Surface2.copy(alpha = 0.7f))
+                    .holoFocus(RoundedCornerShape(5.dp)).clickable { onRestore(id) }.padding(horizontal = 10.dp, vertical = 4.dp),
             )
         }
         Spacer(Modifier.weight(1f))
-        Text(timeText, color = Holo.TextSecondary, fontSize = 10.sp)
+        Text(timeText, color = Holo.TextSecondary, fontSize = 12.sp)
     }
 }
 
@@ -472,7 +473,7 @@ private fun ChatContent(convo: List<DeskMsg>, running: Boolean, toolNote: String
             Box(Modifier.weight(1f)) {
                 if (convo.isEmpty() && !running) {
                     Box(Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
-                        Text("点下面的输入框,和我说点什么。", color = Holo.TextSecondary, fontSize = 13.sp)
+                        Text("点下面的输入框,和我说点什么。", color = Holo.TextSecondary, fontSize = 15.sp)
                     }
                 } else {
                     androidx.compose.foundation.lazy.LazyColumn(
@@ -531,8 +532,8 @@ private fun LiveRoomContent(
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             HoloDot(Holo.Live)
-            Text("LIVE", color = Holo.Live, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-            Text("👁 $likeCount", color = Holo.TextSecondary, fontSize = 10.sp)
+            Text("LIVE", color = Holo.Live, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Text("👁 $likeCount", color = Holo.TextSecondary, fontSize = 12.sp)
         }
         // 右上:场景生成状态
         if (sceneLoading) {
@@ -572,7 +573,7 @@ private fun LiveRoomContent(
                         .background(Color(0xCC0E0F12)).padding(horizontal = 14.dp, vertical = 8.dp),
                 ) {
                     Column(Modifier.verticalScroll(scroll)) {
-                        Text(subtitle.ifBlank { "……" }, color = Holo.TextHud, fontSize = 14.sp, lineHeight = 20.sp)
+                        Text(subtitle.ifBlank { "……" }, color = Holo.TextHud, fontSize = 16.sp, lineHeight = 22.sp)
                     }
                 }
             }
@@ -619,7 +620,7 @@ private fun DialogBubble(m: DeskMsg) {
             Text(
                 m.text,
                 color = if (m.fromUser) Color(0xFF1A1A1A) else Holo.TextHud,
-                fontSize = 14.sp, lineHeight = 20.sp,
+                fontSize = 16.sp, lineHeight = 22.sp,
             )
         }
         if (!m.fromUser) Spacer(Modifier.weight(0.18f))
@@ -651,51 +652,53 @@ private fun DesktopReplyBar(running: Boolean, onSend: (String) -> Unit, onStop: 
     val quick = remember { listOf("你能做什么?", "帮我打开一个网页", "整理一下今天的信息") }
     val charName = CharacterRegistry.current.name
     Column(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         // 快捷回复气泡(运行中隐藏,避免误触)
         if (!running) {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 quick.forEach { q ->
                     Text(
-                        q, color = Holo.TextHud, fontSize = 12.sp,
+                        q, color = Holo.TextHud, fontSize = 14.sp,
                         modifier = Modifier
                             .clip(RoundedCornerShape(10.dp))
-                            .background(Holo.Surface2)
+                            .background(Holo.Surface2.copy(alpha = 0.7f))
+                            .holoFocus(RoundedCornerShape(10.dp))
                             .clickable { onSend(q) }
-                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
                     )
                 }
             }
         }
         // 输入胶囊(黄):居中紧凑、更薄,窄屏自适应
         Row(
-            modifier = Modifier.widthIn(max = 380.dp).fillMaxWidth().height(40.dp)
-                .clip(RoundedCornerShape(20.dp))
+            modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth().height(46.dp)
+                .clip(RoundedCornerShape(23.dp))
                 .background(Holo.Accent)
-                .padding(start = 16.dp, end = 4.dp),
+                .padding(start = 18.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             androidx.compose.foundation.text.BasicTextField(
                 value = input,
                 onValueChange = { input = it },
                 singleLine = true,
-                textStyle = androidx.compose.ui.text.TextStyle(color = Color(0xFF1A1A1A), fontSize = 13.sp),
+                textStyle = androidx.compose.ui.text.TextStyle(color = Color(0xFF1A1A1A), fontSize = 15.sp),
                 cursorBrush = androidx.compose.ui.graphics.SolidColor(Color(0xFF1A1A1A)),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                 keyboardActions = KeyboardActions(onSend = { if (input.isNotBlank()) { onSend(input); input = "" } }),
                 modifier = Modifier.weight(1f),
                 decorationBox = { inner ->
                     if (input.isEmpty()) {
-                        Text("$charName 在等你回复…", color = Color(0x991A1A1A), fontSize = 13.sp, maxLines = 1)
+                        Text("$charName 在等你回复…", color = Color(0x991A1A1A), fontSize = 15.sp, maxLines = 1)
                     }
                     inner()
                 },
             )
             Box(
-                Modifier.size(32.dp).clip(CircleShape).background(Color(0xFF1A1A1A))
+                Modifier.size(36.dp).clip(CircleShape).background(Color(0xFF1A1A1A))
+                    .holoFocus(CircleShape)
                     .clickable {
                         if (running) onStop()
                         else if (input.isNotBlank()) { onSend(input); input = "" }
@@ -705,7 +708,7 @@ private fun DesktopReplyBar(running: Boolean, onSend: (String) -> Unit, onStop: 
                 Icon(
                     if (running) Icons.Filled.Stop else Icons.Filled.ArrowUpward,
                     contentDescription = if (running) "停止" else "发送",
-                    tint = Holo.Accent, modifier = Modifier.size(18.dp),
+                    tint = Holo.Accent, modifier = Modifier.size(20.dp),
                 )
             }
         }
@@ -729,35 +732,35 @@ private fun DesktopTopBar(
     val timeText = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }.format(Date(nowMs))
 
     Row(
-        modifier = Modifier.fillMaxWidth().height(32.dp)
-            .background(Holo.Panel.copy(alpha = 0.85f))
-            .padding(horizontal = 12.dp),
+        modifier = Modifier.fillMaxWidth().height(38.dp)
+            .background(Holo.Panel.copy(alpha = 0.8f))
+            .padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Icon(Icons.Filled.DesktopWindows, contentDescription = null, tint = Holo.Accent.copy(alpha = 0.9f), modifier = Modifier.size(14.dp))
-        Text("本地虚拟电脑", color = Holo.TextHud, fontSize = 12.sp)
+        Icon(Icons.Filled.DesktopWindows, contentDescription = null, tint = Holo.Accent.copy(alpha = 0.9f), modifier = Modifier.size(16.dp))
+        Text("数字管家", color = Holo.TextHud, fontSize = 14.sp, fontWeight = FontWeight.Medium)
         Spacer(Modifier.weight(1f))
         HoloDot(connColor)
-        Text(connLabel, color = Holo.TextSecondary, fontSize = 10.sp)
-        Text(timeText, color = Holo.Accent.copy(alpha = 0.9f), fontSize = 10.sp)
-        Spacer(Modifier.width(2.dp))
+        Text(connLabel, color = Holo.TextSecondary, fontSize = 12.sp)
+        Text(timeText, color = Holo.Accent.copy(alpha = 0.9f), fontSize = 12.sp)
+        Spacer(Modifier.width(4.dp))
         // 场景生成开关(每轮生成会扣积分,给用户一个显式闸门)
         Text(
             if (sceneOn) "场景:开" else "场景:关",
-            color = if (sceneOn) Holo.Accent else Holo.TextSecondary, fontSize = 11.sp,
-            modifier = Modifier.clip(RoundedCornerShape(5.dp)).clickable(onClick = onToggleScene)
-                .padding(horizontal = 6.dp, vertical = 3.dp),
+            color = if (sceneOn) Holo.Accent else Holo.TextSecondary, fontSize = 13.sp,
+            modifier = Modifier.clip(RoundedCornerShape(6.dp)).holoFocus(RoundedCornerShape(6.dp)).clickable(onClick = onToggleScene)
+                .padding(horizontal = 8.dp, vertical = 4.dp),
         )
         // 退出桌面模式(返回上一界面)
         Row(
-            modifier = Modifier.clip(RoundedCornerShape(5.dp)).clickable(onClick = onExit)
-                .padding(horizontal = 6.dp, vertical = 3.dp),
+            modifier = Modifier.clip(RoundedCornerShape(6.dp)).holoFocus(RoundedCornerShape(6.dp)).clickable(onClick = onExit)
+                .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(3.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Icon(Icons.Filled.Close, contentDescription = "退出桌面", tint = Holo.TextSecondary, modifier = Modifier.size(13.dp))
-            Text("退出", color = Holo.TextSecondary, fontSize = 11.sp)
+            Icon(Icons.Filled.Close, contentDescription = "退出桌面", tint = Holo.TextSecondary, modifier = Modifier.size(15.dp))
+            Text("退出", color = Holo.TextSecondary, fontSize = 13.sp)
         }
     }
 }
@@ -813,26 +816,27 @@ private fun RailItem(
         modifier = Modifier.fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .background(if (active) Holo.Surface2 else Color.Transparent)
+            .holoFocus(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
-            .padding(vertical = 7.dp),
+            .padding(vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(
-            Modifier.size(40.dp).clip(RoundedCornerShape(11.dp))
+            Modifier.size(44.dp).clip(RoundedCornerShape(11.dp))
                 .background(if (active) Holo.Accent.copy(alpha = 0.14f) else Holo.AvatarBg),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
                 icon, contentDescription = label,
                 tint = if (active) Holo.Accent else Holo.TextHud.copy(alpha = 0.7f),
-                modifier = Modifier.size(22.dp),
+                modifier = Modifier.size(24.dp),
             )
         }
-        Spacer(Modifier.height(3.dp))
+        Spacer(Modifier.height(4.dp))
         Text(
             label.take(4),
             color = if (active) Holo.Accent else Holo.TextHud.copy(alpha = 0.6f),
-            fontSize = 9.sp, maxLines = 1,
+            fontSize = 11.sp, maxLines = 1,
         )
     }
 }
