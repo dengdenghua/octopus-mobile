@@ -40,14 +40,15 @@ class QQChannelHandler(
         }
 
         QBotApiClient.getInstance().init(ClawApplication.instance)
-        QBotWebSocketManager.getInstance().setOnQQMessageListener { isGroup, openId, messageId, content ->
+        QBotWebSocketManager.getInstance().setOnQQMessageListener { isGroup, openId, messageId, content, senderId ->
             lastOpenId = openId
             lastIsGroup = isGroup
             lastMessageId = messageId
             lastMsgSeq = 0
-            XLog.i(TAG, "[${channel.displayName}] 收到消息: $content, isGroup=$isGroup, openId=$openId")
-            // ACL 授权主体用发送者 openId(getLastSenderId 已按 group/c2c 前缀区分),原子捕获后传入,消除 TOCTOU。
-            ChannelManager.dispatchMessage(channel, content, messageId, getLastSenderId())
+            XLog.i(TAG, "[${channel.displayName}] 收到消息: $content, isGroup=$isGroup, openId=$openId, senderId=$senderId")
+            // ACL 授权主体用 senderId(群聊=member_openid,单聊=userOpenId),按人而非会话授权。
+            // getLastSenderId() 保留给路由回复(群聊返回 group:openId 用于回复到群)。
+            ChannelManager.dispatchMessage(channel, content, messageId, senderId)
         }
         scope.launch {
             try {

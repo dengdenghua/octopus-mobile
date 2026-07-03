@@ -63,7 +63,7 @@ public class QBotWebSocketManager {
     private List<ConnectionStateListener> connectionStateListeners = new CopyOnWriteArrayList<>();
 
     public interface OnQQMessageListener {
-        void onQQMessage(boolean isGroup, String openId, String messageId, String content);
+        void onQQMessage(boolean isGroup, String openId, String messageId, String content, String senderId);
     }
     
     /**
@@ -446,7 +446,7 @@ public class QBotWebSocketManager {
             if (userOpenId != null) {
                 OnQQMessageListener listener = qqMessageListener;
                 if (listener != null) {
-                    listener.onQQMessage(false, userOpenId, c2cMessage.getId(), c2cMessage.getContent() != null ? c2cMessage.getContent() : "");
+                    listener.onQQMessage(false, userOpenId, c2cMessage.getId(), c2cMessage.getContent() != null ? c2cMessage.getContent() : "", userOpenId);
                 }
             }
 
@@ -481,11 +481,13 @@ public class QBotWebSocketManager {
             }
 
             String groupOpenId = groupMessage.getGroupOpenid();
+            String senderMemberOpenId = groupMessage.getAuthor() != null ? groupMessage.getAuthor().getMemberOpenid() : null;
             if (groupOpenId != null) {
                 OnQQMessageListener listener = qqMessageListener;
                 if (listener != null) {
                     String content = groupMessage.getContent() != null ? groupMessage.getContent() : "";
-                    listener.onQQMessage(true, groupOpenId, groupMessage.getId(), content);
+                    // ACL 授权主体用 member_openid(按人),openId(群 openid)保留给路由回复
+                    listener.onQQMessage(true, groupOpenId, groupMessage.getId(), content, senderMemberOpenId);
                 }
             }
 

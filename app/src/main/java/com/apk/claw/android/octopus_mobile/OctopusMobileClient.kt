@@ -44,11 +44,29 @@ open class OctopusMobileClient(
 
     private val gson = Gson()
 
-    private val httpClient: OkHttpClient = OctoHttp.shared.newBuilder()
-        .pingInterval(30, TimeUnit.SECONDS)
-        .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(0, TimeUnit.MILLISECONDS)  // WebSocket 长连接，无读超时
-        .build()
+    private val httpClient: OkHttpClient = run {
+        val builder = OctoHttp.shared.newBuilder()
+            .pingInterval(30, TimeUnit.SECONDS)
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(0, TimeUnit.MILLISECONDS)  // WebSocket 长连接，无读超时
+        // 证书固定：用户在设置中配置 runtime 服务器的 SPKI pin 后，
+        // 即使攻击者持有受信任 CA 也无法 MITM wss:// 连接。
+        val certPin = KVUtils.getRuntimeCertPin()
+        if (certPin.isNotBlank()) {
+            val host = try {
+                java.net.URL(runtimeUrl).host
+            } catch (e: Exception) { null }
+            if (host != null) {
+                builder.certificatePinner(
+                    CertificatePinner.Builder()
+                        .add(host, certPin)
+                        .build()
+                )
+                Log.i(tag, "certificate pinning enabled for $host")
+            }
+        }
+        builder.build()
+    }
 
     private var webSocket: WebSocket? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -94,6 +112,10 @@ open class OctopusMobileClient(
     @Volatile
     private var pendingHelloId: String? = null
 
+    /** 握手 nonce：防止捕获的 hello_ack 被重放（服务端回传则校验，旧服务端不回传则跳过） */
+    @Volatile
+    private var pendingHelloNonce: String? = null
+
     /** 启动客户端 —— 建立 WebSocket 连接 + 发送 hello + 状态流转. */
     open fun connect() {
         val transport = MobileRuntimeSecurity.assess(
@@ -105,6 +127,9 @@ open class OctopusMobileClient(
             diagnostics.onDisconnected("blocked: ${transport.reason}", System.currentTimeMillis())
             setState(ConnectionState.DISCONNECTED)
             return
+        }
+        if (runtimeUrl.startsWith("ws://") && !transport.localDevelopment) {
+            Log.w(tag, "⚠️ connecting to runtime over plaintext ws:// — auth token is exposed to network MITM. Use wss:// in production.")
         }
         Log.i(tag, "connecting to $runtimeUrl as $tentacleId")
 
@@ -122,7 +147,8 @@ open class OctopusMobileClient(
                 this@OctopusMobileClient.webSocket = webSocket
                 setState(ConnectionState.CONNECTED)
 
-                // 发送 hello 握手
+                // 发送 hello 握手 —— 附带随机 nonce 防重放
+                val nonce = generateNonce()
                 val hello = EnvelopeFactory.hello(
                     tentacleId = tentacleId,
                     deviceMeta = mapOf(
@@ -132,9 +158,11 @@ open class OctopusMobileClient(
                         "sdk" to android.os.Build.VERSION.SDK_INT
                     ),
                     capabilities = emptyList(),
-                    authToken = authToken
+                    authToken = authToken,
+                    nonce = nonce
                 )
                 pendingHelloId = hello.id
+                pendingHelloNonce = nonce
                 webSocket.send(hello.toJson())
                 setState(ConnectionState.HELLO_SENT)
             }
@@ -321,6 +349,20 @@ open class OctopusMobileClient(
         val result = root.get("result")
         if (result.isJsonObject) {
             val obj = result.asJsonObject
+            // nonce 校验：若服务端回传了 nonce，必须与我们发送的一致（防重放）。
+            // 旧服务端不回传 nonce 则跳过此项（向后兼容）。
+            val serverNonce = obj.get("nonce")?.asString
+            if (serverNonce != null) {
+                val expected = pendingHelloNonce
+                if (expected == null || serverNonce != expected) {
+                    Log.w(tag, "hello_ack nonce mismatch — possible replay attack, disconnecting")
+                    pendingHelloId = null
+                    pendingHelloNonce = null
+                    webSocket?.close(1008, "nonce mismatch")
+                    setState(ConnectionState.DISCONNECTED)
+                    return true
+                }
+            }
             val registered = obj.get("registered")?.asBoolean == true ||
                 obj.get("ok")?.asBoolean == true ||
                 obj.get("accepted")?.asBoolean == true
@@ -342,6 +384,7 @@ open class OctopusMobileClient(
         val message = root.getAsJsonObject("error")?.get("message")?.asString ?: "hello rejected"
         Log.w(tag, "runtime hello rejected: $message")
         pendingHelloId = null
+        pendingHelloNonce = null
         diagnostics.onDisconnected("hello rejected: $message", System.currentTimeMillis())
         setState(ConnectionState.DISCONNECTED)
         webSocket?.close(1008, "hello rejected")
@@ -352,6 +395,7 @@ open class OctopusMobileClient(
         if (state == ConnectionState.HELLO_SENT) {
             Log.i(tag, "runtime hello acknowledged: $reason")
             pendingHelloId = null
+            pendingHelloNonce = null
             setState(ConnectionState.ONLINE)
             reconnectAttempts.set(0)
         }
@@ -538,6 +582,13 @@ open class OctopusMobileClient(
     open fun currentState(): ConnectionState = state
 
     // ── 辅助 ────────────────────────────────────────────────
+
+    /** 生成 16 字节随机 nonce（十六进制编码），用于握手防重放. */
+    private fun generateNonce(): String {
+        val bytes = ByteArray(16)
+        java.security.SecureRandom().nextBytes(bytes)
+        return bytes.joinToString("") { "%02x".format(it) }
+    }
 
     /**
      * 解析 args 元素为 Map<String, Any>.

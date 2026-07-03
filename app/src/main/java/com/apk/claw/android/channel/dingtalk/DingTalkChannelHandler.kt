@@ -1,4 +1,4 @@
-﻿package com.apk.claw.android.channel.dingtalk
+package com.apk.claw.android.channel.dingtalk
 
 import com.apk.claw.android.channel.Channel
 import com.apk.claw.android.channel.ChannelHandler
@@ -68,9 +68,9 @@ class DingTalkChannelHandler(
                         lastConversationType = message.conversationType
                         lastConversationId = message.conversationId
                         lastMsgId = message.msgId
-                        // ACL 授权主体原子捕获后传入(1:1 用 staffId,群用 group:convId),消除 TOCTOU。
-                        // 注:群聊仍按会话授权(convId)——群内成员粒度是独立残留项,见 CHANGELOG。
-                        ChannelManager.dispatchMessage(channel, text, lastMsgId ?: "", getLastSenderId())
+                        // ACL 授权主体用 senderStaffId(按人),不再用 group:convId(按会话)。
+                        // 群聊内每个成员有独立 staffId,精确到人。getLastSenderId() 保留给路由回复。
+                        ChannelManager.dispatchMessage(channel, text, lastMsgId ?: "", message.senderStaffId)
                         return null
                     }
                 }

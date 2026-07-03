@@ -121,18 +121,20 @@ object EnvelopeFactory {
         tentacleId: String,
         deviceMeta: Map<String, Any?>,
         capabilities: List<String>,
-        authToken: String? = null
+        authToken: String? = null,
+        nonce: String? = null
     ): Envelope.Request = Envelope.Request(
         method = "device/hello",
-        params = mapOf(
-            "protocol_version" to ProtocolVersion.CURRENT,
-            "client_type" to "android_tentacle",
-            "client_version" to "0.1.0",
-            "tentacle_id" to tentacleId,
-            "device_meta" to deviceMeta,
-            "capabilities" to capabilities,
-            "auth_token" to (authToken ?: "")
-        )
+        params = buildMap {
+            put("protocol_version", ProtocolVersion.CURRENT)
+            put("client_type", "android_tentacle")
+            put("client_version", "0.1.0")
+            put("tentacle_id", tentacleId)
+            put("device_meta", deviceMeta)
+            put("capabilities", capabilities)
+            put("auth_token", authToken ?: "")
+            if (nonce != null) put("nonce", nonce)
+        }
     )
 
     /** device/heartbeat —— 心跳 */

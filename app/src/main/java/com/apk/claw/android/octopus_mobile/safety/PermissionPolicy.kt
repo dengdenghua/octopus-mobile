@@ -11,6 +11,7 @@ package com.apk.claw.android.octopus_mobile.safety
  * - [privacyScannerEnabled]：PII/Secret 扫描
  * - [auditLogEnabled]：审计日志
  * - [circuitBreakerEnabled]：断路器（防死循环烧钱）
+ * - [pathSandboxEnabled]：/sdcard 路径沙箱（防越界访问系统/私有目录）
  */
 data class PermissionPolicy(
     val mode: PermissionMode,
@@ -29,8 +30,8 @@ data class PermissionPolicy(
     val maxConsecutiveFailures: Int,
     val maxNoProgressSteps: Int,
 
-    // —— 路径沙箱 ——
-    val pathSandboxEnabled: Boolean,
+    // —— 路径沙箱（不可关闭，两种模式均 true）——
+    val pathSandboxEnabled: Boolean = true,
 
     // —— 不可关闭项 ——
     val privacyScannerEnabled: Boolean = true,
@@ -53,7 +54,7 @@ data class PermissionPolicy(
             pathSandboxEnabled = true,
         )
 
-        /** 完全权限模式策略：闲置/群控机，释放最大能力 */
+        /** 完全权限模式策略：闲置/群控机，释放最大能力（路径沙箱仍不可关闭） */
         val FULL_POWER = PermissionPolicy(
             mode = PermissionMode.FULL_POWER,
             safetyGateEnabled = false,
@@ -62,7 +63,6 @@ data class PermissionPolicy(
             trustAllSources = true,
             maxConsecutiveFailures = 10,
             maxNoProgressSteps = 20,
-            pathSandboxEnabled = false,
         )
 
         /** 根据模式获取预设策略 */

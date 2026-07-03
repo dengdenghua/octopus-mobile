@@ -5,6 +5,7 @@ import com.apk.claw.android.octopus_mobile.safety.ApprovalFlow
 import com.apk.claw.android.octopus_mobile.safety.ToolRiskPolicy
 import com.apk.claw.android.tool.ToolRegistry
 import com.apk.claw.android.tool.ToolResult
+import com.apk.claw.android.octopus_mobile.safety.PermissionModeManager
 import com.apk.claw.android.utils.KVUtils
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -231,7 +232,7 @@ class ProactiveRuleEngine(
                 //  - LOW 风险：自动放行（只读/观察类）
                 //  「高级自动化模式」开启时全部放行（专用自动化设备满血）。
                 val risk = ToolRiskPolicy.riskOf(rule.action.toolName)
-                val advancedMode = KVUtils.isAdvancedAutomationMode()
+                val advancedMode = PermissionModeManager.isFullPowerMode()
                 val params = if (paramOverrides != null) rule.action.toolParams + paramOverrides else rule.action.toolParams
 
                 when {

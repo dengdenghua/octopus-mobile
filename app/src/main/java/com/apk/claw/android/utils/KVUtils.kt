@@ -469,6 +469,13 @@ object KVUtils {
     fun isInsecureOctopusRuntimeAllowed(): Boolean = getBoolean(KEY_OCTOPUS_ALLOW_INSECURE_RUNTIME, false)
     fun setInsecureOctopusRuntimeAllowed(enabled: Boolean) = putBoolean(KEY_OCTOPUS_ALLOW_INSECURE_RUNTIME, enabled)
 
+    // ── Runtime 证书固定（SPKI pin）──
+    // 格式：sha256/base64==...（OkHttp CertificatePinner 格式）。
+    // 配置后即使攻击者持有受信任 CA 也无法 MITM wss:// 连接。留空则不启用。
+    private const val KEY_RUNTIME_CERT_PIN = "KEY_RUNTIME_CERT_PIN"
+    fun getRuntimeCertPin(): String = getString(KEY_RUNTIME_CERT_PIN, "")
+    fun setRuntimeCertPin(pin: String) = putString(KEY_RUNTIME_CERT_PIN, pin)
+
     // ==================== 技能(工具)启停 ====================
     private const val KEY_DISABLED_TOOLS = "KEY_DISABLED_TOOLS"
     fun getDisabledTools(): Set<String> {
