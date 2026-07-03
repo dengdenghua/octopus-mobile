@@ -4,6 +4,10 @@ import dev.langchain4j.agent.tool.ToolSpecification
 import dev.langchain4j.data.message.ChatMessage
 
 interface LlmClient {
+    /** Whether this model supports vision (image content in messages). */
+    val supportsVision: Boolean
+        get() = false
+
     /** Blocking call. Returns the complete AI response. */
     fun chat(messages: List<ChatMessage>, toolSpecs: List<ToolSpecification>): LlmResponse
 

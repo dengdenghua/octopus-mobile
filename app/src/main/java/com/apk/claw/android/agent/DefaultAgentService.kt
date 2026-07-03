@@ -7,6 +7,7 @@ import android.graphics.Bitmap
 import android.util.Base64
 import com.apk.claw.android.ClawApplication
 import com.apk.claw.android.R
+import com.apk.claw.android.TaskOrchestrator
 import com.apk.claw.android.agent.langchain.LangChain4jToolBridge
 import com.apk.claw.android.agent.llm.LlmClient
 import com.apk.claw.android.agent.llm.LlmClientFactory
@@ -16,8 +17,10 @@ import com.apk.claw.android.octopus_mobile.memory.ContextCompressor
 import com.apk.claw.android.service.ClawAccessibilityService
 import com.apk.claw.android.octopus_mobile.GoalVerifier
 import com.apk.claw.android.octopus_mobile.VisionAnalyzer
+import com.apk.claw.android.octopus_mobile.ActionRecorder
 import com.apk.claw.android.octopus_mobile.safety.ErrorClassifier
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import com.apk.claw.android.tool.ToolRegistry
 import com.apk.claw.android.tool.impl.GetScreenInfoTool
 import com.apk.claw.android.tool.ToolResult
@@ -53,6 +56,9 @@ class DefaultAgentService : AgentService {
         private const val MAX_LOOP_WARNINGS = 3
         // 目标自校验：LLM 宣称完成后，用 VLM 看屏确认是否真达成；未达成时最多再修复几轮。
         private const val MAX_GOAL_REPAIRS = 2
+
+        /** VLM 目标校验硬超时(ms):防止 VLM 网络挂起无限阻塞 Agent 执行线程。略高于 VLM HTTP 的 30s callTimeout。 */
+        private const val VLM_VERIFY_TIMEOUT_MS = 35_000L
 
         /** base64 图片最大宽度，超过则等比缩放 */
         private const val VISION_MAX_WIDTH = 720
@@ -95,6 +101,19 @@ class DefaultAgentService : AgentService {
     /** 本次运行是否来自不可信来源（LAN 网页控制台 / 聊天渠道）。 */
     @Volatile
     private var untrustedRun = false
+
+    /**
+     * 动作录制器：Agent 执行任务时录制 UI 动作序列（锚点文字/viewId，非死坐标），
+     * 任务成功后存入 [com.apk.claw.android.octopus_mobile.ActionCache]，供下次同指令
+     * 快路径确定性重放——跳过 LLM 推理，实现"自进化 RPA"。
+     */
+    private var actionRecorder: ActionRecorder? = null
+
+    /**
+     * 工具调用频率计数器（包名 → 调用次数），用于自进化：当某个 open_app 模式
+     * 被高频使用（≥3 次），自动生成一条 ReflexRouter 快路径规则，跳过 LLM 推理。
+     */
+    private val toolCallFrequency = mutableMapOf<String, Int>()
 
     /** 不可信来源运行时，把工具调用包进来源闸门：高危工具默认拦截，满血/远程放行时通过。 */
     private fun execTool(toolName: String, params: Map<String, Any>): com.apk.claw.android.tool.ToolResult {
@@ -493,6 +512,21 @@ class DefaultAgentService : AgentService {
             }
         }
 
+        // 0.5. 自动截屏 UserMessage 特殊处理：全局只保留最新一条，旧截图替换为文本占位符。
+        // 截图 base64 体积大，历史中积攒多张会迅速膨胀 token 用量。
+        val lastAutoScreenshotIdx = messages.indexOfLast { msg ->
+            msg is UserMessage && msg.singleText().startsWith("[自动截屏]")
+        }
+        for (i in messages.indices) {
+            val msg = messages[i]
+            if (msg is UserMessage
+                && msg.singleText().startsWith("[自动截屏]")
+                && i != lastAutoScreenshotIdx
+            ) {
+                messages[i] = UserMessage.from("[早期自动截屏已省略]")
+            }
+        }
+
         // 1. 找出所有 AiMessage 的索引，每个代表一轮
         val aiIndices = messages.indices.filter { messages[it] is AiMessage }
         if (aiIndices.size <= KEEP_RECENT_ROUNDS) return
@@ -641,6 +675,7 @@ class DefaultAgentService : AgentService {
             return
         }
 
+        actionRecorder = ActionRecorder()
         val state = AgentLoopState(buildInitialMessages(userPrompt), config.maxIterations, userPrompt)
         saveCheckpoint(state)
         while (state.shouldContinue()) {
@@ -690,7 +725,47 @@ class DefaultAgentService : AgentService {
         )
     }
 
+    /**
+     * VLM 主力感知：截取当前屏幕并作为 UserMessage(ImageContent) 注入消息历史。
+     * 让 LLM 每轮直接看到屏幕状态，而非仅依赖无障碍树文字转述。
+     * 截图失败时静默跳过（不影响 Agent 循环）。
+     */
+    private fun AgentLoopState.injectAutoScreenshot() {
+        val service = ClawAccessibilityService.getInstance() ?: return
+        val bitmap = service.takeScreenshot(5000) ?: return
+
+        var scaledBitmap: Bitmap? = null
+        try {
+            if (bitmap.width > VISION_MAX_WIDTH) {
+                val scale = VISION_MAX_WIDTH.toFloat() / bitmap.width
+                val newHeight = Math.round(bitmap.height * scale)
+                scaledBitmap = Bitmap.createScaledBitmap(bitmap, VISION_MAX_WIDTH, newHeight, true)
+                bitmap.recycle()
+            }
+            val compressTarget = scaledBitmap ?: bitmap
+            val baos = ByteArrayOutputStream()
+            compressTarget.compress(Bitmap.CompressFormat.JPEG, VISION_JPEG_QUALITY, baos)
+            val base64Str = Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
+
+            messages.add(
+                UserMessage.from(
+                    TextContent.from("[自动截屏] 这是当前屏幕状态，请据此决策。"),
+                    ImageContent.from("data:image/jpeg;base64,$base64Str")
+                )
+            )
+        } catch (e: Exception) {
+            XLog.w(TAG, "Auto-screenshot injection failed", e)
+        } finally {
+            scaledBitmap?.recycle()
+        }
+    }
+
     private fun AgentLoopState.runSingleIteration(callback: AgentCallback): IterationOutcome {
+        // VLM 主力感知：每轮自动注入当前屏幕截图，让 LLM 直接看到屏幕状态。
+        // 仅在模型支持视觉 + enableVision + enableAutoScreenshot 均为 true 时生效。
+        if (config.enableAutoScreenshot && config.enableVision && llmClient.supportsVision) {
+            injectAutoScreenshot()
+        }
         val llmResponse = callLlm(callback) ?: return IterationOutcome.TERMINATE
         if (handleLlmResponse(llmResponse, callback)) return IterationOutcome.TERMINATE
 
@@ -788,7 +863,11 @@ class DefaultAgentService : AgentService {
             runCatching { com.apk.claw.android.navigation.StateDetector.detectCurrentState() }.getOrNull()
         } else null
 
+        // ── 动作录制：工具执行前抓锚点（点击后屏幕就变了，只能在点之前抓）──
+        actionRecorder?.onToolCall(toolName, toolArgs)
         val rawResult = execTool(toolName, params)
+        // ── 动作录制：工具执行后记录成功/失败 ──
+        actionRecorder?.onToolResult(toolName, rawResult.isSuccess)
 
         var result = rawResult
 
@@ -824,6 +903,19 @@ class DefaultAgentService : AgentService {
             DialogHandleResult.TERMINATE -> return ToolHandleResult.TERMINATE
             DialogHandleResult.SKIP_REMAINING -> return ToolHandleResult.SKIP_REMAINING
             DialogHandleResult.NONE -> { }
+        }
+
+        // ── 自进化：高频 open_app 自动生成 ReflexRouter 快路径规则 ──
+        if (toolName == "open_app" && result.isSuccess) {
+            val packageName = params["package"] as? String
+            if (packageName != null) {
+                val count = (toolCallFrequency[packageName] ?: 0) + 1
+                toolCallFrequency[packageName] = count
+                if (count >= 3) {
+                    // ≥3 次：自动提炼规则，生成快路径
+                    TaskOrchestrator.current?.getReflexRouter()?.learnFromPattern(toolName, params, count)
+                }
+            }
         }
 
         if (toolName == "finish" && result.isSuccess) {
@@ -964,7 +1056,10 @@ class DefaultAgentService : AgentService {
         }.getOrNull() ?: return null
 
         val verdict = try {
-            runBlocking { GoalVerifier.verify(goal, bitmap) }
+            // 硬超时 35s(略高于 VLM HTTP 的 30s callTimeout):VLM 网络挂起时不再无限阻塞
+            // Agent 执行线程。超时 → null → 走下方 verdict==null 的 fail-open 分支当作"无法校验",
+            // 绝不拦正常完成。外层 maxIterations 仍兜底。
+            runBlocking { withTimeoutOrNull(VLM_VERIFY_TIMEOUT_MS) { GoalVerifier.verify(goal, bitmap) } }
         } catch (e: Exception) {
             XLog.w(TAG, "goal verify failed, fail-open: ${e.message}")
             null
@@ -983,6 +1078,11 @@ class DefaultAgentService : AgentService {
 
     private fun finishLoop(state: AgentLoopState, callback: AgentCallback) {
         TaskCheckpoint.clear()
+        // ── 动作录制：任务成功完成且有录制动作 → 提交到快路径缓存 ──
+        if (state.iterations < state.maxIterations && !cancelToken.isCancelled()) {
+            // 任务正常完成（不是被取消或超迭代）→ 提交快路径缓存
+            actionRecorder?.commit(state.goal.hashCode().toString(), state.goal)
+        }
         when {
             cancelToken.isCancelled() ->
                 callback.onComplete(state.iterations, ClawApplication.instance.getString(R.string.agent_task_cancel), state.totalTokens)

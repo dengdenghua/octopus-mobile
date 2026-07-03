@@ -15,6 +15,8 @@ data class AgentConfig(
     val memoryPromptSuffix: String = "",  // 跨会话记忆追加到 System Prompt 末尾的文本（用户偏好/事实/上下文）
     /** 是否启用视觉理解（VLM），系统弹窗阻断时通过截图让 LLM 分析弹窗内容 */
     val enableVision: Boolean = true,
+    /** 是否每轮自动注入屏幕截图（需模型支持视觉 + enableVision=true） */
+    val enableAutoScreenshot: Boolean = true,
 ) {
     companion object {
         const val DEFAULT_SYSTEM_PROMPT =
@@ -24,24 +26,24 @@ data class AgentConfig(
 ## 执行协议
 
 每一轮按照以下流程执行：
-1. **感知（Observe）**── 调用 get_screen_info 获取当前屏幕状态
+1. **感知（Observe）**── 每轮自动收到当前屏幕截图（如模型支持视觉），也可调用 get_screen_info 获取结构化无障碍树
 2. **思考（Think）**── 分析：我在哪？屏幕上有什么？距离目标还差哪一步？
 3. **行动（Act）**── 调用操作工具执行动作
 4. 如果操作没有生效 → 先尝试其他方式，不要重复相同操作
 
-注意：步骤 1 的 get_screen_info 同时也是对上一轮操作的验证，不需要额外再调一次来验证。
+注意：步骤 1 的截图/get_screen_info 同时也是对上一轮操作的验证，不需要额外再调一次来验证。
 
 ## 核心规则
 
 规则 1：先观察再行动。
-  不要凭记忆假设屏幕状态，操作前必须先调用 get_screen_info 了解当前屏幕。
+  每轮你会自动收到当前屏幕截图——直接看截图了解屏幕状态。
+  如需结构化信息（元素 bounds、class、resource-id），调用 get_screen_info 补充。
   如果刚执行了确定性操作（如 system_key(key="back")、system_key(key="home")），可以跳过观察直接行动。
 
-规则 1.5：树不够用时改用视觉。
-  如果 get_screen_info 返回为空 / 只有少量无意义节点 / 明显是游戏画面、Canvas 自绘界面、
-  图片或视频内容，或者你需要核对视觉状态（颜色、图标、进度条、验证码样式等），
-  调用 look_at_screen(question="...") 让视觉模型看屏并返回元素的大致像素坐标，再据此 tap/swipe。
-  注意：look_at_screen 较慢且更贵，能用 get_screen_info 解决就不要用它。
+规则 1.5：视觉为主，无障碍树为辅。
+  截图能显示图标、颜色、进度条、验证码、Canvas 自绘界面等无障碍树无法捕获的视觉信息。
+  如果截图不够清晰或需要更精确的视觉分析（如识别小文字、图标含义），调用 look_at_screen(question="...") 获取详细描述。
+  如果未收到截图（模型不支持视觉），改用 get_screen_info 获取无障碍树信息。
 
 规则 2：合理组合工具调用。
   - 确定性操作可以在一轮中并行调用多个工具（如 get_screen_info + tap、open_app + wait）
@@ -169,6 +171,7 @@ run_code 适用：纯计算、数据处理、文件读写、API 调用、UI 自�
         private var dynamicPromptSuffix: String = ""
         private var memoryPromptSuffix: String = ""
         private var enableVision: Boolean = true
+        private var enableAutoScreenshot: Boolean = true
 
         fun apiKey(apiKey: String) = apply { this.apiKey = apiKey }
         fun baseUrl(baseUrl: String) = apply { this.baseUrl = baseUrl }
@@ -181,10 +184,11 @@ run_code 适用：纯计算、数据处理、文件读写、API 调用、UI 自�
         fun dynamicPromptSuffix(dynamicPromptSuffix: String) = apply { this.dynamicPromptSuffix = dynamicPromptSuffix }
         fun memoryPromptSuffix(memoryPromptSuffix: String) = apply { this.memoryPromptSuffix = memoryPromptSuffix }
         fun enableVision(enableVision: Boolean) = apply { this.enableVision = enableVision }
+        fun enableAutoScreenshot(enableAutoScreenshot: Boolean) = apply { this.enableAutoScreenshot = enableAutoScreenshot }
 
         fun build(): AgentConfig {
             require(apiKey.isNotEmpty()) { "API key is required" }
-            return AgentConfig(apiKey, baseUrl, modelName, systemPrompt, maxIterations, temperature, provider, streaming, dynamicPromptSuffix, memoryPromptSuffix, enableVision)
+            return AgentConfig(apiKey, baseUrl, modelName, systemPrompt, maxIterations, temperature, provider, streaming, dynamicPromptSuffix, memoryPromptSuffix, enableVision, enableAutoScreenshot)
         }
     }
 }

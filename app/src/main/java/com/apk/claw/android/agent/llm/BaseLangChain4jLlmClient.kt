@@ -33,6 +33,34 @@ abstract class BaseLangChain4jLlmClient(
     /** 构造流式模型（provider 专属）。 */
     protected abstract fun createStreamingChatModel(): StreamingChatModel
 
+    /**
+     * 基于模型名启发式判断是否支持视觉（图片输入）。
+     * 覆盖主流多模态模型族；未知模型默认 false（安全降级为纯文本，不注入截屏）。
+     */
+    override val supportsVision: Boolean
+        get() {
+            val name = config.modelName.lowercase()
+            return name.contains("gpt-4o") ||
+                name.contains("gpt-4-turbo") ||
+                name.contains("gpt-4-vision") ||
+                name.contains("gpt-4.1") ||
+                name.contains("o1") ||
+                name.contains("o3") ||
+                name.contains("o4") ||
+                name.contains("claude-3") ||
+                name.contains("claude-4") ||
+                name.contains("gemini") ||
+                name.contains("qwen-vl") ||
+                name.contains("qwen2-vl") ||
+                name.contains("qwen2.5-vl") ||
+                name.contains("qwen3-vl") ||
+                name.contains("glm-4v") ||
+                name.contains("step-1v") ||
+                name.contains("step-1.5v") ||
+                name.contains("multimodal") ||
+                name.contains("vision")
+        }
+
     final override fun chat(messages: List<ChatMessage>, toolSpecs: List<ToolSpecification>): LlmResponse {
         val request = ChatRequest.builder()
             .messages(messages)
