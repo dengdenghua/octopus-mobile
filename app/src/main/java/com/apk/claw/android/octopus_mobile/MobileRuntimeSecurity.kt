@@ -6,8 +6,9 @@ import java.net.URI
  * Runtime transport policy for the mother-brain WebSocket.
  *
  * Production deployments must use wss://. Cleartext ws:// is allowed only for
- * loopback/emulator development unless the user explicitly opts into insecure
- * runtime transport.
+ * loopback, emulator, and private network (LAN) development. Non-private
+ * ws:// is always blocked regardless of user override — auth tokens must
+ * never traverse public networks in plaintext.
  */
 object MobileRuntimeSecurity {
 
@@ -25,7 +26,8 @@ object MobileRuntimeSecurity {
         val reason: String,
     )
 
-    fun assess(runtimeUrl: String, allowInsecureRuntime: Boolean = false): Decision {
+    @Suppress("ReturnCount")
+    fun assess(runtimeUrl: String, @Suppress("UNUSED_PARAMETER") allowInsecureRuntime: Boolean = false): Decision {
         val trimmed = runtimeUrl.trim()
         if (trimmed.isBlank()) {
             return Decision(allowed = false, localDevelopment = false, reason = "Runtime URL is empty")
@@ -38,11 +40,15 @@ object MobileRuntimeSecurity {
             scheme == "wss" -> Decision(allowed = true, localDevelopment = false, reason = "secure websocket")
             scheme != "ws" -> Decision(allowed = false, localDevelopment = false, reason = "Runtime URL must use wss:// or ws://")
             isLocalCleartextHost(host) -> Decision(allowed = true, localDevelopment = true, reason = "local development websocket")
-            allowInsecureRuntime -> Decision(allowed = true, localDevelopment = false, reason = "explicit insecure runtime override")
+            isPrivateNetworkHost(host) -> Decision(
+                allowed = true, localDevelopment = true,
+                reason = "private network (LAN) websocket",
+            )
             else -> Decision(
                 allowed = false,
                 localDevelopment = false,
-                reason = "Cleartext ws:// runtime is blocked outside local development",
+                reason = "Cleartext ws:// over public network is blocked — " +
+                    "use wss:// for production",
             )
         }
     }
@@ -54,4 +60,22 @@ object MobileRuntimeSecurity {
 
     private fun isLocalCleartextHost(host: String): Boolean =
         host in LOCAL_CLEAR_TEXT_HOSTS
+
+    /**
+     * 判断是否为 RFC 1918 私有网络地址（LAN）。
+     * 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
+     */
+    @Suppress("ReturnCount", "MagicNumber")
+    private fun isPrivateNetworkHost(host: String): Boolean {
+        val parts = host.split(".")
+        if (parts.size != 4) return false
+        val octets = runCatching { parts.map { it.toInt() } }.getOrNull() ?: return false
+        if (octets.any { it !in 0..255 }) return false
+        return when {
+            octets[0] == 10 -> true                          // 10.0.0.0/8
+            octets[0] == 172 && octets[1] in 16..31 -> true  // 172.16.0.0/12
+            octets[0] == 192 && octets[1] == 168 -> true     // 192.168.0.0/16
+            else -> false
+        }
+    }
 }

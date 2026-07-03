@@ -153,21 +153,10 @@ class AppViewModel : ViewModel() {
             )
             octopusClient = client
 
-            val llmConfig = if (KVUtils.hasLlmConfig()) {
-                LlmConfig(
-                    apiUrl = "${KVUtils.getLlmBaseUrl().trimEnd('/')}/chat/completions",
-                    apiKey = KVUtils.getLlmApiKey(),
-                    model = KVUtils.getLlmModelName(),
-                    temperature = 0.2,
-                    maxTokens = 2048
-                )
-            } else null
-
             val selector = BrainModeSelector(
                 context = ClawApplication.instance,
                 rpcClient = client,
                 toolRegistry = ToolRegistry.getInstance(),
-                llmConfig = llmConfig
             )
             brainSelector = selector
             selector.onModeChanged = { mode ->

@@ -32,7 +32,6 @@ class BrainModeSelector(
     private val context: Context,
     private val rpcClient: OctopusMobileClient,
     private val toolRegistry: ToolRegistry,
-    private val llmConfig: LlmConfig?
 ) {
     private val tag = "BrainModeSelector"
 
@@ -97,34 +96,6 @@ class BrainModeSelector(
     fun skillCount(): Int = skillsCache.size
 
     /**
-     * 决策入口：跑一个用户任务.
-     *
-     * 流程：
-     *  1. 意图分类（浏览器 / 手机 / 混合）
-     *  2. 根据分类自动设置 BrowserEngine（浏览器任务时）
-     *  3. 根据 currentMode() 选 Local 或 Remote 决策
-     */
-    suspend fun decide(task: String): TaskResult {
-        // 1. 意图分类
-        val intent = IntentClassifier.classify(task)
-        val targetDomain = when (intent.primary) {
-            IntentClassifier.IntentType.BROWSER -> AutomationDomain.BROWSER
-            IntentClassifier.IntentType.MOBILE -> AutomationDomain.MOBILE
-            IntentClassifier.IntentType.MIXED -> AutomationDomain.MIXED
-            IntentClassifier.IntentType.AMBIGUOUS -> currentDomain.get()  // 保持当前
-        }
-
-        // 2. 领域切换（如有变化）
-        switchDomain(targetDomain, intent)
-
-        // 3. 按模式决策
-        return when (currentMode.get()) {
-            BrainMode.EXECUTOR_ONLY -> decideRemotely(task, intent)
-            BrainMode.LOCAL_FALLBACK -> decideLocally(task, intent)
-        }
-    }
-
-    /**
      * 切换活跃领域，自动配置 BrowserEngine.
      */
     private fun switchDomain(domain: AutomationDomain, intent: IntentClassifier.ClassificationResult) {
@@ -152,78 +123,6 @@ class BrainModeSelector(
     /** 强制切换领域（外部调用，如 UI 手动切换） */
     fun forceDomain(domain: AutomationDomain) {
         switchDomain(domain, IntentClassifier.ClassificationResult(domain.toIntentType(), 1.0))
-    }
-
-    /**
-     * Phase 1 实现：通过 RPC 让母体决策.
-     *
-     * 母体下发 tool_call 列表 → OctopusMobileClient 接收 → 路由到 executeLocalTool.
-     * 如果远程失败，自动降级到 LOCAL_FALLBACK（如果有 LLM 配置）.
-     */
-    private suspend fun decideRemotely(task: String, intent: IntentClassifier.ClassificationResult): TaskResult {
-        return try {
-            val result = rpcClient.executeRemoteTask(task, intent)
-            when (result) {
-                is RemoteTaskResult.Success -> TaskResult.Done(
-                    summary = result.response,
-                    totalSteps = result.steps,
-                    totalUsage = result.usage
-                )
-                is RemoteTaskResult.Failure -> TaskResult.MaxStepsReached(
-                    totalSteps = 0,
-                    lastResponse = "[REMOTE] ${result.error}",
-                    totalUsage = TokenUsage(0, 0, 0)
-                )
-            }
-        } catch (e: Exception) {
-            Log.e(tag, "decideRemotely failed", e)
-            // 远程失败 → 自动降级到本地
-            if (llmConfig != null) {
-                Log.w(tag, "Remote failed, falling back to LOCAL_FALLBACK")
-                forceMode(BrainMode.LOCAL_FALLBACK)
-                decideLocally(task, intent)
-            } else {
-                TaskResult.MaxStepsReached(
-                    totalSteps = 0,
-                    lastResponse = "[REMOTE] Failed: ${e.message}. No LLM config for fallback.",
-                    totalUsage = TokenUsage(0, 0, 0)
-                )
-            }
-        }
-    }
-
-    private suspend fun decideLocally(task: String, intent: IntentClassifier.ClassificationResult): TaskResult {
-        val cfg = llmConfig
-            ?: return TaskResult.MaxStepsReached(
-                totalSteps = 0,
-                lastResponse = "No LLM config for LOCAL_FALLBACK mode",
-                totalUsage = TokenUsage(0, 0, 0)
-            )
-
-        // 根据意图过滤技能：浏览器任务只给浏览器技能，手机任务给手机技能
-        val filteredSkills = when (intent.primary) {
-            IntentClassifier.IntentType.BROWSER -> skillsCache.filter { it.id.startsWith("android.browser.") }
-            IntentClassifier.IntentType.MOBILE -> skillsCache.filter { !it.id.startsWith("android.browser.") }
-            else -> skillsCache  // MIXED / AMBIGUOUS 给全部
-        }
-
-        val llm = LightweightLlmClient(cfg)
-        val react = LightweightReAct(
-            llmClient = llm,
-            toolExecutor = { call -> executeLocalTool(call) }
-        )
-        // 接通 VLM 目标自校验:用无障碍截屏让 ReAct 在判"完成"前看屏确认目标达成。
-        return react.run(
-            task,
-            filteredSkills,
-            captureScreen = {
-                com.apk.claw.android.service.ClawAccessibilityService
-                    .getInstance()
-                    ?.takeScreenshot(2000L)
-            },
-            // 技能商城:已安装(指令型)技能注入系统上下文,与内置工具并存、不进工具列表。
-            extraSystemContext = com.apk.claw.android.registry.RegistrySkillStore.knowledgeBlock(context),
-        )
     }
 
     /**

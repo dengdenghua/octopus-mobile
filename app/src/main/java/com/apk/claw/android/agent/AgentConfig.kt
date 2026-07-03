@@ -193,12 +193,18 @@ run_code 适用：纯计算、数据处理、文件读写、API 调用、UI 自�
         fun dynamicPromptSuffix(dynamicPromptSuffix: String) = apply { this.dynamicPromptSuffix = dynamicPromptSuffix }
         fun memoryPromptSuffix(memoryPromptSuffix: String) = apply { this.memoryPromptSuffix = memoryPromptSuffix }
         fun enableVision(enableVision: Boolean) = apply { this.enableVision = enableVision }
-        fun enableAutoScreenshot(enableAutoScreenshot: Boolean) = apply { this.enableAutoScreenshot = enableAutoScreenshot }
-        fun skipCheckpoint(skipCheckpoint: Boolean) = apply { this.skipCheckpoint = skipCheckpoint }
+        fun enableAutoScreenshot(enableAutoScreenshot: Boolean) =
+            apply { this.enableAutoScreenshot = enableAutoScreenshot }
+        fun skipCheckpoint(skipCheckpoint: Boolean) =
+            apply { this.skipCheckpoint = skipCheckpoint }
 
         fun build(): AgentConfig {
             require(apiKey.isNotEmpty()) { "API key is required" }
-            return AgentConfig(apiKey, baseUrl, modelName, systemPrompt, maxIterations, temperature, provider, streaming, dynamicPromptSuffix, memoryPromptSuffix, enableVision, enableAutoScreenshot, skipCheckpoint)
+            return AgentConfig(
+                apiKey, baseUrl, modelName, systemPrompt, maxIterations,
+                temperature, provider, streaming, dynamicPromptSuffix,
+                memoryPromptSuffix, enableVision, enableAutoScreenshot, skipCheckpoint,
+            )
         }
     }
 }

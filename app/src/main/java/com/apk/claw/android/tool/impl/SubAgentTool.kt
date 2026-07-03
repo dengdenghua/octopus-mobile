@@ -31,10 +31,14 @@ class SubAgentTool : BaseTool() {
     companion object {
         private const val TAG = "SubAgentTool"
         private const val DEFAULT_MAX_ITERATIONS = 15
+        private const val MAX_ITERATIONS_LIMIT = 30
         private const val SUB_AGENT_TIMEOUT_MS = 120_000L  // 2 分钟超时
+        private const val LOG_TASK_PREVIEW_CHARS = 80
+        private const val LOG_CONTENT_PREVIEW_CHARS = 60
+        private const val MS_PER_SECOND = 1000
 
         /** 子 Agent 专用简化系统提示词 */
-        private val SUB_AGENT_SYSTEM_PROMPT = """## ROLE
+        private const val SUB_AGENT_SYSTEM_PROMPT = """## ROLE
 你是一个执行具体子任务的 Android 自动化子助手。你收到主助手分配的一个明确子任务，需要高效完成它。
 
 ## 执行协议
@@ -71,12 +75,16 @@ class SubAgentTool : BaseTool() {
         )
     )
 
+    @Suppress("ReturnCount", "TooGenericExceptionCaught")
     override fun execute(params: Map<String, Any>): ToolResult {
         val task = requireString(params, "task")
         val maxIterations = (params["max_iterations"] as? Number)?.toInt()
-            ?.coerceIn(1, 30) ?: DEFAULT_MAX_ITERATIONS
+            ?.coerceIn(1, MAX_ITERATIONS_LIMIT) ?: DEFAULT_MAX_ITERATIONS
 
-        XLog.i(TAG, "Spawning sub-agent for task: ${task.take(80)}... (maxIterations=$maxIterations)")
+        XLog.i(
+            TAG,
+            "Spawning sub-agent for task: ${task.take(LOG_TASK_PREVIEW_CHARS)}... (maxIterations=$maxIterations)"
+        )
 
         // 获取主 Agent 的 LLM 配置（通过 TaskOrchestrator 全局引用）
         val orchestrator = com.apk.claw.android.TaskOrchestrator.current
@@ -107,19 +115,25 @@ class SubAgentTool : BaseTool() {
             }
 
             override fun onContent(round: Int, content: String) {
-                XLog.d(TAG, "[sub-agent] content: ${content.take(60)}...")
+                XLog.d(TAG, "[sub-agent] content: ${content.take(LOG_CONTENT_PREVIEW_CHARS)}...")
             }
 
             override fun onToolCall(round: Int, toolId: String, toolName: String, parameters: String) {
                 XLog.d(TAG, "[sub-agent] tool: $toolName")
             }
 
-            override fun onToolResult(round: Int, toolId: String, toolName: String, parameters: String, result: ToolResult) {
+            override fun onToolResult(
+                round: Int, toolId: String, toolName: String,
+                parameters: String, result: ToolResult,
+            ) {
                 XLog.d(TAG, "[sub-agent] tool result: ${if (result.isSuccess) "ok" else "fail"}")
             }
 
             override fun onComplete(round: Int, finalAnswer: String, totalTokens: Int) {
-                XLog.i(TAG, "[sub-agent] completed: ${finalAnswer.take(60)}... (tokens=$totalTokens)")
+                XLog.i(
+                    TAG,
+                    "[sub-agent] completed: ${finalAnswer.take(LOG_CONTENT_PREVIEW_CHARS)}... (tokens=$totalTokens)"
+                )
                 resultRef.set(true to finalAnswer)
                 latch.countDown()
             }
@@ -145,7 +159,8 @@ class SubAgentTool : BaseTool() {
             if (!latch.await(SUB_AGENT_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
                 XLog.w(TAG, "[sub-agent] timed out after ${SUB_AGENT_TIMEOUT_MS}ms")
                 subAgent.cancel()
-                return ToolResult.error("子 Agent 超时（${SUB_AGENT_TIMEOUT_MS / 1000}s），可能任务过于复杂。请尝试拆分为更小的子任务。")
+                val timeoutSec = SUB_AGENT_TIMEOUT_MS / MS_PER_SECOND
+                return ToolResult.error("子 Agent 超时（${timeoutSec}s），可能任务过于复杂。请尝试拆分为更小的子任务。")
             }
         } catch (e: Exception) {
             XLog.e(TAG, "[sub-agent] execution failed", e)

@@ -118,7 +118,10 @@ class OctopusMobileClientHandshakeTest {
 
     @Test
     fun `remote cleartext runtime is blocked before websocket opens`() {
-        val client = OctopusMobileClient("ws://192.168.1.2:8765", "test-device")
+        // 公网明文 ws:// 必须在握手前被 MobileRuntimeSecurity 拦下。
+        // 203.0.113.0/24 是 RFC 5737 文档示例段,代表"非私有、非环回"的公网地址。
+        // LAN(192.168.x.x 等)已被放行用于本地开发,不能用作"被拦截"用例。
+        val client = OctopusMobileClient("ws://203.0.113.42:8765", "test-device")
         client.connect()
         assertEquals(ConnectionState.DISCONNECTED, client.currentState())
     }

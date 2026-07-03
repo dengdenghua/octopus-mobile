@@ -205,6 +205,7 @@ class NavigationRecorder(
      * @param params 工具参数
      * @return true 如果该工具被录制器接受
      */
+    @Suppress("ReturnCount")
     fun onToolExecuted(toolName: String, params: Map<String, Any>): Boolean {
         if (!recording && !passiveMode) return false
 
@@ -218,6 +219,7 @@ class NavigationRecorder(
      * 工具调用转 RemoteAction。
      * 仅映射有 UI 副作用的触屏/按键操作。
      */
+    @Suppress("CyclomaticComplexMethod", "ReturnCount", "MagicNumber")
     private fun toolCallToRemoteAction(toolName: String, params: Map<String, Any>): RemoteAction? {
         return when (toolName) {
             "tap" -> {

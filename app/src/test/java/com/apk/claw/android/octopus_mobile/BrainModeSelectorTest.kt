@@ -20,7 +20,6 @@ import org.robolectric.annotation.Config
  *  - forceDomain 强制切换
  *  - currentDomain() / currentMode() 状态读取
  *  - onDomainChanged 回调触发
- *  - decide() 路由到 remote/local（无真实 LLM，测占位返回）
  *  - executeLocalTool 前缀剥离
  *  - skillCount() 返回 42
  */
@@ -41,7 +40,6 @@ class BrainModeSelectorTest {
             context = context,
             rpcClient = client,
             toolRegistry = ToolRegistry,
-            llmConfig = null
         )
     }
 
@@ -62,41 +60,6 @@ class BrainModeSelectorTest {
         assertEquals(42, selector.skillCount())
     }
 
-    // ── 意图分类驱动领域切换 ──────────────────────────────
-
-    @Test
-    fun `decide switches to BROWSER domain for browser intent`() = runBlocking {
-        assertEquals(AutomationDomain.MOBILE, selector.currentDomain())
-        selector.decide("打开网页 https://example.com")
-        assertEquals(AutomationDomain.BROWSER, selector.currentDomain())
-    }
-
-    @Test
-    fun `decide switches to MOBILE domain for mobile intent`() = runBlocking {
-        // 先切到浏览器
-        selector.decide("打开网页")
-        assertEquals(AutomationDomain.BROWSER, selector.currentDomain())
-
-        // 再切回手机
-        selector.decide("点击屏幕")
-        assertEquals(AutomationDomain.MOBILE, selector.currentDomain())
-    }
-
-    @Test
-    fun `decide switches to MIXED domain for mixed intent`() = runBlocking {
-        selector.decide("在淘宝网页版搜索")
-        assertEquals(AutomationDomain.MIXED, selector.currentDomain())
-    }
-
-    @Test
-    fun `decide keeps current domain for ambiguous intent`() = runBlocking {
-        selector.decide("打开网页")  // 先切到浏览器
-        assertEquals(AutomationDomain.BROWSER, selector.currentDomain())
-
-        selector.decide("你好")  // 不明确，保持浏览器
-        assertEquals(AutomationDomain.BROWSER, selector.currentDomain())
-    }
-
     // ── forceDomain ───────────────────────────────────────
 
     @Test
@@ -112,49 +75,6 @@ class BrainModeSelectorTest {
         selector.onDomainChanged = { callbackCount++ }
         selector.forceDomain(AutomationDomain.MOBILE)  // 已经是 MOBILE
         assertEquals(0, callbackCount)
-    }
-
-    // ── 回调 ──────────────────────────────────────────────
-
-    @Test
-    fun `onDomainChanged fires on domain switch`() = runBlocking {
-        var firedDomain: AutomationDomain? = null
-        selector.onDomainChanged = { firedDomain = it }
-
-        selector.decide("打开网页")
-        assertEquals(AutomationDomain.BROWSER, firedDomain)
-    }
-
-    @Test
-    fun `onDomainChanged does not fire when domain unchanged`() = runBlocking {
-        var callbackCount = 0
-        selector.onDomainChanged = { callbackCount++ }
-
-        selector.decide("点击屏幕")  // 已经是 MOBILE
-        assertEquals(0, callbackCount)
-    }
-
-    // ── decide 路由 ───────────────────────────────────────
-
-    @Test
-    fun `decide returns placeholder for remote mode`() = runBlocking {
-        val result = selector.decide("打开网页")
-        assertTrue(result is TaskResult.MaxStepsReached)
-        val maxSteps = result as TaskResult.MaxStepsReached
-        assertTrue(maxSteps.lastResponse!!.contains("REMOTE"))
-    }
-
-    @Test
-    fun `decide returns error when no llm config in local fallback`() = runBlocking {
-        // 模拟母体离线 → 切到 LOCAL_FALLBACK
-        client.setState(ConnectionState.OFFLINE)
-        selector.checkAndSwitch()
-        assertEquals(BrainMode.LOCAL_FALLBACK, selector.currentMode())
-
-        val result = selector.decide("打开应用")
-        assertTrue(result is TaskResult.MaxStepsReached)
-        val maxSteps = result as TaskResult.MaxStepsReached
-        assertTrue(maxSteps.lastResponse!!.contains("No LLM config"))
     }
 
     // ── executeLocalTool ──────────────────────────────────

@@ -264,9 +264,13 @@ data class NavEdge(
  * UI 动作（D-pad 遥控器 + 触屏）。
  */
 data class RemoteAction(
-    val type: String,       // "dpad_up", "dpad_down", "dpad_left", "dpad_right", "dpad_center", "input_text", "system_key", "tap", "long_press", "swipe"
-    val params: Map<String, Any> = emptyMap()  // repeat, text, keycode, x, y, start_x, start_y, end_x, end_y, duration_ms 等
+    // "dpad_up", "dpad_down", "dpad_left", "dpad_right", "dpad_center",
+    // "input_text", "system_key", "tap", "long_press", "swipe"
+    val type: String,
+    // repeat, text, keycode, x, y, start_x, start_y, end_x, end_y, duration_ms 等
+    val params: Map<String, Any> = emptyMap()
 ) {
+    @Suppress("TooManyFunctions")
     companion object {
         // D-pad（TV）
         fun dpadUp(repeat: Int = 1) = RemoteAction("dpad_up", mapOf("repeat" to repeat))
@@ -283,7 +287,10 @@ data class RemoteAction(
         fun tap(x: Int, y: Int) = RemoteAction("tap", mapOf("x" to x, "y" to y))
         fun longPress(x: Int, y: Int) = RemoteAction("long_press", mapOf("x" to x, "y" to y))
         fun swipe(startX: Int, startY: Int, endX: Int, endY: Int, durationMs: Int = 500) =
-            RemoteAction("swipe", mapOf("start_x" to startX, "start_y" to startY, "end_x" to endX, "end_y" to endY, "duration_ms" to durationMs))
+            RemoteAction("swipe", mapOf(
+                "start_x" to startX, "start_y" to startY,
+                "end_x" to endX, "end_y" to endY, "duration_ms" to durationMs,
+            ))
     }
 
     /** 转换为 ToolRegistry 的工具名和参数 */

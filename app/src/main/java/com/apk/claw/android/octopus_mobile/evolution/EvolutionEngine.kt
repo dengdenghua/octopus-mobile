@@ -15,22 +15,12 @@ import org.json.JSONObject
  *      单次 LLM 调用，评估最近 N 轮表现，给出一个具体行动建议。
  *      "加教训 X" / "回滚上次更新" / "无需行动"
  *
- *  B3 · deepEvolve（贵，~10-30 分/次，手动触发）
- *      MiniMax 式自主循环：
- *        1. 分析最近失败轨迹
- *        2. LLM 提议 K 个候选改动
- *        3. LLM 当裁判打分
- *        4. 选最优（dry_run=True 只预览，False 才应用）
- *
  * 用法：
  * ```kotlin
  * val engine = EvolutionEngine(scorer, llmCall = { prompt -> ... })
  *
  * // B2：便宜反思
  * val reflection = engine.deepReflect()
- *
- * // B3：贵但彻底
- * val evolution = engine.deepEvolve(dryRun = true)
  * ```
  */
 class EvolutionEngine(
@@ -55,41 +45,6 @@ Schema:
   "rationale": "<2-3 sentences why>"
 }
 ```"""
-
-        private const val PROPOSE_SYSTEM = """You are a self-improvement proposer for an AI agent.
-You read recent turns and propose K candidate changes. Output ONLY a JSON envelope.
-
-Schema:
-```json
-{
-  "candidates": [
-    {
-      "id": "c1",
-      "kind": "add_lesson" | "revert",
-      "lesson": "<imperative one-liner>" | null,
-      "tag": "<short category>" | null,
-      "predicted_impact": "<one sentence>",
-      "risk": "low" | "medium" | "high"
-    }
-  ]
-}
-```
-Prefer LOW risk. Favor concrete tool/workflow lessons over vague personality changes."""
-
-        private const val JUDGE_SYSTEM = """You are an impact judge. You read recent agent turns and a candidate self-improvement, then predict the impact. Output ONLY a JSON envelope.
-
-Schema:
-```json
-{
-  "candidate_id": "<id>",
-  "predicted_avg_score_delta": -1.0 .. +1.0,
-  "would_help_count": 0,
-  "would_hurt_count": 0,
-  "confidence": "low" | "medium" | "high",
-  "verdict": "apply" | "skip" | "needs_more_data"
-}
-```
-Be conservative. "needs_more_data" is fine when uncertain."""
     }
 
     // ── 结果类型 ──────────────────────────────────────
@@ -103,39 +58,6 @@ Be conservative. "needs_more_data" is fine when uncertain."""
         val actionDetail: String = "",
         val rationale: String = "",
         val error: String? = null,
-    )
-
-    data class EvolveResult(
-        val ok: Boolean,
-        val roundsRun: Int = 0,
-        val audit: List<EvolveRound> = emptyList(),
-        val applied: List<AppliedAction> = emptyList(),
-        val dryRun: Boolean = true,
-        val error: String? = null,
-    )
-
-    data class EvolveRound(
-        val round: Int,
-        val candidates: List<Candidate> = emptyList(),
-        val winner: Candidate? = null,
-        val applied: AppliedAction? = null,
-    )
-
-    data class Candidate(
-        val id: String,
-        val kind: String,       // "add_lesson" | "revert"
-        val lesson: String? = null,
-        val tag: String? = null,
-        val predictedImpact: String = "",
-        val risk: String = "low",
-        val verdict: String = "skip",
-        val confidence: String = "low",
-    )
-
-    data class AppliedAction(
-        val kind: String,
-        val detail: String,
-        val success: Boolean,
     )
 
     // ── B2 · deepReflect ──────────────────────────────
@@ -215,133 +137,6 @@ Now produce your JSON envelope.
         }
     }
 
-    // ── B3 · deepEvolve ───────────────────────────────
-
-    /**
-     * 自进化循环：提议 → 判断 → 应用.
-     *
-     * @param dryRun true=只预览不应用，false=实际修改
-     * @param maxRounds 最多跑几轮
-     * @param candidatesPerRound 每轮提议几个候选
-     */
-    fun deepEvolve(
-        dryRun: Boolean = true,
-        maxRounds: Int = 1,
-        candidatesPerRound: Int = 3,
-    ): EvolveResult {
-        if (llmCall == null) {
-            return EvolveResult(ok = false, error = "LLM not configured for deep_evolve")
-        }
-
-        val audit = mutableListOf<EvolveRound>()
-        val applied = mutableListOf<AppliedAction>()
-
-        for (round in 1..maxRounds) {
-            val fitness = scorer.computeFitness()
-            val scores = scorer.readRecentScores(20)
-            if (scores.isEmpty()) break
-
-            val scoreRows = scores.joinToString("\n") { s ->
-                "  - ${s.ts} · score=${s.score} · tool=${s.toolName} · reason=${s.reason}"
-            }
-
-            // 1. 提议
-            val proposeUser = """
-AGENT: octopus-mobile
-ROUND: $round/$maxRounds
-K = $candidatesPerRound
-
-### Recent scores
-$scoreRows
-
-### Heuristic verdict
-score=${fitness.score} trend=${fitness.trend} verdict=${fitness.verdict}
-
-Propose $candidatesPerRound candidate changes.
-""".trimIndent()
-
-            val candidates = try {
-                val proposeReply = llmCall.invoke("$PROPOSE_SYSTEM\n\n$proposeUser") ?: ""
-                parseCandidates(proposeReply)
-            } catch (e: Exception) {
-                Log.e(TAG, "Propose failed round $round", e)
-                emptyList()
-            }
-
-            if (candidates.isEmpty()) {
-                audit.add(EvolveRound(round = round))
-                break
-            }
-
-            // 2. 判断每个候选
-            val judgedCandidates = candidates.map { cand ->
-                val judgeUser = """
-AGENT: octopus-mobile
-
-### Recent turns
-$scoreRows
-
-### Candidate
-id=${cand.id} kind=${cand.kind} lesson=${cand.lesson} risk=${cand.risk}
-
-Predict impact + verdict.
-""".trimIndent()
-
-                try {
-                    val judgeReply = llmCall.invoke("$JUDGE_SYSTEM\n\n$judgeUser") ?: ""
-                    val verdict = parseJudgeVerdict(judgeReply)
-                    cand.copy(verdict = verdict.first, confidence = verdict.second)
-                } catch (e: Exception) {
-                    cand.copy(verdict = "skip")
-                }
-            }
-
-            // 3. 选最优
-            val winner = judgedCandidates
-                .filter { it.verdict == "apply" }
-                .maxWithOrNull(compareBy { c ->
-                    mapOf("high" to 3, "medium" to 2, "low" to 1)[c.confidence] ?: 0
-                })
-
-            val appliedAction = if (winner != null && !dryRun) {
-                val action = AppliedAction(
-                    kind = winner.kind,
-                    detail = winner.lesson ?: winner.predictedImpact,
-                    success = true,
-                )
-                applied.add(action)
-                // 自动写入教训库
-                if (winner.kind == "add_lesson" && !winner.lesson.isNullOrEmpty()) {
-                    lessonStore?.addLesson(LessonStore.Lesson(
-                        id = "evolve_${System.currentTimeMillis()}",
-                        content = winner.lesson,
-                        tag = winner.tag,
-                        source = "evolve",
-                        createdAt = System.currentTimeMillis(),
-                    ))
-                    Log.i(TAG, "Lesson auto-saved from deepEvolve: ${winner.lesson}")
-                }
-                Log.i(TAG, "EVOLVE APPLIED: ${winner.kind} - ${winner.lesson}")
-                action
-            } else null
-
-            audit.add(EvolveRound(
-                round = round,
-                candidates = judgedCandidates,
-                winner = winner,
-                applied = appliedAction,
-            ))
-        }
-
-        return EvolveResult(
-            ok = true,
-            roundsRun = audit.size,
-            audit = audit,
-            applied = applied,
-            dryRun = dryRun,
-        )
-    }
-
     // ── 解析 ──────────────────────────────────────────
 
     private fun parseReflectReply(reply: String): ReflectResult {
@@ -359,38 +154,6 @@ Predict impact + verdict.
             )
         } catch (e: Exception) {
             ReflectResult(ok = false, error = "Parse failed: ${e.message}")
-        }
-    }
-
-    private fun parseCandidates(reply: String): List<Candidate> {
-        return try {
-            val jsonStr = extractJson(reply)
-            val json = JSONObject(jsonStr)
-            val arr = json.optJSONArray("candidates") ?: return emptyList()
-            (0 until arr.length()).mapNotNull { i ->
-                val obj = arr.optJSONObject(i) ?: return@mapNotNull null
-                Candidate(
-                    id = obj.optString("id", "c${i + 1}"),
-                    kind = obj.optString("kind", "add_lesson"),
-                    lesson = obj.optString("lesson", null),
-                    tag = obj.optString("tag", null),
-                    predictedImpact = obj.optString("predicted_impact", ""),
-                    risk = obj.optString("risk", "low"),
-                )
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Parse candidates failed", e)
-            emptyList()
-        }
-    }
-
-    private fun parseJudgeVerdict(reply: String): Pair<String, String> {
-        return try {
-            val jsonStr = extractJson(reply)
-            val json = JSONObject(jsonStr)
-            json.optString("verdict", "skip") to json.optString("confidence", "low")
-        } catch (e: Exception) {
-            "skip" to "low"
         }
     }
 
