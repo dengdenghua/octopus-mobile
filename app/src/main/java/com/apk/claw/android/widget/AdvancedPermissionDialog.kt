@@ -76,7 +76,14 @@ class AdvancedPermissionDialog private constructor(context: Context) :
                 tvStatus.setTextColor(ContextCompat.getColor(context, R.color.colorTextSecondary))
                 btnPrimary.setText(R.string.advanced_action_open_shizuku)
                 btnPrimary.setOnClickListener {
-                    openShizukuApp()
+                    // Shizuku 服务在跑(binder 存活)→ 直接弹它的授权框(Shizuku 的授权记在它自己的
+                    // 服务端白名单里,只有 requestPermission 走一遍才会记上;此前只 openShizukuApp,
+                    // 从不 requestPermission,导致永远拿不到权限)。没跑起来才去打开 Shizuku 启动它。
+                    if (ShizukuManager.isBinderAlive) {
+                        ShizukuManager.requestPermission()
+                    } else {
+                        openShizukuApp()
+                    }
                     dismiss()
                 }
             }
