@@ -14,6 +14,7 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.ContextCompat
@@ -23,7 +24,10 @@ import com.apk.claw.android.channel.Channel
 import com.apk.claw.android.octopus_mobile.VoiceInput
 import com.apk.claw.android.service.ClawAccessibilityService
 import com.apk.claw.android.ui.compose.screen.ChatAgentBridge
+import com.apk.claw.android.ui.desktop.CharacterRegistry
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
+import com.google.android.material.imageview.ShapeableImageView
+import com.google.android.material.shape.ShapeAppearanceModel
 import com.lzf.easyfloat.EasyFloat
 import com.lzf.easyfloat.enums.ShowPattern
 import com.lzf.easyfloat.enums.SidePattern
@@ -43,6 +47,8 @@ object FloatingCircleManager {
     private const val IDLE_OFFSET_X_DP = 16
     private const val IDLE_OFFSET_Y_DP = 300
     private const val LISTENING_OFFSET_Y_DP = 100
+    private const val AVATAR_SIZE_DP = 50
+    private const val RING_MARGIN_DP = 3
     private val main = Handler(Looper.getMainLooper())
     private var showing = false
     private var listening = false
@@ -105,18 +111,12 @@ object FloatingCircleManager {
 
     fun setIdleState() = LiveControlOverlay.hide()
 
-    /** 更新球颜色（无障碍状态变化时调用） */
+    /** 更新外圈颜色（无障碍状态变化时调用；头像不变，只换状态环） */
     fun updateOctopusState() {
         if (listening) return // 聆听中不切换视图
         main.post {
             val view = EasyFloat.getFloatView(TAG) ?: return@post
-            val running = ClawAccessibilityService.isRunning()
-            val bgColor = if (running) cSuccess else cError
-            view.background = GradientDrawable().apply {
-                setColor(bgColor)
-                cornerRadius = dp(28).toFloat()
-                setStroke(dp(2), Color.argb(60, 255, 255, 255))
-            }
+            view.background = ringDrawable(a11yRingColor())
         }
     }
 
@@ -139,24 +139,40 @@ object FloatingCircleManager {
         listening = false
     }
 
-    /** 待机章鱼球 */
+    /** 无障碍状态环颜色:绿=开、红=关。 */
+    private fun a11yRingColor(): Int = if (ClawAccessibilityService.isRunning()) cSuccess else cError
+
+    /** 圆形状态环(深底兜底 + 状态色描边),头像叠在内层。 */
+    private fun ringDrawable(ringColor: Int): GradientDrawable = GradientDrawable().apply {
+        setColor(cBg)
+        cornerRadius = dp(28).toFloat()
+        setStroke(dp(3), ringColor)
+    }
+
+    /**
+     * 助手球头像 = 当前角色头像(与桌面 agent、控制中心同一来源 [CharacterRegistry]);
+     * 圆形裁切、内缩 3dp 露出外圈状态环。八爪鱼图标只留给应用外品牌位(桌面图标/通知/闪屏)。
+     */
+    private fun buildAvatarView(app: android.content.Context, size: Int): View =
+        ShapeableImageView(app).apply {
+            setImageResource(CharacterRegistry.current.avatarRes)
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            shapeAppearanceModel = ShapeAppearanceModel.builder()
+                .setAllCornerSizes((size / 2).toFloat())
+                .build()
+        }
+
+    /** 待机助手球:角色头像 + 无障碍状态外圈,可拖拽/点击(语音)/长按(无障碍设置)。 */
     private fun buildIdleView(app: android.content.Context): View {
-        val a11yOn = ClawAccessibilityService.isRunning()
-        val bgColor = if (a11yOn) cSuccess else cError
         return FrameLayout(app).apply {
             layoutParams = FrameLayout.LayoutParams(dp(56), dp(56))
-            background = GradientDrawable().apply {
-                setColor(bgColor)
-                cornerRadius = dp(28).toFloat()
-                setStroke(dp(2), Color.argb(60, 255, 255, 255))
-            }
+            background = ringDrawable(a11yRingColor())
             elevation = dp(6).toFloat()
 
-            addView(TextView(app).apply {
-                text = "🐙"
-                textSize = 24f
-                gravity = Gravity.CENTER
-                layoutParams = FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT)
+            addView(buildAvatarView(app, dp(AVATAR_SIZE_DP)).apply {
+                layoutParams = FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT).apply {
+                    val m = dp(RING_MARGIN_DP); setMargins(m, m, m, m)
+                }
             })
 
             // 点击 → 语音
@@ -239,10 +255,8 @@ object FloatingCircleManager {
                 gravity = Gravity.CENTER
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
 
-                addView(TextView(app).apply {
-                    text = "🐙"
-                    textSize = 20f
-                    layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                addView(buildAvatarView(app, dp(24)).apply {
+                    layoutParams = LinearLayout.LayoutParams(dp(24), dp(24)).apply {
                         marginEnd = dp(8)
                     }
                 })

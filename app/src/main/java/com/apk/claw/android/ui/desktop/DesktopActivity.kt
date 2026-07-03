@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.layout.Column
@@ -54,7 +53,6 @@ import androidx.compose.material.icons.filled.DesktopWindows
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Forum
-import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Mic
@@ -104,7 +102,6 @@ import com.apk.claw.android.ui.compose.screen.AgentSquareScreen
 import com.apk.claw.android.ui.compose.screen.ChatScreen
 import com.apk.claw.android.ui.compose.screen.DiscoverScreen
 import com.apk.claw.android.ui.device.DeviceListActivity
-import com.apk.claw.android.ui.featurescreens.MiniAppListActivity
 import com.apk.claw.android.utils.KVUtils
 import com.apk.claw.android.ui.compose.theme.OctopusTheme
 import kotlinx.coroutines.delay
@@ -303,13 +300,14 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
         val desktopContent = @Composable {
             BoxWithConstraints(Modifier.fillMaxSize()) {
                 val heroH = maxHeight * TV_HERO_HEIGHT_FRACTION
-                val cols = if (docked) TV_COLS_DOCKED else if (bigUi) TV_COLS_TV else TV_COLS_PHONE
+                val maxCols = if (docked) TV_COLS_DOCKED else if (bigUi) TV_COLS_TV else TV_COLS_PHONE
                 val miniApps = remember { MiniAppRegistry.all() }
                 val apps = buildList {
                     add(TvAppSpec(Icons.Filled.ChatBubbleOutline, TvGradChat) { openWindow(WinContent.Chat) })
                     add(TvAppSpec(Icons.Filled.Person, TvGradChar) { openWindow(WinContent.Character) })
                     add(TvAppSpec(Icons.Filled.Explore, TvGradDiscover) { openWindow(WinContent.Discover) })
                     add(TvAppSpec(Icons.Filled.Forum, TvGradSquare) { openWindow(WinContent.Square) })
+                    // 「全部应用」入口去掉:主页少一个图标,右下角空出来给悬浮头像 agent。
                     miniApps.forEach { m ->
                         add(
                             TvAppSpec(Icons.Filled.Apps, TvGradMini) {
@@ -317,38 +315,36 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
                             },
                         )
                     }
-                    add(
-                        TvAppSpec(Icons.Filled.GridView, TvGradAll) {
-                            runCatching {
-                                ctx.startActivity(android.content.Intent(ctx, MiniAppListActivity::class.java))
-                            }
-                        },
-                    )
                 }
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(cols),
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                        start = 24.dp, end = 24.dp, bottom = 24.dp,
-                    ),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp),
-                ) {
-                    // Hero 全宽头:向下滚 → Hero 上移、露出更多图标行(ATV 瀑布流)。
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        TvHero(
-                            character = character,
-                            sceneUrl = sceneUrl,
-                            big = bigUi,
-                            modifier = Modifier.fillMaxWidth().height(heroH),
-                            onClick = { openWindow(WinContent.Chat) },
-                        )
-                    }
-                    itemsIndexed(apps) { i, a ->
-                        TvAppIcon(
-                            a.icon, a.grad, a.onClick,
-                            if (i == 0) Modifier.focusRequester(firstIconFocus) else Modifier,
-                        )
+                // 列数 = 图标数(封顶 maxCols):图标少时单行填满(统一大小),超过才多排、往下滚(瀑布流)。
+                val cols = apps.size.coerceIn(1, maxCols)
+                // 图标区两边对称留白 → 整行居中(重心不偏);右侧留白正好容纳右下角悬浮头像,不重叠。
+                val sideGap = if (docked) 20.dp else 104.dp
+                Column(Modifier.fillMaxSize()) {
+                    // Hero 全宽头(不受留白影响,标题贴左);占视口 ~72%,首页只露一排图标。
+                    TvHero(
+                        character = character,
+                        sceneUrl = sceneUrl,
+                        big = bigUi,
+                        modifier = Modifier.fillMaxWidth().height(heroH),
+                        onClick = { openWindow(WinContent.Chat) },
+                    )
+                    // 图标网格:向下滚露出更多行(ATV 瀑布流);统一大小 + 两侧留白居中。
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(cols),
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                            start = sideGap, end = sideGap, bottom = 20.dp,
+                        ),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp),
+                    ) {
+                        itemsIndexed(apps) { i, a ->
+                            TvAppIcon(
+                                a.icon, a.grad, a.onClick,
+                                if (i == 0) Modifier.focusRequester(firstIconFocus) else Modifier,
+                            )
+                        }
                     }
                 }
                 // 极简顶栏:浮在右上(满屏 / 分屏左区均对齐)。
@@ -467,9 +463,7 @@ private val TvGradChar = listOf(Color(0xFFB18CFF), Color(0xFF6B4BFF))       // �
 private val TvGradDiscover = listOf(Color(0xFF5AB0FF), Color(0xFF0A84FF))   // 发现 蓝
 private val TvGradSquare = listOf(Color(0xFFFFC24D), Color(0xFFFF9500))     // 广场 橙
 private val TvGradMini = listOf(Color(0xFF3DE0D0), Color(0xFF16B8A6))       // 小程序 青
-private val TvGradAll = listOf(Color(0xFF8E97E6), Color(0xFF4A55B8))        // 全部 靛
 private val TvHeroScrim = listOf(Color(0x00000000), Color(0x33000000), Color(0xF0070810))
-private val TvHeroFallback = listOf(Color(0xFF1B1230), Color(0xFF0A0B12))
 
 /** 焦点图标规格(下发到 [TvIconShelf] 渲染)。 */
 private data class TvAppSpec(
@@ -491,6 +485,7 @@ private fun TvHero(
     onClick: () -> Unit,
 ) {
     Box(modifier.clickable(onClick = onClick)) {
+        // 有场景图 = 铺满作壁纸 + 底部渐隐压出标题;无图 = 全透明,让桌面霓虹壁纸透出(信息卡不遮挡桌面)。
         if (sceneUrl != null) {
             coil.compose.AsyncImage(
                 model = sceneUrl,
@@ -498,17 +493,11 @@ private fun TvHero(
                 contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
             )
-        } else {
             Box(
                 Modifier.fillMaxSize()
-                    .background(androidx.compose.ui.graphics.Brush.verticalGradient(TvHeroFallback)),
+                    .background(androidx.compose.ui.graphics.Brush.verticalGradient(TvHeroScrim)),
             )
         }
-        // 底部渐隐,压出标题
-        Box(
-            Modifier.fillMaxSize()
-                .background(androidx.compose.ui.graphics.Brush.verticalGradient(TvHeroScrim)),
-        )
         Column(
             Modifier.align(Alignment.BottomStart)
                 .padding(start = if (big) 40.dp else 28.dp, bottom = if (big) 32.dp else 20.dp),
@@ -609,15 +598,14 @@ private fun TvTopChrome(
         HoloDot(connColor)
         Text(timeText, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium)
         Box {
+            // 应用内 agent 头像 = 当前角色头像(和右下角悬浮头像同一来源 CharacterAvatar);
+            // 点开即控制中心。八爪鱼图标只留给应用外品牌位(桌面图标/通知/闪屏)。
             Box(
-                Modifier.size(32.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.16f))
+                Modifier.size(32.dp).clip(CircleShape)
                     .holoFocus(CircleShape).clickable { menu = true },
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(
-                    Icons.Filled.Person, contentDescription = "菜单",
-                    tint = Color.White, modifier = Modifier.size(18.dp),
-                )
+                CharacterAvatar(32.dp)
             }
             // 控制中心式下拉:2×2 玻璃磁贴(参考 Apple TV 控制中心)。
             androidx.compose.material3.DropdownMenu(
