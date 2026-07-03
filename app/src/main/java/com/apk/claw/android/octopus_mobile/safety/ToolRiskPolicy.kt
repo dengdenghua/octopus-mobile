@@ -78,6 +78,7 @@ object ToolRiskPolicy {
         "create_pm_task",      // 写企业 PM 系统
         "echo_act",            // 写 Echo 虚拟世界
         "echo_bind",           // 绑定角色进 Echo 虚拟世界
+        "spawn_subagent",      // 子 Agent 执行子任务（内部各工具再走一遍 executeTool 管线）
     )
 
     /**

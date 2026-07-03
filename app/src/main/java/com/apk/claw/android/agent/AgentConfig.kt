@@ -17,6 +17,8 @@ data class AgentConfig(
     val enableVision: Boolean = true,
     /** 是否每轮自动注入屏幕截图（需模型支持视觉 + enableVision=true） */
     val enableAutoScreenshot: Boolean = true,
+    /** 是否跳过 TaskCheckpoint 持久化（子 Agent 设为 true 避免与主 Agent 冲突） */
+    val skipCheckpoint: Boolean = false,
 ) {
     companion object {
         const val DEFAULT_SYSTEM_PROMPT =
@@ -96,6 +98,12 @@ data class AgentConfig(
   只有当任务目标已经**可以确认达成**时，才调用 finish(summary)。
   summary 要描述完成了什么，而不只是说"完成了"。
 
+规则 11：复杂任务用子 Agent 分工。
+  当任务有多个独立阶段（如"搜索 X 并发邮件"、"先查日历再预约"），用 spawn_subagent(task="...") 派生子 Agent 执行子任务。
+  子 Agent 有独立的迭代预算（默认 15 轮）和消息历史，不会消耗主循环的迭代次数。
+  子 Agent 的执行结果作为工具返回值，据此决策下一步。
+  注意：子 Agent 适合"可以独立完成的子任务"，不适合需要主 Agent 上下文的连续操作。
+
 ## 安全约束
 - 绝不自动填写账户密码、支付密码、银行卡号等敏感凭证（WiFi 密码等用户明确要求输入的除外）
 - 绝不确认购买/支付操作
@@ -172,6 +180,7 @@ run_code 适用：纯计算、数据处理、文件读写、API 调用、UI 自�
         private var memoryPromptSuffix: String = ""
         private var enableVision: Boolean = true
         private var enableAutoScreenshot: Boolean = true
+        private var skipCheckpoint: Boolean = false
 
         fun apiKey(apiKey: String) = apply { this.apiKey = apiKey }
         fun baseUrl(baseUrl: String) = apply { this.baseUrl = baseUrl }
@@ -185,10 +194,11 @@ run_code 适用：纯计算、数据处理、文件读写、API 调用、UI 自�
         fun memoryPromptSuffix(memoryPromptSuffix: String) = apply { this.memoryPromptSuffix = memoryPromptSuffix }
         fun enableVision(enableVision: Boolean) = apply { this.enableVision = enableVision }
         fun enableAutoScreenshot(enableAutoScreenshot: Boolean) = apply { this.enableAutoScreenshot = enableAutoScreenshot }
+        fun skipCheckpoint(skipCheckpoint: Boolean) = apply { this.skipCheckpoint = skipCheckpoint }
 
         fun build(): AgentConfig {
             require(apiKey.isNotEmpty()) { "API key is required" }
-            return AgentConfig(apiKey, baseUrl, modelName, systemPrompt, maxIterations, temperature, provider, streaming, dynamicPromptSuffix, memoryPromptSuffix, enableVision, enableAutoScreenshot)
+            return AgentConfig(apiKey, baseUrl, modelName, systemPrompt, maxIterations, temperature, provider, streaming, dynamicPromptSuffix, memoryPromptSuffix, enableVision, enableAutoScreenshot, skipCheckpoint)
         }
     }
 }

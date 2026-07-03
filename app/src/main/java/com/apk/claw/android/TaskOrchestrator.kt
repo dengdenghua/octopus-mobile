@@ -39,7 +39,15 @@ class TaskOrchestrator(
 
     companion object {
         private const val TAG = "TaskOrchestrator"
+
+        /** 当前活跃的 TaskOrchestrator 实例，供 DefaultAgentService 等下游访问 reflexRouter。 */
+        @Volatile
+        var current: TaskOrchestrator? = null
+            private set
     }
+
+    /** 获取当前 AgentConfig（供子 Agent 等下游使用）。 */
+    fun getCurrentAgentConfig(): AgentConfig = agentConfigProvider()
 
     private lateinit var agentService: AgentService
 
@@ -61,6 +69,9 @@ class TaskOrchestrator(
         addRules(ReflexRouter.defaultRules())
     }
 
+    /** 对外暴露 reflexRouter，供下游（DefaultAgentService）自动学习新规则。 */
+    internal fun getReflexRouter(): ReflexRouter = reflexRouter
+
     /** 方案 F 决策层切换器（远程/本地模式） */
     var brainSelector: BrainModeSelector? = null
 
@@ -80,6 +91,10 @@ class TaskOrchestrator(
     /** 任务完成计数器，每完成 N 个任务触发一次 B2 反思 */
     private var taskCompleteCount: Int = 0
     private val REFLECT_EVERY_N_TASKS: Int = 3
+
+    init {
+        current = this
+    }
 
     // ==================== Agent 生命周期 ====================
 

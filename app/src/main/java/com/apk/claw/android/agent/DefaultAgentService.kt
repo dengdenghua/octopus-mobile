@@ -677,12 +677,12 @@ class DefaultAgentService : AgentService {
 
         actionRecorder = ActionRecorder()
         val state = AgentLoopState(buildInitialMessages(userPrompt), config.maxIterations, userPrompt)
-        saveCheckpoint(state)
+        if (!config.skipCheckpoint) saveCheckpoint(state)
         while (state.shouldContinue()) {
             state.iterations++
             callback.onLoopStart(state.iterations)
             if (state.runSingleIteration(callback) == IterationOutcome.TERMINATE) break
-            saveCheckpoint(state)
+            if (!config.skipCheckpoint) saveCheckpoint(state)
         }
         finishLoop(state, callback)
     }
@@ -1084,7 +1084,7 @@ class DefaultAgentService : AgentService {
     }
 
     private fun finishLoop(state: AgentLoopState, callback: AgentCallback) {
-        TaskCheckpoint.clear()
+        if (!config.skipCheckpoint) TaskCheckpoint.clear()
         // ── 动作录制：任务成功完成且有录制动作 → 提交到快路径缓存 ──
         if (state.iterations < state.maxIterations && !cancelToken.isCancelled()) {
             // 任务正常完成（不是被取消或超迭代）→ 提交快路径缓存
@@ -1107,7 +1107,7 @@ class DefaultAgentService : AgentService {
 
     override fun cancel() {
         cancelToken.cancel(ClawApplication.instance.getString(R.string.agent_task_cancel))
-        TaskCheckpoint.clear()
+        if (!config.skipCheckpoint) TaskCheckpoint.clear()
     }
 
     override fun shutdown() {

@@ -197,6 +197,9 @@ object ToolRegistry {
         // 跟 impl/browser/BrowserTools.kt 里的 NavigateTool 重名)
         register(com.apk.claw.android.tool.impl.NavigateTool())
 
+        // 子 Agent 工具（多 Agent 分工：主 Agent 派生子 Agent 执行复杂子任务）
+        register(com.apk.claw.android.tool.impl.SubAgentTool())
+
         // 媒体播放器工具（mpv 引擎）
         register(MediaTools())
 

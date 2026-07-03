@@ -2,6 +2,7 @@ package com.apk.claw.android.tool
 
 import com.apk.claw.android.agent.CancellationToken
 import com.blankj.utilcode.util.ScreenUtils
+import java.util.concurrent.locks.LockSupport
 
 abstract class BaseTool {
 
@@ -39,7 +40,8 @@ abstract class BaseTool {
             "search_app_in_store",
             "run_code",
             "preview_html",
-            "generate_app"
+            "generate_app",
+            "spawn_subagent"
         )
 
         private val threadCancelToken = ThreadLocal<CancellationToken>()
@@ -107,35 +109,39 @@ abstract class BaseTool {
             if (result.isSuccess) {
                 val waitMs = optionalLong(params, "wait_after", 0)
                 if (waitMs in 1..MAX_WAIT_AFTER_MS) {
-                    if (cancellationToken != null) {
-                        cancellationToken.sleepInterruptible(waitMs)
-                    } else {
-                        try {
-                            Thread.sleep(waitMs)
-                        } catch (_: InterruptedException) {
-                            Thread.currentThread().interrupt()
-                        }
-                    }
+                    sleepInterruptible(waitMs)
                 }
             }
             result
         }
     }
 
-    /** 子类可调用的可中断 sleep：响应 CancellationToken 取消。 */
+    /**
+     * 子类可调用的可中断 sleep。
+     * 有 CancellationToken 时响应取消；无 token 时用 LockSupport.parkNanos 替代 Thread.sleep,
+     * 可被 Thread.interrupt() 唤醒,避免阻塞线程无法取消。
+     * @return true=正常完成等待；false=被中断/取消。
+     */
     protected fun sleepInterruptible(ms: Long): Boolean {
         val token = currentCancellationToken()
         return if (token != null) {
             token.sleepInterruptible(ms)
         } else {
-            try {
-                Thread.sleep(ms)
-                true
-            } catch (_: InterruptedException) {
-                Thread.currentThread().interrupt()
-                false
-            }
+            parkInterruptible(ms)
         }
+    }
+
+    /** 用 LockSupport 实现可中断等待，避免 Thread.sleep。 */
+    private fun parkInterruptible(ms: Long): Boolean {
+        if (ms <= 0) return true
+        val deadlineNs = System.nanoTime() + ms * 1_000_000
+        while (System.nanoTime() < deadlineNs) {
+            if (Thread.interrupted()) return false
+            val remainingNs = deadlineNs - System.nanoTime()
+            if (remainingNs <= 0) break
+            LockSupport.parkNanos(remainingNs)
+        }
+        return !Thread.interrupted()
     }
 
     /** 子类可调用：若当前任务已取消则抛 InterruptedException。 */
