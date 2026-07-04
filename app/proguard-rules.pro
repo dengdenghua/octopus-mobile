@@ -299,3 +299,14 @@
 # 解释器模式下不生成 JVM 字节码,但 Rhino 用反射加载内部类需全量保留
 -keep class org.mozilla.javascript.** { *; }
 -dontwarn org.mozilla.javascript.**
+
+# Shizuku 全自动配置(libadb-android + sun-security 重定位包 + spake2 JNI)
+# X509CertInfo.set 靠字段名反射生成证书;libadb 无自带 consumer 规则;spake2 走 native —— 都要保活,
+# 否则 release 下配对/拉起 Shizuku 静默失败。conscrypt 自带 proguard.txt,无需再 keep。
+-keep class android.sun.security.** { *; }
+-dontwarn android.sun.security.**
+-keep class io.github.muntashirakon.adb.** { *; }
+-dontwarn io.github.muntashirakon.adb.**
+-keep class io.github.muntashirakon.crypto.spake2.** { *; }
+-dontwarn io.github.muntashirakon.crypto.spake2.**
+-dontwarn org.conscrypt.**

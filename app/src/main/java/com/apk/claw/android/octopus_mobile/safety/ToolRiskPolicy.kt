@@ -37,6 +37,9 @@ object ToolRiskPolicy {
         // 受限目录文件读写、callTool(回 ToolRegistry)等能力 —— 非纯计算,最高危一类。
         // 登记 HIGH → 自动获得「不可信来源弹审批 + 全程审计」,无需新增闸门。见 RunCodeTool/ScriptSandbox。
         "run_code",
+        // 全自动配置 Shizuku:与本机 adbd 完成 ADB 配对并跑 shell 拉起 Shizuku(shell 级特权入口)。
+        // 最高危一类 → 不可信来源须弹审批 + 全程审计,防远端静默给自己开 Shizuku 提权。见 ShizukuAutoSetupTool。
+        "shizuku_auto_setup",
     )
 
     val MEDIUM_RISK_TOOLS: Set<String> = setOf(
