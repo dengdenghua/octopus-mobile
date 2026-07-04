@@ -679,8 +679,6 @@
     <string name="feat_clouddrive">クラウド</string>
     <string name="feat_memory">メモリ</string>
     <string name="feat_video">ビデオライブラリ</string>
-    <string name="feat_desktop">デスクトップモード</string>
-    <string name="feat_desktop_desc">横向きワークベンチ:左ブラウザ + 右チャット</string>
     <!-- Desktop mode (横屏桌面) -->
     <string name="desktop_chat_label">チャット</string>
     <string name="desktop_collapse_chat">チャットを折りたたむ</string>
@@ -805,6 +803,7 @@
     <string name="account_byo_member_hint">会員登録で自分のモデルを利用可(毎月リセット)</string>
     <string name="settings_appearance">外観</string>
     <string name="settings_light_mode">ライトモード</string>
+    <string name="settings_dark_mode">ダークモード</string>
     <string name="settings_theme_follow_system">システムに従う</string>
     <string name="settings_theme_light">ライト</string>
     <string name="settings_theme_dark">ダーク</string>

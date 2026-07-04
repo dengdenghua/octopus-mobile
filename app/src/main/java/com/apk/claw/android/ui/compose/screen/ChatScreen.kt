@@ -373,10 +373,23 @@ fun ChatScreen() {
                 showThinking()
                 ChatAgentBridge.run(
                     prompt = t,
-                    onTool = { icon, name, args, res -> finalizeStream(null); hideThinking(); messages.add(ChatMessage.ToolCall(icon, name, args, res)); showThinking(); persist() },
+                    onTool = { icon, name, args, res ->
+                        com.apk.claw.android.agent.AgentProgressBus.set(null)
+                        finalizeStream(null); hideThinking()
+                        messages.add(ChatMessage.ToolCall(icon, name, args, res))
+                        showThinking(); persist()
+                    },
                     onText = { txt -> appendStream(txt) },
-                    onDone = { ans -> hideThinking(); finalizeStream(ans); isRunning = false; scrollEnd(); persist() },
-                    onError = { e -> hideThinking(); finalizeStream(null); messages.add(ChatMessage.AgentMessage("⚠️ $e")); isRunning = false; scrollEnd(); persist() },
+                    onDone = { ans ->
+                        com.apk.claw.android.agent.AgentProgressBus.set(null)
+                        hideThinking(); finalizeStream(ans); isRunning = false; scrollEnd(); persist()
+                    },
+                    onError = { e ->
+                        com.apk.claw.android.agent.AgentProgressBus.set(null)
+                        hideThinking(); finalizeStream(null)
+                        messages.add(ChatMessage.AgentMessage("⚠️ $e"))
+                        isRunning = false; scrollEnd(); persist()
+                    },
                 )
             } else {
                 messages.add(ChatMessage.AgentMessage(ackText))
@@ -497,7 +510,11 @@ fun ChatScreen() {
                 Box(
                     modifier = Modifier
                         .size(6.dp)
-                        .background(ErrorColor.copy(alpha = if (isRecording) recPulse else 0.6f), CircleShape)
+                        // 录制中=红点闪烁;没工作=灰点(和下面 REC 文字的 TextMuted 一致,不再是暗橙)
+                        .background(
+                            if (isRecording) ErrorColor.copy(alpha = recPulse) else TextMuted.copy(alpha = 0.6f),
+                            CircleShape,
+                        )
                 )
                 Spacer(Modifier.width(OctopusSpacing.xs))
                 Text(
@@ -1744,6 +1761,8 @@ private fun ToolCallItem(msg: ChatMessage.ToolCall) {
 
 @Composable
 private fun ThinkingItem(text: String) {
+    // 有耗时工具(如 generate_app)冒泡阶段进度时,显示阶段(「生成代码中…」),否则显示「思考中」
+    val stage by com.apk.claw.android.agent.AgentProgressBus.stage.collectAsState()
     val infiniteTransition = rememberInfiniteTransition(label = "thinking")
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(
@@ -1760,7 +1779,7 @@ private fun ThinkingItem(text: String) {
             )
         }
         Spacer(modifier = Modifier.width(OctopusSpacing.sm))
-        Text(text, fontSize = OctopusType.label, color = TextSecondary)
+        Text(stage ?: text, fontSize = OctopusType.label, color = TextSecondary)
         Spacer(modifier = Modifier.width(OctopusSpacing.sm))
         (0..2).forEach { i ->
             val alpha by infiniteTransition.animateFloat(

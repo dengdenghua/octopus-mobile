@@ -393,7 +393,7 @@ class DefaultAgentService : AgentService {
                         }
                         override fun onComplete(response: LlmResponse) {}
                         override fun onError(error: Throwable) {}
-                    })
+                    }, cancelToken)
                 } else {
                     llmClient.chat(messages, toolSpecs)
                 }

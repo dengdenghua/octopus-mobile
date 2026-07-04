@@ -1443,6 +1443,66 @@ def square_discovery() -> dict[str, Any]:
     return SQUARE_DISCOVERY
 
 
+# 小程序投稿 html 大小上限(纯文本,比插件 ZIP 的 10MB 上限小得多就够用)。
+MAX_MINIAPP_HTML_BYTES = 2 * 1024 * 1024   # 2MB
+
+
+@app.post("/square/publish")
+def square_publish(body: dict[str, Any], u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    """小程序投稿广场。走跟插件上传(/dev/plugins/upload)同一张 registry_assets 表 + 同一条
+    管理员审核队列(type='plugin', kind='mini-app')——不必另建一套投稿/审核系统。
+    契约(客户端 SquarePublisher.kt):{id, name, description, type:"mini-app", version, html,
+    actions:[名], allow_tools:[..], allow_hosts:[..], allow_device:[..]};鉴权 Bearer <登录 token>。
+    状态默认 pending,人工审核通过后才会出现在 GET /api/v1/registry/assets?type=plugin。"""
+    slug = str(body.get("id") or "").strip().lower()
+    if not slug or not re.match(r'^[a-z0-9][a-z0-9_-]{0,63}$', slug):
+        raise HTTPException(400, "id 无效(小写字母数字/下划线/连字符,1–64 字符)")
+    name = str(body.get("name") or "").strip()
+    if not name:
+        raise HTTPException(400, "name required")
+    html = str(body.get("html") or "")
+    if not html.strip():
+        raise HTTPException(400, "html 不能为空")
+    if len(html.encode("utf-8")) > MAX_MINIAPP_HTML_BYTES:
+        raise HTTPException(413, f"小程序页面过大(上限 {MAX_MINIAPP_HTML_BYTES // 1048576}MB)")
+
+    checksum = "sha256:" + hashlib.sha256(html.encode("utf-8")).hexdigest()
+    tags = {
+        "actions": body.get("actions") or [],
+        "allow_tools": body.get("allow_tools") or [],
+        "allow_hosts": body.get("allow_hosts") or [],
+        "allow_device": body.get("allow_device") or [],
+    }
+
+    aid = f"plugin/{slug}"
+    now = now_ms()
+    user_id = u["user_id"]
+    with closing(db()) as c:
+        existing = c.execute("SELECT author_id, status FROM registry_assets WHERE id=?", (aid,)).fetchone()
+        if existing and existing["author_id"] != user_id:
+            raise HTTPException(403, "该 id 已被其他用户占用")
+        c.execute("""
+            INSERT INTO registry_assets(id, slug, type, kind, version, name, description,
+                category, tags, platforms, mode, author_id, status, checksum, body, body_size, created_at, updated_at)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ON CONFLICT(id) DO UPDATE SET
+                version=excluded.version, name=excluded.name, description=excluded.description,
+                tags=excluded.tags, checksum=excluded.checksum, body=excluded.body,
+                body_size=excluded.body_size, status='pending', reject_reason='', updated_at=excluded.updated_at
+        """, (
+            aid, slug, "plugin", "mini-app",
+            str(body.get("version") or "1.0.0"),
+            name, str(body.get("description") or ""),
+            "", json.dumps(tags), json.dumps(["mobile"]), "mini-app",
+            user_id, "pending", checksum,
+            html, len(html.encode("utf-8")),
+            now, now,
+        ))
+        c.commit()
+    return {"success": True, "message": "已提交到广场,审核通过后就能被大家看到啦",
+            "data": {"id": aid, "slug": slug, "status": "pending"}}
+
+
 @app.get("/config")
 def app_config(request: Request) -> dict[str, Any]:
     """App 启动配置(公开)。技能中心(skill hub)子域名由服务端生成：
@@ -2085,13 +2145,15 @@ def _registry_row_to_asset(r: sqlite3.Row) -> dict[str, Any]:
 
 
 @app.get("/api/v1/registry/assets")
-def registry_list(type: str = "", category: str = "", q: str = "") -> dict[str, Any]:
-    """公开资产目录:?type=skill|plugin  可选 category/q 过滤。"""
+def registry_list(type: str = "", kind: str = "", category: str = "", q: str = "") -> dict[str, Any]:
+    """公开资产目录:?type=skill|plugin  可选 kind(如 mini-app)/category/q 过滤。"""
     with closing(db()) as c:
         sql = "SELECT * FROM registry_assets WHERE status='approved'"
         params: list[Any] = []
         if type:
             sql += " AND type=?"; params.append(type)
+        if kind:
+            sql += " AND kind=?"; params.append(kind)
         if category:
             sql += " AND category=?"; params.append(category)
         rows = c.execute(sql + " ORDER BY updated_at DESC", params).fetchall()
@@ -2267,7 +2329,7 @@ def admin_plugin_list(
 
 
 @app.post("/admin/api/plugins/{slug}/approve")
-def admin_plugin_approve(slug: str, _: bool = Depends(admin_guard)) -> dict[str, Any]:
+def admin_plugin_approve(slug: str, request: Request, _: bool = Depends(admin_guard)) -> dict[str, Any]:
     aid = f"plugin/{slug}"
     with closing(db()) as c:
         r = c.execute("SELECT id FROM registry_assets WHERE id=?", (aid,)).fetchone()
@@ -2281,7 +2343,7 @@ def admin_plugin_approve(slug: str, _: bool = Depends(admin_guard)) -> dict[str,
 
 
 @app.post("/admin/api/plugins/{slug}/reject")
-def admin_plugin_reject(slug: str, body: dict[str, Any], _: bool = Depends(admin_guard)) -> dict[str, Any]:
+def admin_plugin_reject(slug: str, body: dict[str, Any], request: Request, _: bool = Depends(admin_guard)) -> dict[str, Any]:
     aid = f"plugin/{slug}"
     reason = str(body.get("reason") or "")[:500]
     with closing(db()) as c:

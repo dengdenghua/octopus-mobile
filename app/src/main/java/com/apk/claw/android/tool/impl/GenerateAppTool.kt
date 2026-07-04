@@ -44,6 +44,10 @@ class GenerateAppTool : BaseTool() {
         /** 生成后自动修复的最大轮数(每轮:离屏渲染抓错 → LLM 修 → 再渲染)。 */
         private const val MAX_REPAIR = 2
 
+        /** 需求澄清:最多反问几个问题、每问最长多少字(防跑题/刷屏)。 */
+        private const val MAX_CLARIFY_Q = 3
+        private const val CLARIFY_Q_MAX_LEN = 80
+
         /**
          * 生成物可自动获授的「设备能力」白名单——只放**低危、无隐私读取**的工具:生成媒体、预览、
          * 联动其它小程序。刻意不含:截图/剪贴板读取/文件/短信/自动化点击等(会读隐私或改设备状态)。
@@ -71,6 +75,13 @@ class GenerateAppTool : BaseTool() {
             true,
         ),
         ToolParameter("app_name", "string", "Short app name/title shown as the preview title.", false),
+        ToolParameter(
+            "clarified", "boolean",
+            "Leave false/unset on the FIRST attempt — the tool may return 2-3 clarifying questions for " +
+                "you to ask the user. Set true ONLY after you've asked the user those questions and folded " +
+                "their answers into 'description'. When true, generation proceeds without re-checking.",
+            false,
+        ),
     )
 
     override fun execute(params: Map<String, Any>): ToolResult {
@@ -80,9 +91,26 @@ class GenerateAppTool : BaseTool() {
         val eff = LlmRouting.effective()
         if (eff.apiKey.isBlank()) return ToolResult.error("未配置模型，无法生成应用")
 
+        // ── 先问清需求(不确定才反问)──
+        // 首次调用先廉价判一下需求清不清晰:模糊就返回 2-3 个关键问题让 Agent 去问用户,别闷头开干;
+        // 清晰(或 Agent 已问过并带 clarified=true)就直接进流水线。见反馈:不确定要先反问。
+        val clarified = params["clarified"]?.toString()?.equals("true", ignoreCase = true) == true
+        if (!clarified) {
+            val questions = runCatching { assessClarity(eff, description) }.getOrDefault(emptyList())
+            if (questions.isNotEmpty()) {
+                return ToolResult.success(
+                    "这个需求还有关键点不明确。请先把下面的问题问用户、拿到回答后,把答案补进 description、" +
+                        "并带 clarified=true 再调用一次 generate_app(先别急着生成):\n" +
+                        questions.joinToString("\n") { "• $it" },
+                )
+            }
+        }
+
+        com.apk.claw.android.agent.AgentProgressBus.set("规划功能中…")
         val plan = runCatching { callLlm(eff, planPrompt(description)) }
             .getOrElse { return ToolResult.error("规划阶段失败: ${it.message}") }
 
+        com.apk.claw.android.agent.AgentProgressBus.set("生成代码中…")
         val raw = runCatching { callLlm(eff, codePrompt(appName, description, plan)) }
             .getOrElse { return ToolResult.error("生成代码阶段失败: ${it.message}") }
 
@@ -95,6 +123,7 @@ class GenerateAppTool : BaseTool() {
         var errors = runCatching { HtmlLinter.lint(ClawApplication.instance, html).errors }.getOrDefault(emptyList())
         while (errors.isNotEmpty() && repairRounds < MAX_REPAIR) {
             repairRounds++
+            com.apk.claw.android.agent.AgentProgressBus.set("自检修复中(第 $repairRounds 轮)…")
             val fixedRaw = runCatching { callLlm(eff, repairPrompt(html, errors)) }.getOrNull() ?: break
             val fixedHtml = extractHtml(fixedRaw).takeIf { it.isNotBlank() } ?: break
             val fixedErrors = runCatching { HtmlLinter.lint(ClawApplication.instance, fixedHtml).errors }.getOrDefault(emptyList())
@@ -108,6 +137,7 @@ class GenerateAppTool : BaseTool() {
         // 时判达成,不触发误修)。
         var visualNote = ""
         if (com.apk.claw.android.octopus_mobile.VisionAnalyzer.isConfigured()) {
+            com.apk.claw.android.agent.AgentProgressBus.set("视觉验收中…")
             val shot = runCatching { HtmlLinter.lint(ClawApplication.instance, html, capture = true).screenshot }.getOrNull()
             if (shot != null) {
                 val verdict = runCatching {
@@ -132,6 +162,7 @@ class GenerateAppTool : BaseTool() {
         // 生成物自声明要调的设备工具(OCTOPUS_TOOLS),只授予白名单内的(安全/低危);其余丢弃。
         val grantedTools = parseTools(html).filter { it in AGENTIC_TOOL_WHITELIST }
 
+        com.apk.claw.android.agent.AgentProgressBus.set("保存小程序中…")
         val appId = "gen_" + System.currentTimeMillis()
         val saved = runCatching { persistAsMiniApp(appId, appName, html, actions, grantedTools) }.getOrDefault(false)
         val toolNote = if (grantedTools.isNotEmpty()) "，可调用设备能力：${grantedTools.joinToString("、")}" else ""
@@ -295,6 +326,32 @@ class GenerateAppTool : BaseTool() {
         }
     }
 
+    /**
+     * 廉价判断需求是否清晰:清晰 → 空列表(直接生成);有影响成品的关键模糊点 → 2-3 个澄清问题。
+     * fail-open:调用出错/解析不出问题都当「清晰」,不阻断生成,只在真模糊时才反问。
+     */
+    private fun assessClarity(eff: EffectiveLlm, description: String): List<String> {
+        val raw = callLlm(eff, clarifyPrompt(description)).trim()
+        if (raw.startsWith("CLEAR", ignoreCase = true)) return emptyList()
+        return raw.lineSequence()
+            .map { it.trim().trimStart('-', '*', '·', '•', ' ', '1', '2', '3', '.', '、', ')').trim() }
+            .filter { it.endsWith("?") || it.endsWith("？") }
+            .map { it.take(CLARIFY_Q_MAX_LEN) }
+            .take(MAX_CLARIFY_Q)
+            .toList()
+    }
+
+    private fun clarifyPrompt(description: String) = """
+        用户想用一句话生成一个单文件 H5 小程序。判断这个需求是否清晰到能做出他真正想要的东西。
+        需求：$description
+
+        规则:
+        - 若已足够清晰、可以直接开做,第一行只输出:CLEAR
+        - 若有会影响成品的关键模糊点(用途场景 / 核心功能 / 风格外观 / 数据从哪来 等),
+          输出 2-3 个最关键的澄清问题,每行一个、以问号结尾,不要任何解释或编号。
+        宁可少问也不要问无关紧要的细节。
+    """.trimIndent()
+
     /** LLM 偶尔仍会用 ```html 代码块包一层，或前后加几句寒暄——这里剥掉，只留 HTML 本体。 */
     private fun extractHtml(raw: String): String {
         val fenced = Regex("```(?:html)?\\s*([\\s\\S]*?)```").find(raw)?.groupValues?.get(1)
@@ -315,6 +372,9 @@ class GenerateAppTool : BaseTool() {
         Still no cloud backend/multi-device sync — client-only apps only (games, calculators,
         tools, visualizations), local storage at most. Prefer this over preview_html when the user
         asks you to "build/generate an app" rather than just preview a snippet of code.
+        On the first call (clarified unset) the tool may come back with 2-3 clarifying questions
+        when the request is ambiguous — ask the user those, fold the answers into 'description',
+        then call again with clarified=true. If the request is already clear it generates directly.
     """.trimIndent()
 
     override fun getDescriptionCN() = """

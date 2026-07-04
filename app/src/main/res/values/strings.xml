@@ -929,6 +929,7 @@ Shizuku 是安全、开源的本地辅助工具。</string>
     <string name="account_byo_member_hint">成为会员即可使用自定义模型（按月重置）</string>
     <string name="settings_appearance">外观</string>
     <string name="settings_light_mode">浅色模式</string>
+    <string name="settings_dark_mode">深色模式</string>
     <string name="settings_theme_follow_system">跟随系统</string>
     <string name="settings_theme_light">浅色</string>
     <string name="settings_theme_dark">深色</string>

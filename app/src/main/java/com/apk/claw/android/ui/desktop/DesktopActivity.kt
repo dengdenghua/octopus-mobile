@@ -21,9 +21,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -128,6 +125,7 @@ class DesktopActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        hideSystemStatusBar()
         // 常亮:桌面模式面向支起来/投显示器的场景,前台时不熄屏(离开 Activity 自动解除)
         window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         val eng = BrowserEngineFactory.selectBest(this)
@@ -146,11 +144,29 @@ class DesktopActivity : AppCompatActivity() {
         super.onPause()
         // 桌面模式常驻 + KEEP_SCREEN_ON,后台时尤其需要暂停 WebView 的 JS 定时器 / 网络 / 音频。
         engine?.onPause()
+        // 离开桌面模式:恢复悬浮控制条(其它场景/后台仍需要它做停止入口)。
+        com.apk.claw.android.floating.LiveControlOverlay.suppressed = false
     }
 
     override fun onResume() {
         super.onResume()
         engine?.onResume()
+        // 沉浸态在切走再回来时可能被系统恢复,重进时再隐一次。
+        hideSystemStatusBar()
+        // 桌面模式对话自带内嵌状态(黄色竖点 + 停止键),抑制那层「准备中…」悬浮控制条,避免重复。
+        com.apk.claw.android.floating.LiveControlOverlay.suppressed = true
+    }
+
+    /**
+     * 桌面/TV 横屏为沉浸态:隐藏系统状态栏(时间/信号/电量),避免与右上角控制中心([TvTopChrome])
+     * 重叠;下滑可临时唤出。只隐状态栏、保留导航手势区,不影响返回。
+     */
+    private fun hideSystemStatusBar() {
+        androidx.core.view.WindowCompat.getInsetsController(window, window.decorView).apply {
+            hide(androidx.core.view.WindowInsetsCompat.Type.statusBars())
+            systemBarsBehavior =
+                androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
     }
 
     override fun onDestroy() {
@@ -224,9 +240,11 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
     var running by remember { mutableStateOf(false) }
     var toolNote by remember { mutableStateOf("") }
     var seq by remember { mutableLongStateOf(0L) }
-    // 每轮生成一张「角色在场景里」的图,作 Hero 影视壁纸。可在顶栏控制中心关。
+    // Hero 壁纸走「连环画」式:不每条都生成(太耗算力/额度),每隔几轮出新一「格」,延续同一故事线,
+    // 且不把用户对话烧进图里。可在顶栏控制中心关。
     var sceneUrl by remember { mutableStateOf<String?>(null) }
     var sceneGen by rememberSaveable { mutableStateOf(true) }
+    var sceneTurn by remember { mutableIntStateOf(0) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     // 当前角色:统一读取一次,下传给 windowSpec / 子组件,避免散读 CharacterRegistry.current。
     // 不用 remember{} —— current 的 getter 订阅 idx 状态,切角色时自动重组(此时才读)。
@@ -239,14 +257,17 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
             convo.add(DeskMsg(seq++, fromUser = false, text = "请先配置模型(顶部「技能」旁或设置 → 模型),再和我对话。"))
             return@fn
         }
-        // 场景生成:异步、不阻塞对话;失败/未配置则保留上一张(或退回立绘)。
-        if (sceneGen) {
+        // 连环画式壁纸:每 TV_SCENE_EVERY 轮才出新一「格」(省算力/额度),延续同一故事线;
+        // prompt 不再引用用户消息、且明确 no text —— 不把对话烧进图里。异步不阻塞对话。
+        if (sceneGen && sceneTurn % TV_SCENE_EVERY == 0) {
             val c = character
+            val panel = sceneTurn / TV_SCENE_EVERY + 1
             scope.launch {
-                com.apk.claw.android.media.MediaRepository.generateImage(scenePrompt(c, t), "1280x720")
+                com.apk.claw.android.media.MediaRepository.generateImage(scenePrompt(c, panel), "1280x720")
                     .onSuccess { sceneUrl = it.url }
             }
         }
+        sceneTurn++
         running = true; toolNote = ""
         val buf = StringBuilder()
         var streamId: Long? = null
@@ -300,8 +321,10 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
         val desktopContent = @Composable {
             BoxWithConstraints(Modifier.fillMaxSize()) {
                 val heroH = maxHeight * TV_HERO_HEIGHT_FRACTION
+                val availW = maxWidth  // 捕获出来:Column/FlowRow 作用域里读不到 BoxWithConstraints 的 maxWidth
                 val maxCols = if (docked) TV_COLS_DOCKED else if (bigUi) TV_COLS_TV else TV_COLS_PHONE
-                val miniApps = remember { MiniAppRegistry.all() }
+                // 不 remember:新装/新生成的小程序即时出现在桌面(remember 会把首帧的空列表钉死)。
+                val miniApps = MiniAppRegistry.all()
                 val apps = buildList {
                     add(TvAppSpec(Icons.Filled.ChatBubbleOutline, TvGradChat) { openWindow(WinContent.Chat) })
                     add(TvAppSpec(Icons.Filled.Person, TvGradChar) { openWindow(WinContent.Character) })
@@ -320,32 +343,45 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
                 val cols = apps.size.coerceIn(1, maxCols)
                 // 图标区两边对称留白 → 整行居中(重心不偏);右侧留白正好容纳右下角悬浮头像,不重叠。
                 val sideGap = if (docked) 20.dp else 104.dp
-                Column(Modifier.fillMaxSize()) {
-                    // Hero 全宽头(不受留白影响,标题贴左);占视口 ~72%,首页只露一排图标。
+                // 场景壁纸**全屏打底**:Hero 与图标栏共用同一张、边到边全出血,消除首页中部那道接缝。
+                // 无壁纸(未生成/已关场景)则露出底层 HoloBackground 霓虹。
+                if (sceneUrl != null) {
+                    coil.compose.AsyncImage(
+                        model = sceneUrl,
+                        contentDescription = character.zh,
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                        modifier = Modifier.matchParentSize(),
+                    )
+                    // 柔和「全屏」压暗:顶部(状态栏/顶栏)与底部(标题/图标)各一点点、中段全透——
+                    // 均匀不偏,取代原来只压 Hero 上半、中部出现硬边「蒙层」的做法。
+                    Box(
+                        Modifier.matchParentSize()
+                            .background(androidx.compose.ui.graphics.Brush.verticalGradient(TvWallScrim)),
+                    )
+                }
+                // 整屏纵向瀑布流:Hero 与图标同处一个纵向滚动流 —— 向下滑,Hero 上移、露出更多图标行。
+                // 壁纸在底层 matchParentSize 固定不动,内容在其上滚动(轻微视差感)。
+                Column(
+                    Modifier
+                        .fillMaxSize()
+                        .verticalScroll(androidx.compose.foundation.rememberScrollState()),
+                ) {
+                    // Hero 全宽头(full-bleed,标题贴左);占视口 ~72%,首页先露一排图标,下滑看更多。
                     TvHero(
                         character = character,
-                        sceneUrl = sceneUrl,
                         big = bigUi,
                         modifier = Modifier.fillMaxWidth().height(heroH),
                         onClick = { openWindow(WinContent.Chat) },
                     )
-                    // 图标网格:向下滚露出更多行(ATV 瀑布流);统一大小 + 两侧留白居中。
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(cols),
-                        modifier = Modifier.fillMaxWidth().weight(1f),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                            start = sideGap, end = sideGap, bottom = 20.dp,
-                        ),
-                        horizontalArrangement = Arrangement.spacedBy(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(14.dp),
-                    ) {
-                        itemsIndexed(apps) { i, a ->
-                            TvAppIcon(
-                                a.icon, a.grad, a.onClick,
-                                if (i == 0) Modifier.focusRequester(firstIconFocus) else Modifier,
-                            )
-                        }
-                    }
+                    // 图标:每行居中、满 maxCols 自动换行 —— 少时一行居中,多了往下排,随流滚动。
+                    TvIconGrid(
+                        apps = apps,
+                        cols = cols,
+                        maxCols = maxCols,
+                        sideGap = sideGap,
+                        rowWidth = availW,
+                        firstIconFocus = firstIconFocus,
+                    )
                 }
                 // 极简顶栏:浮在右上(满屏 / 分屏左区均对齐)。
                 TvTopChrome(
@@ -457,13 +493,19 @@ private const val TV_ICON_ASPECT = 1.75f            // 图标单元格宽高比(
 private const val TV_COLS_DOCKED = 4                // 分屏窄区列数
 private const val TV_COLS_TV = 7                    // TV/大屏列数(更密、图标更小)
 private const val TV_COLS_PHONE = 6                 // 手机列数
+private const val TV_SCENE_EVERY = 3                // 连环画:每几轮对话才生成新一格壁纸(节流,省算力/额度)
+private const val TITLE_SHADOW_COLOR = 0xCC000000   // 标题文字投影色:80% 不透明黑
+private const val THINKING_DOT_COUNT = 3            // 思考点动画数量
+private const val THINKING_DOT_DURATION_MS = 460    // 思考点单次脉动时长
+private const val THINKING_DOT_STAGGER_MS = 150     // 思考点依次脉动的错峰间隔
 private val TvShelfBg = Color(0xF20A0B0E)
 private val TvGradChat = listOf(Color(0xFF5AD07A), Color(0xFF23A94B))       // 对话 绿
 private val TvGradChar = listOf(Color(0xFFB18CFF), Color(0xFF6B4BFF))       // 角色 紫
 private val TvGradDiscover = listOf(Color(0xFF5AB0FF), Color(0xFF0A84FF))   // 发现 蓝
 private val TvGradSquare = listOf(Color(0xFFFFC24D), Color(0xFFFF9500))     // 广场 橙
 private val TvGradMini = listOf(Color(0xFF3DE0D0), Color(0xFF16B8A6))       // 小程序 青
-private val TvHeroScrim = listOf(Color(0x00000000), Color(0x33000000), Color(0xF0070810))
+// 全屏壁纸的柔和压暗:顶(状态栏/顶栏可读)—中段全透—底(标题/图标可读),均匀无硬边。
+private val TvWallScrim = listOf(Color(0x40000000), Color(0x00000000), Color(0x00000000), Color(0x73000000))
 
 /** 焦点图标规格(下发到 [TvIconShelf] 渲染)。 */
 private data class TvAppSpec(
@@ -479,25 +521,18 @@ private data class TvAppSpec(
 @Composable
 private fun TvHero(
     character: CharacterProfile,
-    sceneUrl: String?,
     big: Boolean,
     modifier: Modifier,
     onClick: () -> Unit,
 ) {
+    // 壁纸与柔和压暗都在 desktopContent 里做(全屏、均匀);Hero 这里只放标题。
+    // 标题给一层文字投影,保证在明亮壁纸上也读得清,不再靠 Hero 局部大蒙层。
+    val titleShadow = androidx.compose.ui.graphics.Shadow(
+        color = Color(TITLE_SHADOW_COLOR),
+        offset = androidx.compose.ui.geometry.Offset(0f, 2f),
+        blurRadius = 12f,
+    )
     Box(modifier.clickable(onClick = onClick)) {
-        // 有场景图 = 铺满作壁纸 + 底部渐隐压出标题;无图 = 全透明,让桌面霓虹壁纸透出(信息卡不遮挡桌面)。
-        if (sceneUrl != null) {
-            coil.compose.AsyncImage(
-                model = sceneUrl,
-                contentDescription = character.zh,
-                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-            )
-            Box(
-                Modifier.fillMaxSize()
-                    .background(androidx.compose.ui.graphics.Brush.verticalGradient(TvHeroScrim)),
-            )
-        }
         Column(
             Modifier.align(Alignment.BottomStart)
                 .padding(start = if (big) 40.dp else 28.dp, bottom = if (big) 32.dp else 20.dp),
@@ -505,6 +540,7 @@ private fun TvHero(
             Text(
                 character.zh, color = Color.White,
                 fontSize = if (big) 46.sp else 34.sp, fontWeight = FontWeight.Bold,
+                style = androidx.compose.ui.text.TextStyle(shadow = titleShadow),
             )
             Spacer(Modifier.height(4.dp))
             Text(
@@ -520,7 +556,38 @@ private fun TvHero(
     }
 }
 
-/** 单个彩色亮图标(渐变圆角方 + 白色图标 + 焦点高亮)。填满网格单元格,固定 16:10 宽高比。 */
+/**
+ * 图标瀑布流:每行居中(spacedBy CenterHorizontally)、满 [maxCols] 自动换行。图标少时一行居中,
+ * 多了往下排;整体在外层 verticalScroll 里,向下滑即可翻出更多行。图标按 [rowWidth] 算统一宽度。
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun TvIconGrid(
+    apps: List<TvAppSpec>,
+    cols: Int,
+    maxCols: Int,
+    sideGap: Dp,
+    rowWidth: Dp,
+    firstIconFocus: FocusRequester,
+) {
+    val spacing = 14.dp
+    val iconW = (rowWidth - sideGap * 2 - spacing * (cols - 1)) / cols
+    androidx.compose.foundation.layout.FlowRow(
+        modifier = Modifier.fillMaxWidth().padding(start = sideGap, end = sideGap, bottom = 24.dp),
+        horizontalArrangement = Arrangement.spacedBy(spacing, Alignment.CenterHorizontally),
+        verticalArrangement = Arrangement.spacedBy(spacing),
+        maxItemsInEachRow = maxCols,
+    ) {
+        apps.forEachIndexed { i, a ->
+            TvAppIcon(
+                a.icon, a.grad, a.onClick,
+                Modifier.width(iconW).then(if (i == 0) Modifier.focusRequester(firstIconFocus) else Modifier),
+            )
+        }
+    }
+}
+
+/** 单个彩色亮图标(渐变圆角方 + 白色图标 + 焦点高亮)。宽度由调用方给(FlowRow),固定 16:10 宽高比。 */
 @Composable
 private fun TvAppIcon(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
@@ -530,7 +597,6 @@ private fun TvAppIcon(
 ) {
     Box(
         modifier = modifier
-            .fillMaxWidth()
             .aspectRatio(TV_ICON_ASPECT)
             .clip(RoundedCornerShape(16.dp))
             .background(androidx.compose.ui.graphics.Brush.verticalGradient(grad))
@@ -742,17 +808,9 @@ private fun ChatContent(convo: List<DeskMsg>, running: Boolean, toolNote: String
                 )
             }
         }
-        // 右:顶条(音波 + 阶段)+ 会话气泡
+        // 右:会话气泡。去掉了「阶段 x/4」条;思考时底部内联一行黄色竖点脉动,不再弹独立思考窗。
         Column(Modifier.weight(1f)) {
-            Row(
-                Modifier.fillMaxWidth().height(28.dp).padding(horizontal = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Waveform(active = running)
-                Spacer(Modifier.weight(1f))
-                PhaseDots(current = 1, total = 4)
-            }
-            Box(Modifier.weight(1f)) {
+            Box(Modifier.fillMaxSize()) {
                 if (convo.isEmpty() && !running) {
                     // 空态:小气泡(不占满、不做大灰块),像角色发来的第一句。
                     Box(Modifier.fillMaxSize().padding(12.dp), contentAlignment = Alignment.TopStart) {
@@ -773,8 +831,8 @@ private fun ChatContent(convo: List<DeskMsg>, running: Boolean, toolNote: String
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 10.dp),
                     ) {
                         items(convo, key = { it.id }) { m -> DialogBubble(m) }
-                        if (running && toolNote.isNotBlank()) {
-                            item(key = "toolnote") { Text(toolNote, color = Holo.Accent, fontSize = 10.sp) }
+                        if (running) {
+                            item(key = "thinking") { ThinkingRow(toolNote) }
                         }
                     }
                 }
@@ -784,27 +842,35 @@ private fun ChatContent(convo: List<DeskMsg>, running: Boolean, toolNote: String
 }
 
 
-/** 小音波条(装饰,呼应 OpenRoom 卡头波形):运行中动画跳动,空闲静止。 */
+/** 思考指示行:几个黄色竖点脉动 + 内联状态文字(工具名 / 默认「思考中…」)。状态嵌在对话里,不弹独立悬浮窗。 */
 @Composable
-private fun Waveform(active: Boolean) {
-    val heights = if (active) {
-        val t = rememberInfiniteTransition(label = "wave")
-        (0 until 5).map { i ->
-            t.animateFloat(
-                initialValue = 0.3f, targetValue = 1f,
+private fun ThinkingRow(toolNote: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        ThinkingDots()
+        Text(toolNote.ifBlank { "思考中…" }, color = Holo.Accent, fontSize = 10.sp)
+    }
+}
+
+/** 几个黄色竖点,依次脉动 —— 思考中的极简动态,替代原音波/阶段条。 */
+@Composable
+private fun ThinkingDots() {
+    val t = rememberInfiniteTransition(label = "think")
+    Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        repeat(THINKING_DOT_COUNT) { i ->
+            val hf = t.animateFloat(
+                initialValue = 0.35f, targetValue = 1f,
                 animationSpec = androidx.compose.animation.core.infiniteRepeatable(
-                    androidx.compose.animation.core.tween(360 + i * 90),
+                    androidx.compose.animation.core.tween(
+                        THINKING_DOT_DURATION_MS,
+                        delayMillis = i * THINKING_DOT_STAGGER_MS,
+                    ),
                     androidx.compose.animation.core.RepeatMode.Reverse,
                 ),
-                label = "w$i",
+                label = "d$i",
             ).value
-        }
-    } else listOf(0.4f, 0.7f, 0.5f, 0.8f, 0.45f)
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-        heights.forEach { hf ->
             Box(
-                Modifier.width(2.5.dp).height((14 * hf).dp).clip(RoundedCornerShape(2.dp))
-                    .background(Holo.Accent.copy(alpha = 0.8f)),
+                Modifier.width(4.dp).height((16 * hf).dp).clip(RoundedCornerShape(2.dp))
+                    .background(Holo.Accent),
             )
         }
     }
@@ -827,21 +893,6 @@ private fun DialogBubble(m: DeskMsg) {
             )
         }
         if (!m.fromUser) Spacer(Modifier.weight(0.18f))
-    }
-}
-
-/** 阶段进度点(参考图右上「阶段 1/4」):首点强调,其余暗;纯视觉章节指示。 */
-@Composable
-private fun PhaseDots(current: Int, total: Int) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-        Text("阶段 $current/$total", color = Holo.TextSecondary, fontSize = 9.sp)
-        Spacer(Modifier.width(3.dp))
-        repeat(total) { i ->
-            Box(
-                Modifier.size(width = 12.dp, height = 3.dp).clip(RoundedCornerShape(2.dp))
-                    .background(if (i < current) Holo.Accent else Holo.BorderStrong),
-            )
-        }
     }
 }
 
@@ -1201,11 +1252,16 @@ private sealed interface WinContent {
 /** 桌面对话一条消息。 */
 private data class DeskMsg(val id: Long, val fromUser: Boolean, val text: String)
 
-/** 每轮直播间场景图的生成提示:角色在场景里回应用户,赛博霓虹、电影感。 */
-private fun scenePrompt(c: CharacterProfile, userText: String): String =
-    "cinematic wide shot, anime illustration of a character named ${c.name} (${c.codename}, ${c.role}), " +
-        "reacting in-scene to: \"${userText.take(120)}\". cyberpunk neon interior, dramatic rim lighting, " +
-        "highly detailed, atmospheric, 16:9"
+/**
+ * 「连环画」第 [panel] 格的生成提示:延续同一角色的漫画故事线,每格推进一个新画面。
+ * 关键:**不引用用户对话**(避免把消息烧进图里)+ 明确 no text/speech bubble/letters,出纯画面。
+ */
+private fun scenePrompt(c: CharacterProfile, panel: Int): String =
+    "Panel $panel of an ongoing cinematic manga story starring ${c.name} (${c.codename}, ${c.role}). " +
+        "Advance the narrative to the next dramatic beat in the same cyberpunk-neon world, keep the " +
+        "character design consistent across panels, expressive manga illustration, dramatic rim lighting, " +
+        "highly detailed, atmospheric. No text, no speech bubbles, no letters, no captions, no watermark, " +
+        "no UI. 16:9."
 
 /**
  * mini-app 浮动窗口内容 —— 用共享的 [com.apk.claw.android.plugin.MiniAppHost] 造 WebView(与全屏

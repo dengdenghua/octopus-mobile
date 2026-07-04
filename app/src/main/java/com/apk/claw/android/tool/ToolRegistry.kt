@@ -182,6 +182,7 @@ object ToolRegistry {
         register(PreviewHtmlTool())
         // 生成应用（Phase 1：规划+编码两段流水线，产出走 preview_html 同一展示通道，无持久化）
         register(GenerateAppTool())
+        register(ShareToSquareTool())
         register(GenerateSkillTool())
         register(ImportSkillTool())
         register(GenerateBrowserPluginTool())
@@ -199,6 +200,10 @@ object ToolRegistry {
 
         // 子 Agent 工具（多 Agent 分工：主 Agent 派生子 Agent 执行复杂子任务）
         register(com.apk.claw.android.tool.impl.SubAgentTool())
+
+        // 全自动配置 Shizuku：视觉 Agent 照「自动配置 Shizuku」技能剧本读配对码,本工具做 ADB 握手。
+        register(com.apk.claw.android.shizuku.autosetup.ShizukuAutoSetupTool())
+        com.apk.claw.android.shizuku.autosetup.ShizukuAutoSetupSkill.seedIfAbsent()
 
         // 媒体播放器工具（mpv 引擎）
         register(MediaTools())

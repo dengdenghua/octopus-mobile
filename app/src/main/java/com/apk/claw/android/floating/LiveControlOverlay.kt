@@ -30,6 +30,9 @@ object LiveControlOverlay {
     private const val TAG = "live_control_float"
     private val main = Handler(Looper.getMainLooper())
     private var showing = false
+    /** 前台页面自带内嵌状态条时(如桌面模式对话)置 true → 抑制这层悬浮控制条,避免重复弹窗。 */
+    @Volatile
+    var suppressed = false
     private var onStop: (() -> Unit)? = null
 
     private val cBg = Color.parseColor("#1C1C1E")
@@ -43,6 +46,7 @@ object LiveControlOverlay {
 
     /** 开始一次任务：显示控制条。onStop 在用户点「停止」时回调。 */
     fun show(step: String, onStop: () -> Unit) {
+        if (suppressed) return  // 桌面模式等自带内嵌状态的页面:不叠这层悬浮条
         this.onStop = onStop
         val app = ClawApplication.instance
         if (!Settings.canDrawOverlays(app)) return  // 无悬浮窗权限则静默跳过（对话页内仍有步骤显示）

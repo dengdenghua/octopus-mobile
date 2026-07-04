@@ -1,6 +1,7 @@
 package com.apk.claw.android.agent.llm
 
 import com.apk.claw.android.agent.AgentConfig
+import com.apk.claw.android.agent.CancellationToken
 import com.apk.claw.android.agent.langchain.http.OkHttpClientBuilderAdapter
 import dev.langchain4j.agent.tool.ToolSpecification
 import dev.langchain4j.data.message.ChatMessage
@@ -10,6 +11,8 @@ import dev.langchain4j.model.chat.request.ChatRequest
 import dev.langchain4j.model.chat.response.ChatResponse
 import dev.langchain4j.model.chat.response.StreamingChatResponseHandler
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicReference
 
 /**
@@ -23,6 +26,17 @@ abstract class BaseLangChain4jLlmClient(
     protected val config: AgentConfig,
     protected val httpClientBuilder: OkHttpClientBuilderAdapter,
 ) : LlmClient {
+
+    companion object {
+        /**
+         * 流式响应整体超时(ms)。
+         *
+         * 防止 LLM 流式连接建立后服务端半挂(不发 onComplete/onError、连接不关),
+         * 导致 executor 线程永久阻塞、Agent 卡死无法接受新任务。
+         * 略高于 OkHttp 的 readTimeout(60s),给慢速 token 留足余量。
+         */
+        private const val STREAM_TIMEOUT_MS = 120_000L
+    }
 
     private val chatModel: ChatModel by lazy { createChatModel() }
     private val streamingChatModel: StreamingChatModel by lazy { createStreamingChatModel() }
@@ -73,7 +87,8 @@ abstract class BaseLangChain4jLlmClient(
     final override fun chatStreaming(
         messages: List<ChatMessage>,
         toolSpecs: List<ToolSpecification>,
-        listener: StreamingListener
+        listener: StreamingListener,
+        cancelToken: CancellationToken?
     ): LlmResponse {
         val request = ChatRequest.builder()
             .messages(messages)
@@ -86,6 +101,11 @@ abstract class BaseLangChain4jLlmClient(
 
         streamingChatModel.chat(request, object : StreamingChatResponseHandler {
             override fun onPartialResponse(token: String) {
+                // 取消检查:流式响应期间主动中断,避免等流自然结束或网络超时。
+                // langchain4j 的流式调用不响应 Thread.interrupt(),只能从回调内部抛异常跳出。
+                if (cancelToken?.isCancelled() == true) {
+                    throw InterruptedException(cancelToken.getReason() ?: "Task cancelled")
+                }
                 listener.onPartialText(token)
             }
 
@@ -103,7 +123,11 @@ abstract class BaseLangChain4jLlmClient(
             }
         })
 
-        latch.await()
+        // P0:加超时,防止 LLM 流式连接半挂(连接不关、不发 onComplete/onError)导致
+        // executor 线程永久阻塞、Agent 卡死无法接受新任务、cancelToken 无法中断。
+        if (!latch.await(STREAM_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
+            throw TimeoutException("LLM streaming timed out after ${STREAM_TIMEOUT_MS}ms")
+        }
         errorRef.get()?.let { throw it }
         return resultRef.get()
     }

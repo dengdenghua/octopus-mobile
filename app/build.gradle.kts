@@ -72,14 +72,15 @@ android {
         // abiFilters 限制,否则会与 splits 冲突、把 32 位过滤掉。
     }
 
-    // 按 ABI 分包:arm64-v8a / armeabi-v7a 各生成一个独立 APK,只含自身架构,
-    // 64 位包不被 32 位库拖大;老 32 位手机装 v7a 那个。不出 universal(否则两套合一会暴涨)。
+    // 按 ABI 分包:arm64-v8a / armeabi-v7a 各生成一个独立 APK,只含自身架构;另出一个
+    // universal 通用包(含两套 .so,一个包 32/64 位都能装,省得分辨给哪台)。GeckoView 已移除,
+    // 通用包也就 ~两套 .so 的体积(几十 MB),不像当年 370MB 那么夸张。
     splits {
         abi {
             isEnable = true
             reset()
             include("arm64-v8a", "armeabi-v7a")
-            isUniversalApk = false
+            isUniversalApk = true
         }
     }
 
@@ -207,6 +208,13 @@ dependencies {
     implementation("dev.rikka.shizuku:api:13.1.5")
     implementation("dev.rikka.shizuku:provider:13.1.5")
 
+    // Shizuku 全自动配置(可选增强)—— 纯 Java ADB 客户端:连本机无线调试自动 pair + 跑 shell
+    // 拉起 Shizuku,配合无障碍读配对码,逼近「一键」。libadb-android 实现 Android 11 无线配对
+    // (SPAKE2 + TLS),conscrypt 提供 TLS,sun-security-android 提供 X509 证书生成。仅 11+ 可单机配对。
+    implementation("com.github.MuntashirAkon:libadb-android:3.1.1")
+    implementation("com.github.MuntashirAkon:sun-security-android:1.1")
+    implementation("org.conscrypt:conscrypt-android:2.5.3")
+
     // mpv-android-lib —— FFmpeg + libplacebo + libass 播放引擎（MIT 协议）
     // 已移除以瘦身 APK(约 -25MB):其原生库 libmpv/libav*/libplacebo/libass 占 ~25MB,
     // 而 MpvController 目前是 stub(播放未接通),这些 .so 是纯死重。
@@ -251,7 +259,8 @@ androidComponents {
                 val abi = output.variantOutputConfiguration.filters
                     .find { it.filterType == com.android.build.api.variant.FilterConfiguration.FilterType.ABI }
                     ?.identifier
-                val abiTag = if (abi != null) "_$abi" else ""
+                // 分包带具体 ABI;universal 通用包无 ABI 过滤 → 标成 _universal 以区分
+                val abiTag = if (abi != null) "_$abi" else "_universal"
                 val fileName = "OctopusMobile_v${versionName}${abiTag}_${getDateTime()}.apk"
                 println("output file name: $fileName")
                 output.outputFileName.set(fileName)

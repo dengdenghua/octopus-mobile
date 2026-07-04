@@ -468,13 +468,19 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     IconBubble(Icons.Filled.LightMode, PrimaryColor)
                     Spacer(Modifier.width(OctopusSpacing.md))
-                    Text(stringResource(R.string.settings_light_mode), color = TextPrimary, fontSize = OctopusType.body, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    // 命名成「深色模式」并让开关=开→深色(直觉一致),不再一直挂着「明亮模式」
+                    Text(
+                        stringResource(R.string.settings_dark_mode),
+                        color = TextPrimary, fontSize = OctopusType.body, fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f),
+                    )
                     Switch(
-                        checked = isLight,
-                        onCheckedChange = { v ->
-                            KVUtils.setThemeMode(v)
-                            themeMode = v
-                            OctopusColors.isLight = v
+                        checked = !isLight,
+                        onCheckedChange = { dark ->
+                            val lightVal = !dark
+                            KVUtils.setThemeMode(lightVal)
+                            themeMode = lightVal
+                            OctopusColors.isLight = lightVal
                         },
                     )
                 }

@@ -60,6 +60,20 @@ internal object PluginRegistryStore {
     fun isInstalled(context: Context, slug: String): Boolean =
         readManifest(context).plugins.any { it.slug == slug }
 
+    /**
+     * 记入安装清单,但不做任何落地(供 [CommunityMiniAppInstaller] 使用 —— 社区小程序 body 是
+     * 原始 HTML 字符串而非 base64 ZIP,不走本类 [install] 的 base64/ZIP-嗅探流程,自己按
+     * mini-app 的目录布局写盘后,复用这里把 slug 记进 `registry/plugins/.manifest.json`,
+     * 这样 [com.apk.claw.android.plugin.PluginManager.loadNonDexPlugins] 的 files-信任闸门
+     * (`installedSlugs`)才会放行)。覆盖同 slug 旧记录。
+     */
+    fun recordInstalled(context: Context, plugin: InstalledPlugin) {
+        val m = readManifest(context)
+        m.plugins.removeAll { it.slug == plugin.slug }
+        m.plugins.add(plugin)
+        writeManifest(context, m)
+    }
+
     private fun sha256Hex(bytes: ByteArray): String =
         MessageDigest.getInstance("SHA-256").digest(bytes)
             .joinToString("") { "%02x".format(it) }

@@ -74,13 +74,14 @@ object ChatAgentBridge {
         curSteps = 0
         curStart = System.currentTimeMillis()
         LiveControlOverlay.show("恢复任务中…") { cancel() }
+        val batcher = StreamBatcher(main) { txt -> onText(txt) }
         val resumed = service.resumeTask(object : AgentCallback {
             override fun onLoopStart(round: Int) {
                 LiveControlOverlay.updateStep(ClawApplication.instance.getString(R.string.chat_agent_bridge_thinking))
             }
 
             override fun onContent(round: Int, content: String) {
-                if (content.isNotEmpty()) main.post { onText(content) }
+                if (content.isNotEmpty()) batcher.submit(content)
             }
 
             override fun onToolCall(round: Int, toolId: String, toolName: String, parameters: String) {}
@@ -94,6 +95,7 @@ object ChatAgentBridge {
             }
 
             override fun onComplete(round: Int, finalAnswer: String, totalTokens: Int) {
+                batcher.flushNow()
                 main.post {
                     onDone(finalAnswer)
                     LiveControlOverlay.hide()
@@ -103,6 +105,7 @@ object ChatAgentBridge {
             }
 
             override fun onError(round: Int, error: Exception, totalTokens: Int) {
+                batcher.flushNow()
                 main.post {
                     onError(error.message ?: "Unknown error")
                     LiveControlOverlay.hide()
@@ -229,14 +232,15 @@ object ChatAgentBridge {
         curStart = System.currentTimeMillis()
         // 实时控制层：任务期间悬浮显示当前步骤 + 停止键（即使 Agent 跳出本 App 也可见）
         LiveControlOverlay.show(ClawApplication.instance.getString(R.string.chat_agent_bridge_preparing)) { cancel() }
+        // 流式 token 批量合并:50ms 间隔合并 post,避免每 token 一次 main.post 风暴
+        val batcher = StreamBatcher(main) { txt -> onText(txt) }
         service.executeTask(prompt, object : AgentCallback {
             override fun onLoopStart(round: Int) {
                 LiveControlOverlay.updateStep(ClawApplication.instance.getString(R.string.chat_agent_bridge_thinking))
             }
 
             override fun onContent(round: Int, content: String) {
-                // 流式:每个 token 都回调(保留空白,避免词间粘连)
-                if (content.isNotEmpty()) main.post { onText(content) }
+                if (content.isNotEmpty()) batcher.submit(content)
             }
 
             override fun onToolCall(round: Int, toolId: String, toolName: String, parameters: String) {
@@ -265,6 +269,7 @@ object ChatAgentBridge {
             }
 
             override fun onComplete(round: Int, finalAnswer: String, totalTokens: Int) {
+                batcher.flushNow()
                 if (recordKey != null) recorder?.commit(recordKey, prompt)
                 LiveControlOverlay.finish(true, ClawApplication.instance.getString(R.string.floating_circle_success_state))
                 finalize("success", finalAnswer)
@@ -273,6 +278,7 @@ object ChatAgentBridge {
             }
 
             override fun onError(round: Int, error: Exception, totalTokens: Int) {
+                batcher.flushNow()
                 LiveControlOverlay.finish(false, error.message?.take(20) ?: ClawApplication.instance.getString(R.string.chat_agent_bridge_error))
                 finalize("error", error.message ?: ClawApplication.instance.getString(R.string.chat_agent_bridge_call_failed))
                 busy.set(false)
@@ -309,4 +315,51 @@ object ChatAgentBridge {
         tool.contains("finish") -> "✅"
         else -> "🔧"
     }
+
+    /**
+     * 流式 token 批量合并器:把高频 token(LLM 50-100/s)累积后按 [STREAM_FLUSH_MS] 间隔
+     * 合并 post 一次,避免每个 token 都 main.post 一次造成主线程消息队列堆积。
+     *
+     * 每次任务创建独立实例,任务结束后丢弃,无残留状态。
+     */
+    private class StreamBatcher(
+        private val main: Handler,
+        private val onFlush: (String) -> Unit
+    ) {
+        private val buf = StringBuilder()
+        private val lock = Any()
+        @Volatile private var pending = false
+
+        /** 累积 token,达到 [STREAM_FLUSH_MS] 间隔后合并 flush。 */
+        fun submit(token: String) {
+            if (token.isEmpty()) return
+            synchronized(lock) { buf.append(token) }
+            if (!pending) {
+                pending = true
+                main.postDelayed({
+                    val snap = synchronized(lock) {
+                        if (buf.isEmpty()) "" else { val s = buf.toString(); buf.setLength(0); s }
+                    }
+                    pending = false
+                    if (snap.isNotEmpty()) onFlush(snap)
+                }, STREAM_FLUSH_MS)
+            }
+        }
+
+        /**
+         * 立即 flush 残留 token(任务结束/出错时调用)。
+         *
+         * 必须在 onError/onComplete 的 main.post 之前调用,确保残留 token 先于
+         * finalizeStream(streamId 清空)进入 UI,避免出错后仍创建新气泡。
+         */
+        fun flushNow() {
+            val snap = synchronized(lock) {
+                if (buf.isEmpty()) "" else { val s = buf.toString(); buf.setLength(0); s }
+            }
+            if (snap.isNotEmpty()) main.post { onFlush(snap) }
+        }
+    }
+
+    /** 流式 token 合并 flush 间隔(ms):平衡流畅度与主线程压力。 */
+    private const val STREAM_FLUSH_MS = 50L
 }
