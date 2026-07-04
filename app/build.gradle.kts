@@ -58,8 +58,10 @@ android {
         applicationId = "com.octopus.mobile"
         minSdk = 28
         targetSdk = 36
-        versionCode = 7
-        versionName = "0.0.7"
+        // versionName 是对外显示名(用户拍板:公开版从 0.0.1 重新起号);versionCode 是
+        // Android 升级判据,只能单调递增 —— 历史包最高到 7,这里必须继续往上走,不随显示名回退。
+        versionCode = 8
+        versionName = "0.0.1"
         buildConfigField("String", "VERSION_INFO", getVersionGit())
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

@@ -3,7 +3,12 @@
 All notable changes to Octopus Mobile are documented here.
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
-## [0.0.7] — 2026-07-04
+## [0.0.1] — 2026-07-04
+
+> **Versioning reset**: this is the first public release, so the display version
+> restarts at 0.0.1. It supersedes the internal 0.0.2–0.0.7 builds below —
+> internally it is `versionCode 8`, so upgrades from any earlier internal build
+> keep working.
 
 A round focused on the **mini-app community square (submit → auto-review →
 browse → install)**, **zero-touch Shizuku setup**, **OTA self-update + crash
