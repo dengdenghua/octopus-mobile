@@ -193,8 +193,10 @@ object ChatAgentBridge {
         // 注入与本次任务相关的已启用「提示词技能」(见 PromptSkillStore):按 prompt 命中,省 token。
         val skillSuffix = com.apk.claw.android.octopus_mobile.skill.PromptSkillStore.buildPromptSection(prompt)
         // 教训(B2 反思产物)+ 跨会话记忆:渠道路径早就注入,对话页补齐读侧(写侧见 run 的 onComplete)。
+        // withMemoInstruction 只在对话页开:让主模型顺手用 MEMO 行标注用户透露的偏好/事实,
+        // onComplete 里 harvestMemos 收割并剥离;渠道路径不开,MEMO 行会原样漏给 IM 用户。
         val lessonSuffix = lessonStore.buildPromptSection()
-        val memorySuffix = memoryStore.buildPromptSection()
+        val memorySuffix = memoryStore.buildPromptSection(withMemoInstruction = true)
         return AgentConfig.Builder()
             .apiKey(eff.apiKey)
             .baseUrl(baseUrl)
@@ -299,15 +301,17 @@ object ChatAgentBridge {
                 batcher.flushNow()
                 if (recordKey != null) recorder?.commit(recordKey, prompt)
                 // 记忆写侧(仿 TaskOrchestrator 任务后钩子;对话页绕过编排器,得自己做):
-                // 只从用户原始指令提取,不喂组装后的 taskPrompt(背景区是历史消息,别重复提取)。
+                // ① 收割主模型标注的 MEMO 行(高质量提取,展示前剥离);
+                // ② 正则保底只扫用户原始指令,不喂组装后的 taskPrompt(背景区是历史消息,别重复提取)。
+                val cleaned = runCatching { memoryStore.harvestMemos(finalAnswer) }.getOrDefault(finalAnswer)
                 runCatching {
                     memoryStore.extractFromTask(prompt)
                     memoryStore.pruneExpiredContexts()
                 }
                 LiveControlOverlay.finish(true, ClawApplication.instance.getString(R.string.floating_circle_success_state))
-                finalize("success", finalAnswer)
+                finalize("success", cleaned)
                 busy.set(false)
-                main.post { onDone(finalAnswer) }
+                main.post { onDone(cleaned) }
             }
 
             override fun onError(round: Int, error: Exception, totalTokens: Int) {

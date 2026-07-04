@@ -63,7 +63,8 @@ class MemoryStoreTest {
 
     @Test
     fun `超上限时优先淘汰非偏好记忆`() {
-        repeat(50) { store.addMemory(mem("f$it", "事实$it", MemoryStore.MemoryType.FACT)) }
+        // 内容加「号」后缀,避免"事实1"被"事实10"包含而触发近似去重
+        repeat(50) { store.addMemory(mem("f$it", "事实${it}号", MemoryStore.MemoryType.FACT)) }
         store.addMemory(mem("p", "我只用地铁出行", MemoryStore.MemoryType.PREFERENCE))
         store.addMemory(mem("f-new", "新事实", MemoryStore.MemoryType.FACT))
         val all = store.getMemories()
@@ -84,6 +85,82 @@ class MemoryStoreTest {
     @Test
     fun `无记忆时注入空串`() {
         assertEquals("", store.buildPromptSection())
+    }
+
+    @Test
+    fun `互为包含的近似重复不再添加`() {
+        store.addMemory(mem("a", "我用饿了么"))
+        store.addMemory(mem("b", "我用饿了么点外卖"))
+        store.addMemory(mem("c", "饿了么"))
+        assertEquals(1, store.getMemories().size)
+    }
+
+    @Test
+    fun `harvest 收割 MEMO 行入库并从展示文本剥离`() {
+        val answer = "已经帮你点好外卖了。\nMEMO: 用户习惯用饿了么点外卖\nMEMO: 用户住在中关村"
+        val cleaned = store.harvestMemos(answer)
+        assertEquals("已经帮你点好外卖了。", cleaned)
+        val all = store.getMemories()
+        assertEquals(2, all.size)
+        assertTrue(all.all { it.source == "agent_inferred" })
+        // 命中偏好措辞("习惯")按 PREFERENCE,否则按 FACT
+        assertEquals(
+            MemoryStore.MemoryType.PREFERENCE,
+            all.first { it.content.contains("饿了么") }.type,
+        )
+        assertEquals(
+            MemoryStore.MemoryType.FACT,
+            all.first { it.content.contains("中关村") }.type,
+        )
+    }
+
+    @Test
+    fun `harvest 每任务最多收 2 条且无 MEMO 时原样返回`() {
+        val flood = (1..5).joinToString("\n") { "MEMO: 事实编号$it" }
+        store.harvestMemos("好的。\n$flood")
+        assertEquals(2, store.getMemories().size)
+        val plain = "好的,已完成。"
+        assertEquals(plain, store.harvestMemos(plain))
+    }
+
+    @Test
+    fun `注入超预算时偏好最先保住`() {
+        store.addMemory(mem("f", "字".repeat(60), MemoryStore.MemoryType.FACT))
+        store.addMemory(mem("p", "我只用地铁出行", MemoryStore.MemoryType.PREFERENCE))
+        val section = store.buildPromptSection(charBudget = 20)
+        assertTrue(section.contains("地铁"))
+        assertFalse(section.contains("字字"))
+    }
+
+    @Test
+    fun `采集指令只在对话页开关打开时附加`() {
+        store.addMemory(mem("p", "我用饿了么", MemoryStore.MemoryType.PREFERENCE))
+        assertFalse(store.buildPromptSection().contains("MEMO"))
+        assertTrue(store.buildPromptSection(withMemoInstruction = true).contains("MEMO"))
+    }
+
+    @Test
+    fun `注入即记一次引用`() {
+        store.addMemory(mem("p", "我用饿了么", MemoryStore.MemoryType.PREFERENCE))
+        store.buildPromptSection()
+        store.buildPromptSection()
+        assertEquals(2, store.getMemories().first().referenceCount)
+    }
+
+    @Test
+    fun `超上限淘汰的是最少引用里最旧的`() {
+        repeat(49) { store.addMemory(mem("f$it", "事实${it}号", refs = 1)) }
+        store.addMemory(
+            MemoryStore.Memory(
+                id = "old-zero", content = "很旧且零引用", type = MemoryStore.MemoryType.FACT,
+                source = "manual", createdAt = 0L, lastReferencedAt = 1L,
+            ),
+        )
+        store.addMemory(mem("fresh-zero", "很新但零引用"))
+        val all = store.getMemories()
+        assertEquals(50, all.size)
+        assertFalse(all.any { it.id == "old-zero" })
+        assertTrue(all.any { it.id == "fresh-zero" })
     }
 
     @Test
