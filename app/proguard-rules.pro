@@ -48,6 +48,12 @@
 # release 下 R8 会改名导致 token/credits 等解析成 null → 登录/积分/邀请全坏。整包保留字段名。
 -keep class com.apk.claw.android.account.** { *; }
 
+# 小程序 registry / 广场社区小程序 wire DTO：RegistryClient（RegistryListResponse 等）、
+# PluginRegistryStore（InstalledPluginManifest）、CommunitySquareApi（CommunityMiniApp/
+# CommunityMiniAppDownload，仅 MiniAppTags 的 snake_case 字段有 @SerializedName）均靠
+# 字段名 == JSON 键。不保留则 release 下广场浏览/安装、registry 安装清单读取静默变空。
+-keep class com.apk.claw.android.registry.** { *; }
+
 # 广场/技能中心 + 宇宙(ECHO Universe) wire DTO：同样经 Gson 反射、字段名 == JSON 键、
 # 仅部分字段有 @SerializedName。不保留则 release 下 R8 改名导致未注解字段解析为空：
 #   /square/feed、/square/discovery、/config 全空 → 广场只剩种子、club 域名派生失效；
