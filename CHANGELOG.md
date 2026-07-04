@@ -6,7 +6,25 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
-- **detekt static-analysis gate** (`io.gitlab.arturbosch.detekt` 1.23.8): Kotlin
+- **Mini-app community square, full submit→review→install loop**: share a
+  generated mini-app to the square (`SquarePublisher`), server-side
+  `POST /square/publish` with auto-review that only auto-rejects or flags risk —
+  **never auto-approves**; browse and install approved community mini-apps in the
+  client (`MiniAppMarketplaceActivity` + `CommunitySquareApi`). Consumer endpoints
+  live under `/square/assets` (not `/api/v1/registry/assets`, which an earlier
+  nginx `location` rule routes to the enterprise registry — verified on prod).
+- **Fully automatic Shizuku setup**: bundled libadb wireless-ADB pairing plus a
+  visual-Agent skill playbook scrapes the pairing dialog — no PC required.
+- **Generate-app UX**: the agent now asks clarifying questions *before* generating
+  a mini-app and streams stage-by-stage progress while building.
+
+### Changed
+- **Live-control overlay is background-only now**: while the app is foreground the
+  chat's inline event stream (tool cards + thinking progress) is the single source
+  of progress; the floating stop-bar only appears once the Agent moves to another
+  app (driven by `ProcessLifecycleOwner`), and retracts on return.
+- **Desktop/browser-home visual pass**: full-bleed wallpaper with immersive status
+  bar, dark theme actually applied, discover page split into "my apps" / "web".
   static analysis wired as a **baseline ratchet** — the 2,631 pre-existing findings
   are grandfathered in `app/detekt-baseline.xml`, and only *new* issues fail the
   build. Added to CI (`ci.yml`) alongside the existing Android Lint ratchet.
@@ -40,6 +58,22 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   downgrade the WebSocket to cleartext `ws://` (bypassing `MobileRuntimeSecurity`,
   which otherwise blocks remote cleartext). It is now blocked alongside the other
   security-policy switches — the flag must be enabled locally.
+
+### Fixed
+- **Accessibility service no longer dies on swipe-back**: swiping back from the
+  task root now moves the app to background instead of finishing the process (and
+  killing the accessibility service with it).
+- **Share-to-square used the wrong token source** — now uses the login-state
+  `AccountStore.token`.
+- **Release-only silent breakage of the square**: the new `registry`-package Gson
+  wire DTOs (`CommunityMiniApp` etc.) had no R8 keep, so browse/install would
+  parse to empty in release builds (fine in debug); kept the package alongside the
+  existing account/screen DTO keeps. Also backfilled 45 missing Japanese
+  translations that tripped the `MissingTranslation` lint gate.
+
+### Performance
+- **Streaming chat**: latch timeout guard, `cancelToken` now interrupts in-flight
+  streams, and token batches are merged before recomposition.
 
 ### Reliability
 - **VLM goal-verification can no longer hang the agent loop**
