@@ -2281,9 +2281,12 @@ def _registry_row_to_asset(r: sqlite3.Row) -> dict[str, Any]:
     }
 
 
-@app.get("/api/v1/registry/assets")
+@app.get("/square/assets")
 def registry_list(type: str = "", kind: str = "", category: str = "", q: str = "") -> dict[str, Any]:
-    """公开资产目录:?type=skill|plugin  可选 kind(如 mini-app)/category/q 过滤。"""
+    """公开资产目录:?type=skill|plugin  可选 kind(如 mini-app)/category/q 过滤。
+    路径故意不用 /api/v1/registry/assets——那个前缀在 api.octoapk.com 的 nginx 上被更早一条
+    location 规则拦截转发去了另一个服务(enterprise 角色/技能 registry,8090),会撞名到不了
+    这里,实测过(真机 404 排查发现)。/square/* 前缀没有这个冲突。"""
     with closing(db()) as c:
         sql = "SELECT * FROM registry_assets WHERE status='approved'"
         params: list[Any] = []
@@ -2301,7 +2304,7 @@ def registry_list(type: str = "", kind: str = "", category: str = "", q: str = "
     return {"success": True, "total": len(data), "data": data}
 
 
-@app.get("/api/v1/registry/assets/{asset_type}/{slug}/download")
+@app.get("/square/assets/{asset_type}/{slug}/download")
 def registry_download(asset_type: str, slug: str) -> dict[str, Any]:
     """下载单个资产(含 body)。skill→ markdown 文本;plugin→ base64 ZIP。"""
     aid = f"{asset_type}/{slug}"
