@@ -38,6 +38,7 @@ class OctopusMobileClientHandshakeTest {
         clients.clear()
         server.shutdown()
         KVUtils.setInsecureOctopusRuntimeAllowed(false)
+        KVUtils.resetForTest()
     }
 
     @Test

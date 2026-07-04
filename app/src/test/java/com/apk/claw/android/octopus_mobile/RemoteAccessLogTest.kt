@@ -14,6 +14,8 @@ class RemoteAccessLogTest {
     @After
     fun tearDown() {
         RemoteAccessLog.clear()
+        RemoteAccessLog.resetSecretCacheForTest()
+        com.apk.claw.android.utils.KVUtils.resetForTest()
     }
 
     @Test

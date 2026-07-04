@@ -17,6 +17,7 @@ class ChannelDispatchSenderIdTest {
     @After
     fun tearDown() {
         ChannelManager.setOnMessageReceivedListener(null)
+        com.apk.claw.android.utils.KVUtils.resetForTest()
     }
 
     private data class Received(val message: String, val messageId: String, val senderId: String?)

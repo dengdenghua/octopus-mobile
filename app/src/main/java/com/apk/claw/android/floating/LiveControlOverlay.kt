@@ -30,10 +30,21 @@ object LiveControlOverlay {
     private const val TAG = "live_control_float"
     private val main = Handler(Looper.getMainLooper())
     private var showing = false
-    /** 前台页面自带内嵌状态条时(如桌面模式对话)置 true → 抑制这层悬浮控制条,避免重复弹窗。 */
+    private var taskActive = false      // 有任务在跑(与前后台无关)
+    private var lastStep = ""
+    private var onStop: (() -> Unit)? = null
+
+    /**
+     * App 在前台(任一 octopus 界面可见)时置 true → 抑制悬浮控制条:对话页内已有内嵌事件流
+     * (工具卡片 + 思考进度),不必再叠一层浮窗。只有当 App 退到后台(Agent 跳去操作别的 App)、
+     * 且任务在跑时才显示浮条兜底。由 ProcessLifecycleOwner 在 [ClawApplication] 里驱动。
+     */
     @Volatile
     var suppressed = false
-    private var onStop: (() -> Unit)? = null
+        set(value) {
+            field = value
+            if (value) dismissView() else if (taskActive) displayView(lastStep)
+        }
 
     private val cBg = Color.parseColor("#1C1C1E")
     private val cBorder = Color.parseColor("#38383A")
@@ -44,12 +55,18 @@ object LiveControlOverlay {
 
     private fun dp(v: Int): Int = (v * android.content.res.Resources.getSystem().displayMetrics.density).toInt()
 
-    /** 开始一次任务：显示控制条。onStop 在用户点「停止」时回调。 */
+    /** 开始一次任务：记录状态;仅当 App 已在后台时立刻显示浮条(前台靠对话内嵌事件流)。 */
     fun show(step: String, onStop: () -> Unit) {
-        if (suppressed) return  // 桌面模式等自带内嵌状态的页面:不叠这层悬浮条
         this.onStop = onStop
+        taskActive = true
+        lastStep = step
+        if (!suppressed) displayView(step)
+    }
+
+    /** 真正把悬浮条显示出来(EasyFloat)。仅在 App 后台且有任务时被调用。 */
+    private fun displayView(step: String) {
         val app = ClawApplication.instance
-        if (!Settings.canDrawOverlays(app)) return  // 无悬浮窗权限则静默跳过（对话页内仍有步骤显示）
+        if (!Settings.canDrawOverlays(app)) return  // 无悬浮窗权限则静默跳过（对话页内仍有内嵌事件流）
         main.post {
             if (showing) {
                 applyStep(step, running = true)
@@ -100,23 +117,35 @@ object LiveControlOverlay {
         }
     }
 
-    /** 更新当前步骤文案。 */
+    /** 更新当前步骤文案(记住 lastStep,以便后台时补显)。 */
     fun updateStep(step: String) {
-        main.post { applyStep(step, running = true) }
+        lastStep = step
+        main.post { if (showing) applyStep(step, running = true) }
     }
 
     /** 任务结束：短暂显示结果后自动收起。 */
     fun finish(success: Boolean, text: String) {
+        taskActive = false
         main.post {
+            if (!showing) return@post
             applyStep((if (success) "✓ " else "✗ ") + text, running = false, tint = if (success) cSuccess else cDanger)
-            main.postDelayed({ hide() }, 1600)
+            main.postDelayed({ dismissView() }, 1600)
         }
     }
 
+    /** 任务真正结束:清任务态 + 收起浮条。 */
     fun hide() {
-        if (showing) {
-            runCatching { EasyFloat.dismiss(TAG) }
-            showing = false
+        taskActive = false
+        dismissView()
+    }
+
+    /** 只收起浮条(不动 taskActive):用于「进前台抑制」时把浮条藏起来,任务还在跑。 */
+    private fun dismissView() {
+        main.post {
+            if (showing) {
+                runCatching { EasyFloat.dismiss(TAG) }
+                showing = false
+            }
         }
     }
 

@@ -107,10 +107,22 @@ object ToolAuditLog {
         return gson.fromJson<List<Entry>>(json, type) ?: emptyList()
     }
 
-    /** 获取或生成设备级 HMAC 密钥。 */
-    private val hmacSecret: String by lazy {
-        KVUtils.getString(KEY_HMAC_SECRET).takeIf { it.isNotEmpty() }
-            ?: AuditChain.generateSecret().also { KVUtils.putString(KEY_HMAC_SECRET, it) }
+    /** 设备级 HMAC 密钥。首次访问时生成并持久化。 */
+    @Volatile private var hmacSecretCache: String? = null
+
+    private val hmacSecret: String
+        get() {
+            hmacSecretCache?.let { return it }
+            val s = KVUtils.getString(KEY_HMAC_SECRET).takeIf { it.isNotEmpty() }
+                ?: AuditChain.generateSecret().also { KVUtils.putString(KEY_HMAC_SECRET, it) }
+            hmacSecretCache = s
+            return s
+        }
+
+    /** 测试专用:重置 HMAC 密钥缓存,使下次访问重新从 KVUtils 读取/生成。 */
+    @androidx.annotation.VisibleForTesting
+    fun resetSecretCacheForTest() {
+        hmacSecretCache = null
     }
 
     /** 业务字段拼接串（不含 prevHash/signature/tampered），作为签名 payload。 */

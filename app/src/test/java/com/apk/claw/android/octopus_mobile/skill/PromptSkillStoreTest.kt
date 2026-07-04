@@ -16,6 +16,9 @@ class PromptSkillStoreTest {
     @After
     fun cleanup() {
         PromptSkillStore.all().forEach { PromptSkillStore.delete(it.id) }
+        // 清空 KVUtils 内存 fallback,避免本测试类写入的 stringFallback 泄漏到下一个测试类
+        // (PromptSkillStore 通过 KVUtils.putString 持久化,落到 object 级静态 stringFallback)。
+        com.apk.claw.android.utils.KVUtils.resetForTest()
     }
 
     @Test

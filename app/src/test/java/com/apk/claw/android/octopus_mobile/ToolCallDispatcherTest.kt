@@ -42,6 +42,8 @@ class ToolCallDispatcherTest {
     @After
     fun tearDown() {
         ToolRegistry.registerAllTools(ToolRegistry.DeviceType.MOBILE)  // reset
+        com.apk.claw.android.octopus_mobile.ToolAuditLog.resetSecretCacheForTest()
+        com.apk.claw.android.utils.KVUtils.resetForTest()
     }
 
     @Test

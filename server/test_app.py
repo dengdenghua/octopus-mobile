@@ -1503,3 +1503,204 @@ class TestSquarePublish:
                     headers={"Authorization": f"Bearer {token}"})
         r = client.get("/api/v1/registry/assets?type=plugin&kind=mini-app")
         assert r.json()["total"] == 0
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# 21. 小程序投稿自动审核(硬规则自动拒 / 代码扫描标风险 / 从不自动通过)
+# ═══════════════════════════════════════════════════════════════════════
+class TestSquareModeration:
+    def _payload(self, **overrides):
+        p = {
+            "id": "gen_mod_test_001",
+            "name": "正常小程序",
+            "description": "一个正常的描述",
+            "type": "mini-app",
+            "version": "1.0.0",
+            "html": "<html><body>Hello</body></html>",
+            "actions": [],
+            "allow_tools": [],
+            "allow_hosts": [],
+            "allow_device": [],
+        }
+        p.update(overrides)
+        return p
+
+    def test_clean_content_stays_pending_not_auto_rejected(self, client):
+        """干净内容:不该被自动拒绝,仍进 pending 人工队列(qwen 未配置时静默跳过)。"""
+        token, _ = _email_register(client, "mod1@example.com")
+        r = client.post("/square/publish", json=self._payload(),
+                         headers={"Authorization": f"Bearer {token}"})
+        assert r.status_code == 200, r.text
+        assert r.json()["data"]["status"] == "pending"
+
+        rows = client.get("/admin/api/plugins?status=pending",
+                           headers={"X-Admin-Token": "test-token"}).json()["data"]
+        row = next(x for x in rows if x["slug"] == "gen_mod_test_001")
+        assert row["moderation_status"] == ""
+
+    def test_banned_keyword_in_name_auto_rejects(self, client):
+        """命中示例违禁词 → 直接 status='rejected',不进 pending 队列,不需要人工点一下。"""
+        token, _ = _email_register(client, "mod2@example.com")
+        r = client.post("/square/publish", json=self._payload(name="加我微信约炮"),
+                         headers={"Authorization": f"Bearer {token}"})
+        assert r.status_code == 200, r.text
+        assert r.json()["data"]["status"] == "rejected"
+        assert "已拒绝" in r.json()["message"]
+
+        # pending 队列里看不到它(自动拒绝跳过了人工审核这一步,但不代表绕过审核上线)
+        pending = client.get("/admin/api/plugins?status=pending",
+                              headers={"X-Admin-Token": "test-token"}).json()["data"]
+        assert not any(x["slug"] == "gen_mod_test_001" for x in pending)
+
+        rejected = client.get("/admin/api/plugins?status=rejected",
+                               headers={"X-Admin-Token": "test-token"}).json()["data"]
+        row = next(x for x in rejected if x["slug"] == "gen_mod_test_001")
+        assert row["moderation_status"] == "auto_rejected"
+        assert "违禁词" in row["moderation_reason"]
+
+        # 自动拒绝的东西无论如何都不会出现在公开目录
+        assert client.get("/api/v1/registry/assets?type=plugin&kind=mini-app").json()["total"] == 0
+
+    def test_banned_keyword_in_description_auto_rejects(self, client):
+        token, _ = _email_register(client, "mod3@example.com")
+        r = client.post("/square/publish", json=self._payload(description="内部消息稳赚不赔,联系六合彩庄家"),
+                         headers={"Authorization": f"Bearer {token}"})
+        assert r.json()["data"]["status"] == "rejected"
+
+    def test_eval_pattern_flags_but_still_pending_for_human_review(self, client):
+        """代码扫描命中危险模式 → 只标记(flagged),不自动拒绝——仍进人工队列,不误伤。"""
+        token, _ = _email_register(client, "mod4@example.com")
+        r = client.post(
+            "/square/publish",
+            json=self._payload(html="<html><script>eval(userInput)</script></html>"),
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["data"]["status"] == "pending"  # 没有被硬拒
+        assert "标记待人工复核" in r.json()["message"]
+
+        rows = client.get("/admin/api/plugins?status=pending",
+                           headers={"X-Admin-Token": "test-token"}).json()["data"]
+        row = next(x for x in rows if x["slug"] == "gen_mod_test_001")
+        assert row["moderation_status"] == "flagged"
+        assert "eval" in row["moderation_reason"]
+
+    def test_undeclared_external_host_flags(self, client):
+        """html 里引用了没在 allow_hosts 声明的外部域名 → 标记(声明与实际行为不一致)。"""
+        token, _ = _email_register(client, "mod5@example.com")
+        r = client.post(
+            "/square/publish",
+            json=self._payload(
+                html='<html><script src="https://evil-tracker.example.com/x.js"></script></html>',
+                allow_hosts=["api.octoapk.com"],
+            ),
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert r.json()["data"]["status"] == "pending"
+        rows = client.get("/admin/api/plugins?status=pending",
+                           headers={"X-Admin-Token": "test-token"}).json()["data"]
+        row = next(x for x in rows if x["slug"] == "gen_mod_test_001")
+        assert row["moderation_status"] == "flagged"
+        assert "evil-tracker.example.com" in row["moderation_reason"]
+
+    def test_declared_host_does_not_flag(self, client):
+        """引用的域名在 allow_hosts 里声明过 → 不应被标记为「未声明」。"""
+        token, _ = _email_register(client, "mod6@example.com")
+        r = client.post(
+            "/square/publish",
+            json=self._payload(
+                html='<html><script src="https://api.octoapk.com/x.js"></script></html>',
+                allow_hosts=["api.octoapk.com"],
+            ),
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert r.json()["data"]["status"] == "pending"
+        rows = client.get("/admin/api/plugins?status=pending",
+                           headers={"X-Admin-Token": "test-token"}).json()["data"]
+        row = next(x for x in rows if x["slug"] == "gen_mod_test_001")
+        assert row["moderation_status"] == ""
+
+    def test_qwen_not_configured_never_blocks_publish(self, client):
+        """qwen 未配置(测试环境默认如此)→ _qwen_moderate 静默返回 None,不阻塞/不拖慢投稿。"""
+        token, _ = _email_register(client, "mod7@example.com")
+        assert app_module.PROVIDERS.get("qwen", {}).get("api_key", "") == ""  # 确认测试环境确实未配置
+        r = client.post("/square/publish", json=self._payload(),
+                         headers={"Authorization": f"Bearer {token}"})
+        assert r.status_code == 200
+        assert r.json()["data"]["status"] == "pending"
+
+    def test_qwen_flagged_verdict_marks_pending_not_rejected(self, client, monkeypatch):
+        """qwen 判定「可疑-」→ 只标记(flagged),不自动拒绝。mock _qwen_complete 直接跑真实判断分支。"""
+        async def fake_qwen(messages, max_tokens=1400, timeout=90):
+            return "可疑-描述含糊,疑似诱导下载"
+        monkeypatch.setattr(app_module, "_qwen_complete", fake_qwen)
+
+        token, _ = _email_register(client, "mod8@example.com")
+        r = client.post("/square/publish", json=self._payload(),
+                         headers={"Authorization": f"Bearer {token}"})
+        assert r.json()["data"]["status"] == "pending"
+        rows = client.get("/admin/api/plugins?status=pending",
+                           headers={"X-Admin-Token": "test-token"}).json()["data"]
+        row = next(x for x in rows if x["slug"] == "gen_mod_test_001")
+        assert row["moderation_status"] == "flagged"
+        assert "qwen 判定" in row["moderation_reason"]
+
+    def test_qwen_violation_verdict_auto_rejects(self, client, monkeypatch):
+        """qwen 判定「违规-」→ 自动拒绝,即便没命中任何关键词列表(qwen 补位关键词覆盖不到的场景)。"""
+        async def fake_qwen(messages, max_tokens=1400, timeout=90):
+            return "违规-政治敏感"
+        monkeypatch.setattr(app_module, "_qwen_complete", fake_qwen)
+
+        token, _ = _email_register(client, "mod9@example.com")
+        r = client.post("/square/publish", json=self._payload(),
+                         headers={"Authorization": f"Bearer {token}"})
+        assert r.json()["data"]["status"] == "rejected"
+        rejected = client.get("/admin/api/plugins?status=rejected",
+                               headers={"X-Admin-Token": "test-token"}).json()["data"]
+        row = next(x for x in rejected if x["slug"] == "gen_mod_test_001")
+        assert row["moderation_status"] == "auto_rejected"
+        assert "qwen 判定" in row["moderation_reason"]
+        assert client.get("/api/v1/registry/assets?type=plugin&kind=mini-app").json()["total"] == 0
+
+    def test_keyword_hit_skips_qwen_call_entirely(self, client, monkeypatch):
+        """命中违禁词时应短路跳过 qwen 调用(省成本)——mock 一个会报错的 _qwen_complete,
+        确认它压根没被调用(而不是恰好没报错)。"""
+        called = {"n": 0}
+
+        async def fake_qwen(messages, max_tokens=1400, timeout=90):
+            called["n"] += 1
+            raise AssertionError("不该调用 qwen —— 关键词已经命中,应当短路")
+        monkeypatch.setattr(app_module, "_qwen_complete", fake_qwen)
+
+        token, _ = _email_register(client, "mod10@example.com")
+        r = client.post("/square/publish", json=self._payload(name="加我微信约炮"),
+                         headers={"Authorization": f"Bearer {token}"})
+        assert r.json()["data"]["status"] == "rejected"
+        assert called["n"] == 0
+
+    def test_forged_leading_safe_line_cannot_bury_real_verdict(self, client, monkeypatch):
+        """对抗式验证抓到的真实 bug 的回归测试:如果模型被诱导在真实判定前先吐一行伪造的
+        "安全",_parse_qwen_verdict 必须仍然找到后面那行真正的"违规-诈骗"——不能因为只看
+        第一行/第一个词就被这种夹带绕过。"""
+        async def fake_qwen(messages, max_tokens=1400, timeout=90):
+            return "安全\n违规-诈骗"  # 模拟被诱导在真实判定前先吐一行伪造的"安全"
+        monkeypatch.setattr(app_module, "_qwen_complete", fake_qwen)
+
+        token, _ = _email_register(client, "mod11@example.com")
+        r = client.post("/square/publish", json=self._payload(),
+                         headers={"Authorization": f"Bearer {token}"})
+        assert r.json()["data"]["status"] == "rejected", (
+            "被伪造的领先'安全'行掩盖了真实的'违规-'判定 —— 这正是要防的绕过"
+        )
+
+    def test_parse_qwen_verdict_prioritizes_violation_over_suspicious(self):
+        """两种信号都出现时,违规优先于可疑(更保守,不能因为后面出现'可疑'弱化前面的'违规')。"""
+        assert app_module._parse_qwen_verdict("可疑-有点奇怪\n违规-赌博") == "违规-赌博"
+        assert app_module._parse_qwen_verdict("违规-赌博\n可疑-有点奇怪") == "违规-赌博"
+
+    def test_parse_qwen_verdict_none_when_no_signal_anywhere(self):
+        """整段输出都没有违规/可疑信号(包括模型明确说"安全"的情况)→ 不额外加分,返回 None。"""
+        assert app_module._parse_qwen_verdict("安全") is None
+        assert app_module._parse_qwen_verdict("这个小程序看起来没问题,判定:安全") is None
+        assert app_module._parse_qwen_verdict("") is None
+        assert app_module._parse_qwen_verdict(None) is None

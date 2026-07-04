@@ -215,6 +215,9 @@ dependencies {
     implementation("com.github.MuntashirAkon:sun-security-android:1.1")
     implementation("org.conscrypt:conscrypt-android:2.5.3")
 
+    // App 级前后台感知(ProcessLifecycleOwner):前台抑制悬浮控制条,后台才显示。见 ClawApplication。
+    implementation("androidx.lifecycle:lifecycle-process:2.6.2")
+
     // mpv-android-lib —— FFmpeg + libplacebo + libass 播放引擎（MIT 协议）
     // 已移除以瘦身 APK(约 -25MB):其原生库 libmpv/libav*/libplacebo/libass 占 ~25MB,
     // 而 MpvController 目前是 stub(播放未接通),这些 .so 是纯死重。

@@ -3,6 +3,7 @@ package com.apk.claw.android.octopus_mobile
 import com.apk.claw.android.octopus_mobile.safety.ToolRiskPolicy
 import com.apk.claw.android.tool.ToolRegistry
 import com.apk.claw.android.utils.KVUtils
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -22,6 +23,12 @@ class MobileActionTimelineTest {
         ToolRegistry.circuitBreaker = null
         ToolRegistry.highRiskConfirmer = null
         ToolRegistry.registerAllTools(ToolRegistry.DeviceType.MOBILE)
+    }
+
+    @After
+    fun tearDown() {
+        com.apk.claw.android.octopus_mobile.ToolAuditLog.resetSecretCacheForTest()
+        KVUtils.resetForTest()
     }
 
     @Test

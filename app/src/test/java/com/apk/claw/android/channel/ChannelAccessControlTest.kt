@@ -1,6 +1,7 @@
 package com.apk.claw.android.channel
 
 import com.apk.claw.android.utils.KVUtils
+import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
@@ -19,6 +20,11 @@ class ChannelAccessControlTest {
     fun reset() {
         KVUtils.setChannelAclEnabled(true)
         Channel.values().forEach { KVUtils.clearChannelAllowedSenders(it.name) }
+    }
+
+    @After
+    fun tearDown() {
+        KVUtils.resetForTest()
     }
 
     @Test
