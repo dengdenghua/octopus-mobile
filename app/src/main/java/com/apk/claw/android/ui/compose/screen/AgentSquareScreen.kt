@@ -191,8 +191,9 @@ private fun AgentFeed(remote: List<AgentPost>?, local: List<AgentPost>) {
 private fun AgentPostCard(post: AgentPost) {
     Surface(
         shape = OctopusShape.large,
-        color = OctopusBackground.glassSurface,
-        border = androidx.compose.foundation.BorderStroke(1.dp, OctopusBackground.glassBorder),
+        // 帖子是文字密集内容,用实底表面 —— 不跟随玻璃透明度,玻璃调到最透也可读。
+        color = OctopusBackground.solidSurface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, OctopusBackground.solidBorder),
         shadowElevation = OctopusThemeStyle.cardShadow(2.dp),
         modifier = Modifier
             .fillMaxWidth()

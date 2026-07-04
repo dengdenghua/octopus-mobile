@@ -271,23 +271,49 @@ object OctopusBackground {
         )
     }
 
-    val cardSurface: Color
-        get() = if (OctopusThemeStyle.isGlass) {
-            if (OctopusColors.isLight) Color.White.copy(alpha = 0.82f) else Color(0xFF222225).copy(alpha = 0.72f)
-        } else {
-            if (OctopusColors.isLight) Color.White else Color(0xFF272729)
+    // 玻璃透明度映射:模糊滑块 0..48 线性映射到 [base, base-span]。
+    // 默认值 18 正好映射回历史写死值(浅 0.82 / 深 0.72),老用户无感知。
+    private const val GLASS_BLUR_FULL_SCALE = 48f
+    private const val GLASS_ALPHA_BASE_LIGHT = 0.94f
+    private const val GLASS_ALPHA_BASE_DARK = 0.84f
+    private const val GLASS_ALPHA_SPAN = 0.32f
+
+    /** 玻璃卡片透明度:由「玻璃设置」的模糊半径滑块驱动,滑得越大越透。 */
+    private val glassSurfaceAlpha: Float
+        get() {
+            val t = (OctopusGlass.blurRadius.value / GLASS_BLUR_FULL_SCALE).coerceIn(0f, 1f)
+            val base = if (OctopusColors.isLight) GLASS_ALPHA_BASE_LIGHT else GLASS_ALPHA_BASE_DARK
+            return base - t * GLASS_ALPHA_SPAN
         }
 
+    val cardSurface: Color
+        get() = if (OctopusThemeStyle.isGlass) {
+            (if (OctopusColors.isLight) Color.White else Color(0xFF222225)).copy(alpha = glassSurfaceAlpha)
+        } else {
+            solidSurface
+        }
+
+    /** 玻璃卡片描边:高光滑块(0..2,默认 1)直接缩放描边亮度。 */
     val cardBorder: Color
         get() = if (OctopusThemeStyle.isGlass) {
-            if (OctopusColors.isLight) Color.White.copy(alpha = 0.82f) else Color.White.copy(alpha = 0.14f)
+            val h = OctopusGlass.highlight
+            if (OctopusColors.isLight) Color.White.copy(alpha = (0.82f * h).coerceIn(0f, 1f))
+            else Color.White.copy(alpha = (0.14f * h).coerceIn(0f, 1f))
         } else {
-            if (OctopusColors.isLight) Color(0x14000000) else Color(0x1AFFFFFF)
+            solidBorder
         }
 
     val glassSurface: Color get() = cardSurface
 
     val glassBorder: Color get() = cardBorder
+
+    /**
+     * 不跟随玻璃透明度的实底表面 —— 弹窗、广场帖子等文字密集内容用,
+     * 玻璃再透也保证可读性。
+     */
+    val solidSurface: Color get() = if (OctopusColors.isLight) Color.White else Color(0xFF272729)
+
+    val solidBorder: Color get() = if (OctopusColors.isLight) Color(0x14000000) else Color(0x1AFFFFFF)
 }
 
 /**
