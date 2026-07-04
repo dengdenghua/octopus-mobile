@@ -3,11 +3,46 @@
 All notable changes to Octopus Mobile are documented here.
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.0.0] — 2026-07-05
+
+First stable release (`versionCode 9`). Builds on the 0.0.1 test build with a
+round of intelligence upgrades to the in-app assistant, a multi-character system,
+high-framerate remote screen capture, and browser/glass-theme visual polish.
+
+### Added
+- **Multi-turn conversation context** (`ConversationContext` + `ChatAgentBridge`):
+  the in-app chat now carries a summary of recent turns into each task, so
+  follow-ups like “换成蓝牙的” resolve against what was just said instead of being
+  treated as a brand-new, context-free instruction.
+- **Long-term memory, now wired into the chat surface** (`MemoryStore`): the chat
+  path reads *and* writes cross-session memory (preferences/facts) the same way the
+  messaging channels always did. Extraction is upgraded from 4 regex patterns to
+  a zero-extra-cost `MEMO:` annotation the main model emits and we harvest; regex
+  stays as a fallback. Injection is budgeted and ranked (preferences first), and
+  the eviction bug that discarded the *newest* memory instead of the least-used is
+  fixed.
+- **Per-character conversations** (`0a58299`): switch the assistant’s character in
+  chat; sessions and history are fully isolated per character (TV mode included).
+- **High-framerate remote screen capture** (`4f8700b`): `MediaProjection`-based
+  capture lifts the remote-control mirror from 2–5 fps to 20–30 fps.
+- **“TV mode”** (`78298b3`): the landscape “local virtual PC” is renamed TV mode
+  and injects the current character’s persona into the conversation.
+
+### Fixed
+- **`extractFromTask` no longer mines the agent’s own reply** — first-person text in
+  the assistant’s answer (“我是你的手机助手”) was being stored as a *user* fact.
+- **Glass theme**: transparency/highlight settings now actually take effect; square
+  posts use a solid background instead of tracking the glass alpha (`ec0b941`).
+- **Browser glass polish**: address-bar outline unified to the same soft-white as
+  other glass components (was theme purple); home search bar made properly
+  translucent (was an opaque 82% white “bar”), and its placeholder text darkened
+  from `TextMuted` so it’s legible on the light field.
+
 ## [0.0.1] — 2026-07-04
 
-> **Versioning reset**: this is the first public release, so the display version
-> restarts at 0.0.1. It supersedes the internal 0.0.2–0.0.7 builds below —
-> internally it is `versionCode 8`, so upgrades from any earlier internal build
+> **Versioning reset**: the 0.0.1 test build restarted the display version from
+> the internal 0.0.2–0.0.7 line. 1.0.0 above is the first stable public release —
+> `versionCode 9`, so upgrades from 0.0.1 (vc8) or any earlier internal build
 > keep working.
 
 A round focused on the **mini-app community square (submit → auto-review →
