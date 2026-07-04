@@ -469,7 +469,11 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
                     IconBubble(Icons.Filled.LightMode, PrimaryColor)
                     Spacer(Modifier.width(OctopusSpacing.md))
                     // 命名成「深色模式」并让开关=开→深色(直觉一致),不再一直挂着「明亮模式」
-                    Text(stringResource(R.string.settings_dark_mode), color = TextPrimary, fontSize = OctopusType.body, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    Text(
+                        stringResource(R.string.settings_dark_mode),
+                        color = TextPrimary, fontSize = OctopusType.body, fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f),
+                    )
                     Switch(
                         checked = !isLight,
                         onCheckedChange = { dark ->

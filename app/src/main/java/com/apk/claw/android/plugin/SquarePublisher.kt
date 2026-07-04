@@ -78,11 +78,11 @@ object SquarePublisher {
                         val msg = runCatching { JSONObject(body).optString("message") }.getOrDefault("")
                         Outcome(true, msg.ifBlank { "已提交到广场,审核通过后就能被大家看到啦" })
                     }
-                    resp.code == 404 || resp.code == 501 ->
+                    resp.code == HTTP_NOT_FOUND || resp.code == HTTP_NOT_IMPLEMENTED ->
                         Outcome(false, "服务端还没开放广场投稿(端点未接入);小程序已存在本地,可稍后再试")
-                    resp.code == 401 || resp.code == 403 ->
+                    resp.code == HTTP_UNAUTHORIZED || resp.code == HTTP_FORBIDDEN ->
                         Outcome(false, "登录已过期或没有投稿权限,请重新登录后再试")
-                    else -> Outcome(false, "投稿失败:HTTP ${resp.code} ${body.take(120)}")
+                    else -> Outcome(false, "投稿失败:HTTP ${resp.code} ${body.take(ERROR_BODY_TAIL)}")
                 }
             }
         }.getOrElse {
@@ -93,8 +93,16 @@ object SquarePublisher {
 
     /** 读小程序入口页 html(复用 MiniAppHost 的定位逻辑,只处理本地 filesDir 的 file:// 生成物)。 */
     private fun readHtml(ctx: Context, manifest: PluginManifest): String? {
-        val uri = MiniAppHost.resolvePageUrl(ctx, manifest) ?: return null
-        if (!uri.startsWith("file:")) return null // assets 里的内置插件不投稿
-        return runCatching { File(URI(uri)).readText() }.getOrNull()?.takeIf { it.isNotBlank() }
+        val uri = MiniAppHost.resolvePageUrl(ctx, manifest)
+        // assets 里的内置插件不投稿(uri 为空或非 file: 均返回 null)
+        return uri?.takeIf { it.startsWith("file:") }
+            ?.let { runCatching { File(URI(it)).readText() }.getOrNull() }
+            ?.takeIf { it.isNotBlank() }
     }
+
+    private const val HTTP_NOT_FOUND = 404
+    private const val HTTP_NOT_IMPLEMENTED = 501
+    private const val HTTP_UNAUTHORIZED = 401
+    private const val HTTP_FORBIDDEN = 403
+    private const val ERROR_BODY_TAIL = 120
 }

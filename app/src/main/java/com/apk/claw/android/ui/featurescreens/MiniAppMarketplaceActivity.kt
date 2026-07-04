@@ -134,7 +134,10 @@ private fun CommunityMiniAppCard(
     FCard {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(app.name.ifBlank { app.effectiveSlug }, color = FText, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                Text(
+                    app.name.ifBlank { app.effectiveSlug },
+                    color = FText, fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
+                )
                 if (app.description.isNotBlank()) {
                     Text(
                         app.description, color = FMuted, fontSize = 12.sp,

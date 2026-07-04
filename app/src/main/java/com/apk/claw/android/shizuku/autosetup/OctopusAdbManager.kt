@@ -28,6 +28,9 @@ import java.security.cert.CertificateFactory
 import java.security.spec.PKCS8EncodedKeySpec
 import java.util.Date
 import java.util.Random
+import com.apk.claw.android.utils.XLog
+
+private const val TAG_ADB = "OctopusAdbManager"
 
 /**
  * octopus 的 ADB 连接管理器 —— [AbsAdbConnectionManager] 的具体实现(libadb-android)。
@@ -79,8 +82,15 @@ class OctopusAdbManager private constructor(context: Context) : AbsAdbConnection
                 CertificateFactory.getInstance("X.509").generateCertificate(it)
             }
             pk to ct
-        } catch (e: Exception) {
-            null // 损坏/格式变更 → 当作没有,重新生成并重新配对
+        } catch (e: java.security.spec.InvalidKeySpecException) {
+            XLog.w(TAG_ADB, "私钥格式损坏,将重新生成: ${e.message}")
+            null
+        } catch (e: java.security.cert.CertificateException) {
+            XLog.w(TAG_ADB, "证书格式损坏,将重新生成: ${e.message}")
+            null
+        } catch (e: java.io.IOException) {
+            XLog.w(TAG_ADB, "密钥/证书文件读失败,将重新生成: ${e.message}")
+            null
         }
     }
 

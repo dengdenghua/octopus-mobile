@@ -51,15 +51,9 @@ internal object CommunityMiniAppInstaller {
      */
     suspend fun install(context: Context, data: CommunityMiniAppDownload): String? {
         val slug = data.effectiveSlug
-        if (slug.isBlank()) return "安装失败:服务端未提供小程序 slug"
-        if (!SLUG_RE.matches(slug)) return "安装失败:slug 格式不合法,已拒绝(疑似非法数据)"
-        if (data.body.isBlank()) return "安装失败:小程序页面内容为空"
-
-        // ── 写盘前校验 sha256(fail-closed:checksum 缺失即拒绝)──
-        val expected = data.content?.checksum?.removePrefix("sha256:")
-        if (expected.isNullOrBlank()) return "校验失败:服务端未提供 checksum,已拒绝安装"
-        val actual = sha256Hex(data.body.toByteArray(Charsets.UTF_8))
-        if (!actual.equals(expected, ignoreCase = true)) return "校验失败:checksum 不符,已拒绝安装"
+        // ── 写盘前所有校验合并:任一失败返回对应错误,全部通过才进入写盘 ──
+        val validationError = validate(slug, data)
+        if (validationError != null) return validationError
 
         return withContext(Dispatchers.IO) {
             runCatching {
@@ -73,7 +67,9 @@ internal object CommunityMiniAppInstaller {
                     type = "mini-app",
                     description = data.description,
                     page = "index.html",
-                    actions = data.tags.actions.map { PluginActionDef(name = it, description = "", params = emptyList()) },
+                    actions = data.tags.actions.map {
+                        PluginActionDef(name = it, description = "", params = emptyList())
+                    },
                     allowTools = data.tags.allowTools,
                     allowHosts = data.tags.allowHosts,
                     allowDevice = data.tags.allowDevice,
@@ -95,6 +91,20 @@ internal object CommunityMiniAppInstaller {
                 ClawApplication.instance.pluginManager.refreshNonDexPlugins()
                 null
             }.getOrElse { "安装失败:${it.message}" }
+        }
+    }
+
+    /** 写盘前合并校验:slug 合法性 + body 非空 + sha256 匹配。返回 null = 通过。 */
+    private fun validate(slug: String, data: CommunityMiniAppDownload): String? = when {
+        slug.isBlank() -> "安装失败:服务端未提供小程序 slug"
+        !SLUG_RE.matches(slug) -> "安装失败:slug 格式不合法,已拒绝(疑似非法数据)"
+        data.body.isBlank() -> "安装失败:小程序页面内容为空"
+        data.content?.checksum?.removePrefix("sha256:").isNullOrBlank() ->
+            "校验失败:服务端未提供 checksum,已拒绝安装"
+        else -> {
+            val expected = data.content!!.checksum.removePrefix("sha256:")
+            val actual = sha256Hex(data.body.toByteArray(Charsets.UTF_8))
+            if (!actual.equals(expected, ignoreCase = true)) "校验失败:checksum 不符,已拒绝安装" else null
         }
     }
 

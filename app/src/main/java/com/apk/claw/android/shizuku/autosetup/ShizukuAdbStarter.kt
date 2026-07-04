@@ -25,6 +25,9 @@ object ShizukuAdbStarter {
 
     private const val DEFAULT_TIMEOUT_MS = 10_000L
 
+    /** 日志输出尾部截断长度,避免 Shizuku 启动脚本的长输出刷屏。 */
+    private const val LOG_OUT_TAIL = 200
+
     /**
      * 用配对码把本机与 adbd 配对。host/port/code 取自无线调试「使用配对码配对设备」子弹窗
      * (见 [PairingDialogParser])。配对成功后身份被 adbd 记住,下次免配对。
@@ -66,7 +69,7 @@ object ShizukuAdbStarter {
 
     private fun AbsAdbConnectionManager.startShizuku(): String {
         val out = shell(SHIZUKU_START_CMD)
-        XLog.i(TAG, "Shizuku 启动输出: ${out.take(200)}")
+        XLog.i(TAG, "Shizuku 启动输出: ${out.take(LOG_OUT_TAIL)}")
         return out
     }
 

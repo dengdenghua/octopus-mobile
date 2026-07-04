@@ -75,6 +75,7 @@ internal data class CommunityMiniAppDownload(
 
 internal object CommunitySquareApi {
     private const val API = "/api/v1/registry/assets"
+    private const val ERROR_BODY_TAIL = 120
 
     private val gson = Gson()
     private val http = OctoHttp.shared.newBuilder()
@@ -96,7 +97,7 @@ internal object CommunitySquareApi {
             val req = Request.Builder().url("$b$API?type=plugin&kind=mini-app").get().build()
             http.newCall(req).execute().use { resp ->
                 val respBody = resp.body?.string().orEmpty()
-                if (!resp.isSuccessful) error("HTTP ${resp.code} ${respBody.take(120)}")
+                if (!resp.isSuccessful) error("HTTP ${resp.code} ${respBody.take(ERROR_BODY_TAIL)}")
                 if (respBody.isBlank()) error("响应为空")
                 val root = gson.fromJson(respBody, JsonObject::class.java)
                 val dataArr = root?.getAsJsonArray("data") ?: error("响应格式不对(缺 data)")
@@ -120,7 +121,7 @@ internal object CommunitySquareApi {
             val req = Request.Builder().url("$b$API/plugin/$slug/download").get().build()
             http.newCall(req).execute().use { resp ->
                 val respBody = resp.body?.string().orEmpty()
-                if (!resp.isSuccessful) error("HTTP ${resp.code} ${respBody.take(120)}")
+                if (!resp.isSuccessful) error("HTTP ${resp.code} ${respBody.take(ERROR_BODY_TAIL)}")
                 if (respBody.isBlank()) error("响应为空")
                 val root = gson.fromJson(respBody, JsonObject::class.java) ?: error("响应格式不对")
                 val data = root.getAsJsonObject("data") ?: error("响应格式不对(缺 data)")

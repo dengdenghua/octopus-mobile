@@ -23,7 +23,6 @@
     <ID>CyclomaticComplexMethod:ClawAccessibilityService.kt$ClawAccessibilityService$private fun buildNodeTreeFull(node: AccessibilityNodeInfo, sb: StringBuilder, depth: Int)</ID>
     <ID>CyclomaticComplexMethod:CloudDriveActivity.kt$@Composable fun CloudDriveScreen(onBack: () -&gt; Unit)</ID>
     <ID>CyclomaticComplexMethod:ConfigServer.kt$ConfigServer$override fun serve(session: IHTTPSession): Response</ID>
-    <ID>CyclomaticComplexMethod:ConnectionStateMachine.kt$ConnectionStateMachine$fun transition(event: ConnectionEvent): ConnectionState?</ID>
     <ID>CyclomaticComplexMethod:DefaultAgentService.kt$DefaultAgentService$private fun AgentLoopState.executeSingleTool(toolRequest: ToolExecutionRequest, callback: AgentCallback): ToolHandleResult</ID>
     <ID>CyclomaticComplexMethod:DefaultAgentService.kt$DefaultAgentService$private fun compressHistoryForSend(messages: MutableList&lt;ChatMessage&gt;)</ID>
     <ID>CyclomaticComplexMethod:DefaultAgentService.kt$DefaultAgentService$private fun handleSystemDialogWithVision( messages: MutableList&lt;ChatMessage&gt;, callback: AgentCallback, iterations: Int ): Boolean</ID>
@@ -33,7 +32,6 @@
     <ID>CyclomaticComplexMethod:DeviceRouteHandler.kt$DeviceRouteHandler$private fun handleControlInput(session: NanoHTTPD.IHTTPSession, ctx: RouteContext): NanoHTTPD.Response</ID>
     <ID>CyclomaticComplexMethod:DualConfigWriter.kt$DualConfigWriter$private fun handleIncomingMessage(rawJson: String)</ID>
     <ID>CyclomaticComplexMethod:EchoUniverseTools.kt$EchoUniverseTools.ObserveTool$override fun execute(params: Map&lt;String, Any&gt;): ToolResult</ID>
-    <ID>CyclomaticComplexMethod:EvolutionEngine.kt$EvolutionEngine$fun deepEvolve( dryRun: Boolean = true, maxRounds: Int = 1, candidatesPerRound: Int = 3, ): EvolveResult</ID>
     <ID>CyclomaticComplexMethod:EvolutionEngine.kt$EvolutionEngine$fun deepReflect(window: Int = 20): ReflectResult</ID>
     <ID>CyclomaticComplexMethod:FileOpsTool.kt$FileOpsTool$override fun execute(params: Map&lt;String, Any&gt;): ToolResult</ID>
     <ID>CyclomaticComplexMethod:FileRouteHandler.kt$FileRouteHandler$private fun handleFileDownload(session: NanoHTTPD.IHTTPSession, ctx: RouteContext): NanoHTTPD.Response</ID>
@@ -46,6 +44,7 @@
     <ID>CyclomaticComplexMethod:MediaScanner.kt$MediaScanner$fun scan(path: String, recursive: Boolean = true, type: String = "all"): List&lt;MediaFile&gt;</ID>
     <ID>CyclomaticComplexMethod:MediaTools.kt$MediaTools$override fun execute(params: Map&lt;String, Any&gt;): ToolResult</ID>
     <ID>CyclomaticComplexMethod:MiniAppActionTools.kt$AppActionTool$override fun execute(params: Map&lt;String, Any&gt;): ToolResult</ID>
+    <ID>CyclomaticComplexMethod:MiniAppListActivity.kt$@Composable private fun MiniAppCard( m: PluginManifest, expanded: Boolean, onToggleExpand: () -&gt; Unit, onLaunch: () -&gt; Unit, publishing: Boolean = false, onShare: () -&gt; Unit = {}, )</ID>
     <ID>CyclomaticComplexMethod:MjpegImageView.kt$MjpegImageView$fun start(url: String)</ID>
     <ID>CyclomaticComplexMethod:NavigateTool.kt$NavigateTool$override fun execute(params: Map&lt;String, Any&gt;): ToolResult</ID>
     <ID>CyclomaticComplexMethod:OctopusMobileClient.kt$OctopusMobileClient$internal fun handleIncomingMessage(text: String)</ID>
@@ -128,7 +127,6 @@
     <ID>LongMethod:DiscoverScreen.kt$@Composable private fun BrowserOmnibox( value: String, onValueChange: (String) -&gt; Unit, selectedOption: BrowserSearchOption, options: List&lt;BrowserSearchOption&gt;, engineMenuOpen: Boolean, onEngineMenuChange: (Boolean) -&gt; Unit, onEngineSelected: (BrowserSearchOption) -&gt; Unit, onSubmit: () -&gt; Unit, )</ID>
     <ID>LongMethod:EchoUniverseTools.kt$EchoUniverseTools.ObserveTool$override fun execute(params: Map&lt;String, Any&gt;): ToolResult</ID>
     <ID>LongMethod:ErrorClassifier.kt$ErrorClassifier$fun classifyMessage( msg: String, statusCode: Int? = null, provider: String = "", ): ErrorClassification</ID>
-    <ID>LongMethod:EvolutionEngine.kt$EvolutionEngine$fun deepEvolve( dryRun: Boolean = true, maxRounds: Int = 1, candidatesPerRound: Int = 3, ): EvolveResult</ID>
     <ID>LongMethod:EvolutionEngine.kt$EvolutionEngine$fun deepReflect(window: Int = 20): ReflectResult</ID>
     <ID>LongMethod:FeatureHubScreen.kt$@Composable private fun AgentDiscoveryCard(post: AgentDiscoveryPost, onClick: () -&gt; Unit)</ID>
     <ID>LongMethod:FeatureHubScreen.kt$@Composable private fun AgentDiscoveryDetail( post: AgentDiscoveryPost, onDismiss: () -&gt; Unit, onRun: () -&gt; Unit, )</ID>
@@ -144,7 +142,7 @@
     <ID>LongMethod:LoginActivity.kt$LoginActivity$override fun onCreate(savedInstanceState: Bundle?)</ID>
     <ID>LongMethod:MediaTools.kt$MediaTools$override fun execute(params: Map&lt;String, Any&gt;): ToolResult</ID>
     <ID>LongMethod:MemoryActivity.kt$@Composable fun MemoryScreen(onBack: () -&gt; Unit)</ID>
-    <ID>LongMethod:MiniAppListActivity.kt$@Composable private fun MiniAppCard( m: PluginManifest, expanded: Boolean, onToggleExpand: () -&gt; Unit, onLaunch: () -&gt; Unit, )</ID>
+    <ID>LongMethod:MiniAppListActivity.kt$@Composable private fun MiniAppCard( m: PluginManifest, expanded: Boolean, onToggleExpand: () -&gt; Unit, onLaunch: () -&gt; Unit, publishing: Boolean = false, onShare: () -&gt; Unit = {}, )</ID>
     <ID>LongMethod:MobileQualityGate.kt$MobileQualityGate$fun evaluate( registeredTools: Set&lt;String&gt; = registeredToolNames(), rpcUrl: String = KVUtils.getOctopusRpcUrl(), allowInsecureRuntime: Boolean = KVUtils.isInsecureOctopusRuntimeAllowed(), ): Report</ID>
     <ID>LongMethod:NavigateTool.kt$NavigateTool$override fun execute(params: Map&lt;String, Any&gt;): ToolResult</ID>
     <ID>LongMethod:OctopusMobileClient.kt$OctopusMobileClient$internal fun handleIncomingMessage(text: String)</ID>
@@ -197,7 +195,6 @@
     <ID>LongParameterList:WeChatApiClient.kt$WeChatApiClient$( filekey: String, mediaType: Int, toUserId: String, rawsize: Int, rawfilemd5: String, filesize: Int, aeskeyHex: String )</ID>
     <ID>LoopWithTooManyJumpStatements:CloudDriveManager.kt$CloudDriveManager$for</ID>
     <ID>LoopWithTooManyJumpStatements:DeviceDiscoveryManager.kt$DeviceDiscoveryManager$while</ID>
-    <ID>LoopWithTooManyJumpStatements:EvolutionEngine.kt$EvolutionEngine$for</ID>
     <ID>LoopWithTooManyJumpStatements:GenerateAppTool.kt$GenerateAppTool$while</ID>
     <ID>LoopWithTooManyJumpStatements:H264Decoder.kt$H264Decoder$while</ID>
     <ID>LoopWithTooManyJumpStatements:MediaScanner.kt$MediaScanner$for</ID>
@@ -245,7 +242,6 @@
     <ID>MagicNumber:BitReader.kt$BitReader$32</ID>
     <ID>MagicNumber:BitReader.kt$BitReader$7</ID>
     <ID>MagicNumber:BitReader.kt$BitReader$8</ID>
-    <ID>MagicNumber:BrainModeSelector.kt$BrainModeSelector$2000L</ID>
     <ID>MagicNumber:BrowserScreen.kt$0.30f</ID>
     <ID>MagicNumber:BrowserScreen.kt$100</ID>
     <ID>MagicNumber:BrowserScreen.kt$1920</ID>
@@ -263,11 +259,6 @@
     <ID>MagicNumber:BrowserTools.kt$BrowserTypeTool$50</ID>
     <ID>MagicNumber:BrowserTools.kt$GetDomTool$50</ID>
     <ID>MagicNumber:BrowserTools.kt$GetDomTool$5000</ID>
-    <ID>MagicNumber:CanaryManager.kt$CanaryManager$0.80</ID>
-    <ID>MagicNumber:CanaryManager.kt$CanaryManager$5</ID>
-    <ID>MagicNumber:CanaryManager.kt$CanaryManager.CanaryConfig$0.70</ID>
-    <ID>MagicNumber:CanaryManager.kt$CanaryManager.CanaryConfig$0.80</ID>
-    <ID>MagicNumber:CanaryManager.kt$CanaryManager.CanaryConfig$0.85</ID>
     <ID>MagicNumber:CanaryManager.kt$CanaryManager.Phase$0.05</ID>
     <ID>MagicNumber:CanaryManager.kt$CanaryManager.Phase$0.25</ID>
     <ID>MagicNumber:CanaryManager.kt$CanaryManager.Phase$0.50</ID>
@@ -334,7 +325,6 @@
     <ID>MagicNumber:ConnectionDiagnostics.kt$ConnectionDiagnostics$1000</ID>
     <ID>MagicNumber:ConnectionDiagnostics.kt$ConnectionDiagnostics$3600</ID>
     <ID>MagicNumber:ConnectionDiagnostics.kt$ConnectionDiagnostics$60</ID>
-    <ID>MagicNumber:ConnectionStateMachine.kt$ConnectionStateMachine$30</ID>
     <ID>MagicNumber:ContextCompressor.kt$ContextCompressor$100</ID>
     <ID>MagicNumber:ContextSummarizer.kt$ContextSummarizer$0.2</ID>
     <ID>MagicNumber:ContextSummarizer.kt$ContextSummarizer$160</ID>
@@ -350,12 +340,8 @@
     <ID>MagicNumber:DefaultAgentService.kt$DefaultAgentService$80</ID>
     <ID>MagicNumber:DemoRecorder.kt$DemoRecorder$12</ID>
     <ID>MagicNumber:DesktopActivity.kt$0.18f</ID>
-    <ID>MagicNumber:DesktopActivity.kt$0.45f</ID>
-    <ID>MagicNumber:DesktopActivity.kt$0.4f</ID>
     <ID>MagicNumber:DesktopActivity.kt$0.5f</ID>
-    <ID>MagicNumber:DesktopActivity.kt$0.7f</ID>
     <ID>MagicNumber:DesktopActivity.kt$0.82f</ID>
-    <ID>MagicNumber:DesktopActivity.kt$0.8f</ID>
     <ID>MagicNumber:DesktopActivity.kt$0.98f</ID>
     <ID>MagicNumber:DesktopActivity.kt$0x991A1A1A</ID>
     <ID>MagicNumber:DesktopActivity.kt$0xCC1A1A1A</ID>
@@ -364,12 +350,7 @@
     <ID>MagicNumber:DesktopActivity.kt$0xFFFFC24D</ID>
     <ID>MagicNumber:DesktopActivity.kt$100</ID>
     <ID>MagicNumber:DesktopActivity.kt$1000</ID>
-    <ID>MagicNumber:DesktopActivity.kt$120</ID>
-    <ID>MagicNumber:DesktopActivity.kt$14</ID>
     <ID>MagicNumber:DesktopActivity.kt$16</ID>
-    <ID>MagicNumber:DesktopActivity.kt$360</ID>
-    <ID>MagicNumber:DesktopActivity.kt$5</ID>
-    <ID>MagicNumber:DesktopActivity.kt$90</ID>
     <ID>MagicNumber:DesktopActivity.kt$99</ID>
     <ID>MagicNumber:DesktopHolo.kt$0.006f</ID>
     <ID>MagicNumber:DesktopHolo.kt$0.05f</ID>
@@ -451,8 +432,6 @@
     <ID>MagicNumber:ErrorClassifier.kt$ErrorClassifier$504</ID>
     <ID>MagicNumber:EvolutionActivity.kt$0.5f</ID>
     <ID>MagicNumber:EvolutionActivity.kt$100</ID>
-    <ID>MagicNumber:EvolutionEngine.kt$EvolutionEngine$20</ID>
-    <ID>MagicNumber:EvolutionEngine.kt$EvolutionEngine$3</ID>
     <ID>MagicNumber:EvolutionEngine.kt$EvolutionEngine$50</ID>
     <ID>MagicNumber:FastReplay.kt$FastReplay$1000</ID>
     <ID>MagicNumber:FeatureHubScreen.kt$0.64f</ID>
@@ -477,9 +456,7 @@
     <ID>MagicNumber:FloatingCircleManager.kt$FloatingCircleManager$18</ID>
     <ID>MagicNumber:FloatingCircleManager.kt$FloatingCircleManager$20</ID>
     <ID>MagicNumber:FloatingCircleManager.kt$FloatingCircleManager$200L</ID>
-    <ID>MagicNumber:FloatingCircleManager.kt$FloatingCircleManager$20f</ID>
     <ID>MagicNumber:FloatingCircleManager.kt$FloatingCircleManager$24</ID>
-    <ID>MagicNumber:FloatingCircleManager.kt$FloatingCircleManager$24f</ID>
     <ID>MagicNumber:FloatingCircleManager.kt$FloatingCircleManager$255</ID>
     <ID>MagicNumber:FloatingCircleManager.kt$FloatingCircleManager$260</ID>
     <ID>MagicNumber:FloatingCircleManager.kt$FloatingCircleManager$28</ID>
@@ -880,7 +857,6 @@
     <ID>MaxLineLength:ActivityActivity.kt$FPill(e.target, if (e.target == stringResource(R.string.control_target_local)) FPrimary else FWarning)</ID>
     <ID>MaxLineLength:ActivityActivity.kt$Text(e.task, color = FText, fontSize = 14.sp, fontWeight = FontWeight.Medium, lineHeight = 19.sp, maxLines = 2)</ID>
     <ID>MaxLineLength:ActivityActivity.kt$Text(stringResource(R.string.activity_steps_and_time, e.steps, relTime(e.ts)), color = FMuted, fontSize = 10.sp)</ID>
-    <ID>MaxLineLength:AgentConfig.kt$AgentConfig.Builder$return AgentConfig(apiKey, baseUrl, modelName, systemPrompt, maxIterations, temperature, provider, streaming, dynamicPromptSuffix, memoryPromptSuffix, enableVision)</ID>
     <ID>MaxLineLength:AgentRouteHandler.kt$AgentRouteHandler$return ctx.corsResponse(NanoHTTPD.newFixedLengthResponse(NanoHTTPD.Response.Status.BAD_REQUEST, MIME_JSON, """{"code":-1,"message":"请输入指令"}"""))</ID>
     <ID>MaxLineLength:AgentRouteHandler.kt$AgentRouteHandler$session.uri == "/api/agent/events" &amp;&amp; session.method == NanoHTTPD.Method.GET -&gt; handleAgentEvents(session, ctx)</ID>
     <ID>MaxLineLength:AgentSquareScreen.kt$border = if (isSelected) null else androidx.compose.foundation.BorderStroke(1.dp, OctopusColors.Border.copy(alpha = 0.6f))</ID>
@@ -975,8 +951,6 @@
     <ID>MaxLineLength:ChatScreen.kt$onConfigLlm = { runCatching { context.startActivity(android.content.Intent(context, LlmConfigActivity::class.java)) } }</ID>
     <ID>MaxLineLength:ChatScreen.kt$onEnableA11y = { runCatching { context.startActivity(android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)) } }</ID>
     <ID>MaxLineLength:ChatScreen.kt$onEnter = { runCatching { com.apk.claw.android.ui.device.RemoteControlActivity.start(context, dev.deviceId) } }</ID>
-    <ID>MaxLineLength:ChatScreen.kt$onError = { e -&gt; hideThinking(); finalizeStream(null); messages.add(ChatMessage.AgentMessage("⚠️ $e")); isRunning = false; scrollEnd(); persist() }</ID>
-    <ID>MaxLineLength:ChatScreen.kt$onTool = { icon, name, args, res -&gt; finalizeStream(null); hideThinking(); messages.add(ChatMessage.ToolCall(icon, name, args, res)); showThinking(); persist() }</ID>
     <ID>MaxLineLength:ChatScreen.kt$private</ID>
     <ID>MaxLineLength:ChatScreen.kt$runCatching { context.startActivity(android.content.Intent(context, com.apk.claw.android.ui.desktop.DesktopActivity::class.java)) }</ID>
     <ID>MaxLineLength:ChatScreen.kt$runCatching { context.startActivity(android.content.Intent(context, com.apk.claw.android.ui.featurescreens.ActivityActivity::class.java)) }</ID>
@@ -1176,7 +1150,6 @@
     <ID>MaxLineLength:MiniAppActionTools.kt$AppActionTool$"Dispatch an action to a mini-app (auto-opens it if not running). Args: app_id, action_type, params (JSON string). Call list_apps first to discover valid action_type + params."</ID>
     <ID>MaxLineLength:MiniAppActionTools.kt$ListAppsTool$"List installed mini-apps and the agent-callable actions each declares (with param schemas). Call this before app_action."</ID>
     <ID>MaxLineLength:MiniAppActionTools.kt$ReadAppEventsTool$"Read recent events reported by mini-apps (user actions inside a mini-app). Use to perceive what happened in an app."</ID>
-    <ID>MaxLineLength:MobileRuntimeSecurity.kt$MobileRuntimeSecurity$allowInsecureRuntime -&gt; Decision(allowed = true, localDevelopment = false, reason = "explicit insecure runtime override")</ID>
     <ID>MaxLineLength:MobileRuntimeSecurity.kt$MobileRuntimeSecurity$isLocalCleartextHost(host) -&gt; Decision(allowed = true, localDevelopment = true, reason = "local development websocket")</ID>
     <ID>MaxLineLength:MobileRuntimeSecurity.kt$MobileRuntimeSecurity$scheme != "ws" -&gt; Decision(allowed = false, localDevelopment = false, reason = "Runtime URL must use wss:// or ws://")</ID>
     <ID>MaxLineLength:MockAccountGateway.kt$MockAccountGateway$Goods(id = "g_1000", title = "1000 Credits", credits = 1000, bonusCredits = 200, priceFen = 6900, tag = "Super value")</ID>
@@ -1198,7 +1171,6 @@
     <ID>MaxLineLength:NavigationExecutor.kt$NavigationExecutor$XLog.w(TAG, "Checkpoint mismatch at step $executedSteps: expected=${expectedNode.label}, similarity=$similarity")</ID>
     <ID>MaxLineLength:NavigationExecutor.kt$NavigationExecutor$return ExecutionResult(false, executedSteps, replanCount, "Action execution failed: ${edge.action.type}")</ID>
     <ID>MaxLineLength:NavigationGraph.kt$NavigationGraph$weight = computeWeight(existing.successCount + 1, existing.failCount, (existing.avgDurationMs + durationMs) / 2)</ID>
-    <ID>MaxLineLength:NavigationGraph.kt$RemoteAction$val type: String</ID>
     <ID>MaxLineLength:NavigationGraph.kt$if (selectedBottomRoute == screen.route &amp;&amp; currentDestination?.route == screen.route) return@CompactBottomBar</ID>
     <ID>MaxLineLength:NavigationRecorder.kt$NavigationRecorder$KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -&gt; RemoteAction.dpadCenter()</ID>
     <ID>MaxLineLength:OctopusComponents.kt$if</ID>
@@ -1293,7 +1265,6 @@
     <ID>MaxLineLength:SettingsScreen.kt$Text(name, fontSize = OctopusType.tag, color = if (connected) TextPrimary else TextMuted, maxLines = 1)</ID>
     <ID>MaxLineLength:SettingsScreen.kt$Text(stringResource(R.string.remote_console_pair_desc), color = TextMuted, fontSize = OctopusType.caption, lineHeight = 16.sp)</ID>
     <ID>MaxLineLength:SettingsScreen.kt$Text(stringResource(R.string.settings_advanced_hint), color = TextMuted, fontSize = OctopusType.caption, lineHeight = 15.sp, modifier = Modifier.weight(1f))</ID>
-    <ID>MaxLineLength:SettingsScreen.kt$Text(stringResource(R.string.settings_light_mode), color = TextPrimary, fontSize = OctopusType.body, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))</ID>
     <ID>MaxLineLength:SettingsScreen.kt$Text(stringResource(R.string.settings_subtitle), color = TextMuted, fontSize = OctopusType.label, lineHeight = 16.sp, maxLines = 2)</ID>
     <ID>MaxLineLength:SettingsScreen.kt$Text(stringResource(R.string.settings_workspace_desc), color = TextMuted, fontSize = OctopusType.caption, lineHeight = 16.sp)</ID>
     <ID>MaxLineLength:SettingsScreen.kt$Text(title, fontSize = OctopusType.body, fontWeight = FontWeight.SemiBold, color = TextPrimary, lineHeight = 17.sp, maxLines = 2)</ID>
@@ -1475,8 +1446,6 @@
     <ID>PackageNaming:ConnectionDiagnostics.kt$package com.apk.claw.android.octopus_mobile</ID>
     <ID>PackageNaming:ConnectionDiagnosticsTest.kt$package com.apk.claw.android.octopus_mobile</ID>
     <ID>PackageNaming:ConnectionState.kt$package com.apk.claw.android.octopus_mobile</ID>
-    <ID>PackageNaming:ConnectionStateMachine.kt$package com.apk.claw.android.octopus_mobile</ID>
-    <ID>PackageNaming:ConnectionStateMachineTest.kt$package com.apk.claw.android.octopus_mobile</ID>
     <ID>PackageNaming:ContextCompressor.kt$package com.apk.claw.android.octopus_mobile.memory</ID>
     <ID>PackageNaming:ControlTarget.kt$package com.apk.claw.android.octopus_mobile</ID>
     <ID>PackageNaming:DemoRecorder.kt$package com.apk.claw.android.octopus_mobile</ID>
@@ -1549,7 +1518,6 @@
     <ID>PackageNaming:SmsReceiver.kt$package com.apk.claw.android.octopus_mobile.proactive</ID>
     <ID>PackageNaming:SsrfSafeDns.kt$package com.apk.claw.android.octopus_mobile.safety</ID>
     <ID>PackageNaming:SsrfSafeHttp.kt$package com.apk.claw.android.octopus_mobile.safety</ID>
-    <ID>PackageNaming:StartupModeResolverTest.kt$package com.apk.claw.android.octopus_mobile</ID>
     <ID>PackageNaming:SystemWebViewEngine.kt$package com.apk.claw.android.octopus_mobile.browser</ID>
     <ID>PackageNaming:SystemWebViewEngineTest.kt$package com.apk.claw.android.octopus_mobile.browser</ID>
     <ID>PackageNaming:ThinkingMode.kt$package com.apk.claw.android.octopus_mobile.cerebrum</ID>
@@ -1576,7 +1544,6 @@
     <ID>ReturnCount:BrowserTools.kt$BrowserNavigateTool$override fun execute(params: Map&lt;String, Any&gt;): ToolResult</ID>
     <ID>ReturnCount:BrowserTools.kt$BrowserTypeTool$override fun execute(params: Map&lt;String, Any&gt;): ToolResult</ID>
     <ID>ReturnCount:BrowserTools.kt$private fun unwrapJsString(value: String?): String?</ID>
-    <ID>ReturnCount:CanaryManager.kt$CanaryManager$fun recordOutcome(skillName: String, success: Boolean): CanaryState?</ID>
     <ID>ReturnCount:CastApprovalManager.kt$CastApprovalManager$private fun createChannel(context: Context)</ID>
     <ID>ReturnCount:CastRouteHandler.kt$CastRouteHandler$private fun handleCastLaunch(session: NanoHTTPD.IHTTPSession, ctx: RouteContext): NanoHTTPD.Response</ID>
     <ID>ReturnCount:ChannelAccessControl.kt$ChannelAccessControl$fun authorize(channel: Channel, senderId: String?): Decision</ID>
@@ -1591,7 +1558,6 @@
     <ID>ReturnCount:ConfigServerManager.kt$ConfigServerManager$fun getAddress(): String?</ID>
     <ID>ReturnCount:ConfigServerManager.kt$ConfigServerManager$fun isWifiConnected(context: Context): Boolean</ID>
     <ID>ReturnCount:ConfigServerManager.kt$ConfigServerManager$fun start(context: Context): Boolean</ID>
-    <ID>ReturnCount:ConnectionStateMachine.kt$ConnectionStateMachine$fun transition(event: ConnectionEvent): ConnectionState?</ID>
     <ID>ReturnCount:ContextCompressor.kt$ContextCompressor$fun compress(messages: List&lt;ChatMessage&gt;): List&lt;ChatMessage&gt;</ID>
     <ID>ReturnCount:ContextSummarizer.kt$ContextSummarizer$fun summarize(prompt: String): String?</ID>
     <ID>ReturnCount:DebugRouteHandler.kt$DebugRouteHandler$private fun handleServeFile(session: NanoHTTPD.IHTTPSession, ctx: RouteContext): NanoHTTPD.Response</ID>
@@ -1649,7 +1615,6 @@
     <ID>ReturnCount:MiniAppActionTools.kt$AppActionTool$override fun execute(params: Map&lt;String, Any&gt;): ToolResult</ID>
     <ID>ReturnCount:MiniAppHost.kt$MiniAppHost$fun resolvePageUrl(context: Context, manifest: PluginManifest): String?</ID>
     <ID>ReturnCount:MjpegImageView.kt$MjpegImageView$private fun readLine(stream: BufferedInputStream): String?</ID>
-    <ID>ReturnCount:MobileRuntimeSecurity.kt$MobileRuntimeSecurity$fun assess(runtimeUrl: String, allowInsecureRuntime: Boolean = false): Decision</ID>
     <ID>ReturnCount:NavigateTool.kt$NavigateTool$override fun execute(params: Map&lt;String, Any&gt;): ToolResult</ID>
     <ID>ReturnCount:NavigationExecutor.kt$NavigationExecutor$fun execute(path: NavigationPath): ExecutionResult</ID>
     <ID>ReturnCount:NavigationRecorder.kt$NavigationRecorder$fun onKeyEvent(keyCode: Int): Boolean</ID>
@@ -1756,7 +1721,6 @@
     <ID>SwallowedException:ActivityLog.kt$ActivityLog$e: Exception</ID>
     <ID>SwallowedException:AuditChain.kt$AuditChain$e: Exception</ID>
     <ID>SwallowedException:DebugRouteHandler.kt$DebugRouteHandler$e: Exception</ID>
-    <ID>SwallowedException:EvolutionEngine.kt$EvolutionEngine$e: Exception</ID>
     <ID>SwallowedException:FastReplay.kt$FastReplay$e: Exception</ID>
     <ID>SwallowedException:FeiShuChannelHandler.kt$FeiShuChannelHandler.&lt;no name provided&gt;$e: Exception</ID>
     <ID>SwallowedException:HeartbeatReporter.kt$HeartbeatReporter$e: Exception</ID>
@@ -1804,7 +1768,6 @@
     <ID>TooGenericExceptionCaught:ApprovalFlow.kt$ApprovalFlow$e: Exception</ID>
     <ID>TooGenericExceptionCaught:AuditChain.kt$AuditChain$e: Exception</ID>
     <ID>TooGenericExceptionCaught:BookmarkManager.kt$BookmarkManager$e: Exception</ID>
-    <ID>TooGenericExceptionCaught:BrainModeSelector.kt$BrainModeSelector$e: Exception</ID>
     <ID>TooGenericExceptionCaught:BrowserTools.kt$e: Exception</ID>
     <ID>TooGenericExceptionCaught:CanaryManager.kt$CanaryManager$e: Exception</ID>
     <ID>TooGenericExceptionCaught:ChannelManager.kt$ChannelManager$e: Exception</ID>
@@ -1920,7 +1883,6 @@
     <ID>TooManyFunctions:BrainModeSelector.kt$BrainModeSelector</ID>
     <ID>TooManyFunctions:BrowserEngine.kt$BrowserEngine</ID>
     <ID>TooManyFunctions:BrowserScreen.kt$com.apk.claw.android.ui.browser.BrowserScreen.kt</ID>
-    <ID>TooManyFunctions:CanaryManager.kt$CanaryManager</ID>
     <ID>TooManyFunctions:ChannelHandler.kt$ChannelHandler</ID>
     <ID>TooManyFunctions:ChannelManager.kt$ChannelManager</ID>
     <ID>TooManyFunctions:ChatAgentBridge.kt$ChatAgentBridge</ID>
@@ -2013,7 +1975,6 @@
     <ID>UnusedPrivateMember:ShizukuShellService.kt$ShizukuShellService$private fun containsShellMetachar(s: String): Boolean</ID>
     <ID>UnusedPrivateProperty:AgentPresentation.kt$AgentPresentation$/** 当前在外接屏上运行的 App 列表 */ private val runningApps = mutableListOf&lt;RunningAppInfo&gt;()</ID>
     <ID>UnusedPrivateProperty:BitReader.kt$BitReader$i</ID>
-    <ID>UnusedPrivateProperty:ConnectionStateMachineTest.kt$ConnectionStateMachineTest$val capped = sm.getBackoffDelayMs()</ID>
     <ID>UnusedPrivateProperty:DefaultAgentService.kt$DefaultAgentService$val msgCountBefore = messages.size</ID>
     <ID>UnusedPrivateProperty:DeviceListActivity.kt$DeviceListActivity.Companion$private const val TAG = "DeviceListActivity"</ID>
     <ID>UnusedPrivateProperty:ErrorClassifier.kt$ErrorClassifier$private const val TAG = "ErrorClassifier"</ID>
@@ -2076,7 +2037,6 @@
     <ID>WildcardImport:BrowserSettingsActivity.kt$import androidx.compose.foundation.layout.*</ID>
     <ID>WildcardImport:BrowserSettingsActivity.kt$import androidx.compose.runtime.*</ID>
     <ID>WildcardImport:BrowserToolsTest.kt$import org.junit.Assert.*</ID>
-    <ID>WildcardImport:CanaryManagerTest.kt$import org.junit.Assert.*</ID>
     <ID>WildcardImport:ChannelAccessControlTest.kt$import org.junit.Assert.*</ID>
     <ID>WildcardImport:ChannelAclActivity.kt$import androidx.compose.foundation.layout.*</ID>
     <ID>WildcardImport:ChannelAclActivity.kt$import androidx.compose.runtime.*</ID>
@@ -2090,7 +2050,6 @@
     <ID>WildcardImport:CloudDriveActivity.kt$import androidx.compose.material3.*</ID>
     <ID>WildcardImport:CloudDriveActivity.kt$import androidx.compose.runtime.*</ID>
     <ID>WildcardImport:ConfigServer.kt$import com.apk.claw.android.server.routes.*</ID>
-    <ID>WildcardImport:ConnectionStateMachineTest.kt$import org.junit.Assert.*</ID>
     <ID>WildcardImport:DeviceDetailActivity.kt$import android.widget.*</ID>
     <ID>WildcardImport:DeviceDiscoveryManager.kt$import kotlinx.coroutines.*</ID>
     <ID>WildcardImport:DiscoverScreen.kt$import androidx.compose.foundation.layout.*</ID>
@@ -2145,7 +2104,6 @@
     <ID>WildcardImport:SkillExporterTest.kt$import org.junit.Assert.*</ID>
     <ID>WildcardImport:SkillsActivity.kt$import androidx.compose.foundation.layout.*</ID>
     <ID>WildcardImport:SkillsActivity.kt$import androidx.compose.runtime.*</ID>
-    <ID>WildcardImport:StartupModeResolverTest.kt$import org.junit.Assert.*</ID>
     <ID>WildcardImport:StateDetectorTest.kt$import org.junit.Assert.*</ID>
     <ID>WildcardImport:SystemWebViewEngineTest.kt$import org.junit.Assert.*</ID>
     <ID>WildcardImport:Theme.kt$import androidx.compose.material3.*</ID>

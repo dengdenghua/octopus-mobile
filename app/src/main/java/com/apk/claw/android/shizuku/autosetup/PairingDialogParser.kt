@@ -30,6 +30,9 @@ object PairingDialogParser {
     private val CODE_PLAIN = Regex("""(?<!\d)(\d{6})(?!\d)""")
     private val CODE_SPACED = Regex("""(?<!\d)(\d{3})[ \-](\d{3})(?!\d)""")
 
+    /** 合法 TCP 端口上界,用于校验从弹窗文本里抠出的 port 字段。 */
+    private const val MAX_TCP_PORT = 65535
+
     /**
      * 从一屏文本节点解析配对信息；任一要素缺失（无 ip:port 或无配对码）返回 null，
      * 由上层决定回退到「让用户手填配对码」。
@@ -38,16 +41,18 @@ object PairingDialogParser {
         if (texts.isEmpty()) return null
         val joined = texts.joinToString("\n")
 
-        val ipPort = IP_PORT.find(joined) ?: return null
-        val host = ipPort.groupValues[1]
-        val port = ipPort.groupValues[2].toIntOrNull()?.takeIf { it in 1..65535 } ?: return null
+        val ipPort = IP_PORT.find(joined)
+        val port = ipPort?.groupValues?.get(2)?.toIntOrNull()?.takeIf { it in 1..MAX_TCP_PORT }
 
         // 关键：先挖掉 ip:port，剩下的文本里再找 6 位码，防止把 port/IP 段当配对码
-        val rest = joined.replace(ipPort.value, " ")
-        val code = CODE_PLAIN.find(rest)?.groupValues?.get(1)
-            ?: CODE_SPACED.find(rest)?.let { it.groupValues[1] + it.groupValues[2] }
-            ?: return null
+        val code = ipPort?.let {
+            val rest = joined.replace(it.value, " ")
+            CODE_PLAIN.find(rest)?.groupValues?.get(1)
+                ?: CODE_SPACED.find(rest)?.let { m -> m.groupValues[1] + m.groupValues[2] }
+        }
 
-        return PairingInfo(host = host, port = port, code = code)
+        return if (ipPort != null && port != null && code != null) {
+            PairingInfo(host = ipPort.groupValues[1], port = port, code = code)
+        } else null
     }
 }
