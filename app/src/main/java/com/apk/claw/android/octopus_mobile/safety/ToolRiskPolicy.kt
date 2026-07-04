@@ -40,6 +40,9 @@ object ToolRiskPolicy {
         // 全自动配置 Shizuku:与本机 adbd 完成 ADB 配对并跑 shell 拉起 Shizuku(shell 级特权入口)。
         // 最高危一类 → 不可信来源须弹审批 + 全程审计,防远端静默给自己开 Shizuku 提权。见 ShizukuAutoSetupTool。
         "shizuku_auto_setup",
+        // 分享到广场:把本地小程序 html 对外发布到公开广场。高危 → 不可信来源须弹审批,
+        // 防远端静默把用户/攻击者内容刷上广场。见 ShareToSquareTool。
+        "share_to_square",
     )
 
     val MEDIUM_RISK_TOOLS: Set<String> = setOf(

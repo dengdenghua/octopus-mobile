@@ -34,9 +34,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.rememberCoroutineScope
 import com.apk.claw.android.plugin.MiniAppRegistry
 import com.apk.claw.android.plugin.PermissionGate
 import com.apk.claw.android.plugin.PluginManifest
+import com.apk.claw.android.plugin.SquarePublisher
+import kotlinx.coroutines.launch
 
 class MiniAppListActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -48,8 +51,10 @@ class MiniAppListActivity : ComponentActivity() {
 @Composable
 private fun MiniAppListScreen(onBack: () -> Unit) {
     val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
     val apps = remember { MiniAppRegistry.all() }
     var expandedId by remember { mutableStateOf<String?>(null) }
+    var publishingId by remember { mutableStateOf<String?>(null) }
 
     FeatureScaffold(title = "小程序", onBack = onBack) {
         if (apps.isEmpty()) {
@@ -67,6 +72,17 @@ private fun MiniAppListScreen(onBack: () -> Unit) {
                     expanded = expandedId == m.id,
                     onToggleExpand = { expandedId = if (expandedId == m.id) null else m.id },
                     onLaunch = { MiniAppRegistry.launch(ctx, m.id) },
+                    publishing = publishingId == m.id,
+                    onShare = {
+                        if (publishingId == null) {
+                            publishingId = m.id
+                            scope.launch {
+                                val r = SquarePublisher.publish(m)
+                                publishingId = null
+                                android.widget.Toast.makeText(ctx, r.message, android.widget.Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    },
                 )
             }
         }
@@ -79,6 +95,8 @@ private fun MiniAppCard(
     expanded: Boolean,
     onToggleExpand: () -> Unit,
     onLaunch: () -> Unit,
+    publishing: Boolean = false,
+    onShare: () -> Unit = {},
 ) {
     // 每次 recompose 时从 KVUtils 读最新授权集(小程序数量少,可接受)
     val grantState = remember(m.id, expanded) {
@@ -167,8 +185,15 @@ private fun MiniAppCard(
 
                 Spacer(Modifier.height(12.dp))
 
-                // 启动按钮
+                // 底部操作:分享到广场 + 打开
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    Text(
+                        if (publishing) "分享中…" else "分享到广场",
+                        color = if (publishing) FMuted else FSub, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier
+                            .clickable(enabled = !publishing, onClick = onShare)
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
                     Text(
                         "打开",
                         color = FPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
