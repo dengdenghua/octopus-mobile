@@ -1842,3 +1842,63 @@ class TestCrashReport:
                      if getattr(r, "path", "") == "/crash/report")
         dep_calls = [d.call for d in route.dependant.dependencies]
         assert app_module.actor not in dep_calls
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# 23. App 在线更新(OTA)—— GET /app/latest + /app/latest.apk
+# ═══════════════════════════════════════════════════════════════════════
+class TestAppUpdate:
+    def test_latest_unconfigured_looks_like_up_to_date(self, client, monkeypatch):
+        """未配置版本号/APK 缺失 → versionCode=0,客户端 vc<=BuildConfig.VERSION_CODE 恒真,
+        天然表现为「已最新」而不是报错——不需要客户端另外判断一个 available 标志位。"""
+        monkeypatch.setattr(app_module, "APP_UPDATE_VERSION_CODE", 0)
+        r = client.get("/app/latest")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["versionCode"] == 0
+        assert data["url"] == ""
+
+    def test_latest_configured_but_apk_missing_still_looks_up_to_date(self, client, monkeypatch, tmp_path):
+        """版本号配了,但 APK 文件实际不存在(运维还没放包)→ 同样不能谎报「有更新」,
+        否则客户端会去下载一个 404 的地址。"""
+        monkeypatch.setattr(app_module, "APP_UPDATE_VERSION_CODE", 99)
+        monkeypatch.setattr(app_module, "APP_UPDATE_APK_PATH", str(tmp_path / "missing.apk"))
+        r = client.get("/app/latest")
+        assert r.json()["versionCode"] == 0
+
+    def test_latest_and_apk_download(self, client, monkeypatch, tmp_path):
+        apk = tmp_path / "octopus-app.apk"
+        payload = b"fake universal apk bytes for endpoint test"
+        apk.write_bytes(payload)
+        monkeypatch.setattr(app_module, "APP_UPDATE_APK_PATH", str(apk))
+        monkeypatch.setattr(app_module, "APP_UPDATE_VERSION_CODE", 42)
+        monkeypatch.setattr(app_module, "APP_UPDATE_VERSION_NAME", "0.0.8")
+        monkeypatch.setattr(app_module, "APP_UPDATE_NOTES", "修了一堆东西")
+        monkeypatch.setattr(app_module, "APP_UPDATE_FORCE", True)
+
+        r = client.get("/app/latest")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["versionCode"] == 42
+        assert data["versionName"] == "0.0.8"
+        assert data["notes"] == "修了一堆东西"
+        assert data["force"] is True
+        assert data["url"].endswith("/app/latest.apk")
+
+        r2 = client.get("/app/latest.apk")
+        assert r2.status_code == 200
+        assert r2.content == payload
+        assert r2.headers["content-type"] == "application/vnd.android.package-archive"
+
+    def test_download_404_when_apk_missing(self, client, monkeypatch, tmp_path):
+        monkeypatch.setattr(app_module, "APP_UPDATE_APK_PATH", str(tmp_path / "missing.apk"))
+        r = client.get("/app/latest.apk")
+        assert r.status_code == 404
+
+    def test_no_auth_required(self):
+        """检查更新不该要求已登录——契约就是公开访问,直接核对路由声明没挂任何鉴权依赖。"""
+        route = next(r for r in app_module.app.routes
+                     if getattr(r, "path", "") == "/app/latest")
+        dep_calls = [d.call for d in route.dependant.dependencies]
+        assert app_module.actor not in dep_calls
+        assert app_module.admin_guard not in dep_calls

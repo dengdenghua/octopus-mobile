@@ -2097,6 +2097,48 @@ def download_shizuku_apk() -> FileResponse:
     )
 
 
+# App 在线更新(OTA)。同 Shizuku 下载镜像一个模式:运维把 universal 签名 APK 放到
+# APP_UPDATE_APK_PATH,配 APP_UPDATE_VERSION_CODE/_VERSION_NAME/_NOTES/_FORCE 声明这个包的版本号,
+# 服务端只做受控静态分发——不在这里构建/签名 APK(签名密钥不经手服务端)。
+APP_UPDATE_APK_PATH = os.environ.get(
+    "APP_UPDATE_APK_PATH",
+    os.path.join(os.path.dirname(__file__), "downloads", "octopus-app.apk"),
+)
+APP_UPDATE_VERSION_CODE = int(os.environ.get("APP_UPDATE_VERSION_CODE", "0") or "0")
+APP_UPDATE_VERSION_NAME = os.environ.get("APP_UPDATE_VERSION_NAME", "")
+APP_UPDATE_NOTES = os.environ.get("APP_UPDATE_NOTES", "")
+APP_UPDATE_FORCE = os.environ.get("APP_UPDATE_FORCE", "").strip().lower() in ("1", "true", "yes")
+
+
+@app.get("/app/latest")
+def app_latest(request: Request) -> dict[str, Any]:
+    """App 在线更新(OTA)元信息。客户端契约(AppUpdater.kt):
+    {versionCode, versionName, url, notes, force},公开无需鉴权(检查更新不该要求已登录)。
+    未配置版本号或 APK 文件缺失时返回 versionCode=0——客户端逻辑是
+    `vc <= BuildConfig.VERSION_CODE` 判定"已最新",0 恒小于等于任何真实版本号,
+    天然表现为"没有更新"而不是报错,运维还没放包时不会误导用户。"""
+    if APP_UPDATE_VERSION_CODE <= 0 or not os.path.isfile(APP_UPDATE_APK_PATH):
+        return {"versionCode": 0, "versionName": "", "url": "", "notes": "", "force": False}
+    return {
+        "versionCode": APP_UPDATE_VERSION_CODE,
+        "versionName": APP_UPDATE_VERSION_NAME or f"v{APP_UPDATE_VERSION_CODE}",
+        "url": str(request.url_for("download_app_apk")),
+        "notes": APP_UPDATE_NOTES,
+        "force": APP_UPDATE_FORCE,
+    }
+
+
+@app.get("/app/latest.apk", name="download_app_apk")
+def download_app_apk() -> FileResponse:
+    if not os.path.isfile(APP_UPDATE_APK_PATH):
+        raise HTTPException(status_code=404, detail="update APK is not configured")
+    return FileResponse(
+        APP_UPDATE_APK_PATH,
+        media_type="application/vnd.android.package-archive",
+        filename="octopus-update.apk",
+    )
+
+
 # ─────────────────── 模型目录 + 中转(多上游路由,按模型倍率扣积分,0=免费) ───────────────────
 def _resolve_model(requested: str | None) -> tuple[str, dict[str, Any]]:
     """请求的 model → (规整后 model_id, spec)。目录外/未指定 → 回退 DEFAULT_MODEL(防拿 key 乱调)。
