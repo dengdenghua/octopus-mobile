@@ -444,8 +444,10 @@ private fun BrowserOmnibox(
     onSubmit: () -> Unit,
 ) {
     val isGlass = OctopusThemeStyle.isGlass
-    val omniBg = if (isGlass) Color.White.copy(alpha = 0.82f) else SurfaceColor
-    val omniBorder = if (isGlass) Color.White.copy(alpha = 0.58f) else OctopusBackground.glassBorder
+    // 玻璃模式:更通透的半透明白 —— 原 0.82 太不透明,搜索框像贴了块实心白横条(用户反馈),
+    // 与其它玻璃组件(tile 0.22 / icon 0.72)也不协调;边框同步调柔和。
+    val omniBg = if (isGlass) Color.White.copy(alpha = 0.55f) else SurfaceColor
+    val omniBorder = if (isGlass) Color.White.copy(alpha = 0.35f) else OctopusBackground.glassBorder
     Surface(
         modifier = Modifier.fillMaxWidth().height(54.dp),
         shape = RoundedCornerShape(22.dp),
@@ -507,7 +509,12 @@ private fun BrowserOmnibox(
                     keyboardActions = KeyboardActions(onGo = { onSubmit() }),
                 )
                 if (value.isEmpty()) {
-                    Text(stringResource(R.string.ai_browser_omnibox_hint), color = TextMuted, fontSize = 15.sp, maxLines = 1)
+                    Text(
+                        stringResource(R.string.ai_browser_omnibox_hint),
+                        color = TextSecondary,
+                        fontSize = 15.sp,
+                        maxLines = 1,
+                    )
                 }
             }
 
