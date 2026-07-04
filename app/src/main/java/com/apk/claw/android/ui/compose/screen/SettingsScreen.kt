@@ -536,12 +536,35 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
             }
         }
 
-        // ── 版本号从 BuildConfig 读取 ──
+        // ── 版本号 + 点此在线检查更新 ──
         item {
+            val updCtx = LocalContext.current
+            var checking by remember { mutableStateOf(false) }
             Text(
-                stringResource(R.string.settings_version_template, BuildConfig.VERSION_NAME),
+                if (checking) {
+                    "检查更新中…"
+                } else {
+                    stringResource(R.string.settings_version_template, BuildConfig.VERSION_NAME) + " · 点此检查更新"
+                },
                 fontSize = OctopusType.caption, color = TextMuted,
-                modifier = Modifier.fillMaxWidth().padding(vertical = OctopusSpacing.sm),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(enabled = !checking) {
+                        checking = true
+                        scope.launch {
+                            val r = com.apk.claw.android.update.AppUpdater.check()
+                            checking = false
+                            when (r) {
+                                is com.apk.claw.android.update.AppUpdater.CheckResult.UpToDate ->
+                                    android.widget.Toast.makeText(updCtx, "已是最新版本", android.widget.Toast.LENGTH_SHORT).show()
+                                is com.apk.claw.android.update.AppUpdater.CheckResult.Error ->
+                                    android.widget.Toast.makeText(updCtx, r.message, android.widget.Toast.LENGTH_LONG).show()
+                                // 有新版:弹窗由根部 AppUpdateHost 自动弹出
+                                is com.apk.claw.android.update.AppUpdater.CheckResult.Available -> Unit
+                            }
+                        }
+                    }
+                    .padding(vertical = OctopusSpacing.sm),
                 textAlign = TextAlign.Center,
             )
         }

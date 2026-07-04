@@ -4,7 +4,9 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.LaunchedEffect
 import com.apk.claw.android.ui.compose.theme.OctopusTheme
+import com.apk.claw.android.update.AppUpdater
 
 /**
  * Compose 入口 Activity —— 只负责挂载 [OctopusApp] 到 window。
@@ -17,6 +19,9 @@ class MainActivity : ComponentActivity() {
         setContent {
             OctopusTheme {
                 OctopusApp()
+                // 在线更新:根部挂弹窗宿主 + 启动静默查一次(有新版才弹,已最新无感)。
+                AppUpdateHost()
+                LaunchedEffect(Unit) { runCatching { AppUpdater.check() } }
             }
         }
     }
