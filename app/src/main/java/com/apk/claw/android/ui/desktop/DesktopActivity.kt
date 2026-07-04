@@ -234,8 +234,14 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
         ConnectionState.HELLO_SENT, ConnectionState.RECONNECTING -> Color(0xFFFFC24D)
         else -> Holo.AccentDim
     }
-    // 对话:主 Agent 会话([ChatAgentBridge]);convo = 完整会话。
-    val convo = remember { androidx.compose.runtime.mutableStateListOf<DeskMsg>() }
+    // 对话:主 Agent 会话([ChatAgentBridge])。convo 按角色分桶隔离 —— 每个角色一份
+    // 独立会话,切角色即切上下文(convo 在下方 character 就绪后按 id 取桶)。
+    val convoByChar = remember {
+        androidx.compose.runtime.mutableStateMapOf<
+            String,
+            androidx.compose.runtime.snapshots.SnapshotStateList<DeskMsg>,
+        >()
+    }
     var running by remember { mutableStateOf(false) }
     var toolNote by remember { mutableStateOf("") }
     var seq by remember { mutableLongStateOf(0L) }
@@ -248,6 +254,8 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
     // 当前角色:统一读取一次,下传给 windowSpec / 子组件,避免散读 CharacterRegistry.current。
     // 不用 remember{} —— current 的 getter 订阅 idx 状态,切角色时自动重组(此时才读)。
     val character = CharacterRegistry.current
+    // 当前角色的会话(独立桶):切角色自动换到该角色自己的对话,历史互不可见。
+    val convo = convoByChar.getOrPut(character.id) { androidx.compose.runtime.mutableStateListOf() }
     val send: (String) -> Unit = fn@{ raw ->
         val t = raw.trim()
         if (t.isEmpty() || running) return@fn

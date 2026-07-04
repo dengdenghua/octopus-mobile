@@ -25,9 +25,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
+import androidx.compose.ui.res.painterResource
+import com.apk.claw.android.ui.desktop.CharacterRegistry
+import com.apk.claw.android.ui.desktop.personaPrompt
+import com.apk.claw.android.utils.KVUtils
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Launch
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
@@ -169,6 +174,9 @@ private const val CHAT_MESSAGES_LIMIT = 240
 private const val CHAT_SCROLL_THROTTLE_MS = 180L
 private const val CHAT_STREAM_UI_THROTTLE_MS = 80L
 
+/** 对话页当前角色的持久化键(与 TV 模式的选择互不影响)。 */
+private const val CHAT_CHARACTER_KEY = "chat_current_character"
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen() {
@@ -176,6 +184,11 @@ fun ChatScreen() {
     val sessions = remember { mutableStateListOf<SessionStore.SessionMeta>() }
     var currentId by remember { mutableStateOf("") }
     val messages = remember { mutableStateListOf<ChatMessage>() }
+    // 角色空间:点顶栏「Octopus」可切角色(与 TV 模式同一批角色),会话与历史按角色完全隔离。
+    var currentCharacter by remember {
+        mutableStateOf(KVUtils.getString(CHAT_CHARACTER_KEY, SessionStore.CHARACTER_DEFAULT))
+    }
+    var charMenuOpen by remember { mutableStateOf(false) }
 
     var inputText by remember { mutableStateOf("") }
     var isRunning by remember { mutableStateOf(false) }
@@ -254,27 +267,43 @@ fun ChatScreen() {
         }
     }
 
-    // 初始化:确保至少一个会话,加载当前会话
+    // 加载某个角色的会话空间:该角色的会话列表 + 其当前会话与消息(与其他角色完全隔离)。
+    val loadCharacterSpace = { char: String ->
+        val idx = SessionStore.ensureAtLeastOne(System.currentTimeMillis(), emptyList(), char)
+        sessions.clear(); sessions.addAll(idx)
+        val cid = SessionStore.currentId(char)?.takeIf { c -> idx.any { it.id == c } } ?: idx.first().id
+        SessionStore.setCurrent(cid, char)
+        currentId = cid
+        messages.clear(); messages.addAll(ChatStore.load(cid) ?: emptyList())
+    }
+    // 初始化:确保至少一个会话,加载当前角色的当前会话
     LaunchedEffect(Unit) {
         if (currentId.isEmpty()) {
-            val idx = SessionStore.ensureAtLeastOne(System.currentTimeMillis(), emptyList())
-            sessions.clear(); sessions.addAll(idx)
-            currentId = SessionStore.currentId() ?: idx.first().id
-            messages.clear(); messages.addAll(ChatStore.load(currentId) ?: emptyList())
+            loadCharacterSpace(currentCharacter)
             if (messages.isNotEmpty()) listState.scrollToItem(messages.size)
+        }
+    }
+    // 切角色:存好当前角色的会话,整体切换到目标角色的会话空间(选择持久化)。
+    val switchCharacter = { charId: String ->
+        if (charId != currentCharacter) {
+            if (currentId.isNotEmpty()) ChatStore.save(currentId, messages)
+            currentCharacter = charId
+            KVUtils.putString(CHAT_CHARACTER_KEY, charId)
+            loadCharacterSpace(charId)
+            scrollEnd()
         }
     }
     val switchTo = { id: String ->
         if (id != currentId && id.isNotEmpty()) {
             ChatStore.save(currentId, messages)
-            SessionStore.setCurrent(id); currentId = id
+            SessionStore.setCurrent(id, currentCharacter); currentId = id
             messages.clear(); messages.addAll(ChatStore.load(id) ?: emptyList())
             scrollEnd()
         }
     }
     val newChat = {
         if (currentId.isNotEmpty()) ChatStore.save(currentId, messages)
-        val meta = SessionStore.create(System.currentTimeMillis()).copy(title = newChatTitle)
+        val meta = SessionStore.create(System.currentTimeMillis(), currentCharacter).copy(title = newChatTitle)
         SessionStore.updateMeta(meta.id, newChatTitle, meta.updatedAt)
         sessions.add(0, meta); currentId = meta.id; messages.clear()
     }
@@ -284,8 +313,9 @@ fun ChatScreen() {
         sessions.removeAll { it.id == id }
         if (id == currentId) {
             val next = sessions.firstOrNull()?.id
-                ?: SessionStore.create(System.currentTimeMillis()).also { sessions.add(0, it) }.id
-            SessionStore.setCurrent(next); currentId = next
+                ?: SessionStore.create(System.currentTimeMillis(), currentCharacter)
+                    .also { sessions.add(0, it) }.id
+            SessionStore.setCurrent(next, currentCharacter); currentId = next
             messages.clear(); messages.addAll(ChatStore.load(next) ?: emptyList())
         }
     }
@@ -399,6 +429,9 @@ fun ChatScreen() {
                 ChatAgentBridge.run(
                     prompt = t,
                     conversationContext = convContext,
+                    // 非默认角色注入人设:该角色第一人称应答;Octopus 本体不扮演(persona=null)。
+                    persona = CharacterRegistry.all
+                        .firstOrNull { it.id == currentCharacter }?.personaPrompt(),
                     onTool = { icon, name, args, res ->
                         com.apk.claw.android.agent.AgentProgressBus.set(null)
                         finalizeStream(null); hideThinking()
@@ -502,7 +535,46 @@ fun ChatScreen() {
                 Icon(Icons.Filled.Menu, contentDescription = stringResource(R.string.chat_sessions), tint = TextSecondary)
             }
             Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                Text("Octopus", fontWeight = FontWeight.SemiBold, fontSize = OctopusType.titleLg, color = TextPrimary)
+                // 点标题切角色:Octopus 本体 + TV 模式同一批角色,会话/历史随角色整体切换。
+                val curProfile = CharacterRegistry.all.firstOrNull { it.id == currentCharacter }
+                Box {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clickable { charMenuOpen = true },
+                    ) {
+                        Text(
+                            curProfile?.zh ?: "Octopus",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = OctopusType.titleLg,
+                            color = TextPrimary,
+                        )
+                        Icon(
+                            Icons.Filled.ExpandMore,
+                            contentDescription = "切换角色",
+                            tint = TextMuted,
+                            modifier = Modifier.size(OctopusIconSize.small),
+                        )
+                    }
+                    DropdownMenu(expanded = charMenuOpen, onDismissRequest = { charMenuOpen = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Octopus · 默认助手") },
+                            onClick = { charMenuOpen = false; switchCharacter(SessionStore.CHARACTER_DEFAULT) },
+                        )
+                        CharacterRegistry.all.forEach { c ->
+                            DropdownMenuItem(
+                                text = { Text("${c.zh} · ${c.name}") },
+                                leadingIcon = {
+                                    Image(
+                                        painterResource(c.avatarRes),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(OctopusIconSize.medium).clip(CircleShape),
+                                    )
+                                },
+                                onClick = { charMenuOpen = false; switchCharacter(c.id) },
+                            )
+                        }
+                    }
+                }
                 Spacer(Modifier.width(OctopusSpacing.sm))
                 val ready = llmOk && a11yOk
                 Row(verticalAlignment = Alignment.CenterVertically) {

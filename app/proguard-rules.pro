@@ -66,6 +66,9 @@
 -keep class com.apk.claw.android.ui.compose.screen.OpenAiChatResponse { *; }
 -keep class com.apk.claw.android.ui.compose.screen.OpenAiChoice { *; }
 -keep class com.apk.claw.android.ui.compose.screen.OpenAiMessage { *; }
+# 会话索引(SessionMeta)经 Gson 落盘(含 character 角色隔离字段):R8 改名会让
+# 升级换 mapping 后旧索引读不回来 → 历史会话/角色空间丢失。ChatStore$Dto 已被上面 **Dto 覆盖。
+-keep class com.apk.claw.android.ui.compose.screen.SessionStore$SessionMeta { *; }
 
 # ============================================================
 # Gson
