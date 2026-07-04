@@ -274,6 +274,20 @@ object KVUtils {
         mmkv.clearAll()
     }
 
+    /**
+     * 测试专用:清空内存 fallback(mmkv 未初始化时的回退存储)。
+     *
+     * 用于解决单测间状态污染:多个测试类共享同一 JVM,KVUtils 的 [stringFallback]/[boolFallback]
+     * 是 object 级静态,一个测试写入的值会泄漏到下一个测试。`@After` 调本方法可隔离。
+     * 生产环境应调 [clear](清 MMKV + 加密 prefs),本方法对生产无意义(mmkv 已初始化时不走 fallback)。
+     */
+    @androidx.annotation.VisibleForTesting
+    fun resetForTest() {
+        stringFallback.clear()
+        boolFallback.clear()
+        disabledToolsFallback.clear()
+    }
+
     fun getAllKeys(): Array<String> {
         return mmkv.allKeys() ?: emptyArray()
     }

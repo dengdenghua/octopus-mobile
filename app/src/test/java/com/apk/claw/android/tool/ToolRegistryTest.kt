@@ -15,6 +15,7 @@ import com.apk.claw.android.octopus_mobile.safety.ToolCallGuardrailController
 import com.apk.claw.android.utils.KVUtils
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
+import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
@@ -53,6 +54,12 @@ class ToolRegistryTest {
         KVUtils.setToolDisabled("send_sms", false)
         ToolAuditLog.clear()
         ToolRegistry.clearBrowserEngine()
+    }
+
+    @After
+    fun tearDown() {
+        com.apk.claw.android.octopus_mobile.ToolAuditLog.resetSecretCacheForTest()
+        com.apk.claw.android.utils.KVUtils.resetForTest()
     }
 
     // ── 注册与查询 ────────────────────────────────────────

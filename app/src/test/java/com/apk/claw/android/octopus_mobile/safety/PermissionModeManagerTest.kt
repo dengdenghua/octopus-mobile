@@ -1,6 +1,7 @@
 package com.apk.claw.android.octopus_mobile.safety
 
 import com.apk.claw.android.utils.KVUtils
+import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
@@ -17,6 +18,11 @@ class PermissionModeManagerTest {
         // 回到默认审批模式基线
         KVUtils.setAdvancedAutomationMode(false)
         PermissionModeManager.reload()
+    }
+
+    @After
+    fun tearDown() {
+        KVUtils.resetForTest()
     }
 
     @Test
