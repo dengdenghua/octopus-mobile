@@ -67,7 +67,8 @@ def clean_state():
     init_db()
     with closing(db()) as c:
         for t in ("users", "sms_codes", "email_codes", "orders", "usage_log", "admin_log",
-                  "credit_transactions", "device_reports", "remote_devices", "remote_pair_codes"):
+                  "credit_transactions", "device_reports", "remote_devices", "remote_pair_codes",
+                  "registry_assets"):
             c.execute(f"DELETE FROM {t}")
         c.commit()
     app_module._rl.clear()
@@ -1398,3 +1399,107 @@ class TestDeviceProtocol:
         assert d["osVersion"] == "14"
         assert d["batteryLevel"] == 60
         assert d["lastHeartbeatAt"] > 0
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# 20. 小程序投稿广场(/square/publish → registry_assets → 管理员审核 → 公开)
+# ═══════════════════════════════════════════════════════════════════════
+class TestSquarePublish:
+    def _payload(self, **overrides):
+        p = {
+            "id": "gen_1751234567890",
+            "name": "每日相册整理",
+            "description": "自动整理相册生成回忆视频",
+            "type": "mini-app",
+            "version": "1.0.0",
+            "html": "<html><body>Hello Mini App</body></html>",
+            "actions": ["run"],
+            "allow_tools": ["fs_read"],
+            "allow_hosts": [],
+            "allow_device": ["camera"],
+        }
+        p.update(overrides)
+        return p
+
+    def test_requires_auth(self, client):
+        r = client.post("/square/publish", json=self._payload())
+        assert r.status_code == 401
+
+    def test_publish_then_pending_not_public(self, client):
+        token, _ = _email_register(client, "square1@example.com")
+        r = client.post("/square/publish", json=self._payload(),
+                         headers={"Authorization": f"Bearer {token}"})
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert d["success"] is True
+        assert d["data"]["status"] == "pending"
+
+        # pending 不进公开目录
+        r = client.get("/api/v1/registry/assets?type=plugin&kind=mini-app")
+        assert r.json()["total"] == 0
+
+    def test_rejects_empty_html(self, client):
+        token, _ = _email_register(client, "square2@example.com")
+        r = client.post("/square/publish", json=self._payload(html=""),
+                         headers={"Authorization": f"Bearer {token}"})
+        assert r.status_code == 400
+
+    def test_rejects_missing_name(self, client):
+        token, _ = _email_register(client, "square3@example.com")
+        r = client.post("/square/publish", json=self._payload(name=""),
+                         headers={"Authorization": f"Bearer {token}"})
+        assert r.status_code == 400
+
+    def test_other_user_cannot_hijack_id(self, client):
+        token1, _ = _email_register(client, "square4a@example.com")
+        client.post("/square/publish", json=self._payload(),
+                    headers={"Authorization": f"Bearer {token1}"})
+        token2, _ = _email_register(client, "square4b@example.com")
+        r = client.post("/square/publish", json=self._payload(name="抢占"),
+                         headers={"Authorization": f"Bearer {token2}"})
+        assert r.status_code == 403
+
+    def test_admin_approve_then_public_download(self, client):
+        """完整闭环:投稿 → pending → 管理员批准(此前这一步因缺 request 参数必 500,已修)→ 公开可下载。"""
+        token, _ = _email_register(client, "square5@example.com")
+        client.post("/square/publish", json=self._payload(),
+                    headers={"Authorization": f"Bearer {token}"})
+
+        r = client.post("/admin/api/plugins/gen_1751234567890/approve",
+                         headers={"X-Admin-Token": "test-token"})
+        assert r.status_code == 200, r.text
+
+        r = client.get("/api/v1/registry/assets?type=plugin&kind=mini-app")
+        assert r.json()["total"] == 1
+
+        r = client.get("/api/v1/registry/assets/plugin/gen_1751234567890/download")
+        assert r.status_code == 200
+        assert r.json()["data"]["body"] == "<html><body>Hello Mini App</body></html>"
+
+    def test_admin_reject_then_still_hidden(self, client):
+        """reject 同样此前因缺 request 参数必 500,已修。"""
+        token, _ = _email_register(client, "square6@example.com")
+        client.post("/square/publish", json=self._payload(),
+                    headers={"Authorization": f"Bearer {token}"})
+
+        r = client.post("/admin/api/plugins/gen_1751234567890/reject",
+                         json={"reason": "测试拒绝"},
+                         headers={"X-Admin-Token": "test-token"})
+        assert r.status_code == 200, r.text
+
+        r = client.get("/api/v1/registry/assets?type=plugin&kind=mini-app")
+        assert r.json()["total"] == 0
+
+    def test_republish_resets_to_pending(self, client):
+        """已批准的资产被作者再次投稿(如改了内容)→ 重置回 pending,需重新审核。"""
+        token, _ = _email_register(client, "square7@example.com")
+        client.post("/square/publish", json=self._payload(),
+                    headers={"Authorization": f"Bearer {token}"})
+        client.post("/admin/api/plugins/gen_1751234567890/approve",
+                    headers={"X-Admin-Token": "test-token"})
+        assert client.get("/api/v1/registry/assets?type=plugin&kind=mini-app").json()["total"] == 1
+
+        client.post("/square/publish", json=self._payload(version="1.1.0"),
+                    headers={"Authorization": f"Bearer {token}"})
+        r = client.get("/api/v1/registry/assets?type=plugin&kind=mini-app")
+        assert r.json()["total"] == 0
