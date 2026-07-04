@@ -89,6 +89,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.apk.claw.android.R
 import com.apk.claw.android.appViewModel
+import com.apk.claw.android.base.KeepAliveBack
 import com.apk.claw.android.octopus_mobile.ConnectionState
 import com.apk.claw.android.octopus_mobile.browser.BrowserEngine
 import com.apk.claw.android.octopus_mobile.browser.BrowserEngineFactory
@@ -125,6 +126,8 @@ class DesktopActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // 无障碍保活:根页滑动返回改退后台(页内浏览返回由下方 BackHandler 优先接管,不冲突)。
+        KeepAliveBack.install(this)
         hideSystemStatusBar()
         // 常亮:桌面模式面向支起来/投显示器的场景,前台时不熄屏(离开 Activity 自动解除)
         window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
