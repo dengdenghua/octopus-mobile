@@ -32,6 +32,13 @@ object ChatAgentBridge {
 
     private val service = DefaultAgentService()
     private val main = Handler(Looper.getMainLooper())
+
+    // 长期记忆/教训:与渠道路径(AppViewModel.getAgentConfig)同待遇。对话页此前只注入技能,
+    // 记忆读写双缺 —— 用户在对话页说"我用饿了么不用美团"既记不住、下次也想不起来。
+    private val memoryStore by lazy { com.apk.claw.android.octopus_mobile.memory.MemoryStore() }
+    private val lessonStore by lazy {
+        com.apk.claw.android.octopus_mobile.evolution.LessonStore(ClawApplication.instance)
+    }
     // 单 Agent 服务:同一时刻只跑一个任务。网页端([AgentWebBridge])与 App 对话页共享本桥,
     // 用一个忙标记拦截并发,避免后来的 run() 经 updateConfig 把前一个任务的 executor 关掉。
     private val busy = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -185,6 +192,9 @@ object ChatAgentBridge {
         if (baseUrl.isEmpty()) baseUrl = "https://api.deepseek.com/v1"
         // 注入与本次任务相关的已启用「提示词技能」(见 PromptSkillStore):按 prompt 命中,省 token。
         val skillSuffix = com.apk.claw.android.octopus_mobile.skill.PromptSkillStore.buildPromptSection(prompt)
+        // 教训(B2 反思产物)+ 跨会话记忆:渠道路径早就注入,对话页补齐读侧(写侧见 run 的 onComplete)。
+        val lessonSuffix = lessonStore.buildPromptSection()
+        val memorySuffix = memoryStore.buildPromptSection()
         return AgentConfig.Builder()
             .apiKey(eff.apiKey)
             .baseUrl(baseUrl)
@@ -193,7 +203,8 @@ object ChatAgentBridge {
             .maxIterations(40)
             .enableVision(false)
             .streaming(true)   // 逐字流式输出
-            .dynamicPromptSuffix(skillSuffix)
+            .dynamicPromptSuffix(lessonSuffix + skillSuffix)
+            .memoryPromptSuffix(memorySuffix)
             .build()
     }
 
@@ -281,6 +292,12 @@ object ChatAgentBridge {
             override fun onComplete(round: Int, finalAnswer: String, totalTokens: Int) {
                 batcher.flushNow()
                 if (recordKey != null) recorder?.commit(recordKey, prompt)
+                // 记忆写侧(仿 TaskOrchestrator 任务后钩子;对话页绕过编排器,得自己做):
+                // 只从用户原始指令提取,不喂组装后的 taskPrompt(背景区是历史消息,别重复提取)。
+                runCatching {
+                    memoryStore.extractFromTask(prompt)
+                    memoryStore.pruneExpiredContexts()
+                }
                 LiveControlOverlay.finish(true, ClawApplication.instance.getString(R.string.floating_circle_success_state))
                 finalize("success", finalAnswer)
                 busy.set(false)

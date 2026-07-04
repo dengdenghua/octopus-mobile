@@ -224,7 +224,7 @@ class AppViewModel : ViewModel() {
             taskOrchestrator.evolutionEngine = evolutionEngine
             taskOrchestrator.lessonStore = lessonStore
             // 初始化 MemoryStore 并传给 TaskOrchestrator
-            val memStore = MemoryStore(ClawApplication.instance)
+            val memStore = MemoryStore()
             memoryStore = memStore
             taskOrchestrator.memoryStore = memStore
             XLog.i(TAG, "EvolutionEngine initialized: B1=active, B2=${if (evoLlmCall != null) "active" else "degraded"}, B3=${if (evoLlmCall != null) "available" else "unavailable"}, LessonStore=active")

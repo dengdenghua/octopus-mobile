@@ -502,7 +502,7 @@ class TaskOrchestrator(
                 FloatingCircleManager.setSuccessState()
                 // 从任务结果中提取用户偏好并更新记忆
                 memoryStore?.let { store ->
-                    store.extractFromTask(task, finalAnswer)
+                    store.extractFromTask(task)
                     store.pruneExpiredContexts()
                     // 更新 agentConfig 的 memoryPromptSuffix
                     val memorySection = store.buildPromptSection()

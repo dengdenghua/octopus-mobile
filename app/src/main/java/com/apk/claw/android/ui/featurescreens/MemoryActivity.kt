@@ -12,7 +12,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -44,8 +43,7 @@ private fun typeColor(t: MemoryType) = when (t) {
 
 @Composable
 fun MemoryScreen(onBack: () -> Unit) {
-    val ctx = LocalContext.current
-    val store = remember { MemoryStore(ctx) }
+    val store = remember { MemoryStore() }
     var items by remember { mutableStateOf(store.getMemories()) }
     var showAdd by remember { mutableStateOf(false) }
     fun refresh() { items = store.getMemories() }

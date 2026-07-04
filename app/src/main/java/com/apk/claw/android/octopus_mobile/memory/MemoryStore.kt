@@ -1,6 +1,5 @@
 package com.apk.claw.android.octopus_mobile.memory
 
-import android.content.Context
 import com.apk.claw.android.utils.KVUtils
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -15,8 +14,10 @@ import com.google.gson.reflect.TypeToken
  *  - PREFERENCE: 用户偏好（"我用饿了么不用美团"、"我坐地铁不打车"）
  *  - CONTEXT: 任务上下文（"刚才帮我订的那家店是海底捞"）
  *  - FACT: 用户事实（"我叫小明"、"我的公司在中关村"）
+ *
+ * 只依赖 [KVUtils](MMKV 未初始化时退回内存 map),无 Android 依赖,可纯 JVM 单测。
  */
-class MemoryStore(private val context: Context) {
+class MemoryStore {
 
     data class Memory(
         val id: String,
@@ -125,8 +126,13 @@ class MemoryStore(private val context: Context) {
         }
     }
 
-    /** 从任务结果中提取偏好 */
-    fun extractFromTask(task: String, result: String) {
+    /**
+     * 从**用户指令**中提取偏好/事实。
+     *
+     * 只扫用户说的话,不扫 Agent 的回答 —— 回答里的"我是/我用"是 Agent 的第一人称
+     * (如"我是你的手机助手"),混进来会被当成用户事实存下(踩过的真 bug)。
+     */
+    fun extractFromTask(task: String) {
         // 简单的规则匹配提取偏好（不依赖 LLM，零成本）
         val preferencePatterns = mapOf(
             "(?:我用|我喜欢|我习惯用|我一般用)(.+?)(?:不?用|代替|而不是)".toRegex() to MemoryType.PREFERENCE,
@@ -134,9 +140,8 @@ class MemoryStore(private val context: Context) {
             "(?:我叫|我的名字是|我是)(.+)".toRegex() to MemoryType.FACT,
             "(?:我的公司|我在.*上班|我的地址|我住)(.+)".toRegex() to MemoryType.FACT,
         )
-        val combined = "$task $result"
         for ((pattern, type) in preferencePatterns) {
-            val match = pattern.find(combined) ?: continue
+            val match = pattern.find(task) ?: continue
             val content = match.value.trim()
             if (content.length < 2 || content.length > 100) continue
             val id = "mem_${System.currentTimeMillis()}_${content.hashCode()}"
