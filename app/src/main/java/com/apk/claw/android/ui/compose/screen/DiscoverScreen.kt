@@ -317,12 +317,16 @@ private fun <T> TwoColumnTiles(items: List<T>, tile: @Composable (T, Modifier) -
 }
 
 /** 浏览器桌面的「壁纸」:柔和极光渐变,替代原来的纯白,给主页一点桌面质感(暗色模式用深色版)。 */
+private val WallpaperAuroraLight = listOf(Color(0xFFE9F0FF), Color(0xFFF1ECFF), Color(0xFFFFEFF6))
+private val WallpaperAuroraDark = listOf(Color(0xFF12131A), Color(0xFF181426), Color(0xFF1B1220))
+
 @Composable
-private fun browserWallpaperBrush(): Brush = if (OctopusColors.isLight) {
-    Brush.linearGradient(listOf(Color(0xFFE9F0FF), Color(0xFFF1ECFF), Color(0xFFFFEFF6)))
-} else {
-    Brush.linearGradient(listOf(Color(0xFF12131A), Color(0xFF181426), Color(0xFF1B1220)))
-}
+private fun browserWallpaperBrush(): Brush =
+    Brush.linearGradient(if (OctopusColors.isLight) WallpaperAuroraLight else WallpaperAuroraDark)
+
+/** Google s2 favicon 服务地址;host 为空时返回 null,走各自的 fallback 图标。 */
+private fun faviconUrl(host: String): String? =
+    host.takeIf { it.isNotBlank() }?.let { "https://www.google.com/s2/favicons?sz=64&domain=$it" }
 
 /** 小程序图标配色:每个按 name+id 哈希取一组渐变 + 首字母,像真·App 图标一样彩色可区分。 */
 private val MINI_APP_GRADS = listOf(
@@ -370,7 +374,7 @@ private fun BookmarksSection(bookmarks: List<BookmarkItem>, onOpen: (String) -> 
             val host = remember(b.url) { urlHost(b.url) }
             HomeTile(label = b.title.ifBlank { host }, subtitle = host, modifier = mod, onClick = { onOpen(b.url) }) {
                 FaviconIcon(
-                    url = host.takeIf { it.isNotBlank() }?.let { "https://www.google.com/s2/favicons?sz=64&domain=$it" },
+                    url = faviconUrl(host),
                     tint = OctopusTints.CatKnowledge,
                     fallback = Icons.Filled.Bookmark,
                     contentDescription = b.title,
@@ -401,7 +405,7 @@ private fun CommonSitesSection(
                 onLongClick = { onLongPress(site) },
             ) {
                 FaviconIcon(
-                    url = host.takeIf { it.isNotBlank() }?.let { "https://www.google.com/s2/favicons?sz=64&domain=$it" },
+                    url = faviconUrl(host),
                     tint = OctopusTints.CatKnowledge,
                     fallback = Icons.Filled.Public,
                     contentDescription = site.title,

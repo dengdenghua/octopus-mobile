@@ -182,5 +182,5 @@
         android:contentDescription="@string/cd_back"
         android:padding="8dp"
         android:src="@drawable/ic_back"
-        android:tint="@color/colorTextPrimary" />
+        app:tint="@color/colorTextPrimary" />
 </FrameLayout>

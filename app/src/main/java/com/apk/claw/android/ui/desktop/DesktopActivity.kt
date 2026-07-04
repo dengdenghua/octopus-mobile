@@ -1266,7 +1266,7 @@ private fun scenePrompt(c: CharacterProfile, panel: Int): String =
  */
 @Composable
 private fun MiniAppWindow(appId: String) {
-    val activity = androidx.compose.ui.platform.LocalContext.current as? android.app.Activity ?: return
+    val activity = androidx.activity.compose.LocalActivity.current ?: return
     val manifest = remember(appId) { MiniAppRegistry.get(appId) } ?: return
     androidx.compose.runtime.DisposableEffect(appId) {
         onDispose { com.apk.claw.android.plugin.MiniAppActionBus.unregister(appId) }

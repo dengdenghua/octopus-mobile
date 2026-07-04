@@ -1132,4 +1132,55 @@
     <string name="browser_new_tab">新しいタブ</string>
     <string name="browser_windows_count">ウィンドウ (%1$d)</string>
     <string name="browser_new_window">+ 新しいウィンドウ</string>
+    <!-- 投屏确认(远程控制外接屏) -->
+    <string name="cast_approval_allow">許可</string>
+    <string name="cast_approval_channel_desc">リモートからの画面キャスト開始や外部ディスプレイでのアプリ起動時に確認通知を表示します</string>
+    <string name="cast_approval_channel_name">キャスト確認</string>
+    <string name="cast_approval_deny">拒否</string>
+    <string name="cast_approval_text">%1$s が外部ディスプレイの制御を要求しています。許可しますか?</string>
+    <string name="cast_approval_title">リモートキャスト要求</string>
+    <!-- 对话 / 桌面模式 -->
+    <string name="chat_scroll_bottom">一番下へ戻る</string>
+    <string name="chat_target_virtual_pc">ローカル仮想PC</string>
+    <string name="common_back">戻る</string>
+    <string name="confirm">確認</string>
+    <string name="discover_group_apps">マイアプリ</string>
+    <string name="discover_group_web">ウェブ</string>
+    <string name="feat_miniapps">ミニアプリ</string>
+    <string name="feat_miniapps_desc">あなたのミニアプリエコシステム</string>
+    <!-- 插件商城 -->
+    <string name="plugin_marketplace_download_failed">ダウンロード失敗:ネットワークまたはサービスに接続できません</string>
+    <string name="plugin_marketplace_empty">一致するプラグインがありません</string>
+    <string name="plugin_marketplace_entry_desc">ミニアプリや拡張プラグインをクラウドからダウンロード</string>
+    <string name="plugin_marketplace_installed_toast">%1$s をインストールしました</string>
+    <string name="plugin_marketplace_load_failed">読み込みに失敗しました。ネットワークを確認して再試行してください</string>
+    <string name="plugin_marketplace_search_hint">プラグインを検索</string>
+    <string name="plugin_marketplace_subtitle">インストール済み %1$d · 全 %2$d</string>
+    <string name="plugin_marketplace_title">プラグインストア</string>
+    <string name="plugin_marketplace_uninstalled_toast">%1$s をアンインストールしました</string>
+    <!-- 远程控制通知 -->
+    <string name="remote_control_notif_controlling">リモート操作されています</string>
+    <string name="remote_control_notif_text">閲覧 %1$d 人 · 操作 %2$d 人 · 接続元: %3$s</string>
+    <string name="remote_control_notif_viewing">リモート閲覧されています</string>
+    <!-- 设置 -->
+    <string name="settings_ui_style">インターフェーススタイル</string>
+    <string name="settings_ui_style_glass">ガラステーマ</string>
+    <string name="settings_ui_style_standard">標準テーマ</string>
+    <string name="settings_workspace_desc">Agent スクリプトが WORKSPACE 定数でアクセスする既定ディレクトリ。readFile/writeFile はこのディレクトリと Download/Documents 内に制限され、存在しない場合は自動作成されます。</string>
+    <string name="settings_workspace_hint">/sdcard/Download/Octopus/</string>
+    <string name="settings_workspace_title">スクリプトワークスペース</string>
+    <!-- 技能商城 -->
+    <string name="skill_empty">一致するスキルがありません</string>
+    <string name="skill_filter_all">すべて</string>
+    <string name="skill_filter_mobile">スマホ対応のみ</string>
+    <string name="skill_install">インストール</string>
+    <string name="skill_installed">インストール済み</string>
+    <string name="skill_installed_toast">%1$s をインストールしました</string>
+    <string name="skill_installing">ダウンロード中</string>
+    <string name="skill_load_failed">読み込みに失敗しました。ネットワークを確認して再試行してください</string>
+    <string name="skill_marketplace_entry_desc">スキルをクラウドからオンデマンドでダウンロード。内蔵スキルと併用できます</string>
+    <string name="skill_marketplace_subtitle">インストール済み %1$d · 全 %2$d</string>
+    <string name="skill_marketplace_title">スキルストア</string>
+    <string name="skill_search_hint">スキルを検索</string>
+    <string name="skill_uninstalled_toast">%1$s をアンインストールしました</string>
 </resources>
