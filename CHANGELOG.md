@@ -3,9 +3,26 @@
 All notable changes to Octopus Mobile are documented here.
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
+## [0.0.7] — 2026-07-04
+
+A round focused on the **mini-app community square (submit → auto-review →
+browse → install)**, **zero-touch Shizuku setup**, **OTA self-update + crash
+reporting** (both work pre-login), and a large gate-hygiene pass (compile fix,
+45 ja + 42 zh translations, R8 keeps, detekt/lint back to green).
 
 ### Added
+- **In-app OTA update**: silent check on launch plus a manual "check update" row
+  in Settings (`AppUpdater` + `AppUpdateHost`); server serves
+  `GET /app/latest` / `/app/latest.apk` as controlled static distribution — ops
+  drops a signed universal APK at `APP_UPDATE_APK_PATH` and declares
+  `APP_UPDATE_VERSION_CODE/_VERSION_NAME/_NOTES/_FORCE`; signing keys never
+  touch the server. Unconfigured ⇒ `versionCode=0` ⇒ clients see "up to date".
+- **Crash reporting that works before login/pairing** (`CrashReporter` +
+  public rate-limited `POST /crash/report`): an uncaught-exception handler
+  writes the crash to disk synchronously (no network in the crashing thread),
+  uploads pending files in the background on next launch, with count/age
+  retention caps so an unreachable server can't pile up files on low-storage
+  devices.
 - **Mini-app community square, full submit→review→install loop**: share a
   generated mini-app to the square (`SquarePublisher`), server-side
   `POST /square/publish` with auto-review that only auto-rejects or flags risk —
