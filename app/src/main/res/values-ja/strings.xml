@@ -1141,7 +1141,7 @@
     <string name="cast_approval_title">リモートキャスト要求</string>
     <!-- 对话 / 桌面模式 -->
     <string name="chat_scroll_bottom">一番下へ戻る</string>
-    <string name="chat_target_virtual_pc">ローカル仮想PC</string>
+    <string name="chat_target_virtual_pc">TVモード</string>
     <string name="common_back">戻る</string>
     <string name="confirm">確認</string>
     <string name="discover_group_apps">マイアプリ</string>

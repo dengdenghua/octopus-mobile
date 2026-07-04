@@ -284,6 +284,8 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
         com.apk.claw.android.ui.compose.screen.ChatAgentBridge.run(
             prompt = t,
             conversationContext = convContext,
+            // TV 模式角色扮演:注入当前角色人设,切角色即换人应答(否则永远一口 Octopus 腔)。
+            persona = character.personaPrompt(),
             onTool = { _, name, _, _ -> toolNote = "· 使用 $name" },
             onText = { tok -> buf.append(tok); put(buf.toString()) },
             onDone = { ans -> put(ans.ifBlank { buf.toString() }); running = false; toolNote = "" },

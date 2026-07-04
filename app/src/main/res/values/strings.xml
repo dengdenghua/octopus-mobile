@@ -577,7 +577,7 @@ Shizuku 是安全、开源的本地辅助工具。</string>
     <string name="chat_voice_hold_to_speak">按住说话</string>
     <string name="chat_scroll_bottom">回到底部</string>
     <string name="chat_target_local_device">本机</string>
-    <string name="chat_target_virtual_pc">本地虚拟电脑</string>
+    <string name="chat_target_virtual_pc">TV 模式</string>
     <string name="chat_demo_open_wechat">打开微信，给小明发一条消息</string>
     <string name="chat_demo_main_screen">✓ 主屏幕</string>
     <string name="chat_demo_search">✓ 搜索</string>

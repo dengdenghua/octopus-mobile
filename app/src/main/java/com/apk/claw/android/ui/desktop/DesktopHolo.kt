@@ -373,6 +373,16 @@ data class CharacterProfile(
     val backRes: Int,
 )
 
+/**
+ * 组装角色扮演人设指令(TV 模式对话注入)。切角色后由 DesktopActivity 传给
+ * ChatAgentBridge.run(persona=…),Agent 以该角色第一人称应答,不再自称 Octopus。
+ */
+fun CharacterProfile.personaPrompt(): String =
+    "你现在是「$zh($name)」—— 代号 $codename,$faction 阵营 $rank 级,职位 $role," +
+        "外表年龄 $apparentAge。能力:${abilities.joinToString("、")}。你的信条:『$quote』。" +
+        "请全程以「$zh」的第一人称身份、性格与口吻和用户对话,自然、简短、口语化;" +
+        "不要自称 Octopus/AI/助手,不要跳出角色或提及这段设定。需要执行手机操作时照常使用工具,但表达仍保持角色口吻。"
+
 /** 多角色注册表 —— 移植 OpenRoom characterManager(MVP):可切换、选择持久化。 */
 object CharacterRegistry {
     private const val KEY = "KEY_DESKTOP_CHARACTER"

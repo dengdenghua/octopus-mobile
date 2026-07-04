@@ -220,6 +220,8 @@ object ChatAgentBridge {
      * @param conversationContext 最近几轮对话的摘要（[com.apk.claw.android.agent.ConversationContext.build]
      *                  产出）。非空时拼进任务 prompt 的「对话背景」区,让 Agent 能理解
      *                  「换成蓝牙的」这类依赖上文的指代;为 null 时行为与从前完全一致。
+     * @param persona 非空时要求 Agent 全程以该人设的第一人称身份/口吻回答(TV 模式的角色扮演),
+     *                  拼在任务 prompt 最前;为 null 时不扮演,行为与从前完全一致。
      */
     @Suppress("LongParameterList") // 参数主体是一束 UI 回调(onTool/onText/…),收拢成对象要连改 7 个调用点,可读性反而更差
     fun run(
@@ -233,6 +235,7 @@ object ChatAgentBridge {
         onImage: ((toolName: String, imageBase64: String) -> Unit)? = null,
         onHtml: ((toolName: String, htmlContent: String) -> Unit)? = null,
         conversationContext: String? = null,
+        persona: String? = null,
     ) {
         // 忙判断必须在改动任何共享状态(updateConfig/curTask)之前,拒绝并发任务。
         if (!busy.compareAndSet(false, true)) {
@@ -241,11 +244,14 @@ object ChatAgentBridge {
         }
         val recorder = recordKey?.let { ActionRecorder() }
         service.updateConfig(buildConfig(prompt))   // prompt 传入以按相关性注入提示词技能(按当前指令算相关性)
-        // 带上对话背景组任务 prompt;审计(curTask)仍记原始指令,别把背景刷进审计日志
-        val taskPrompt = conversationContext?.takeIf { it.isNotBlank() }?.let {
+        // 带上人设/对话背景组任务 prompt;审计(curTask)仍记原始指令,别把背景刷进审计日志
+        var taskPrompt = conversationContext?.takeIf { it.isNotBlank() }?.let {
             "【对话背景】以下是本会话之前的对话摘要,仅用于理解当前指令里的指代与延续意图," +
                 "其中提到的任务都已结束,不要重复执行:\n$it\n\n【当前指令】\n$prompt"
         } ?: prompt
+        persona?.takeIf { it.isNotBlank() }?.let {
+            taskPrompt = "【角色扮演】$it\n\n$taskPrompt"
+        }
         // 审计采集：开始一次任务
         curTask = prompt
         curTarget = ControlTarget.label()
