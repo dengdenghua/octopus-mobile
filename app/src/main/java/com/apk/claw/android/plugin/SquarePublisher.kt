@@ -3,7 +3,7 @@ package com.apk.claw.android.plugin
 import android.content.Context
 import com.apk.claw.android.ClawApplication
 import com.apk.claw.android.account.AccountConfig
-import com.apk.claw.android.utils.KVUtils
+import com.apk.claw.android.account.AccountStore
 import com.apk.claw.android.utils.OctoHttp
 import com.apk.claw.android.utils.XLog
 import kotlinx.coroutines.Dispatchers
@@ -42,8 +42,9 @@ object SquarePublisher {
 
     suspend fun publish(manifest: PluginManifest): Outcome = withContext(Dispatchers.IO) {
         val ctx = ClawApplication.instance
-        val token = KVUtils.getOctopusAuthToken()
-        if (token.isEmpty()) return@withContext Outcome(false, "请先登录后再分享到广场")
+        // 用登录态账号 token(AccountStore.token,与余额/LLM 路由同源),不是官网控制台那个手填 token。
+        val token = AccountStore.token
+        if (token.isBlank()) return@withContext Outcome(false, "请先登录后再分享到广场")
 
         val html = readHtml(ctx, manifest)
             ?: return@withContext Outcome(false, "找不到该小程序的页面文件,无法分享(仅本地生成的小程序可投稿)")
