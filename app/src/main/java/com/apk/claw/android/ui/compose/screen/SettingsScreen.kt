@@ -49,6 +49,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.apk.claw.android.BuildConfig
+import com.apk.claw.android.capture.ScreenCaptureService
 import com.apk.claw.android.server.ConfigServerManager
 import com.apk.claw.android.server.RemoteConsoleGateway
 import com.apk.claw.android.service.ClawAccessibilityService
@@ -389,6 +390,34 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
                     SettingsDivider()
                     ClickableSettingsRow(Icons.Filled.GraphicEq, stringResource(R.string.settings_remote_lan_title), "") {
                         context.startActivity(Intent(context, com.apk.claw.android.ui.featurescreens.PcRemoteActivity::class.java))
+                    }
+                    SettingsDivider()
+                    // 高清屏幕采集(MediaProjection):开→系统投屏授权后,网页遥控台/远控画面走高帧率快路;
+                    // 关→无感回退无障碍截图(2-5fps)。授权是异步系统框,状态回来后随 refreshTick 校正。
+                    val hdActive = remember(refreshTick) { ScreenCaptureService.isActive() }
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        IconBubble(Icons.Filled.Monitor, PrimaryColor)
+                        Spacer(Modifier.width(OctopusSpacing.md))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "高清屏幕采集",
+                                color = TextPrimary, fontSize = OctopusType.body, fontWeight = FontWeight.SemiBold,
+                            )
+                            Text(
+                                if (hdActive) "已开启 · 远控画面高帧率" else "关 · 远控走无障碍截图(2-5fps)",
+                                fontSize = OctopusType.caption, color = TextMuted,
+                            )
+                        }
+                        Switch(
+                            checked = hdActive,
+                            onCheckedChange = { on ->
+                                if (on) {
+                                    ScreenCaptureService.requestStart(context)
+                                } else {
+                                    ScreenCaptureService.stop(context)
+                                }
+                            },
+                        )
                     }
                 } else {
                     Row(verticalAlignment = Alignment.CenterVertically) {
