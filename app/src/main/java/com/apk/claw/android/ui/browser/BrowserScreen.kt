@@ -511,7 +511,9 @@ private fun BrowserTopBar(
                 )
                 .border(
                     width = 1.dp,
-                    color = if (isGlass) OctopusColors.Primary.copy(alpha = 0.3f) else OctopusColors.Border,
+                    // 玻璃模式:与底栏/按钮等其它玻璃组件统一的柔和淡白边,而非突兀的主题紫描边
+                    // —— 修「玻璃模式下贯穿搜索框的紫色细横条」(明亮模式该边本就近乎透明)。
+                    color = if (isGlass) Color.White.copy(alpha = 0.14f) else OctopusColors.Border,
                     shape = OctopusShape.capsule,
                 )
                 .padding(start = 8.dp, end = 4.dp),
