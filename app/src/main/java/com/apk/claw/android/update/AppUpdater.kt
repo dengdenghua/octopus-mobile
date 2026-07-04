@@ -15,6 +15,8 @@ import kotlinx.coroutines.withContext
 import okhttp3.Request
 import org.json.JSONObject
 import java.io.File
+import java.io.InputStream
+import java.io.OutputStream
 import java.util.concurrent.TimeUnit
 
 /**
@@ -111,22 +113,29 @@ object AppUpdater {
             if (!resp.isSuccessful) error("HTTP ${resp.code}")
             val body = resp.body ?: error("empty response")
             val total = body.contentLength().takeIf { it > 0 }
-            var read = 0L
             out.outputStream().use { output ->
-                body.byteStream().use { input ->
-                    val buf = ByteArray(BUFFER_SIZE)
-                    while (true) {
-                        val n = input.read(buf)
-                        if (n <= 0) break
-                        output.write(buf, 0, n)
-                        read += n
-                        total?.let { onProgress((read.toFloat() / it).coerceIn(0f, 1f)) }
-                    }
-                }
+                body.byteStream().use { input -> copyWithProgress(input, output, total, onProgress) }
             }
             onProgress(1f)
         }
         return out
+    }
+
+    private fun copyWithProgress(
+        input: InputStream,
+        output: OutputStream,
+        total: Long?,
+        onProgress: (Float) -> Unit,
+    ) {
+        val buf = ByteArray(BUFFER_SIZE)
+        var read = 0L
+        while (true) {
+            val n = input.read(buf)
+            if (n <= 0) break
+            output.write(buf, 0, n)
+            read += n
+            total?.let { onProgress((read.toFloat() / it).coerceIn(0f, 1f)) }
+        }
     }
 
     private fun installApk(context: Context, apk: File) {

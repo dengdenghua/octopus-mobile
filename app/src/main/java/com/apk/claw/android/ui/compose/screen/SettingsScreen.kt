@@ -72,6 +72,8 @@ import com.apk.claw.android.account.AccountStore
 import com.apk.claw.android.ui.account.AccountActivity
 import com.apk.claw.android.ui.account.LoginActivity
 import com.apk.claw.android.utils.KVUtils
+import com.apk.claw.android.update.AppUpdater
+import android.widget.Toast
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -552,15 +554,15 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
                     .clickable(enabled = !checking) {
                         checking = true
                         scope.launch {
-                            val r = com.apk.claw.android.update.AppUpdater.check()
+                            val r = AppUpdater.check()
                             checking = false
                             when (r) {
-                                is com.apk.claw.android.update.AppUpdater.CheckResult.UpToDate ->
-                                    android.widget.Toast.makeText(updCtx, "已是最新版本", android.widget.Toast.LENGTH_SHORT).show()
-                                is com.apk.claw.android.update.AppUpdater.CheckResult.Error ->
-                                    android.widget.Toast.makeText(updCtx, r.message, android.widget.Toast.LENGTH_LONG).show()
+                                is AppUpdater.CheckResult.UpToDate ->
+                                    Toast.makeText(updCtx, "已是最新版本", Toast.LENGTH_SHORT).show()
+                                is AppUpdater.CheckResult.Error ->
+                                    Toast.makeText(updCtx, r.message, Toast.LENGTH_LONG).show()
                                 // 有新版:弹窗由根部 AppUpdateHost 自动弹出
-                                is com.apk.claw.android.update.AppUpdater.CheckResult.Available -> Unit
+                                is AppUpdater.CheckResult.Available -> Unit
                             }
                         }
                     }

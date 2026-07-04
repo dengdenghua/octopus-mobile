@@ -22,6 +22,8 @@ import androidx.compose.ui.unit.dp
 import com.apk.claw.android.update.AppUpdater
 import kotlinx.coroutines.launch
 
+private const val PERCENT_MAX = 100
+
 /**
  * 在线更新弹窗宿主 —— 挂在 App 根部(MainActivity)。观察 [AppUpdater.available]:
  * 一旦发现新版本(自动启动检查 或 设置页手动检查),弹出「发现新版本」对话框,
@@ -44,7 +46,7 @@ fun AppUpdateHost() {
                 progress?.let { p ->
                     Spacer(Modifier.height(12.dp))
                     LinearProgressIndicator(progress = { p }, modifier = Modifier.fillMaxWidth())
-                    Text("下载中 ${(p * 100).toInt()}%")
+                    Text("下载中 ${(p * PERCENT_MAX).toInt()}%")
                 }
             }
         },

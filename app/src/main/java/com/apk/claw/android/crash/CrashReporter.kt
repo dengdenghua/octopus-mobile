@@ -1,3 +1,7 @@
+// 本文件的第一约束是「捕获一切、绝不再抛」(见 CrashReporter KDoc):崩溃上报器里
+// Throwable 级捕获是设计本意,不是偷懒 —— 对这条规则做文件级豁免。
+@file:Suppress("TooGenericExceptionCaught")
+
 package com.apk.claw.android.crash
 
 import android.app.ActivityManager
@@ -40,6 +44,7 @@ object CrashReporter {
     private const val MAX_KEEP_FILES = 20
     private const val MAX_AGE_MS = 7L * 24 * 60 * 60 * 1000 // 7 天
     private const val STACK_TRACE_MAX_CHARS = 8000
+    private const val BYTES_PER_MB = 1024L * 1024
 
     private val JSON = "application/json; charset=utf-8".toMediaType()
     private val http = OctoHttp.shared.newBuilder()
@@ -125,7 +130,7 @@ object CrashReporter {
                 ?: return@runCatching 0L to 0L
             val info = ActivityManager.MemoryInfo()
             am.getMemoryInfo(info)
-            (info.availMem / (1024 * 1024)) to (info.totalMem / (1024 * 1024))
+            (info.availMem / BYTES_PER_MB) to (info.totalMem / BYTES_PER_MB)
         }.getOrDefault(0L to 0L)
     }
 
@@ -161,13 +166,9 @@ object CrashReporter {
             if (base.isEmpty()) return
 
             val body = runCatching { file.readText() }.getOrNull()
-            if (body.isNullOrBlank()) {
-                // 空文件/读不出来,没有重试价值,直接清理掉。
-                runCatching { file.delete() }
-                return
-            }
-            // 校验一遍是合法 JSON 再上传,避免半写坏文件反复占位重试。
-            runCatching { JSONObject(body) }.getOrElse {
+            // 空文件/读不出来/非法 JSON(半写坏文件):没有重试价值,直接清理掉,
+            // 避免反复占位重试。合法性校验通过才上传。
+            if (body.isNullOrBlank() || runCatching { JSONObject(body) }.isFailure) {
                 runCatching { file.delete() }
                 return
             }
