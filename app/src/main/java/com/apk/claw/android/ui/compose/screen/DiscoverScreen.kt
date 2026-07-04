@@ -453,7 +453,9 @@ private fun BrowserOmnibox(
         shape = RoundedCornerShape(22.dp),
         color = omniBg,
         border = BorderStroke(0.5.dp, omniBorder),
-        shadowElevation = if (isGlass) 8.dp else 0.dp,
+        // 去掉阴影:玻璃模式下 8dp 阴影让搜索框"浮起",半透明白本体 + 下方阴影 = 视觉两层,
+        // 就是用户看到的「内层白横条」。平贴后只剩一层半透明,靠 border 保留轮廓。
+        shadowElevation = 0.dp,
     ) {
         Row(
             modifier = Modifier.fillMaxSize().padding(start = OctopusSpacing.md, end = OctopusSpacing.sm),
