@@ -27,19 +27,16 @@ fun OctopusTheme(
 ) {
     // 系统暗色模式
     val systemDark = isSystemInDarkTheme()
-    // 用户偏好（默认 null 表示跟随系统；true/false 表示强制亮/暗）
-    val userOverride = remember { com.apk.claw.android.utils.KVUtils.getThemeMode() }
-    val light = when (userOverride) {
-        null -> !systemDark           // 跟随系统
-        true -> true                  // 强制亮色
-        false -> false                // 强制暗色
+    // 反应式真源 = OctopusColors.isLight。设置页切换主题时**直接改它**;这里只在「首次组合 / 系统暗色
+    // 变化」时,按存储偏好(null=跟随系统)播种一次,**不在每次重组里回写**——否则会把用户刚切到的
+    // 深色又冲回去(这正是「深色不生效」的元凶:原来用 remember 记了旧值 + SideEffect 每次回写)。
+    LaunchedEffect(systemDark) {
+        OctopusColors.isLight = com.apk.claw.android.utils.KVUtils.getThemeMode() ?: !systemDark
     }
+    val light = OctopusColors.isLight
 
-    // 同步给 OctopusColors，触发所有读取它的 Composable 重组
+    // 风格/玻璃参数:设置页写 KV,这里读 KV 同步到反应式对象(单一真源;读的是最新值,不会回退)。
     SideEffect {
-        if (OctopusColors.isLight != light) {
-            OctopusColors.isLight = light
-        }
         val prefs = com.apk.claw.android.utils.KVUtils
         OctopusThemeStyle.style = UiStyle.fromStorage(prefs.getUiStyle())
         val blurRadius = prefs.getGlassBlurRadius().dp

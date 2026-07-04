@@ -922,6 +922,7 @@
     <string name="account_byo_member_hint">开通会员后可用自定义模型(每月重置)</string>
     <string name="settings_appearance">外观</string>
     <string name="settings_light_mode">明亮模式</string>
+    <string name="settings_dark_mode">深色模式</string>
     <string name="settings_theme_follow_system">跟随系统</string>
     <string name="settings_theme_light">明亮</string>
     <string name="settings_theme_dark">深色</string>

@@ -128,6 +128,7 @@ class DesktopActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        hideSystemStatusBar()
         // 常亮:桌面模式面向支起来/投显示器的场景,前台时不熄屏(离开 Activity 自动解除)
         window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         val eng = BrowserEngineFactory.selectBest(this)
@@ -151,6 +152,20 @@ class DesktopActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         engine?.onResume()
+        // 沉浸态在切走再回来时可能被系统恢复,重进时再隐一次。
+        hideSystemStatusBar()
+    }
+
+    /**
+     * 桌面/TV 横屏为沉浸态:隐藏系统状态栏(时间/信号/电量),避免与右上角控制中心([TvTopChrome])
+     * 重叠;下滑可临时唤出。只隐状态栏、保留导航手势区,不影响返回。
+     */
+    private fun hideSystemStatusBar() {
+        androidx.core.view.WindowCompat.getInsetsController(window, window.decorView).apply {
+            hide(androidx.core.view.WindowInsetsCompat.Type.statusBars())
+            systemBarsBehavior =
+                androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
     }
 
     override fun onDestroy() {
@@ -320,11 +335,26 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
                 val cols = apps.size.coerceIn(1, maxCols)
                 // 图标区两边对称留白 → 整行居中(重心不偏);右侧留白正好容纳右下角悬浮头像,不重叠。
                 val sideGap = if (docked) 20.dp else 104.dp
+                // 场景壁纸**全屏打底**:Hero 与图标栏共用同一张、边到边全出血,消除首页中部那道接缝。
+                // 无壁纸(未生成/已关场景)则露出底层 HoloBackground 霓虹。
+                if (sceneUrl != null) {
+                    coil.compose.AsyncImage(
+                        model = sceneUrl,
+                        contentDescription = character.zh,
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                        modifier = Modifier.matchParentSize(),
+                    )
+                    // 柔和「全屏」压暗:顶部(状态栏/顶栏)与底部(标题/图标)各一点点、中段全透——
+                    // 均匀不偏,取代原来只压 Hero 上半、中部出现硬边「蒙层」的做法。
+                    Box(
+                        Modifier.matchParentSize()
+                            .background(androidx.compose.ui.graphics.Brush.verticalGradient(TvWallScrim)),
+                    )
+                }
                 Column(Modifier.fillMaxSize()) {
                     // Hero 全宽头(不受留白影响,标题贴左);占视口 ~72%,首页只露一排图标。
                     TvHero(
                         character = character,
-                        sceneUrl = sceneUrl,
                         big = bigUi,
                         modifier = Modifier.fillMaxWidth().height(heroH),
                         onClick = { openWindow(WinContent.Chat) },
@@ -463,7 +493,8 @@ private val TvGradChar = listOf(Color(0xFFB18CFF), Color(0xFF6B4BFF))       // �
 private val TvGradDiscover = listOf(Color(0xFF5AB0FF), Color(0xFF0A84FF))   // 发现 蓝
 private val TvGradSquare = listOf(Color(0xFFFFC24D), Color(0xFFFF9500))     // 广场 橙
 private val TvGradMini = listOf(Color(0xFF3DE0D0), Color(0xFF16B8A6))       // 小程序 青
-private val TvHeroScrim = listOf(Color(0x00000000), Color(0x33000000), Color(0xF0070810))
+// 全屏壁纸的柔和压暗:顶(状态栏/顶栏可读)—中段全透—底(标题/图标可读),均匀无硬边。
+private val TvWallScrim = listOf(Color(0x40000000), Color(0x00000000), Color(0x00000000), Color(0x73000000))
 
 /** 焦点图标规格(下发到 [TvIconShelf] 渲染)。 */
 private data class TvAppSpec(
@@ -479,25 +510,18 @@ private data class TvAppSpec(
 @Composable
 private fun TvHero(
     character: CharacterProfile,
-    sceneUrl: String?,
     big: Boolean,
     modifier: Modifier,
     onClick: () -> Unit,
 ) {
+    // 壁纸与柔和压暗都在 desktopContent 里做(全屏、均匀);Hero 这里只放标题。
+    // 标题给一层文字投影,保证在明亮壁纸上也读得清,不再靠 Hero 局部大蒙层。
+    val titleShadow = androidx.compose.ui.graphics.Shadow(
+        color = Color(0xCC000000),
+        offset = androidx.compose.ui.geometry.Offset(0f, 2f),
+        blurRadius = 12f,
+    )
     Box(modifier.clickable(onClick = onClick)) {
-        // 有场景图 = 铺满作壁纸 + 底部渐隐压出标题;无图 = 全透明,让桌面霓虹壁纸透出(信息卡不遮挡桌面)。
-        if (sceneUrl != null) {
-            coil.compose.AsyncImage(
-                model = sceneUrl,
-                contentDescription = character.zh,
-                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-            )
-            Box(
-                Modifier.fillMaxSize()
-                    .background(androidx.compose.ui.graphics.Brush.verticalGradient(TvHeroScrim)),
-            )
-        }
         Column(
             Modifier.align(Alignment.BottomStart)
                 .padding(start = if (big) 40.dp else 28.dp, bottom = if (big) 32.dp else 20.dp),
@@ -505,6 +529,7 @@ private fun TvHero(
             Text(
                 character.zh, color = Color.White,
                 fontSize = if (big) 46.sp else 34.sp, fontWeight = FontWeight.Bold,
+                style = androidx.compose.ui.text.TextStyle(shadow = titleShadow),
             )
             Spacer(Modifier.height(4.dp))
             Text(
@@ -742,17 +767,9 @@ private fun ChatContent(convo: List<DeskMsg>, running: Boolean, toolNote: String
                 )
             }
         }
-        // 右:顶条(音波 + 阶段)+ 会话气泡
+        // 右:会话气泡。去掉了「阶段 x/4」条;思考时底部内联一行黄色竖点脉动,不再弹独立思考窗。
         Column(Modifier.weight(1f)) {
-            Row(
-                Modifier.fillMaxWidth().height(28.dp).padding(horizontal = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Waveform(active = running)
-                Spacer(Modifier.weight(1f))
-                PhaseDots(current = 1, total = 4)
-            }
-            Box(Modifier.weight(1f)) {
+            Box(Modifier.fillMaxSize()) {
                 if (convo.isEmpty() && !running) {
                     // 空态:小气泡(不占满、不做大灰块),像角色发来的第一句。
                     Box(Modifier.fillMaxSize().padding(12.dp), contentAlignment = Alignment.TopStart) {
@@ -773,8 +790,8 @@ private fun ChatContent(convo: List<DeskMsg>, running: Boolean, toolNote: String
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 10.dp),
                     ) {
                         items(convo, key = { it.id }) { m -> DialogBubble(m) }
-                        if (running && toolNote.isNotBlank()) {
-                            item(key = "toolnote") { Text(toolNote, color = Holo.Accent, fontSize = 10.sp) }
+                        if (running) {
+                            item(key = "thinking") { ThinkingRow(toolNote) }
                         }
                     }
                 }
@@ -784,27 +801,32 @@ private fun ChatContent(convo: List<DeskMsg>, running: Boolean, toolNote: String
 }
 
 
-/** 小音波条(装饰,呼应 OpenRoom 卡头波形):运行中动画跳动,空闲静止。 */
+/** 思考指示行:几个黄色竖点脉动 +(可选)当前工具名。内联在对话底部,不弹独立思考窗。 */
 @Composable
-private fun Waveform(active: Boolean) {
-    val heights = if (active) {
-        val t = rememberInfiniteTransition(label = "wave")
-        (0 until 5).map { i ->
-            t.animateFloat(
-                initialValue = 0.3f, targetValue = 1f,
+private fun ThinkingRow(toolNote: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        ThinkingDots()
+        if (toolNote.isNotBlank()) Text(toolNote, color = Holo.Accent, fontSize = 10.sp)
+    }
+}
+
+/** 几个黄色竖点,依次脉动 —— 思考中的极简动态,替代原音波/阶段条。 */
+@Composable
+private fun ThinkingDots() {
+    val t = rememberInfiniteTransition(label = "think")
+    Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        repeat(3) { i ->
+            val hf = t.animateFloat(
+                initialValue = 0.35f, targetValue = 1f,
                 animationSpec = androidx.compose.animation.core.infiniteRepeatable(
-                    androidx.compose.animation.core.tween(360 + i * 90),
+                    androidx.compose.animation.core.tween(460, delayMillis = i * 150),
                     androidx.compose.animation.core.RepeatMode.Reverse,
                 ),
-                label = "w$i",
+                label = "d$i",
             ).value
-        }
-    } else listOf(0.4f, 0.7f, 0.5f, 0.8f, 0.45f)
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-        heights.forEach { hf ->
             Box(
-                Modifier.width(2.5.dp).height((14 * hf).dp).clip(RoundedCornerShape(2.dp))
-                    .background(Holo.Accent.copy(alpha = 0.8f)),
+                Modifier.width(4.dp).height((16 * hf).dp).clip(RoundedCornerShape(2.dp))
+                    .background(Holo.Accent),
             )
         }
     }
@@ -827,21 +849,6 @@ private fun DialogBubble(m: DeskMsg) {
             )
         }
         if (!m.fromUser) Spacer(Modifier.weight(0.18f))
-    }
-}
-
-/** 阶段进度点(参考图右上「阶段 1/4」):首点强调,其余暗;纯视觉章节指示。 */
-@Composable
-private fun PhaseDots(current: Int, total: Int) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-        Text("阶段 $current/$total", color = Holo.TextSecondary, fontSize = 9.sp)
-        Spacer(Modifier.width(3.dp))
-        repeat(total) { i ->
-            Box(
-                Modifier.size(width = 12.dp, height = 3.dp).clip(RoundedCornerShape(2.dp))
-                    .background(if (i < current) Holo.Accent else Holo.BorderStrong),
-            )
-        }
     }
 }
 
