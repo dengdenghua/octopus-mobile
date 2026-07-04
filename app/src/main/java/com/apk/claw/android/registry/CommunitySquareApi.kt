@@ -20,7 +20,8 @@ import java.util.concurrent.TimeUnit
  *
  * 路径故意不用 /api/v1/registry/assets——那个前缀在服务端所在域名的 nginx 上被更早一条 location
  * 规则拦截转发去了另一个服务(enterprise 角色/技能 registry),会撞名到不了 mobile 服务器,
- * 真机实测踩过这个坑。/square/* 前缀没有这个冲突。
+ * 真机实测踩过这个坑。/square/ 开头的前缀没有这个冲突。
+ * (这行注释里不能写「斜杠+星号」字面量:Kotlin 块注释可嵌套,那两个字符会被当成新开一层注释,吞掉整个文件。)
  *
  * 注意与 [RegistryAsset]/[RegistryClient] 的关键差异:mini-app 行的 `tags` 字段是**对象**
  * `{actions,allow_tools,allow_hosts,allow_device}`,不是普通 registry 资产那种字符串数组 ——
