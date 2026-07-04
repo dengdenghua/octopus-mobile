@@ -206,7 +206,11 @@ object ChatAgentBridge {
      * @param onError 出错（含未配置 / LLM 调用失败）
      * @param recordKey 非空时把本次运行的有效 UI 动作录成「快路径」存到该 key（例程 id）下，
      *                  供 [FastReplay] 下次确定性重放。对话页传 null（不录）。仅本机目标可录。
+     * @param conversationContext 最近几轮对话的摘要（[com.apk.claw.android.agent.ConversationContext.build]
+     *                  产出）。非空时拼进任务 prompt 的「对话背景」区,让 Agent 能理解
+     *                  「换成蓝牙的」这类依赖上文的指代;为 null 时行为与从前完全一致。
      */
+    @Suppress("LongParameterList") // 参数主体是一束 UI 回调(onTool/onText/…),收拢成对象要连改 7 个调用点,可读性反而更差
     fun run(
         prompt: String,
         onTool: (icon: String, name: String, args: String, result: String?) -> Unit,
@@ -217,6 +221,7 @@ object ChatAgentBridge {
         untrusted: Boolean = false,
         onImage: ((toolName: String, imageBase64: String) -> Unit)? = null,
         onHtml: ((toolName: String, htmlContent: String) -> Unit)? = null,
+        conversationContext: String? = null,
     ) {
         // 忙判断必须在改动任何共享状态(updateConfig/curTask)之前,拒绝并发任务。
         if (!busy.compareAndSet(false, true)) {
@@ -224,7 +229,12 @@ object ChatAgentBridge {
             return
         }
         val recorder = recordKey?.let { ActionRecorder() }
-        service.updateConfig(buildConfig(prompt))   // prompt 传入以按相关性注入提示词技能
+        service.updateConfig(buildConfig(prompt))   // prompt 传入以按相关性注入提示词技能(按当前指令算相关性)
+        // 带上对话背景组任务 prompt;审计(curTask)仍记原始指令,别把背景刷进审计日志
+        val taskPrompt = conversationContext?.takeIf { it.isNotBlank() }?.let {
+            "【对话背景】以下是本会话之前的对话摘要,仅用于理解当前指令里的指代与延续意图," +
+                "其中提到的任务都已结束,不要重复执行:\n$it\n\n【当前指令】\n$prompt"
+        } ?: prompt
         // 审计采集：开始一次任务
         curTask = prompt
         curTarget = ControlTarget.label()
@@ -234,7 +244,7 @@ object ChatAgentBridge {
         LiveControlOverlay.show(ClawApplication.instance.getString(R.string.chat_agent_bridge_preparing)) { cancel() }
         // 流式 token 批量合并:50ms 间隔合并 post,避免每 token 一次 main.post 风暴
         val batcher = StreamBatcher(main) { txt -> onText(txt) }
-        service.executeTask(prompt, object : AgentCallback {
+        service.executeTask(taskPrompt, object : AgentCallback {
             override fun onLoopStart(round: Int) {
                 LiveControlOverlay.updateStep(ClawApplication.instance.getString(R.string.chat_agent_bridge_thinking))
             }

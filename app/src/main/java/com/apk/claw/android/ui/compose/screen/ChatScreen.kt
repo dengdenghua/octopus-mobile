@@ -385,8 +385,20 @@ fun ChatScreen() {
                     streamId = null; buf = StringBuilder()
                 }
                 showThinking()
+                // 多轮上下文:带上最近几轮 user/agent 消息摘要(dropLast 排除刚 add 的本条),
+                // 让「换成蓝牙的」这类指代能接上文。工具卡片/思考气泡不算轮次。
+                val convContext = com.apk.claw.android.agent.ConversationContext.build(
+                    messages.dropLast(1).mapNotNull {
+                        when (it) {
+                            is ChatMessage.UserMessage -> true to it.text
+                            is ChatMessage.AgentMessage -> false to it.text
+                            else -> null
+                        }
+                    },
+                )
                 ChatAgentBridge.run(
                     prompt = t,
+                    conversationContext = convContext,
                     onTool = { icon, name, args, res ->
                         com.apk.claw.android.agent.AgentProgressBus.set(null)
                         finalizeStream(null); hideThinking()

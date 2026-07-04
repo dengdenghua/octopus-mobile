@@ -277,8 +277,13 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
             if (id == null) { val m = DeskMsg(seq++, fromUser = false, text = s); streamId = m.id; convo.add(m) }
             else { val i = convo.indexOfFirst { it.id == id }; if (i >= 0) convo[i] = convo[i].copy(text = s) }
         }
+        // 多轮上下文:带上最近几轮对话摘要(dropLast 排除刚 add 的本条),指代能接上文。
+        val convContext = com.apk.claw.android.agent.ConversationContext.build(
+            convo.dropLast(1).map { it.fromUser to it.text },
+        )
         com.apk.claw.android.ui.compose.screen.ChatAgentBridge.run(
             prompt = t,
+            conversationContext = convContext,
             onTool = { _, name, _, _ -> toolNote = "· 使用 $name" },
             onText = { tok -> buf.append(tok); put(buf.toString()) },
             onDone = { ans -> put(ans.ifBlank { buf.toString() }); running = false; toolNote = "" },
