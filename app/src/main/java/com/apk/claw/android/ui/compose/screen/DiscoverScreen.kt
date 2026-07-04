@@ -147,7 +147,7 @@ fun DiscoverScreen(onOpenUrl: ((String?) -> Unit)? = null) {
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .background(OctopusBackground.pageBrush())
+            .background(browserWallpaperBrush())
             .statusBarsPadding(),
         contentPadding = PaddingValues(
             start = OctopusSpacing.lg,
@@ -316,6 +316,39 @@ private fun <T> TwoColumnTiles(items: List<T>, tile: @Composable (T, Modifier) -
     }
 }
 
+/** 浏览器桌面的「壁纸」:柔和极光渐变,替代原来的纯白,给主页一点桌面质感(暗色模式用深色版)。 */
+@Composable
+private fun browserWallpaperBrush(): Brush = if (OctopusColors.isLight) {
+    Brush.linearGradient(listOf(Color(0xFFE9F0FF), Color(0xFFF1ECFF), Color(0xFFFFEFF6)))
+} else {
+    Brush.linearGradient(listOf(Color(0xFF12131A), Color(0xFF181426), Color(0xFF1B1220)))
+}
+
+/** 小程序图标配色:每个按 name+id 哈希取一组渐变 + 首字母,像真·App 图标一样彩色可区分。 */
+private val MINI_APP_GRADS = listOf(
+    listOf(Color(0xFF667EEA), Color(0xFF764BA2)),
+    listOf(Color(0xFFFF9A9E), Color(0xFFFF6A88)),
+    listOf(Color(0xFF43E97B), Color(0xFF38F9D7)),
+    listOf(Color(0xFFFFB199), Color(0xFFFF6A5B)),
+    listOf(Color(0xFF4FACFE), Color(0xFF00F2FE)),
+    listOf(Color(0xFFA18CD1), Color(0xFFFBC2EB)),
+    listOf(Color(0xFFF6D365), Color(0xFFFDA085)),
+    listOf(Color(0xFF30CFD0), Color(0xFF330867)),
+)
+
+/** 彩色小程序图标:渐变底 + 白色首字母,填满 [HomeTile] 的 32dp 图标位。 */
+@Composable
+private fun MiniAppTileIcon(name: String, id: String) {
+    val grad = MINI_APP_GRADS[((name + id).hashCode() and Int.MAX_VALUE) % MINI_APP_GRADS.size]
+    val initial = name.trim().take(1).ifBlank { "小" }.uppercase()
+    Box(
+        modifier = Modifier.fillMaxSize().background(Brush.linearGradient(grad)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(initial, color = Color.White, fontSize = OctopusType.bodyStrong, fontWeight = FontWeight.Bold)
+    }
+}
+
 /** 我的小程序：[MiniAppRegistry] 里已注册的小程序（含 generate_app 现场生成的），点了直接启动。 */
 @Composable
 private fun MiniAppsSection(apps: List<PluginManifest>, onLaunch: (String) -> Unit) {
@@ -323,7 +356,7 @@ private fun MiniAppsSection(apps: List<PluginManifest>, onLaunch: (String) -> Un
     HomeSectionCard(title = stringResource(R.string.browser_home_miniapps), isEmpty = apps.isEmpty()) {
         TwoColumnTiles(apps) { m, mod ->
             HomeTile(label = m.name.ifBlank { m.id }, subtitle = miniAppTag, modifier = mod, onClick = { onLaunch(m.id) }) {
-                Icon(Icons.Filled.Apps, contentDescription = null, tint = OctopusTints.CatDev, modifier = Modifier.size(OctopusIconSize.medium))
+                MiniAppTileIcon(name = m.name.ifBlank { m.id }, id = m.id)
             }
         }
     }
@@ -337,7 +370,7 @@ private fun BookmarksSection(bookmarks: List<BookmarkItem>, onOpen: (String) -> 
             val host = remember(b.url) { urlHost(b.url) }
             HomeTile(label = b.title.ifBlank { host }, subtitle = host, modifier = mod, onClick = { onOpen(b.url) }) {
                 FaviconIcon(
-                    url = host.takeIf { it.isNotBlank() }?.let { "https://$it/favicon.ico" },
+                    url = host.takeIf { it.isNotBlank() }?.let { "https://www.google.com/s2/favicons?sz=64&domain=$it" },
                     tint = OctopusTints.CatKnowledge,
                     fallback = Icons.Filled.Bookmark,
                     contentDescription = b.title,
@@ -368,7 +401,7 @@ private fun CommonSitesSection(
                 onLongClick = { onLongPress(site) },
             ) {
                 FaviconIcon(
-                    url = host.takeIf { it.isNotBlank() }?.let { "https://$it/favicon.ico" },
+                    url = host.takeIf { it.isNotBlank() }?.let { "https://www.google.com/s2/favicons?sz=64&domain=$it" },
                     tint = OctopusTints.CatKnowledge,
                     fallback = Icons.Filled.Public,
                     contentDescription = site.title,
