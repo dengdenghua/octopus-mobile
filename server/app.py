@@ -427,6 +427,24 @@ def init_db() -> None:
                 created_at INTEGER NOT NULL,
                 updated_at INTEGER NOT NULL
             );
+            -- App 崩溃上报(公开无鉴权,崩溃可能发生在登录前/配对前):客户端 uncaught-exception 落盘,
+            -- 下次启动后台补传。所有字段均按"客户端上报可能残缺"处理,只在缺整个 body / 超限时拒绝。
+            CREATE TABLE IF NOT EXISTS crash_reports(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                device_model TEXT DEFAULT '',
+                manufacturer TEXT DEFAULT '',
+                os_version TEXT DEFAULT '',
+                sdk_int INTEGER DEFAULT 0,
+                app_version TEXT DEFAULT '',
+                app_version_code INTEGER DEFAULT 0,
+                stack_trace TEXT DEFAULT '',
+                thread_name TEXT DEFAULT '',
+                available_mem_mb INTEGER DEFAULT 0,
+                total_mem_mb INTEGER DEFAULT 0,
+                occurred_at INTEGER DEFAULT 0,
+                client_ip TEXT DEFAULT '',
+                created_at INTEGER NOT NULL
+            );
             """
         )
         # 迁移:给已存在的 users 表补 email 列(幂等)
@@ -464,6 +482,7 @@ def init_db() -> None:
         c.execute("CREATE INDEX IF NOT EXISTS idx_credit_txn_user ON credit_transactions(user_id, ts)")
         c.execute("CREATE INDEX IF NOT EXISTS idx_device_reports_user ON device_reports(user_id, device_id, ts)")
         c.execute("CREATE INDEX IF NOT EXISTS idx_registry_type_status ON registry_assets(type, status, updated_at)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_crash_reports_created ON crash_reports(created_at)")
         # 迁移:给已存在的 remote_devices 表补新列(幂等)
         for _col in (
             "push_token TEXT DEFAULT ''", "os_version TEXT DEFAULT ''",
@@ -1316,6 +1335,55 @@ def device_status(device_id: str, u: sqlite3.Row = Depends(actor)) -> dict[str, 
         "deviceModel": row["device_model"],
         "revoked": bool(row["revoked"]),
     }
+
+
+# 崩溃上报 body 整体上限(防滥用刷爆磁盘/内存);stackTrace 字段单独再截断一次(纵深防御,
+# 不信任客户端已经截断过)。
+CRASH_REPORT_MAX_BYTES = 32 * 1024
+CRASH_STACK_TRACE_MAX_CHARS = 8000
+
+
+@app.post("/crash/report")
+def crash_report(body: dict[str, Any], request: Request) -> dict[str, Any]:
+    """App 崩溃上报,【公开无鉴权】——崩溃可能发生在登录前/设备配对前,若像 /device/report 那样
+    要求已登录 + 已配对设备,恰恰会丢掉这个功能最想抓住的那批报告。仅按客户端 IP 限流防滥用。
+    对客户端payload 宽容:字段残缺也要落库,只在整个 body 缺失/超限时拒绝——严格校验导致 400
+    会直接丢失这条崩溃记录,违背这个功能存在的意义。"""
+    if not isinstance(body, dict) or not body:
+        raise HTTPException(status_code=400, detail="body required")
+    raw_size = len(json.dumps(body, ensure_ascii=False).encode("utf-8"))
+    if raw_size > CRASH_REPORT_MAX_BYTES:
+        raise HTTPException(status_code=413, detail=f"body 过大(上限 {CRASH_REPORT_MAX_BYTES // 1024}KB)")
+
+    rate_limit(f"crash:{client_ip(request)}", 20, 3600)  # 同 IP 每小时最多 20 条崩溃上报
+
+    def _s(key: str, max_len: int = 256) -> str:
+        v = body.get(key, "")
+        return str(v)[:max_len] if v is not None else ""
+
+    def _i(key: str) -> int:
+        v = body.get(key, 0)
+        try:
+            return int(v)
+        except (TypeError, ValueError):
+            return 0
+
+    stack_trace = _s("stackTrace", CRASH_STACK_TRACE_MAX_CHARS)
+
+    with closing(db()) as c:
+        c.execute(
+            "INSERT INTO crash_reports(device_model, manufacturer, os_version, sdk_int, "
+            "app_version, app_version_code, stack_trace, thread_name, available_mem_mb, "
+            "total_mem_mb, occurred_at, client_ip, created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                _s("deviceModel"), _s("manufacturer"), _s("osVersion"), _i("sdkInt"),
+                _s("appVersion"), _i("appVersionCode"), stack_trace, _s("threadName"),
+                _i("availableMemMb"), _i("totalMemMb"), _i("occurredAt"),
+                client_ip(request), now_ms(),
+            ),
+        )
+        c.commit()
+    return {"ok": True}
 
 
 REMOTE_CONSOLE_HTML = r"""<!doctype html>
@@ -3045,6 +3113,20 @@ def admin_logs(_: bool = Depends(admin_guard), limit: int = 100) -> dict[str, An
     with closing(db()) as c:
         rows = c.execute("SELECT id, ts, action, target_user, detail FROM admin_log "
                          "ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+    return {"items": [dict(r) for r in rows]}
+
+
+@app.get("/admin/api/crashes")
+def admin_crashes(_: bool = Depends(admin_guard), limit: int = 100) -> dict[str, Any]:
+    """最近崩溃上报,最新在前。client_ip 仅在此管理端点暴露(便于发现"同 IP/网络多次崩溃"的模式),
+    公开的 POST /crash/report 响应里不含此字段。"""
+    limit = max(1, min(500, limit))
+    with closing(db()) as c:
+        rows = c.execute(
+            "SELECT id, device_model, manufacturer, os_version, sdk_int, app_version, "
+            "app_version_code, stack_trace, thread_name, available_mem_mb, total_mem_mb, "
+            "occurred_at, client_ip, created_at FROM crash_reports "
+            "ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
     return {"items": [dict(r) for r in rows]}
 
 

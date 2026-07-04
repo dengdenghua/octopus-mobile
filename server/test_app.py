@@ -68,7 +68,7 @@ def clean_state():
     with closing(db()) as c:
         for t in ("users", "sms_codes", "email_codes", "orders", "usage_log", "admin_log",
                   "credit_transactions", "device_reports", "remote_devices", "remote_pair_codes",
-                  "registry_assets"):
+                  "registry_assets", "crash_reports"):
             c.execute(f"DELETE FROM {t}")
         c.commit()
     app_module._rl.clear()
@@ -1704,3 +1704,141 @@ class TestSquareModeration:
         assert app_module._parse_qwen_verdict("这个小程序看起来没问题,判定:安全") is None
         assert app_module._parse_qwen_verdict("") is None
         assert app_module._parse_qwen_verdict(None) is None
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# 22. App 崩溃上报(POST /crash/report 公开无鉴权 → GET /admin/api/crashes 管理员查看)
+# ═══════════════════════════════════════════════════════════════════════
+class TestCrashReport:
+    def _payload(self, **overrides):
+        p = {
+            "deviceModel": "Pixel 8",
+            "manufacturer": "Google",
+            "osVersion": "14",
+            "sdkInt": 34,
+            "appVersion": "1.2.3",
+            "appVersionCode": 123,
+            "stackTrace": "java.lang.RuntimeException: boom\n\tat com.example.Foo.bar(Foo.java:42)",
+            "threadName": "main",
+            "availableMemMb": 128,
+            "totalMemMb": 2048,
+            "occurredAt": 1751234567890,
+        }
+        p.update(overrides)
+        return p
+
+    def test_report_no_auth_required(self, client):
+        """公开端点:不带 Authorization 头也必须成功——崩溃可能发生在登录前。"""
+        r = client.post("/crash/report", json=self._payload())
+        assert r.status_code == 200, r.text
+        assert r.json() == {"ok": True}
+
+    def test_report_full_payload_stored(self, client):
+        r = client.post("/crash/report", json=self._payload())
+        assert r.status_code == 200, r.text
+
+        rows = client.get("/admin/api/crashes",
+                           headers={"X-Admin-Token": "test-token"}).json()["items"]
+        assert len(rows) == 1
+        row = rows[0]
+        assert row["device_model"] == "Pixel 8"
+        assert row["manufacturer"] == "Google"
+        assert row["os_version"] == "14"
+        assert row["sdk_int"] == 34
+        assert row["app_version"] == "1.2.3"
+        assert row["app_version_code"] == 123
+        assert "RuntimeException" in row["stack_trace"]
+        assert row["thread_name"] == "main"
+        assert row["available_mem_mb"] == 128
+        assert row["total_mem_mb"] == 2048
+        assert row["occurred_at"] == 1751234567890
+        assert row["client_ip"]  # 管理端点暴露 IP
+        assert row["created_at"] > 0
+
+    def test_report_partial_payload_still_succeeds(self, client):
+        """残缺 payload(大部分字段缺失)必须仍然 200 并落库,而不是 400——严格校验会丢失崩溃记录,
+        违背这个功能存在的意义。"""
+        r = client.post("/crash/report", json={"stackTrace": "NullPointerException"})
+        assert r.status_code == 200, r.text
+        assert r.json() == {"ok": True}
+
+        rows = client.get("/admin/api/crashes",
+                           headers={"X-Admin-Token": "test-token"}).json()["items"]
+        assert len(rows) == 1
+        row = rows[0]
+        assert row["stack_trace"] == "NullPointerException"
+        assert row["device_model"] == ""
+        assert row["sdk_int"] == 0
+        assert row["available_mem_mb"] == 0
+
+    def test_report_empty_body_rejected(self, client):
+        """完全空 body(不是"部分字段缺失"而是压根没内容)→ 拒绝,这是唯一该拒的情况之一。"""
+        r = client.post("/crash/report", json={})
+        assert r.status_code == 400
+
+    def test_report_oversized_stack_trace_truncated_not_rejected(self, client):
+        """stackTrace 超过 8000 字符 → 服务端截断保存,而不是整条 400 拒绝(纵深防御:不信任
+        客户端已经截断过)。"""
+        huge_trace = "x" * 20000
+        r = client.post("/crash/report", json=self._payload(stackTrace=huge_trace))
+        assert r.status_code == 200, r.text
+
+        rows = client.get("/admin/api/crashes",
+                           headers={"X-Admin-Token": "test-token"}).json()["items"]
+        assert len(rows) == 1
+        assert len(rows[0]["stack_trace"]) == 8000
+
+    def test_report_oversized_body_rejected(self, client):
+        """整个 JSON body 超过 ~32KB → 413 拒绝(防滥用刷爆磁盘/内存),不落库。"""
+        r = client.post("/crash/report", json=self._payload(stackTrace="y" * 100_000))
+        assert r.status_code == 413
+
+        rows = client.get("/admin/api/crashes",
+                           headers={"X-Admin-Token": "test-token"}).json()["items"]
+        assert len(rows) == 0
+
+    def test_report_rate_limited_after_threshold(self, client):
+        """同 IP 每小时最多 20 条 → 第 21 条 429。"""
+        for _ in range(20):
+            r = client.post("/crash/report", json=self._payload())
+            assert r.status_code == 200
+        r = client.post("/crash/report", json=self._payload())
+        assert r.status_code == 429
+
+    def test_admin_crashes_requires_token_401(self, client):
+        """无 token → 401(与其它 /admin/api/* 端点一致)。"""
+        client.post("/crash/report", json=self._payload())
+        r = client.get("/admin/api/crashes", headers={"X-Admin-Token": "wrong"})
+        assert r.status_code == 401
+
+    def test_admin_crashes_503_without_admin_token_configured(self, client, monkeypatch):
+        """未设 ADMIN_TOKEN → 503(默认关闭),与其它 admin 端点一致。"""
+        monkeypatch.setattr(app_module, "ADMIN_TOKEN", "")
+        r = client.get("/admin/api/crashes")
+        assert r.status_code == 503
+
+    def test_admin_crashes_returns_newest_first(self, client):
+        client.post("/crash/report", json=self._payload(stackTrace="first"))
+        client.post("/crash/report", json=self._payload(stackTrace="second"))
+        client.post("/crash/report", json=self._payload(stackTrace="third"))
+
+        rows = client.get("/admin/api/crashes",
+                           headers={"X-Admin-Token": "test-token"}).json()["items"]
+        assert len(rows) == 3
+        assert [r["stack_trace"] for r in rows] == ["third", "second", "first"]
+
+    def test_admin_crashes_endpoint_uses_admin_guard_dependency(self):
+        """不只测行为,直接检查路由声明本身确实挂了 Depends(admin_guard)——防止将来有人重构时
+        不小心把依赖去掉但behavior 测试恰好没抓到。"""
+        route = next(r for r in app_module.app.routes
+                     if getattr(r, "path", "") == "/admin/api/crashes")
+        dep_calls = [d.call for d in route.dependant.dependencies]
+        assert app_module.admin_guard in dep_calls
+
+    def test_public_report_endpoint_has_no_actor_dependency(self):
+        """契约要求 POST /crash/report 不能用 Depends(actor)(会要求登录+已配对设备,
+        丢失这个功能最想抓住的那批崩溃)——直接检查路由声明确认没有挂 actor 依赖。"""
+        route = next(r for r in app_module.app.routes
+                     if getattr(r, "path", "") == "/crash/report")
+        dep_calls = [d.call for d in route.dependant.dependencies]
+        assert app_module.actor not in dep_calls

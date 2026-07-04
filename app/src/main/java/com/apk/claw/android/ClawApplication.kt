@@ -3,6 +3,7 @@ package com.apk.claw.android
 import com.apk.claw.android.agent.DefaultAgentService
 import com.apk.claw.android.base.BaseApp
 import com.apk.claw.android.channel.ChannelManager
+import com.apk.claw.android.crash.CrashReporter
 import com.apk.claw.android.octopus_mobile.BrainModeSelector
 import com.apk.claw.android.octopus_mobile.ConnectionState
 import com.apk.claw.android.octopus_mobile.DeviceDiscoveryManager
@@ -18,6 +19,10 @@ import com.apk.claw.android.utils.DeviceUtils
 import com.apk.claw.android.utils.KVUtils
 import com.apk.claw.android.utils.XLog
 import com.blankj.utilcode.util.NetworkUtils
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 /**
  * Application 入口
@@ -77,6 +82,9 @@ open class ClawApplication : BaseApp() {
      * 单元测试用 TestClawApplication 覆写为空实现，跳过 JVM 上不可用的原生依赖。
      */
     protected open fun initializeApp() {
+        // 崩溃兜底上报:必须在本函数最早一行安装 —— 下面紧跟着的同步初始化链本身也曾被审计
+        // 认定为潜在崩溃风险点,越早装、覆盖面越全（含此链自身崩溃）。
+        CrashReporter.install(this)
         XLog.setDEBUG(BuildConfig.DEBUG)
         registerNetworkCallback()
         appViewModelInstance = getAppViewModelProvider()[AppViewModel::class.java]
@@ -141,6 +149,11 @@ open class ClawApplication : BaseApp() {
                 appViewModelInstance.afterInit()
             }
         }, "app-async-init").start()
+
+        // 崩溃兜底补传：后台协程扫描上次启动遗留的本地崩溃文件并上传，不阻塞启动/UI 线程。
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            CrashReporter.uploadPending(this@ClawApplication)
+        }
     }
 
     /**
