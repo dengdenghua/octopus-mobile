@@ -144,8 +144,6 @@ class DesktopActivity : AppCompatActivity() {
         super.onPause()
         // 桌面模式常驻 + KEEP_SCREEN_ON,后台时尤其需要暂停 WebView 的 JS 定时器 / 网络 / 音频。
         engine?.onPause()
-        // 离开桌面模式:恢复悬浮控制条(其它场景/后台仍需要它做停止入口)。
-        com.apk.claw.android.floating.LiveControlOverlay.suppressed = false
     }
 
     override fun onResume() {
@@ -153,8 +151,6 @@ class DesktopActivity : AppCompatActivity() {
         engine?.onResume()
         // 沉浸态在切走再回来时可能被系统恢复,重进时再隐一次。
         hideSystemStatusBar()
-        // 桌面模式对话自带内嵌状态(黄色竖点 + 停止键),抑制那层「准备中…」悬浮控制条,避免重复。
-        com.apk.claw.android.floating.LiveControlOverlay.suppressed = true
     }
 
     /**

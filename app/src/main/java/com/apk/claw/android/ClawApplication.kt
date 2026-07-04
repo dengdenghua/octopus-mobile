@@ -105,6 +105,19 @@ open class ClawApplication : BaseApp() {
         ShizukuManager.init()
         XLog.i(TAG, "Shizuku initialized: installed=${ShizukuManager.isShizukuInstalled(packageManager)}")
 
+        // App 前后台感知:前台(任一界面可见)时抑制「准备中…」悬浮控制条 —— 对话页内已有内嵌事件流
+        // (工具卡片 + 思考进度);仅当退到后台(Agent 跳去操作别的 App)才显示浮条做停止兜底。
+        androidx.lifecycle.ProcessLifecycleOwner.get().lifecycle.addObserver(
+            object : androidx.lifecycle.DefaultLifecycleObserver {
+                override fun onStart(owner: androidx.lifecycle.LifecycleOwner) {
+                    com.apk.claw.android.floating.LiveControlOverlay.suppressed = true
+                }
+                override fun onStop(owner: androidx.lifecycle.LifecycleOwner) {
+                    com.apk.claw.android.floating.LiveControlOverlay.suppressed = false
+                }
+            },
+        )
+
         // 网络日志输出到文件（调试时设为 true）
         DefaultAgentService.FILE_LOGGING_ENABLED = BuildConfig.DEBUG
         DefaultAgentService.FILE_LOGGING_CACHE_DIR = cacheDir
