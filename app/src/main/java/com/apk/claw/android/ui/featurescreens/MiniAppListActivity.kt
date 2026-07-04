@@ -18,7 +18,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -35,6 +37,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.DisposableEffect
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.apk.claw.android.plugin.MiniAppRegistry
 import com.apk.claw.android.plugin.PermissionGate
 import com.apk.claw.android.plugin.PluginManifest
@@ -52,11 +58,29 @@ class MiniAppListActivity : ComponentActivity() {
 private fun MiniAppListScreen(onBack: () -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
-    val apps = remember { MiniAppRegistry.all() }
+    // 从广场小程序商城安装完返回后,刷新列表(新装的小程序才能立刻出现,不需要重启 App)
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var rev by remember { mutableStateOf(0) }
+    DisposableEffect(lifecycleOwner) {
+        val obs = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_RESUME) rev++ }
+        lifecycleOwner.lifecycle.addObserver(obs)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
+    }
+    val apps = remember(rev) { MiniAppRegistry.all() }
     var expandedId by remember { mutableStateOf<String?>(null) }
     var publishingId by remember { mutableStateOf<String?>(null) }
 
-    FeatureScaffold(title = "小程序", onBack = onBack) {
+    FeatureScaffold(
+        title = "小程序",
+        onBack = onBack,
+        action = {
+            IconButton(onClick = {
+                ctx.startActivity(android.content.Intent(ctx, MiniAppMarketplaceActivity::class.java))
+            }) {
+                Icon(Icons.Filled.Public, contentDescription = "浏览广场小程序", tint = FText)
+            }
+        },
+    ) {
         if (apps.isEmpty()) {
             Text(
                 "还没有安装小程序。安装 type=mini-app 的插件后会出现在这里。",
