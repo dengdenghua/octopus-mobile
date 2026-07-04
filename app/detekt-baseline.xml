@@ -44,7 +44,6 @@
     <ID>CyclomaticComplexMethod:MediaScanner.kt$MediaScanner$fun scan(path: String, recursive: Boolean = true, type: String = "all"): List&lt;MediaFile&gt;</ID>
     <ID>CyclomaticComplexMethod:MediaTools.kt$MediaTools$override fun execute(params: Map&lt;String, Any&gt;): ToolResult</ID>
     <ID>CyclomaticComplexMethod:MiniAppActionTools.kt$AppActionTool$override fun execute(params: Map&lt;String, Any&gt;): ToolResult</ID>
-    <ID>CyclomaticComplexMethod:MiniAppListActivity.kt$@Composable private fun MiniAppCard( m: PluginManifest, expanded: Boolean, onToggleExpand: () -&gt; Unit, onLaunch: () -&gt; Unit, publishing: Boolean = false, onShare: () -&gt; Unit = {}, )</ID>
     <ID>CyclomaticComplexMethod:MjpegImageView.kt$MjpegImageView$fun start(url: String)</ID>
     <ID>CyclomaticComplexMethod:NavigateTool.kt$NavigateTool$override fun execute(params: Map&lt;String, Any&gt;): ToolResult</ID>
     <ID>CyclomaticComplexMethod:OctopusMobileClient.kt$OctopusMobileClient$internal fun handleIncomingMessage(text: String)</ID>
@@ -142,7 +141,6 @@
     <ID>LongMethod:LoginActivity.kt$LoginActivity$override fun onCreate(savedInstanceState: Bundle?)</ID>
     <ID>LongMethod:MediaTools.kt$MediaTools$override fun execute(params: Map&lt;String, Any&gt;): ToolResult</ID>
     <ID>LongMethod:MemoryActivity.kt$@Composable fun MemoryScreen(onBack: () -&gt; Unit)</ID>
-    <ID>LongMethod:MiniAppListActivity.kt$@Composable private fun MiniAppCard( m: PluginManifest, expanded: Boolean, onToggleExpand: () -&gt; Unit, onLaunch: () -&gt; Unit, publishing: Boolean = false, onShare: () -&gt; Unit = {}, )</ID>
     <ID>LongMethod:MobileQualityGate.kt$MobileQualityGate$fun evaluate( registeredTools: Set&lt;String&gt; = registeredToolNames(), rpcUrl: String = KVUtils.getOctopusRpcUrl(), allowInsecureRuntime: Boolean = KVUtils.isInsecureOctopusRuntimeAllowed(), ): Report</ID>
     <ID>LongMethod:NavigateTool.kt$NavigateTool$override fun execute(params: Map&lt;String, Any&gt;): ToolResult</ID>
     <ID>LongMethod:OctopusMobileClient.kt$OctopusMobileClient$internal fun handleIncomingMessage(text: String)</ID>

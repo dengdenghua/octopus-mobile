@@ -13,10 +13,14 @@ import java.util.concurrent.TimeUnit
  * 广场社区小程序(community mini-app)消费端 —— 浏览 + 下载「审核通过」的用户投稿小程序。
  *
  * 契约(公开只读,无鉴权,详见 SquarePublisher.kt 顶部注释里的 POST /square/publish 对应关系):
- *   GET <squareBaseUrl>/api/v1/registry/assets?type=plugin&kind=mini-app
+ *   GET <squareBaseUrl>/square/assets?type=plugin&kind=mini-app
  *     列出 status='approved' 的小程序信封(不含 body)。
- *   GET <squareBaseUrl>/api/v1/registry/assets/plugin/{slug}/download
+ *   GET <squareBaseUrl>/square/assets/plugin/{slug}/download
  *     取单个小程序完整 payload(信封 + body,body 是原始 HTML 字符串,非 base64)。
+ *
+ * 路径故意不用 /api/v1/registry/assets——那个前缀在服务端所在域名的 nginx 上被更早一条 location
+ * 规则拦截转发去了另一个服务(enterprise 角色/技能 registry),会撞名到不了 mobile 服务器,
+ * 真机实测踩过这个坑。/square/* 前缀没有这个冲突。
  *
  * 注意与 [RegistryAsset]/[RegistryClient] 的关键差异:mini-app 行的 `tags` 字段是**对象**
  * `{actions,allow_tools,allow_hosts,allow_device}`,不是普通 registry 资产那种字符串数组 ——
@@ -74,7 +78,7 @@ internal data class CommunityMiniAppDownload(
 }
 
 internal object CommunitySquareApi {
-    private const val API = "/api/v1/registry/assets"
+    private const val API = "/square/assets"
     private const val ERROR_BODY_TAIL = 120
 
     private val gson = Gson()

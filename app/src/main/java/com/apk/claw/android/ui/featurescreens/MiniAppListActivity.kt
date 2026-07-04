@@ -130,104 +130,119 @@ private fun MiniAppCard(
             if (m.allowPay) map["pay"] = "pay" in granted
         }
     }
-
     FCard {
-        // 头部行:名称 + 展开箭头
-        Row(
-            modifier = Modifier.fillMaxWidth().clickable(onClick = onToggleExpand),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(m.name.ifBlank { m.id }, color = FText, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                if (m.description.isNotBlank()) {
-                    Text(m.description, color = FMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
-                }
-            }
-            Icon(
-                if (expanded) Icons.Filled.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = null, tint = FMuted, modifier = Modifier.size(20.dp)
-            )
-        }
-
-        // 展开区:权限管理 + 启动
+        MiniAppCardHeader(m, expanded, onToggleExpand)
         AnimatedVisibility(visible = expanded) {
             Column(modifier = Modifier.padding(top = 12.dp)) {
-
-                // 声明的 tools(只读展示)
-                if (m.allowTools.isNotEmpty()) {
-                    PermRow(label = "可用工具") {
-                        Text(m.allowTools.joinToString(", "), color = FMuted, fontSize = 12.sp)
-                    }
-                }
-
-                // 声明的 hosts(只读展示)
-                if (m.allowHosts.isNotEmpty()) {
-                    PermRow(label = "可访问域名") {
-                        Text(m.allowHosts.joinToString(", "), color = FMuted, fontSize = 12.sp)
-                    }
-                }
-
-                // 设备自动化能力(每个 cap 一个开关)
+                MiniAppDeclaredCaps(m)
                 m.allowDevice.forEach { cap ->
-                    val granted = grantState[cap] ?: false
-                    PermRow(label = "设备能力: $cap") {
-                        Switch(
-                            checked = granted,
-                            onCheckedChange = { on ->
-                                if (on) PermissionGate.grant(m.id, cap)
-                                else PermissionGate.revoke(m.id, cap)
-                                grantState[cap] = on
-                            },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = FPrimary,
-                                checkedTrackColor = FPrimary.copy(alpha = 0.3f),
-                            ),
-                            modifier = Modifier.scale(0.8f)
-                        )
-                    }
+                    MiniAppCapabilitySwitch(
+                        cap = cap,
+                        granted = grantState[cap] ?: false,
+                        onToggle = { on ->
+                            if (on) PermissionGate.grant(m.id, cap)
+                            else PermissionGate.revoke(m.id, cap)
+                            grantState[cap] = on
+                        },
+                    )
                 }
-
-                // 计费权限
                 if (m.allowPay) {
-                    val payGranted = grantState["pay"] ?: false
-                    PermRow(label = "积分支付") {
-                        Switch(
-                            checked = payGranted,
-                            onCheckedChange = { on ->
-                                if (on) PermissionGate.grant(m.id, "pay")
-                                else PermissionGate.revoke(m.id, "pay")
-                                grantState["pay"] = on
-                            },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = FPrimary,
-                                checkedTrackColor = FPrimary.copy(alpha = 0.3f),
-                            ),
-                            modifier = Modifier.scale(0.8f)
-                        )
-                    }
+                    MiniAppPaySwitch(
+                        granted = grantState["pay"] ?: false,
+                        onToggle = { on ->
+                            if (on) PermissionGate.grant(m.id, "pay")
+                            else PermissionGate.revoke(m.id, "pay")
+                            grantState["pay"] = on
+                        },
+                    )
                 }
-
                 Spacer(Modifier.height(12.dp))
-
-                // 底部操作:分享到广场 + 打开
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    Text(
-                        if (publishing) "分享中…" else "分享到广场",
-                        color = if (publishing) FMuted else FSub, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier
-                            .clickable(enabled = !publishing, onClick = onShare)
-                            .padding(horizontal = 16.dp, vertical = 8.dp)
-                    )
-                    Text(
-                        "打开",
-                        color = FPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier
-                            .clickable(onClick = onLaunch)
-                            .padding(horizontal = 16.dp, vertical = 8.dp)
-                    )
-                }
+                MiniAppCardActions(publishing, onShare, onLaunch)
             }
         }
+    }
+}
+
+@Composable
+private fun MiniAppCardHeader(m: PluginManifest, expanded: Boolean, onToggleExpand: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onToggleExpand),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(m.name.ifBlank { m.id }, color = FText, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            if (m.description.isNotBlank()) {
+                Text(m.description, color = FMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
+            }
+        }
+        Icon(
+            if (expanded) Icons.Filled.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null, tint = FMuted, modifier = Modifier.size(20.dp)
+        )
+    }
+}
+
+@Composable
+private fun MiniAppDeclaredCaps(m: PluginManifest) {
+    if (m.allowTools.isNotEmpty()) {
+        PermRow(label = "可用工具") {
+            Text(m.allowTools.joinToString(", "), color = FMuted, fontSize = 12.sp)
+        }
+    }
+    if (m.allowHosts.isNotEmpty()) {
+        PermRow(label = "可访问域名") {
+            Text(m.allowHosts.joinToString(", "), color = FMuted, fontSize = 12.sp)
+        }
+    }
+}
+
+@Composable
+private fun MiniAppCapabilitySwitch(cap: String, granted: Boolean, onToggle: (Boolean) -> Unit) {
+    PermRow(label = "设备能力: $cap") {
+        Switch(
+            checked = granted,
+            onCheckedChange = onToggle,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = FPrimary,
+                checkedTrackColor = FPrimary.copy(alpha = 0.3f),
+            ),
+            modifier = Modifier.scale(0.8f)
+        )
+    }
+}
+
+@Composable
+private fun MiniAppPaySwitch(granted: Boolean, onToggle: (Boolean) -> Unit) {
+    PermRow(label = "积分支付") {
+        Switch(
+            checked = granted,
+            onCheckedChange = onToggle,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = FPrimary,
+                checkedTrackColor = FPrimary.copy(alpha = 0.3f),
+            ),
+            modifier = Modifier.scale(0.8f)
+        )
+    }
+}
+
+@Composable
+private fun MiniAppCardActions(publishing: Boolean, onShare: () -> Unit, onLaunch: () -> Unit) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+        Text(
+            if (publishing) "分享中…" else "分享到广场",
+            color = if (publishing) FMuted else FSub, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+            modifier = Modifier
+                .clickable(enabled = !publishing, onClick = onShare)
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+        )
+        Text(
+            "打开",
+            color = FPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+            modifier = Modifier
+                .clickable(onClick = onLaunch)
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+        )
     }
 }
 

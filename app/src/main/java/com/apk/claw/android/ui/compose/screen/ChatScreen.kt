@@ -32,9 +32,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Launch
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.Extension
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Psychology
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CameraAlt
@@ -90,6 +97,13 @@ import com.apk.claw.android.octopus_mobile.VoiceInput
 import com.apk.claw.android.server.ConfigServerManager
 import com.apk.claw.android.service.ClawAccessibilityService
 import com.apk.claw.android.ui.settings.LlmConfigActivity
+import com.apk.claw.android.ui.featurescreens.ActivityActivity
+import com.apk.claw.android.ui.featurescreens.MemoryActivity
+import com.apk.claw.android.ui.featurescreens.MiniAppListActivity
+import com.apk.claw.android.ui.featurescreens.RoutinesActivity
+import com.apk.claw.android.ui.featurescreens.SkillsActivity
+import com.apk.claw.android.ui.featurescreens.TrustCenterActivity
+import com.apk.claw.android.ui.plugin.PluginActivity
 import android.Manifest
 import android.content.pm.PackageManager
 import android.widget.Toast
@@ -533,30 +547,29 @@ fun ChatScreen() {
                     Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.common_more), tint = TextPrimary)
                 }
                 DropdownMenu(expanded = moreMenuOpen, onDismissRequest = { moreMenuOpen = false }) {
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.routines_title)) },
-                        onClick = {
-                            moreMenuOpen = false
-                            runCatching { context.startActivity(android.content.Intent(context, com.apk.claw.android.ui.featurescreens.RoutinesActivity::class.java)) }
-                        },
+                    val dismiss = { moreMenuOpen = false }
+                    // 功能快捷区:菜单能装很长,别浪费 —— 直达常用功能,少绕导航。
+                    MoreMenuLink(Icons.Filled.Apps, R.string.feat_miniapps, MiniAppListActivity::class.java, dismiss)
+                    MoreMenuLink(Icons.Filled.Bolt, R.string.feat_skills, SkillsActivity::class.java, dismiss)
+                    MoreMenuLink(
+                        Icons.Filled.Extension, R.string.settings_plugin_mgmt,
+                        PluginActivity::class.java, dismiss,
                     )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.activity_screen_title)) },
-                        onClick = {
-                            moreMenuOpen = false
-                            runCatching { context.startActivity(android.content.Intent(context, com.apk.claw.android.ui.featurescreens.ActivityActivity::class.java)) }
-                        },
+                    MoreMenuLink(Icons.Filled.Psychology, R.string.feat_memory, MemoryActivity::class.java, dismiss)
+                    HorizontalDivider()
+                    MoreMenuLink(Icons.Filled.Schedule, R.string.routines_title, RoutinesActivity::class.java, dismiss)
+                    MoreMenuLink(
+                        Icons.Filled.History, R.string.activity_screen_title,
+                        ActivityActivity::class.java, dismiss,
                     )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.trustcenter_title)) },
-                        onClick = {
-                            moreMenuOpen = false
-                            runCatching { context.startActivity(android.content.Intent(context, com.apk.claw.android.ui.featurescreens.TrustCenterActivity::class.java)) }
-                        },
+                    MoreMenuLink(
+                        Icons.Filled.Shield, R.string.trustcenter_title,
+                        TrustCenterActivity::class.java, dismiss,
                     )
                     HorizontalDivider()
                     DropdownMenuItem(
                         text = { Text(stringResource(R.string.chat_clear_current)) },
+                        leadingIcon = { Icon(Icons.Filled.DeleteSweep, contentDescription = null, tint = ErrorColor) },
                         enabled = !isRunning,
                         onClick = {
                             moreMenuOpen = false
@@ -1757,6 +1770,25 @@ private fun ToolCallItem(msg: ChatMessage.ToolCall) {
             }
         }
     }
+}
+
+/** ⋮ 菜单里的一行功能快捷入口:图标 + 标题,点了收起菜单并打开对应功能页。 */
+@Composable
+private fun MoreMenuLink(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    titleRes: Int,
+    target: Class<*>,
+    onDismiss: () -> Unit,
+) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    DropdownMenuItem(
+        text = { Text(stringResource(titleRes)) },
+        leadingIcon = { Icon(icon, contentDescription = null, tint = PrimaryColor) },
+        onClick = {
+            onDismiss()
+            runCatching { ctx.startActivity(android.content.Intent(ctx, target)) }
+        },
+    )
 }
 
 @Composable

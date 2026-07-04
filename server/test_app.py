@@ -1435,7 +1435,7 @@ class TestSquarePublish:
         assert d["data"]["status"] == "pending"
 
         # pending 不进公开目录
-        r = client.get("/api/v1/registry/assets?type=plugin&kind=mini-app")
+        r = client.get("/square/assets?type=plugin&kind=mini-app")
         assert r.json()["total"] == 0
 
     def test_rejects_empty_html(self, client):
@@ -1469,10 +1469,10 @@ class TestSquarePublish:
                          headers={"X-Admin-Token": "test-token"})
         assert r.status_code == 200, r.text
 
-        r = client.get("/api/v1/registry/assets?type=plugin&kind=mini-app")
+        r = client.get("/square/assets?type=plugin&kind=mini-app")
         assert r.json()["total"] == 1
 
-        r = client.get("/api/v1/registry/assets/plugin/gen_1751234567890/download")
+        r = client.get("/square/assets/plugin/gen_1751234567890/download")
         assert r.status_code == 200
         assert r.json()["data"]["body"] == "<html><body>Hello Mini App</body></html>"
 
@@ -1487,7 +1487,7 @@ class TestSquarePublish:
                          headers={"X-Admin-Token": "test-token"})
         assert r.status_code == 200, r.text
 
-        r = client.get("/api/v1/registry/assets?type=plugin&kind=mini-app")
+        r = client.get("/square/assets?type=plugin&kind=mini-app")
         assert r.json()["total"] == 0
 
     def test_republish_resets_to_pending(self, client):
@@ -1497,11 +1497,11 @@ class TestSquarePublish:
                     headers={"Authorization": f"Bearer {token}"})
         client.post("/admin/api/plugins/gen_1751234567890/approve",
                     headers={"X-Admin-Token": "test-token"})
-        assert client.get("/api/v1/registry/assets?type=plugin&kind=mini-app").json()["total"] == 1
+        assert client.get("/square/assets?type=plugin&kind=mini-app").json()["total"] == 1
 
         client.post("/square/publish", json=self._payload(version="1.1.0"),
                     headers={"Authorization": f"Bearer {token}"})
-        r = client.get("/api/v1/registry/assets?type=plugin&kind=mini-app")
+        r = client.get("/square/assets?type=plugin&kind=mini-app")
         assert r.json()["total"] == 0
 
 
@@ -1559,7 +1559,7 @@ class TestSquareModeration:
         assert "违禁词" in row["moderation_reason"]
 
         # 自动拒绝的东西无论如何都不会出现在公开目录
-        assert client.get("/api/v1/registry/assets?type=plugin&kind=mini-app").json()["total"] == 0
+        assert client.get("/square/assets?type=plugin&kind=mini-app").json()["total"] == 0
 
     def test_banned_keyword_in_description_auto_rejects(self, client):
         token, _ = _email_register(client, "mod3@example.com")
@@ -1660,7 +1660,7 @@ class TestSquareModeration:
         row = next(x for x in rejected if x["slug"] == "gen_mod_test_001")
         assert row["moderation_status"] == "auto_rejected"
         assert "qwen 判定" in row["moderation_reason"]
-        assert client.get("/api/v1/registry/assets?type=plugin&kind=mini-app").json()["total"] == 0
+        assert client.get("/square/assets?type=plugin&kind=mini-app").json()["total"] == 0
 
     def test_keyword_hit_skips_qwen_call_entirely(self, client, monkeypatch):
         """命中违禁词时应短路跳过 qwen 调用(省成本)——mock 一个会报错的 _qwen_complete,
