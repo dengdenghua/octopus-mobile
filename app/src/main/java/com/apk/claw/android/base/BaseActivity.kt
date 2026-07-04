@@ -5,6 +5,7 @@ import android.content.res.Resources
 import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -12,6 +13,7 @@ import androidx.core.view.updatePadding
 import com.blankj.utilcode.util.AdaptScreenUtils
 import com.blankj.utilcode.util.BarUtils
 import com.apk.claw.android.R
+import com.apk.claw.android.service.ClawAccessibilityService
 
 /**
  *
@@ -30,6 +32,35 @@ open class BaseActivity : AppCompatActivity() {
 
         // 统一处理状态栏高度 - 在布局加载后应用
         applyStatusBarPadding()
+
+        installKeepAliveBackHandler()
+    }
+
+    /**
+     * 无障碍保活的返回拦截。
+     *
+     * 问题:开着无障碍服务时,从「任务根」页面滑动返回会 finish 掉根 Activity → 任务被移除 →
+     * 进程可被系统(尤其国产 ROM)立即回收 → 与进程同生死的无障碍服务被一并关闭,表现为
+     * 「一滑返回无障碍就自动关了」。
+     *
+     * 处理:仅当① 本页是任务根 且 ② 无障碍正开着时,把返回改为退到后台(moveTaskToBack),
+     * 保活进程与服务,应用照常在后台待命;其余情况(非根页/未开无障碍)一律交回系统默认返回,
+     * 不改变正常的页内返回与「未用无障碍用户」的退出体验。子类/Compose 自己注册的返回回调优先级更高,
+     * 不受影响。
+     */
+    private fun installKeepAliveBackHandler() {
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (isTaskRoot && ClawAccessibilityService.isRunning()) {
+                    moveTaskToBack(true)
+                } else {
+                    // 让出:临时禁用本回调并重新分发,走系统/其它回调的默认返回逻辑。
+                    isEnabled = false
+                    onBackPressedDispatcher.onBackPressed()
+                    isEnabled = true
+                }
+            }
+        })
     }
 
     /**
