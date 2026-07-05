@@ -2078,3 +2078,133 @@ class TestCreatorRevenue:
         ids = {x["id"] for x in r.json()["data"]["assets"]}
         assert "plugin/app_a" in ids
         assert "plugin/app_b" not in ids
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# 广场图文帖:id 去斜杠回归测试
+#
+# 历史 bug:帖子 id 形如 "post/<hex>" 含斜杠,Starlette 单段路由 {post_id}([^/]+)
+# 不匹配斜杠 → 详情/点赞/收藏/评论全部 404。根治为 id 用下划线前缀(post_<hex>)+
+# 启动幂等迁移把历史 "post/x" 改写成 "post_x"。这里端到端锁死两点:
+#   ① 新发帖 id 不含斜杠,且详情/点赞/收藏/评论子路由都可路由(200,非 404)。
+#   ② 历史含斜杠 id 及其在评论/点赞/收藏表里的外键引用,被 init_db 迁移一致改写。
+# ═══════════════════════════════════════════════════════════════════════
+def _clear_square_tables():
+    with closing(db()) as c:
+        for t in ("square_posts", "square_comments", "square_likes", "square_favorites"):
+            c.execute(f"DELETE FROM {t}")
+        c.commit()
+
+
+def _approve_post(post_id: str):
+    """把帖子直接置为 approved(生产走人工审核队列;测试里直接改状态)。"""
+    with closing(db()) as c:
+        c.execute("UPDATE square_posts SET status='approved' WHERE id=?", (post_id,))
+        c.commit()
+
+
+class TestSquarePostIdNoSlash:
+    def test_published_post_id_has_no_slash(self, client):
+        _clear_square_tables()
+        tok, _ = _email_register(client, "poster@example.com")
+        r = client.post(
+            "/square/posts/publish",
+            json={"title": "去斜杠回归帖", "content": "正文内容", "images": [], "tag": "测试"},
+            headers={"Authorization": f"Bearer {tok}"},
+        )
+        assert r.status_code == 200, r.text
+        pid = r.json()["postId"]
+        assert pid.startswith("post_"), pid
+        assert "/" not in pid, f"帖子 id 不能含斜杠(会让单段路由 404):{pid}"
+
+    def test_detail_like_favorite_comment_routable(self, client):
+        """全链路:发帖 → 审核通过 → 详情/点赞/收藏/发评论/评论列表都可路由(200,非 404)。"""
+        _clear_square_tables()
+        tok, _ = _email_register(client, "poster2@example.com")
+        pid = client.post(
+            "/square/posts/publish",
+            json={"title": "端到端帖", "content": "正文", "images": [], "tag": "教程"},
+            headers={"Authorization": f"Bearer {tok}"},
+        ).json()["postId"]
+        _approve_post(pid)
+        auth = {"Authorization": f"Bearer {tok}"}
+
+        # 详情
+        r = client.get(f"/square/posts/{pid}", headers=auth)
+        assert r.status_code == 200, r.text
+        assert r.json()["post"]["id"] == pid
+        assert r.json()["post"]["title"] == "端到端帖"
+
+        # 点赞
+        r = client.post(f"/square/posts/{pid}/like", headers=auth)
+        assert r.status_code == 200, r.text
+        assert r.json()["liked"] is True
+
+        # 收藏
+        r = client.post(f"/square/posts/{pid}/favorite", headers=auth)
+        assert r.status_code == 200, r.text
+        assert r.json()["favorited"] is True
+
+        # 发评论
+        r = client.post(f"/square/posts/{pid}/comments",
+                        json={"content": "第一条评论"}, headers=auth)
+        assert r.status_code == 200, r.text
+
+        # 评论列表
+        r = client.get(f"/square/posts/{pid}/comments", headers=auth)
+        assert r.status_code == 200, r.text
+        assert any(cmt["content"] == "第一条评论" for cmt in r.json()["comments"])
+
+        # 详情回读:liked/favorited/评论数已更新
+        detail = client.get(f"/square/posts/{pid}", headers=auth).json()["post"]
+        assert detail["liked"] is True and detail["favorited"] is True
+        assert detail["commentsCount"] == 1
+
+    def test_startup_migration_rewrites_legacy_slash_ids(self, client):
+        """历史含斜杠 id 及其在评论/点赞/收藏表里的外键引用,被 init_db 幂等迁移改写。"""
+        _clear_square_tables()
+        _, uid = _email_register(client, "legacy@example.com")
+        legacy_id = "post/deadbeefcafe0001"
+        migrated_id = "post_deadbeefcafe0001"
+        now = _now_ms()
+        with closing(db()) as c:
+            c.execute(
+                "INSERT INTO square_posts(id, author_id, title, content, cover_url, images, tag,"
+                " status, moderation_status, moderation_reason, likes_count, comments_count,"
+                " favorites_count, created_at, updated_at)"
+                " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (legacy_id, uid, "历史帖", "正文", "", "[]", "教程", "approved", "", "",
+                 1, 1, 1, now, now),
+            )
+            c.execute("INSERT INTO square_comments(id, post_id, user_id, content, parent_id, created_at)"
+                      " VALUES(?,?,?,?,?,?)", ("c_legacy1", legacy_id, uid, "老评论", "", now))
+            c.execute("INSERT INTO square_likes(post_id, user_id, created_at) VALUES(?,?,?)",
+                      (legacy_id, uid, now))
+            c.execute("INSERT INTO square_favorites(user_id, post_id, created_at) VALUES(?,?,?)",
+                      (uid, legacy_id, now))
+            c.commit()
+
+        # 触发启动迁移(幂等)
+        init_db()
+
+        with closing(db()) as c:
+            assert c.execute("SELECT COUNT(*) FROM square_posts WHERE id LIKE 'post/%'").fetchone()[0] == 0
+            assert c.execute("SELECT COUNT(*) FROM square_comments WHERE post_id LIKE 'post/%'").fetchone()[0] == 0
+            assert c.execute("SELECT COUNT(*) FROM square_likes WHERE post_id LIKE 'post/%'").fetchone()[0] == 0
+            assert c.execute("SELECT COUNT(*) FROM square_favorites WHERE post_id LIKE 'post/%'").fetchone()[0] == 0
+            # id 被改写为下划线前缀,内容原样保留
+            row = c.execute("SELECT id, title FROM square_posts WHERE id=?", (migrated_id,)).fetchone()
+            assert row is not None and row["title"] == "历史帖"
+            assert c.execute("SELECT COUNT(*) FROM square_comments WHERE post_id=?", (migrated_id,)).fetchone()[0] == 1
+            assert c.execute("SELECT COUNT(*) FROM square_likes WHERE post_id=?", (migrated_id,)).fetchone()[0] == 1
+            assert c.execute("SELECT COUNT(*) FROM square_favorites WHERE post_id=?", (migrated_id,)).fetchone()[0] == 1
+
+        # 迁移后帖子按新 id 可路由(历史 bug 的核心症状:此前这里 404)
+        r = client.get(f"/square/posts/{migrated_id}")
+        assert r.status_code == 200, r.text
+        assert r.json()["post"]["id"] == migrated_id
+
+        # 幂等:再跑一次迁移不炸、不误伤
+        init_db()
+        with closing(db()) as c:
+            assert c.execute("SELECT COUNT(*) FROM square_posts WHERE id=?", (migrated_id,)).fetchone()[0] == 1
