@@ -40,7 +40,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.apk.claw.android.ui.compose.screen.AgentSquareScreen
 import com.apk.claw.android.ui.compose.screen.ChatScreen
 import com.apk.claw.android.ui.compose.screen.DiscoverScreen
 import com.apk.claw.android.ui.compose.screen.FeatureHubScreen
@@ -70,7 +69,6 @@ fun OctopusApp() {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
     val selectedBottomRoute = when (currentDestination?.route) {
-        Screen.AgentSquare.route -> Screen.Features.route
         Screen.Universe.route -> Screen.Features.route
         else -> currentDestination?.route
     }
@@ -217,7 +215,9 @@ fun OctopusNavHost(
         composable(Screen.Chat.route) { ChatScreen() }
         composable(Screen.Features.route) {
             FeatureHubScreen(
-                onNavigateToAgentSquare = { navController.navigate(Screen.AgentSquare.route) },
+                // 灵感 tab 即广场:search→广场搜索,publish/+→发帖(合并原独立「灵感广场」的搜索/发帖入口)
+                onOpenSearch = { navController.navigate("square_search") },
+                onCreatePost = { navController.navigate("square_create_post") },
                 onNavigateToUniverse = { navController.navigate(Screen.Universe.route) },
                 onNavigateToSkillMarketplace = { navController.navigate(Screen.SkillMarketplace.route) },
                 onNavigateToPluginMarketplace = { navController.navigate(Screen.PluginMarketplace.route) },
@@ -235,14 +235,8 @@ fun OctopusNavHost(
                 onMessage = showMessage,
             )
         }
-        composable(Screen.AgentSquare.route) {
-            AgentSquareScreen(
-                onBack = { navController.popBackStack() },
-                onOpenSearch = { navController.navigate("square_search") },
-                onCreatePost = { navController.navigate("square_create_post") },
-                onOpenPost = { postId -> navController.navigate("square_post/$postId") },
-            )
-        }
+        // 「灵感广场」(AgentSquare)独立入口已移除 —— 灵感 tab(FeatureHub 探索)即广场,
+        // 其 search/发帖 直连下面的 square_search / square_create_post。
         composable("square_create_post") {
             com.apk.claw.android.ui.compose.screen.CreatePostScreen(
                 onBack = { navController.popBackStack() },

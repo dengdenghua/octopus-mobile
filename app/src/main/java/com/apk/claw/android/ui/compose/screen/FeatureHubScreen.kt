@@ -136,7 +136,8 @@ private val sampleCircles = listOf(
 
 @Composable
 fun FeatureHubScreen(
-    onNavigateToAgentSquare: () -> Unit = {},
+    onOpenSearch: () -> Unit = {},
+    onCreatePost: () -> Unit = {},
     onNavigateToUniverse: () -> Unit = {},
     onNavigateToSkillMarketplace: () -> Unit = {},
     onNavigateToPluginMarketplace: () -> Unit = {},
@@ -159,8 +160,8 @@ fun FeatureHubScreen(
 
             when (tab) {
                 0 -> ExploreTab(
-                    onOpenActivity = { ctx.open(it) },
-                    onNavigateToAgentSquare = onNavigateToAgentSquare,
+                    onOpenSearch = onOpenSearch,
+                    onCreatePost = onCreatePost,
                     onNavigateToUniverse = onNavigateToUniverse,
                     onOpenPost = { selectedPost = it },
                 )
@@ -227,9 +228,10 @@ private fun TabLabel(text: String, selected: Boolean, onClick: () -> Unit) {
 // ── 探索 Tab：灵感瀑布流 ──────────────────────────
 
 @Composable
+@Suppress("LongMethod")
 private fun ExploreTab(
-    onOpenActivity: (Class<*>) -> Unit,
-    onNavigateToAgentSquare: () -> Unit,
+    onOpenSearch: () -> Unit,
+    onCreatePost: () -> Unit,
     onNavigateToUniverse: () -> Unit,
     onOpenPost: (AgentDiscoveryPost) -> Unit,
 ) {
@@ -257,9 +259,9 @@ private fun ExploreTab(
         item(span = StaggeredGridItemSpan.FullLine) {
             AgentDiscoveryHeader(
                 header = data?.header,
-                onSearch = onNavigateToAgentSquare,
+                onSearch = onOpenSearch,
                 onUniverse = onNavigateToUniverse,
-                onCreate = { onOpenActivity(MiniAppListActivity::class.java) },
+                onCreate = onCreatePost,
             )
         }
 
