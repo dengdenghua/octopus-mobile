@@ -229,7 +229,11 @@
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="specialUse"
-            android:stopWithTask="false" />
+            android:stopWithTask="false">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps remote-control and accessibility automation alive in the background" />
+        </service>
 
         <!-- 高清屏幕采集:MediaProjection 前台服务 + 透明授权中转 Activity -->
         <service
