@@ -4,7 +4,8 @@
 应在灵感帖子流、不在应用货架)。取代早先的 seed_tutorials.py(那个把教程当 mini-app 上货架)。
 
 - 作者:内置 official 账号(昵称「Octopus 官方」),不存在则建。
-- 帖子 id 稳定为 post/tutorial-<slug>,幂等 upsert;status='approved' 直接进 feed(官方内容走代码评审)。
+- 帖子 id 稳定为 post_tutorial-<slug>(下划线前缀,不含斜杠——斜杠会让单段路由 404),幂等 upsert;
+  status='approved' 直接进 feed(官方内容走代码评审)。
 - HTML → 纯文本:去标签、块级元素换行、li 加「• 」、折叠多余空行(帖子只渲染纯文本+图片,富样式丢失是已知取舍)。
 
 用法(生产):python3 seed_tutorial_posts.py --db /path/to/octo.db
@@ -98,7 +99,7 @@ def seed(db_path: str) -> None:
         for slug, (title, tag) in TUTORIALS.items():
             html = (HERE / f"{slug}.html").read_text(encoding="utf-8")
             content = html_to_text(html)
-            post_id = f"post/{slug}"
+            post_id = f"post_{slug}"
             conn.execute(
                 """
                 INSERT INTO square_posts(
@@ -117,7 +118,7 @@ def seed(db_path: str) -> None:
             )
             # 教程从应用货架(+混合 feed 的小程序卡)移除
             conn.execute("DELETE FROM registry_assets WHERE id=?", (f"plugin/{slug}",))
-            print(f"  ✓ {slug}  正文 {len(content)} 字  → post/{slug}(已建帖 + 删小程序)")
+            print(f"  ✓ {slug}  正文 {len(content)} 字  → post_{slug}(已建帖 + 删小程序)")
         conn.commit()
         rows = conn.execute(
             "SELECT id, status, LENGTH(content) FROM square_posts WHERE author_id=? ORDER BY id",

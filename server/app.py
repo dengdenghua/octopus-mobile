@@ -473,7 +473,7 @@ def init_db() -> None:
             -- 与 registry_assets(小程序资产)分表:语义/审核流程/权限模型不同,混用会让创作者分成
             -- 与下载计数纠缠。帖子走独立表 + 独立审核队列。
             CREATE TABLE IF NOT EXISTS square_posts(
-                id TEXT PRIMARY KEY,             -- "post/<uuid>"
+                id TEXT PRIMARY KEY,             -- "post_<hex>"(不含斜杠:见 square_publish_post 说明)
                 author_id TEXT NOT NULL,
                 title TEXT NOT NULL,
                 content TEXT DEFAULT '',
@@ -587,6 +587,25 @@ def init_db() -> None:
                 c.execute(f"ALTER TABLE registry_assets ADD COLUMN {_col}")
             except sqlite3.OperationalError:
                 pass
+        # 迁移:广场帖 id 去斜杠(post/<x> → post_<x>),幂等。
+        # 历史 bug:帖子 id 形如 "post/<hex>" 含斜杠,而 Starlette 单段路由 {post_id} 用 [^/]+
+        # 不匹配斜杠 → 详情/点赞/收藏/评论全部 404(客户端把 id 直接拼进 /square/posts/<id>)。
+        # 根治:把前缀从 "post/" 换成 "post_"(单段可路由),并同步迁移所有引用该 id 的表。
+        # substr(x, 6):"post/" 是 5 字符,取第 6 位起即斜杠后的内容;只改 LIKE 'post/%' 的行,
+        # 跑过一次再跑是 no-op。id→id、评论/点赞/收藏的 post_id 外键列一并改,保持引用一致。
+        for _tbl, _col in (
+            ("square_posts", "id"),
+            ("square_comments", "post_id"),
+            ("square_likes", "post_id"),
+            ("square_favorites", "post_id"),
+        ):
+            try:
+                c.execute(
+                    f"UPDATE {_tbl} SET {_col} = 'post_' || substr({_col}, 6) "
+                    f"WHERE {_col} LIKE 'post/%'"
+                )
+            except sqlite3.OperationalError:
+                pass  # 表/列尚未建时跳过(正常不会到这:上面 CREATE TABLE IF NOT EXISTS 已建)
         c.commit()
 
 
@@ -1674,7 +1693,9 @@ async def square_publish_post(body: dict[str, Any], u: sqlite3.Row = Depends(act
 
     final_status = "rejected" if mod_status == "auto_rejected" else "pending"
     cover = images[0] if images else ""
-    post_id = f"post/{secrets.token_hex(8)}"
+    # id 用下划线前缀(post_<hex>)而非斜杠:帖子 id 会被客户端直接拼进 URL 路径
+    # (/square/posts/<id>),Starlette 单段路由 {post_id} 用 [^/]+ 不匹配斜杠,含斜杠会 404。
+    post_id = f"post_{secrets.token_hex(8)}"
     now = now_ms()
     with closing(db()) as c:
         c.execute("""
