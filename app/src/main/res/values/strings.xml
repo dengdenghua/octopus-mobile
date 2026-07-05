@@ -891,6 +891,11 @@ Shizuku 是安全、开源的本地辅助工具。</string>
     <!-- ── account &amp; billing ── -->
     <string name="menu_account">账户与点数</string>
     <string name="account_title">我的账户</string>
+    <string name="account_edit_nickname">修改</string>
+    <string name="account_nickname_title">修改昵称</string>
+    <string name="account_nickname_hint">1-24 个字符</string>
+    <string name="account_nickname_unset">未设置昵称</string>
+    <string name="account_nickname_updated">昵称已更新</string>
     <string name="account_login_title">登录</string>
     <string name="account_login_tip">使用邮箱登录，我们会发送验证码。</string>
     <string name="account_mobile_label">手机号</string>

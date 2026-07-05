@@ -14,6 +14,8 @@ interface AccountGateway {
     suspend fun sendEmailCode(email: String): SmsSendResult
     suspend fun loginEmail(email: String, code: String): LoginResult
     suspend fun profile(token: String): AccountProfile
+    /** 改昵称(社区/榜单/帖子作者名都读它)。返回更新后的 profile。 */
+    suspend fun updateNickname(token: String, nickname: String): AccountProfile
     suspend fun balance(token: String): BalanceResult
     suspend fun goods(token: String): GoodsList
     suspend fun createOrder(token: String, goodsId: String, currency: String = "CNY"): CreateOrderResult

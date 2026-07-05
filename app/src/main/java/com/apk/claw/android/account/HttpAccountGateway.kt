@@ -81,6 +81,9 @@ class HttpAccountGateway(baseUrl: String) : AccountGateway {
     override suspend fun profile(token: String): AccountProfile =
         get("/account/profile", token, AccountProfile::class.java)
 
+    override suspend fun updateNickname(token: String, nickname: String): AccountProfile =
+        post("/account/nickname", mapOf("nickname" to nickname), token, AccountProfile::class.java)
+
     override suspend fun balance(token: String): BalanceResult =
         get("/account/balance", token, BalanceResult::class.java)
 

@@ -86,6 +86,11 @@ class MockAccountGateway : AccountGateway {
         return AccountProfile(uid, mobile, "用户$mobile", null)
     }
 
+    override suspend fun updateNickname(token: String, nickname: String): AccountProfile {
+        val uid = tokenToUser[token] ?: throw IllegalStateException("Not logged in")
+        return AccountProfile(uid, uid.removePrefix("mock-"), nickname, null)
+    }
+
     override suspend fun balance(token: String): BalanceResult {
         val u = userOf(token)
         val active = u.memberExpireAt > System.currentTimeMillis()

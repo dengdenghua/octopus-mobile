@@ -756,6 +756,11 @@
     <!-- ── アカウントと課金 ── -->
     <string name="menu_account">アカウントとチャージ</string>
     <string name="account_title">マイアカウント</string>
+    <string name="account_edit_nickname">編集</string>
+    <string name="account_nickname_title">ニックネーム変更</string>
+    <string name="account_nickname_hint">1〜24文字</string>
+    <string name="account_nickname_unset">ニックネーム未設定</string>
+    <string name="account_nickname_updated">ニックネームを更新しました</string>
     <string name="account_login_title">ログイン</string>
     <string name="account_login_tip">メールでログインします。認証コードをメールに送信します。</string>
     <string name="account_mobile_label">電話番号</string>

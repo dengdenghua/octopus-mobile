@@ -34,11 +34,14 @@ import java.util.Locale
  * (mock settles without one), then poll the order until paid and refresh the
  * balance. All backend calls go through [AccountRepository].
  */
+private const val MAX_NICKNAME_LEN = 24
+
 class AccountActivity : BaseActivity() {
 
     private lateinit var tvCredits: TextView
     private lateinit var tvCreditsBreakdown: TextView
     private lateinit var tvMobile: TextView
+    private lateinit var tvNickname: TextView
     private lateinit var tvMember: TextView
     private lateinit var llGoods: LinearLayout
     private lateinit var tvInviteCode: TextView
@@ -66,6 +69,7 @@ class AccountActivity : BaseActivity() {
         tvCredits = findViewById(R.id.tvCredits)
         tvCreditsBreakdown = findViewById(R.id.tvCreditsBreakdown)
         tvMobile = findViewById(R.id.tvMobile)
+        tvNickname = findViewById(R.id.tvNickname)
         tvMember = findViewById(R.id.tvMember)
         llGoods = findViewById(R.id.llGoods)
         tvInviteCode = findViewById(R.id.tvInviteCode)
@@ -77,6 +81,8 @@ class AccountActivity : BaseActivity() {
         btnTierPremium = findViewById(R.id.btnTierPremium)
         tvTierHint = findViewById(R.id.tvTierHint)
         tvMobile.text = AccountStore.mobile
+        renderNickname()
+        findViewById<TextView>(R.id.btnEditNickname).setOnClickListener { showNicknameDialog() }
 
         btnTierFast.setOnClickListener { setTier(AccountConfig.TIER_FAST) }
         btnTierFlash.setOnClickListener { setTier(AccountConfig.TIER_FLASH) }
@@ -109,6 +115,7 @@ class AccountActivity : BaseActivity() {
                         s.giftCredits,
                     )
                     if (s.mobile.isNotEmpty()) tvMobile.text = s.mobile
+                    tvNickname.text = s.nickname.ifBlank { getString(R.string.account_nickname_unset) }
                     tvMember.text = if (s.byoUnlocked) {
                         getString(R.string.account_member_active, formatDate(s.memberExpireAt))
                     } else {
@@ -274,6 +281,39 @@ class AccountActivity : BaseActivity() {
     private fun formatPrice(g: Goods): String {
         val (sym, cents) = if (selectedCurrency() == "USD" && g.priceUsdCents > 0) "$" to g.priceUsdCents else "¥" to g.priceFen
         return if (cents % 100 == 0L) sym + (cents / 100) else sym + String.format(Locale.US, "%.2f", cents / 100.0)
+    }
+
+    private fun renderNickname() {
+        tvNickname.text = AccountStore.nickname.ifBlank { getString(R.string.account_nickname_unset) }
+    }
+
+    private fun showNicknameDialog() {
+        val input = EditText(this).apply {
+            hint = getString(R.string.account_nickname_hint)
+            setText(AccountStore.nickname)
+            setSelection(text.length)
+            filters = arrayOf(android.text.InputFilter.LengthFilter(MAX_NICKNAME_LEN))
+        }
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(R.string.account_nickname_title)
+            .setView(input)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                val name = input.text.toString().trim()
+                if (name.isEmpty()) {
+                    toast(getString(R.string.account_nickname_hint))
+                } else {
+                    lifecycleScope.launch {
+                        AccountRepository.updateNickname(name)
+                            .onSuccess {
+                                renderNickname()
+                                toast(getString(R.string.account_nickname_updated))
+                            }
+                            .onFailure { toast(it.message ?: getString(R.string.account_nickname_hint)) }
+                    }
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 
     private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()

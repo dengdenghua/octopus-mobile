@@ -1074,6 +1074,18 @@ def profile(u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
     return {"userId": u["user_id"], "mobile": u["mobile"], "nickname": u["nickname"], "avatar": None}
 
 
+@app.post("/account/nickname")
+def set_nickname(body: dict[str, Any], u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    """改昵称:社区/榜单/帖子作者名都读这个。1-24 字,去首尾空白。"""
+    nick = str(body.get("nickname", "")).strip()
+    if not (1 <= len(nick) <= 24):
+        raise HTTPException(status_code=400, detail="昵称需 1-24 个字符")
+    with closing(db()) as c:
+        c.execute("UPDATE users SET nickname = ? WHERE user_id = ?", (nick, u["user_id"]))
+        c.commit()
+    return {"userId": u["user_id"], "mobile": u["mobile"], "nickname": nick, "avatar": None}
+
+
 @app.get("/account/balance")
 def balance(u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
     active = u["member_expire_at"] > now_ms()

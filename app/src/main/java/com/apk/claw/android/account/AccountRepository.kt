@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.StateFlow
 data class AccountState(
     val loggedIn: Boolean = false,
     val mobile: String = "",
+    val nickname: String = "",
     val credits: Long = 0,
     val paidCredits: Long = 0,
     val giftCredits: Long = 0,
@@ -38,6 +39,7 @@ object AccountRepository {
         AccountState(
             loggedIn = AccountStore.isLoggedIn,
             mobile = AccountStore.mobile.ifEmpty { AccountStore.email },
+            nickname = AccountStore.nickname,
             credits = AccountStore.credits,
             paidCredits = AccountStore.paidCredits,
             giftCredits = AccountStore.giftCredits,
@@ -71,6 +73,15 @@ object AccountRepository {
             AccountStore.saveLogin(it)
             refreshBalance()
         }
+        publish()
+        return r
+    }
+
+    /** 改昵称:成功后更新本地 nickname 并 publish(社区/榜单/帖子作者名即时跟随)。 */
+    suspend fun updateNickname(nickname: String): Result<AccountProfile> {
+        if (!AccountStore.isLoggedIn) return Result.failure(IllegalStateException("未登录"))
+        val r = runCatching { gateway().updateNickname(AccountStore.token, nickname) }
+        r.getOrNull()?.nickname?.let { AccountStore.nickname = it }
         publish()
         return r
     }
