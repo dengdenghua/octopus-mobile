@@ -44,6 +44,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
@@ -189,32 +191,35 @@ fun DiscoverScreen(onOpenUrl: ((String?) -> Unit)? = null) {
             )
         }
 
+        // ── 手机桌面主页式 launcher:每个数据类别一个分区标题 + 图标网格,直接铺在壁纸上 ──
         // ── 我的应用(小程序):agent 可发现并操作的原生 app ──
         if (miniApps.isNotEmpty()) {
-            item { DiscoverGroupLabel(stringResource(R.string.discover_group_apps)) }
+            item { LauncherSectionHeader(stringResource(R.string.browser_home_miniapps)) }
             item {
                 MiniAppsSection(apps = miniApps) { id -> MiniAppRegistry.launch(context, id) }
             }
         }
 
-        // ── 网页:书签 + 常用站点(网页世界的入口) ──
-        if (bookmarks.isNotEmpty() || commonSites.isNotEmpty()) {
-            item { DiscoverGroupLabel(stringResource(R.string.discover_group_web)) }
-            if (bookmarks.isNotEmpty()) {
-                item { BookmarksSection(bookmarks = bookmarks) { openUrl(it) } }
-            }
-            if (commonSites.isNotEmpty()) {
-                item {
-                    CommonSitesSection(
-                        sites = commonSites,
-                        onOpen = { openUrl(it) },
-                        onLongPress = { siteToDelete = it },
-                    )
-                }
+        // ── 书签 ──
+        if (bookmarks.isNotEmpty()) {
+            item { LauncherSectionHeader(stringResource(R.string.browser_home_bookmarks)) }
+            item { BookmarksSection(bookmarks = bookmarks) { openUrl(it) } }
+        }
+
+        // ── 常用网站(长按删除) ──
+        if (commonSites.isNotEmpty()) {
+            item { LauncherSectionHeader(stringResource(R.string.browser_home_common_sites)) }
+            item {
+                CommonSitesSection(
+                    sites = commonSites,
+                    onOpen = { openUrl(it) },
+                    onLongPress = { siteToDelete = it },
+                )
             }
         }
 
-        // ── 常用入口:从「广场 → 更多」分流来的浏览器相关工具(浏览器设置/多窗口/云盘/例程/视频库) ──
+        // ── 浏览器工具:从「广场 → 更多」分流来的浏览器相关工具(浏览器设置/多窗口/云盘/例程/视频库) ──
+        item { LauncherSectionHeader(stringResource(R.string.browser_home_tools)) }
         item { BrowserToolsSection { context.startActivity(Intent(context, it)) } }
     }
 
@@ -289,41 +294,32 @@ private fun BrowserHomeTopBar() {
     }
 }
 
-/** 分组标签(「我的应用」/「网页」)—— 把发现页分成 app 世界与网页世界两个清晰心智。 */
+/** launcher 分区标题(小程序 / 书签 / 常用网站 / 浏览器工具)—— 直接压在壁纸上,像手机桌面的分屏/分组标签。 */
 @Composable
-private fun DiscoverGroupLabel(text: String) {
+private fun LauncherSectionHeader(text: String) {
     Text(
         text,
-        color = TextMuted,
-        fontSize = OctopusType.caption,
-        fontWeight = FontWeight.SemiBold,
+        color = BrowserHomeTextColor(),
+        fontSize = OctopusType.bodyStrong,
+        fontWeight = FontWeight.Bold,
         modifier = Modifier.padding(start = OctopusSpacing.xs, top = OctopusSpacing.xs),
     )
 }
 
-/** 三个聚合小节共用的卡片外壳：标题 + 内容；列表为空时整块不占地方。 */
-@Composable
-private fun HomeSectionCard(title: String, isEmpty: Boolean, content: @Composable ColumnScope.() -> Unit) {
-    if (isEmpty) return
-    GlassPanel(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        contentPadding = OctopusSpacing.sm,
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(OctopusSpacing.sm)) {
-            Text(title, color = TextPrimary, fontSize = OctopusType.bodyStrong, fontWeight = FontWeight.Bold)
-            content()
-        }
-    }
-}
+/** 每行固定列数的 launcher 图标网格:最后一行落单补等宽 Spacer 保持左对齐(手机桌面观感)。 */
+private const val LAUNCHER_COLUMNS = 4
 
-/** 三个聚合小节共用的两列平铺：最后一行落单时补一个等宽 Spacer 保持对齐。 */
+/** 书签在首页最多铺两排图标(4 列 × 2 行),多的在浏览器书签页看全。 */
+private const val MAX_BOOKMARK_ICONS = LAUNCHER_COLUMNS * 2
+
 @Composable
-private fun <T> TwoColumnTiles(items: List<T>, tile: @Composable (T, Modifier) -> Unit) {
-    items.chunked(2).forEach { row ->
-        Row(horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.sm), modifier = Modifier.fillMaxWidth()) {
-            row.forEach { tile(it, Modifier.weight(1f)) }
-            if (row.size == 1) Spacer(Modifier.weight(1f))
+private fun <T> LauncherGrid(items: List<T>, cell: @Composable (T, Modifier) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(OctopusSpacing.sm)) {
+        items.chunked(LAUNCHER_COLUMNS).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.xs), modifier = Modifier.fillMaxWidth()) {
+                row.forEach { cell(it, Modifier.weight(1f)) }
+                repeat(LAUNCHER_COLUMNS - row.size) { Spacer(Modifier.weight(1f)) }
+            }
         }
     }
 }
@@ -365,15 +361,19 @@ private fun MiniAppTileIcon(name: String, id: String) {
     }
 }
 
+/** favicon/glyph 类图标的浅色圆角底座:让小尺寸站点图标在壁纸上也有清晰的「App 图标」轮廓。 */
+@Composable
+private fun LauncherIconSquare(content: @Composable () -> Unit) {
+    val bg = if (OctopusThemeStyle.isGlass) Color.White.copy(alpha = 0.85f) else SurfaceColor
+    Box(modifier = Modifier.fillMaxSize().background(bg), contentAlignment = Alignment.Center) { content() }
+}
+
 /** 我的小程序：[MiniAppRegistry] 里已注册的小程序（含 generate_app 现场生成的），点了直接启动。 */
 @Composable
 private fun MiniAppsSection(apps: List<PluginManifest>, onLaunch: (String) -> Unit) {
-    val miniAppTag = stringResource(R.string.browser_home_miniapp_tag)
-    HomeSectionCard(title = stringResource(R.string.browser_home_miniapps), isEmpty = apps.isEmpty()) {
-        TwoColumnTiles(apps) { m, mod ->
-            HomeTile(label = m.name.ifBlank { m.id }, subtitle = miniAppTag, modifier = mod, onClick = { onLaunch(m.id) }) {
-                MiniAppTileIcon(name = m.name.ifBlank { m.id }, id = m.id)
-            }
+    LauncherGrid(apps) { m, mod ->
+        LauncherIcon(label = m.name.ifBlank { m.id }, modifier = mod, onClick = { onLaunch(m.id) }) {
+            MiniAppTileIcon(name = m.name.ifBlank { m.id }, id = m.id)
         }
     }
 }
@@ -381,10 +381,10 @@ private fun MiniAppsSection(apps: List<PluginManifest>, onLaunch: (String) -> Un
 /** 书签：[BookmarkManager] 里存的收藏，图标尝试用站点自己的 favicon.ico，加载失败落回书签图标。 */
 @Composable
 private fun BookmarksSection(bookmarks: List<BookmarkItem>, onOpen: (String) -> Unit) {
-    HomeSectionCard(title = stringResource(R.string.browser_home_bookmarks), isEmpty = bookmarks.isEmpty()) {
-        TwoColumnTiles(bookmarks.take(6)) { b, mod ->
-            val host = remember(b.url) { urlHost(b.url) }
-            HomeTile(label = b.title.ifBlank { host }, subtitle = host, modifier = mod, onClick = { onOpen(b.url) }) {
+    LauncherGrid(bookmarks.take(MAX_BOOKMARK_ICONS)) { b, mod ->
+        val host = remember(b.url) { urlHost(b.url) }
+        LauncherIcon(label = b.title.ifBlank { host }, modifier = mod, onClick = { onOpen(b.url) }) {
+            LauncherIconSquare {
                 FaviconIcon(
                     url = faviconUrl(host),
                     tint = OctopusTints.CatKnowledge,
@@ -406,16 +406,15 @@ private fun CommonSitesSection(
     onOpen: (String) -> Unit,
     onLongPress: (CommonSiteItem) -> Unit,
 ) {
-    HomeSectionCard(title = stringResource(R.string.browser_home_common_sites), isEmpty = sites.isEmpty()) {
-        TwoColumnTiles(sites) { site, mod ->
-            val host = remember(site.url) { urlHost(site.url) }
-            HomeTile(
-                label = site.title.ifBlank { host },
-                subtitle = host,
-                modifier = mod,
-                onClick = { onOpen(site.url) },
-                onLongClick = { onLongPress(site) },
-            ) {
+    LauncherGrid(sites) { site, mod ->
+        val host = remember(site.url) { urlHost(site.url) }
+        LauncherIcon(
+            label = site.title.ifBlank { host },
+            modifier = mod,
+            onClick = { onOpen(site.url) },
+            onLongClick = { onLongPress(site) },
+        ) {
+            LauncherIconSquare {
                 FaviconIcon(
                     url = faviconUrl(host),
                     tint = OctopusTints.CatKnowledge,
@@ -553,44 +552,40 @@ private fun SearchOptionIcon(option: BrowserSearchOption, modifier: Modifier = M
     }
 }
 
-/** 三个聚合小节共用的单个格子：图标 + 主标题 + 副标题。onLongClick 非空时才支持长按（目前只有常用网站需要长按删除）。 */
+/** 手机桌面式单个图标格:上方圆角方形图标(56dp)、下方居中标签。onLongClick 非空才支持长按(常用网站删除)。 */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun HomeTile(
+private fun LauncherIcon(
     label: String,
-    subtitle: String,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
     icon: @Composable () -> Unit,
 ) {
-    val isGlass = OctopusThemeStyle.isGlass
-    val tileBg = if (isGlass) Color.White.copy(alpha = 0.22f) else OctopusColors.FillSecondary
-    val iconBg = if (isGlass) Color.White.copy(alpha = 0.72f) else SurfaceColor
-    Row(
+    Column(
         modifier = modifier
-            .height(52.dp)
-            .clip(OctopusShape.large)
-            .background(tileBg)
-            .combinedClickable(
-                onClick = onClick,
-                onLongClick = onLongClick,
-            )
-            .padding(horizontal = OctopusSpacing.xs),
-        verticalAlignment = Alignment.CenterVertically,
+            .clip(RoundedCornerShape(18.dp))
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .padding(vertical = OctopusSpacing.xs),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Surface(
-            modifier = Modifier.size(32.dp),
-            shape = RoundedCornerShape(10.dp),
-            color = iconBg,
-        ) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { icon() }
-        }
-        Spacer(Modifier.width(OctopusSpacing.sm))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(label, color = TextPrimary, fontSize = OctopusType.caption, fontWeight = FontWeight.SemiBold, maxLines = 1)
-            Text(subtitle, color = TextSecondary, fontSize = OctopusType.tag, maxLines = 1)
-        }
+        Box(
+            modifier = Modifier
+                .size(56.dp)
+                .clip(RoundedCornerShape(16.dp)),
+            contentAlignment = Alignment.Center,
+        ) { icon() }
+        Spacer(Modifier.height(OctopusSpacing.xs))
+        Text(
+            label,
+            color = BrowserHomeTextColor(),
+            fontSize = OctopusType.tag,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            textAlign = TextAlign.Center,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 
@@ -648,19 +643,18 @@ private val BROWSER_TOOLS = listOf(
 
 @Composable
 private fun BrowserToolsSection(onOpen: (Class<*>) -> Unit) {
-    HomeSectionCard(title = stringResource(R.string.browser_home_tools), isEmpty = false) {
-        TwoColumnTiles(BROWSER_TOOLS) { tool, mod ->
-            HomeTile(
-                label = stringResource(tool.labelRes),
-                subtitle = stringResource(tool.descRes),
-                modifier = mod,
-                onClick = { onOpen(tool.activity) },
-            ) {
+    LauncherGrid(BROWSER_TOOLS) { tool, mod ->
+        LauncherIcon(
+            label = stringResource(tool.labelRes),
+            modifier = mod,
+            onClick = { onOpen(tool.activity) },
+        ) {
+            LauncherIconSquare {
                 Icon(
                     tool.icon,
                     contentDescription = null,
                     tint = tool.tint,
-                    modifier = Modifier.size(OctopusIconSize.medium),
+                    modifier = Modifier.size(28.dp),
                 )
             }
         }
