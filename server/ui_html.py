@@ -123,6 +123,7 @@ th{color:var(--mut);font-weight:600}tr:hover td{background:#12151c}
     <button data-tab="orders" onclick="tab('orders')">订单</button>
     <button data-tab="ai" onclick="tab('ai')">AI 分析</button>
     <button data-tab="profit" onclick="tab('profit')">盈利/经营</button>
+    <button data-tab="pricing" onclick="tab('pricing')">定价/调价</button>
     <button data-tab="logs" onclick="tab('logs')">操作审计</button>
   </div>
   <div id="bar" class="row" style="margin-bottom:10px"></div>
@@ -151,7 +152,7 @@ function logout(msg){sessionStorage.removeItem(SS);$("#app").classList.add("hide
   if(msg)$("#loginErr").textContent=msg;}
 function refresh(){loadStats();tab(curTab);}
 function tab(t){curTab=t;document.querySelectorAll(".tabs button").forEach(b=>b.classList.toggle("on",b.dataset.tab===t));
-  $("#bar").innerHTML=""; ({users:loadUsers,usage:loadUsage,orders:loadOrders,ai:loadAI,profit:loadProfit,logs:loadLogs}[t])();}
+  $("#bar").innerHTML=""; ({users:loadUsers,usage:loadUsage,orders:loadOrders,ai:loadAI,profit:loadProfit,pricing:loadPricing,logs:loadLogs}[t])();}
 
 async function loadStats(){
   try{const s=await api("/admin/api/stats");
@@ -340,6 +341,54 @@ async function loadProfit(){
   }catch(e){if(e.message!=="auth")$("#view").innerHTML=esc(e.message);}
 }
 
+async function loadPricing(){
+  $("#bar").innerHTML=`<button class="sm" onclick="loadPricing()">刷新</button>
+    <button class="sm" onclick="takeSnapshot()">立即拍成本快照</button>
+    <button class="sm" onclick="aiAdvise(this)">⚡ 让 AI 出调价建议</button>`;
+  const v=$("#view"); v.innerHTML=`<div class="mut">加载中…</div>`;
+  try{
+    const cfg=await api("/admin/api/config");
+    const trend=await api("/admin/api/cost-trend?limit=8");
+    const props=await api("/admin/api/pricing/proposals");
+    let h=`<h4 style="margin:6px 0">动态定价 / 运营配置<span class="mut" style="font-weight:400"> · 改完保存即时生效,免重部署</span></h4>`;
+    h+=`<div class="row" style="flex-wrap:wrap;gap:8px">`+cfg.items.map(it=>
+      `<div class="card" style="min-width:210px"><div class="k">${esc(it.label)}</div>
+       <div class="mut" style="font-size:12px;margin:2px 0 6px">${esc(it.key)} · 默认 ${esc(it.default)}</div>
+       <input id="cfg_${esc(it.key)}" value="${esc(it.value)}" style="width:88px">
+       <button class="sm" onclick="saveConfig('${esc(it.key)}')">保存</button></div>`).join("")+`</div>`;
+    h+=`<h4 style="margin:16px 0 6px">成本 / 毛利趋势</h4>`;
+    h+=`<table><thead><tr><th>时间</th><th>收入</th><th>满负荷成本</th><th>毛利率%</th><th>¥/积分成本</th><th>活跃</th></tr></thead><tbody>${
+      trend.snapshots.map(s=>`<tr><td class="mut" style="font-size:12px">${dt(s.ts)}</td>
+        <td>¥${(s.revenue||0).toFixed(2)}</td><td>¥${(s.cost_full||0).toFixed(4)}</td>
+        <td>${s.gross_margin_full==null?'—':s.gross_margin_full}</td>
+        <td>${s.cost_per_credit_full||0}</td><td>${s.active_users||0}</td></tr>`).join("")||
+      '<tr><td colspan=6 class="mut">还没有快照(后台定时会拍,或点上方「立即拍成本快照」)</td></tr>'}</tbody></table>`;
+    h+=`<h4 style="margin:16px 0 6px">AI 调价建议 <span class="mut" style="font-weight:400">· 采纳才写入生效</span></h4><div id="proposals">${renderProposals(props.proposals)}</div>`;
+    v.innerHTML=h;
+  }catch(e){ if(e.message!=="auth") v.innerHTML=`<div class="card">加载失败:${esc(e.message)}</div>`; }
+}
+function renderProposals(ps){
+  if(!ps||!ps.length) return `<div class="mut">暂无待处理建议 —— 点上方「让 AI 出调价建议」</div>`;
+  return `<table><thead><tr><th>参数</th><th>当前 → 建议</th><th>理由</th><th></th></tr></thead><tbody>`+
+    ps.map(p=>`<tr><td class="mono">${esc(p.config_key)}</td>
+      <td>${esc(p.current_value)} → <b style="color:var(--ok)">${esc(p.suggested_value)}</b></td>
+      <td class="mut" style="font-size:12px">${esc(p.reason||'')}</td>
+      <td><button class="sm" onclick="approveProposal(${p.id})">采纳</button>
+      <button class="sm" onclick="rejectProposal(${p.id})">驳回</button></td></tr>`).join("")+`</tbody></table>`;
+}
+async function saveConfig(key){
+  try{ await api("/admin/api/config",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({key:key,value:$("#cfg_"+key).value})}); loadPricing();
+  }catch(e){ alert("保存失败:"+e.message); }
+}
+async function takeSnapshot(){ try{ await api("/admin/api/cost-trend/snapshot",{method:"POST"}); loadPricing(); }catch(e){ alert(e.message);} }
+async function aiAdvise(btn){ btn.disabled=true; const old=btn.textContent; btn.textContent="分析中…";
+  try{ const d=await api("/admin/api/pricing/advise",{method:"POST"});
+    if(!d.llmAvailable) alert(d.note||"未配置 qwen,出不了建议"); loadPricing();
+  }catch(e){ alert(e.message); btn.disabled=false; btn.textContent=old; }
+}
+async function approveProposal(id){ try{ await api("/admin/api/pricing/proposals/"+id+"/approve",{method:"POST"}); loadPricing(); }catch(e){ alert(e.message);} }
+async function rejectProposal(id){ try{ await api("/admin/api/pricing/proposals/"+id+"/reject",{method:"POST"}); loadPricing(); }catch(e){ alert(e.message);} }
 if(tok())api("/admin/api/stats").then(enter).catch(()=>logout());
 $("#tokIn").addEventListener("keydown",e=>{if(e.key==="Enter")doLogin();});
 </script></body></html>"""
