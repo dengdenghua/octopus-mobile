@@ -118,10 +118,10 @@ object RemoteConsoleGateway {
             .build()
         val code = http.newCall(startReq).execute().use { resp ->
             val text = resp.body?.string().orEmpty()
-            if (!resp.isSuccessful) throw RuntimeException(serverDetail(text) ?: "绑定失败: HTTP ${resp.code}")
+            if (!resp.isSuccessful) error(serverDetail(text) ?: "绑定失败: HTTP ${resp.code}")
             gson.fromJson(text, JsonObject::class.java)?.get("code")?.asString.orEmpty()
         }
-        if (code.isBlank()) throw RuntimeException("服务端未返回配对码")
+        if (code.isBlank()) error("服务端未返回配对码")
         claimPairCode(code, name)
     }
 

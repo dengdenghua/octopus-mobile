@@ -55,6 +55,7 @@ private fun accentAt(index: Int): Color {
 }
 
 /** 提示词技能配图:按关键词猜一个贴切的 emoji。 */
+@Suppress("CyclomaticComplexMethod")
 private fun emojiForSkill(name: String, desc: String): String {
     val s = (name + " " + desc).lowercase()
     return when {
@@ -157,7 +158,7 @@ private fun SkillsScreen(onBack: () -> Unit) {
                 item(key = "__skills_header__") {
                     SkillGroupHeader("✨", "提示词技能", promptSkills.size, "相关任务时自动注入,让 Agent 更懂这件事")
                 }
-                itemsIndexed(promptSkills, key = { _, it -> it.id }) { index, s ->
+                itemsIndexed(promptSkills, key = { _, sk -> sk.id }) { index, s ->
                     PromptSkillCard(
                         emoji = emojiForSkill(s.name, s.description),
                         accent = accentAt(index),
@@ -175,7 +176,7 @@ private fun SkillsScreen(onBack: () -> Unit) {
                     "核心控制/感知工具锁定;其余可按需停用,降低误操作与隐私面",
                 )
             }
-            itemsIndexed(tools, key = { _, it -> it.getName() }) { index, t ->
+            itemsIndexed(tools, key = { _, tl -> tl.getName() }) { index, t ->
                 val name = t.getName()
                 val core = name in CORE
                 val enabled = remember(rev, name) { ToolRegistry.getInstance().isToolEnabled(name) }
