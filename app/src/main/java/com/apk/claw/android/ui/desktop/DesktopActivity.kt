@@ -14,9 +14,9 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
@@ -215,6 +215,8 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
     var openContent by remember { mutableStateOf<WinContent?>(null) }
     // 钉住:内容层从居中浮层切到右侧停靠面板(Copilot 式:左桌面 + 右对话)。记住用户偏好,不随开关重置。
     var pinned by remember { mutableStateOf(false) }
+    // 长按桌面小程序图标 → 待确认删除的目标(null=无弹窗)。
+    var appToDelete by remember { mutableStateOf<com.apk.claw.android.plugin.PluginManifest?>(null) }
     val openWindow: (WinContent) -> Unit = { kind -> openContent = kind }
     // app_action 未运行时请桌面把 mini-app 开成窗口(后台线程 → 切主线程 openWindow)
     val mainHandler = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
@@ -340,16 +342,24 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
                 // 不 remember:新装/新生成的小程序即时出现在桌面(remember 会把首帧的空列表钉死)。
                 val miniApps = MiniAppRegistry.all()
                 val apps = buildList {
-                    add(TvAppSpec(Icons.Filled.ChatBubbleOutline, TvGradChat) { openWindow(WinContent.Chat) })
-                    add(TvAppSpec(Icons.Filled.Person, TvGradChar) { openWindow(WinContent.Character) })
-                    add(TvAppSpec(Icons.Filled.Explore, TvGradDiscover) { openWindow(WinContent.Discover) })
-                    add(TvAppSpec(Icons.Filled.Forum, TvGradSquare) { openWindow(WinContent.Square) })
+                    add(
+                        TvAppSpec(
+                            Icons.Filled.ChatBubbleOutline, TvGradChat,
+                            onClick = { openWindow(WinContent.Chat) },
+                        ),
+                    )
+                    add(TvAppSpec(Icons.Filled.Person, TvGradChar, onClick = { openWindow(WinContent.Character) }))
+                    add(TvAppSpec(Icons.Filled.Explore, TvGradDiscover, onClick = { openWindow(WinContent.Discover) }))
+                    add(TvAppSpec(Icons.Filled.Forum, TvGradSquare, onClick = { openWindow(WinContent.Square) }))
                     // 「全部应用」入口去掉:主页少一个图标,右下角空出来给悬浮头像 agent。
                     miniApps.forEach { m ->
                         add(
-                            TvAppSpec(Icons.Filled.Apps, TvGradMini) {
-                                openWindow(WinContent.Mini(m.id, m.name))
-                            },
+                            TvAppSpec(
+                                icon = Icons.Filled.Apps,
+                                grad = TvGradMini,
+                                onClick = { openWindow(WinContent.Mini(m.id, m.name)) },
+                                onLongClick = { appToDelete = m },
+                            ),
                         )
                     }
                 }
@@ -373,29 +383,45 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
                             .background(androidx.compose.ui.graphics.Brush.verticalGradient(TvWallScrim)),
                     )
                 }
-                // 整屏纵向瀑布流:Hero 与图标同处一个纵向滚动流 —— 向下滑,Hero 上移、露出更多图标行。
-                // 壁纸在底层 matchParentSize 固定不动,内容在其上滚动(轻微视差感)。
-                Column(
-                    Modifier
-                        .fillMaxSize()
-                        .verticalScroll(androidx.compose.foundation.rememberScrollState()),
-                ) {
-                    // Hero 全宽头(full-bleed,标题贴左);占视口 ~72%,首页先露一排图标,下滑看更多。
-                    TvHero(
-                        character = character,
-                        big = bigUi,
-                        modifier = Modifier.fillMaxWidth().height(heroH),
-                        onClick = { openWindow(WinContent.Chat) },
-                    )
-                    // 图标:每行居中、满 maxCols 自动换行 —— 少时一行居中,多了往下排,随流滚动。
-                    TvIconGrid(
-                        apps = apps,
-                        cols = cols,
-                        maxCols = maxCols,
-                        sideGap = sideGap,
-                        rowWidth = availW,
-                        firstIconFocus = firstIconFocus,
-                    )
+                // 整页上下翻页(不是瀑布流连续滚):第 0 页 = Hero + 首屏放得下的图标行;
+                // 其余图标按「整页」分块,一次翻一页(VerticalPager 会吸附到整页)。
+                val spacing = 14.dp
+                val iconW = (availW - sideGap * 2 - spacing * (cols - 1)) / cols
+                val rowStride = iconW / TV_ICON_ASPECT + spacing
+                val page0Rows = ((maxHeight - heroH - 32.dp).value / rowStride.value).toInt().coerceAtLeast(1)
+                val fullRows = ((maxHeight - 56.dp).value / rowStride.value).toInt().coerceAtLeast(1)
+                val page0Count = page0Rows * maxCols
+                val fullCount = fullRows * maxCols
+                val pages = buildList {
+                    add(apps.take(page0Count))
+                    var idx = page0Count
+                    while (idx < apps.size) {
+                        add(apps.subList(idx, minOf(idx + fullCount, apps.size)))
+                        idx += fullCount
+                    }
+                }
+                val pagerState = androidx.compose.foundation.pager.rememberPagerState(pageCount = { pages.size })
+                androidx.compose.foundation.pager.VerticalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize(),
+                ) { page ->
+                    if (page == 0) {
+                        Column(Modifier.fillMaxSize()) {
+                            // Hero 全宽头(full-bleed,标题贴左);占视口 ~72%。
+                            TvHero(
+                                character = character,
+                                big = bigUi,
+                                modifier = Modifier.fillMaxWidth().height(heroH),
+                                onClick = { openWindow(WinContent.Chat) },
+                            )
+                            TvIconGrid(pages.getOrElse(0) { emptyList() }, maxCols, sideGap, iconW, firstIconFocus)
+                        }
+                    } else {
+                        Column(Modifier.fillMaxSize()) {
+                            Spacer(Modifier.height(24.dp))
+                            TvIconGrid(pages.getOrElse(page) { emptyList() }, maxCols, sideGap, iconW, null)
+                        }
+                    }
                 }
                 // 极简顶栏:浮在右上(满屏 / 分屏左区均对齐)。
                 TvTopChrome(
@@ -464,6 +490,29 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
                 }
             }
         }
+        // 长按桌面小程序图标 → 确认删除(内置磁贴 onLongClick=null,不会触发)。
+        appToDelete?.let { m ->
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { appToDelete = null },
+                title = { androidx.compose.material3.Text("删除小程序") },
+                text = {
+                    androidx.compose.material3.Text(
+                        "确定删除「${m.name.ifBlank { m.id }}」?删除后可在小程序广场重新安装。",
+                    )
+                },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(onClick = {
+                        com.apk.claw.android.ClawApplication.instance.pluginManager.uninstallMiniApp(m.id)
+                        appToDelete = null
+                    }) { androidx.compose.material3.Text("删除") }
+                },
+                dismissButton = {
+                    androidx.compose.material3.TextButton(onClick = { appToDelete = null }) {
+                        androidx.compose.material3.Text("取消")
+                    }
+                },
+            )
+        }
         // 浏览网页:居中较宽浮层(暂不参与右侧分屏)。
         if (browsing) {
             Box(Modifier.fillMaxSize().background(TvOverlayScrim), contentAlignment = Alignment.Center) {
@@ -526,6 +575,7 @@ private data class TvAppSpec(
     val icon: androidx.compose.ui.graphics.vector.ImageVector,
     val grad: List<Color>,
     val onClick: () -> Unit,
+    val onLongClick: (() -> Unit)? = null,
 )
 
 /**
@@ -578,16 +628,14 @@ private fun TvHero(
 @Composable
 private fun TvIconGrid(
     apps: List<TvAppSpec>,
-    cols: Int,
     maxCols: Int,
     sideGap: Dp,
-    rowWidth: Dp,
-    firstIconFocus: FocusRequester,
+    iconW: Dp,
+    firstIconFocus: FocusRequester?,
 ) {
     val spacing = 14.dp
-    val iconW = (rowWidth - sideGap * 2 - spacing * (cols - 1)) / cols
     androidx.compose.foundation.layout.FlowRow(
-        modifier = Modifier.fillMaxWidth().padding(start = sideGap, end = sideGap, bottom = 24.dp),
+        modifier = Modifier.fillMaxWidth().padding(start = sideGap, end = sideGap, top = 8.dp, bottom = 24.dp),
         horizontalArrangement = Arrangement.spacedBy(spacing, Alignment.CenterHorizontally),
         verticalArrangement = Arrangement.spacedBy(spacing),
         maxItemsInEachRow = maxCols,
@@ -595,19 +643,25 @@ private fun TvIconGrid(
         apps.forEachIndexed { i, a ->
             TvAppIcon(
                 a.icon, a.grad, a.onClick,
-                Modifier.width(iconW).then(if (i == 0) Modifier.focusRequester(firstIconFocus) else Modifier),
+                Modifier.width(iconW).then(
+                    if (i == 0 && firstIconFocus != null) Modifier.focusRequester(firstIconFocus) else Modifier,
+                ),
+                onLongClick = a.onLongClick,
             )
         }
     }
 }
 
-/** 单个彩色亮图标(渐变圆角方 + 白色图标 + 焦点高亮)。宽度由调用方给(FlowRow),固定 16:10 宽高比。 */
+/** 单个彩色亮图标(渐变圆角方 + 白色图标 + 焦点高亮)。宽度由调用方给(FlowRow),固定 16:10 宽高比。
+ *  [onLongClick] 非空(小程序)则支持长按删除;内置磁贴传 null 不可删。 */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun TvAppIcon(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     grad: List<Color>,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    onLongClick: (() -> Unit)? = null,
 ) {
     Box(
         modifier = modifier
@@ -615,7 +669,7 @@ private fun TvAppIcon(
             .clip(RoundedCornerShape(16.dp))
             .background(androidx.compose.ui.graphics.Brush.verticalGradient(grad))
             .holoFocus(RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick),
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
