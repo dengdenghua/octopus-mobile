@@ -1239,4 +1239,6 @@
     <string name="user_profile_following_tag">已关注</string>
     <string name="user_profile_no_posts">还没有发布作品</string>
     <string name="user_profile_load_failed">加载用户信息失败</string>
+    <string name="market_mine_skills">我的技能</string>
+    <string name="market_mine_apps">我的小程序</string>
 </resources>

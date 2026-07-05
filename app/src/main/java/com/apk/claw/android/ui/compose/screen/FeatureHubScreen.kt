@@ -106,23 +106,12 @@ import java.util.UUID
  *   - 探索: 社交圈子/热门/推荐（INS 风格占位，待接内容源）
  *   - 工具箱: 双列卡片网格（技能/插件/云盘/记忆…），每张带描述
  */
-private data class FeatureItem(
-    val labelRes: Int,
-    val descRes: Int,
-    val icon: ImageVector,
-    val tint: Color,
-    val target: Class<*>,
-)
-
 private val SkillTint get() = com.apk.claw.android.ui.compose.theme.OctopusTints.Skill
-private val PluginTint get() = com.apk.claw.android.ui.compose.theme.OctopusTints.Plugin
 private val RoutineTint get() = com.apk.claw.android.ui.compose.theme.OctopusTints.Routine
 private val CloudTint get() = com.apk.claw.android.ui.compose.theme.OctopusTints.Cloud
 private val MemoryTint get() = com.apk.claw.android.ui.compose.theme.OctopusTints.Memory
 private val VideoTint get() = com.apk.claw.android.ui.compose.theme.OctopusTints.Video
 private val WindowTint get() = com.apk.claw.android.ui.compose.theme.OctopusTints.Window
-private val EvolveTint get() = com.apk.claw.android.ui.compose.theme.OctopusTints.Evolve
-private val TrustTint get() = com.apk.claw.android.ui.compose.theme.OctopusTints.Trust
 private val BrowserTint get() = com.apk.claw.android.ui.compose.theme.OctopusTints.Browser
 
 // ── 探索页占位数据 ──
@@ -145,25 +134,6 @@ private val sampleCircles = listOf(
 
 // AgentDiscoveryPost / 灵感发现流数据已迁至 SquareCatalog.kt（服务端 API + 缓存 + 种子回退）。
 
-private fun featureSections(): List<Pair<Int, List<FeatureItem>>> = listOf(
-    R.string.feat_section_automation to listOf(
-        FeatureItem(R.string.feat_skills, R.string.feat_skills_desc, Icons.Filled.Bolt, SkillTint, SkillsActivity::class.java),
-        FeatureItem(R.string.feat_miniapps, R.string.feat_miniapps_desc, Icons.Filled.Apps, PluginTint, MiniAppListActivity::class.java),
-        FeatureItem(R.string.feat_routines, R.string.feat_routines_desc, Icons.Filled.Schedule, RoutineTint, RoutinesActivity::class.java),
-    ),
-    R.string.feat_section_data to listOf(
-        FeatureItem(R.string.feat_clouddrive, R.string.feat_clouddrive_desc, Icons.Filled.CloudQueue, CloudTint, CloudDriveActivity::class.java),
-        FeatureItem(R.string.feat_memory, R.string.feat_memory_desc, Icons.Filled.Psychology, MemoryTint, MemoryActivity::class.java),
-        FeatureItem(R.string.feat_video, R.string.feat_video_desc, Icons.Filled.Movie, VideoTint, VideoLibraryActivity::class.java),
-    ),
-    R.string.feat_section_advanced to listOf(
-        FeatureItem(R.string.feat_browser_settings, R.string.feat_browser_desc, Icons.Filled.Public, BrowserTint, BrowserSettingsActivity::class.java),
-        FeatureItem(R.string.feat_multiwindow, R.string.feat_multiwindow_desc, Icons.Filled.GridView, WindowTint, MultiWindowActivity::class.java),
-        FeatureItem(R.string.feat_evolution, R.string.feat_evolution_desc, Icons.Filled.TrendingUp, EvolveTint, EvolutionActivity::class.java),
-        FeatureItem(R.string.feat_trust, R.string.feat_trust_desc, Icons.Filled.Shield, TrustTint, TrustCenterActivity::class.java),
-    ),
-)
-
 @Composable
 fun FeatureHubScreen(
     onNavigateToAgentSquare: () -> Unit = {},
@@ -175,8 +145,6 @@ fun FeatureHubScreen(
     var tab by remember { mutableStateOf(0) }
     var selectedPost by remember { mutableStateOf<AgentDiscoveryPost?>(null) }
 
-    val sections = remember { featureSections() }
-
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize().background(OctopusBackground.pageBrush()).statusBarsPadding()) {
             // 顶部双 Tab
@@ -187,9 +155,6 @@ fun FeatureHubScreen(
                 TabLabel(stringResource(R.string.feat_explore_title), selected = tab == 0) { tab = 0 }
                 Spacer(Modifier.width(OctopusSpacing.xl))
                 TabLabel(stringResource(R.string.feat_toolbox_title), selected = tab == 1) { tab = 1 }
-                Spacer(Modifier.width(OctopusSpacing.xl))
-                // 「更多」= 旧的功能入口大杂烩(ToolboxTab),过渡用 —— 分流到浏览器/设置后删除。
-                TabLabel(stringResource(R.string.feat_more_title), selected = tab == 2) { tab = 2 }
             }
 
             when (tab) {
@@ -199,12 +164,13 @@ fun FeatureHubScreen(
                     onNavigateToUniverse = onNavigateToUniverse,
                     onOpenPost = { selectedPost = it },
                 )
-                1 -> MarketTab(
+                else -> MarketTab(
                     onOpenSkillStore = onNavigateToSkillMarketplace,
                     onOpenPluginStore = onNavigateToPluginMarketplace,
                     onOpenAppStore = { ctx.open(MiniAppMarketplaceActivity::class.java) },
+                    onOpenMySkills = { ctx.open(SkillsActivity::class.java) },
+                    onOpenMyApps = { ctx.open(MiniAppListActivity::class.java) },
                 )
-                else -> ToolboxTab(sections, onNavigateToSkillMarketplace, onNavigateToPluginMarketplace) { ctx.open(it.target) }
             }
         }
 
@@ -929,121 +895,6 @@ private fun SectionHeaderWithAction(text: String, icon: ImageVector, tint: Color
     }
 }
 
-/** 整行入口卡片（图标 + 标题 + 描述 + 右箭头） */
-@Composable
-private fun ExploreEntryCard(icon: ImageVector, tint: Color, title: String, desc: String, onClick: () -> Unit) {
-    GlassCard(
-        modifier = Modifier.fillMaxWidth(),
-        onClick = onClick,
-    ) {
-        Row(modifier = Modifier.padding(OctopusSpacing.md), verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier.size(40.dp).background(tint.copy(alpha = 0.16f), OctopusShape.medium),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(22.dp))
-            }
-            Spacer(Modifier.width(OctopusSpacing.md))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(title, color = OctopusColors.TextPrimary, fontSize = OctopusType.bodyStrong, fontWeight = FontWeight.Medium, maxLines = 1)
-                Spacer(Modifier.height(OctopusSpacing.xs))
-                Text(desc, color = OctopusColors.TextMuted, fontSize = OctopusType.caption, lineHeight = 14.sp, maxLines = 2)
-            }
-        }
-    }
-}
-
-// ── 工具箱 Tab ──────────────────────────────────────────
-
-@Composable
-private fun ToolboxTab(
-    sections: List<Pair<Int, List<FeatureItem>>>,
-    onMarket: () -> Unit,
-    onPluginMarket: () -> Unit,
-    onClick: (FeatureItem) -> Unit,
-) {
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(2),
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(
-            start = OctopusSpacing.lg,
-            end = OctopusSpacing.lg,
-            top = OctopusSpacing.xs,
-            bottom = OctopusLayout.bottomNavContentPadding,
-        ),
-        horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.md),
-        verticalArrangement = Arrangement.spacedBy(OctopusSpacing.md),
-    ) {
-        // 技能商城入口(整行)
-        item(span = { GridItemSpan(maxLineSpan) }) {
-            ExploreEntryCard(
-                icon = Icons.Filled.Extension,
-                tint = SkillTint,
-                title = stringResource(R.string.skill_marketplace_title),
-                desc = stringResource(R.string.skill_marketplace_entry_desc),
-                onClick = onMarket,
-            )
-        }
-        // 插件商城入口(整行)
-        item(span = { GridItemSpan(maxLineSpan) }) {
-            ExploreEntryCard(
-                icon = Icons.Filled.Apps,
-                tint = PluginTint,
-                title = stringResource(R.string.plugin_marketplace_title),
-                desc = stringResource(R.string.plugin_marketplace_entry_desc),
-                onClick = onPluginMarket,
-            )
-        }
-        sections.forEach { (headerRes, items) ->
-            item(span = { GridItemSpan(maxLineSpan) }) { SectionHeader(stringResource(headerRes)) }
-            items(items, key = { it.labelRes }) { item -> ToolCard(item) { onClick(item) } }
-        }
-    }
-}
-
-@Composable
-private fun ToolCard(item: FeatureItem, onClick: () -> Unit) {
-    GlassCard(
-        modifier = Modifier.fillMaxWidth(),
-        onClick = onClick,
-    ) {
-        Column(modifier = Modifier.padding(OctopusSpacing.md)) {
-            Box(
-                modifier = Modifier.size(40.dp).background(item.tint.copy(alpha = 0.16f), OctopusShape.medium),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(item.icon, contentDescription = null, tint = item.tint, modifier = Modifier.size(22.dp))
-            }
-            Spacer(Modifier.height(OctopusSpacing.md))
-            Text(
-                stringResource(item.labelRes),
-                color = OctopusColors.TextPrimary,
-                fontSize = OctopusType.bodyStrong,
-                fontWeight = FontWeight.Medium,
-                maxLines = 1,
-            )
-            Spacer(Modifier.height(OctopusSpacing.xs))
-            Text(
-                stringResource(item.descRes),
-                color = OctopusColors.TextMuted,
-                fontSize = OctopusType.caption,
-                lineHeight = 14.sp,
-                maxLines = 2,
-            )
-        }
-    }
-}
-
-@Composable
-private fun SectionHeader(text: String) {
-    Text(
-        text,
-        color = OctopusColors.TextMuted,
-        fontSize = OctopusType.body,
-        fontWeight = FontWeight.Medium,
-        modifier = Modifier.padding(start = OctopusSpacing.xs, end = OctopusSpacing.xs, top = OctopusSpacing.md, bottom = OctopusSpacing.xs),
-    )
-}
 
 private fun Context.open(target: Class<*>) {
     runCatching { startActivity(Intent(this, target)) }

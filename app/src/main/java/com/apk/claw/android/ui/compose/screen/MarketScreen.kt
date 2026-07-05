@@ -99,6 +99,8 @@ fun MarketTab(
     onOpenSkillStore: () -> Unit,
     onOpenPluginStore: () -> Unit,
     onOpenAppStore: () -> Unit,
+    onOpenMySkills: () -> Unit,
+    onOpenMyApps: () -> Unit,
 ) {
     var kind by remember { mutableStateOf(MarketKind.SKILL) }
     var category by remember { mutableStateOf<String?>(null) }
@@ -127,6 +129,8 @@ fun MarketTab(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
+        // 顶部「我的/已安装」入口(用户拍板放这):我的技能 / 我的小程序 —— 已装管理,非货架
+        MyStuffRow(onOpenMySkills, onOpenMyApps)
         MarketKindTabs(kind) { kind = it; sort = MarketSort.LATEST }
         MarketSortRow(sort) { sort = it }
         if (categories.isNotEmpty()) {
@@ -286,5 +290,40 @@ private fun MarketItemCard(item: MarketItem, kind: MarketKind, onClick: () -> Un
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun MyStuffRow(onMySkills: () -> Unit, onMyApps: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = OctopusSpacing.lg, vertical = OctopusSpacing.sm),
+        horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.sm),
+    ) {
+        MyStuffPill(Icons.Filled.Bolt, stringResource(R.string.market_mine_skills), Modifier.weight(1f), onMySkills)
+        MyStuffPill(Icons.Filled.Apps, stringResource(R.string.market_mine_apps), Modifier.weight(1f), onMyApps)
+    }
+}
+
+@Composable
+private fun MyStuffPill(icon: ImageVector, text: String, modifier: Modifier, onClick: () -> Unit) {
+    Row(
+        modifier = modifier
+            .clip(PillShape)
+            .background(OctopusColors.SurfaceVariant)
+            .clickable { onClick() }
+            .padding(horizontal = OctopusSpacing.md, vertical = OctopusSpacing.sm),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = OctopusColors.TextSecondary,
+            modifier = Modifier.size(KindIconSize),
+        )
+        Spacer(Modifier.size(KindIconGap))
+        Text(text, color = OctopusColors.TextPrimary, fontSize = OctopusType.caption, fontWeight = FontWeight.Bold)
     }
 }

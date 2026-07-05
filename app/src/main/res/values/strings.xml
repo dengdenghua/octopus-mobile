@@ -1253,4 +1253,6 @@ Shizuku 是安全、开源的本地辅助工具。</string>
     <string name="market_category_all">全部</string>
     <string name="market_empty">这个分类下还没有内容,晚点再来看看</string>
     <string name="feat_more_title">更多</string>
+    <string name="market_mine_skills">我的技能</string>
+    <string name="market_mine_apps">我的小程序</string>
 </resources>

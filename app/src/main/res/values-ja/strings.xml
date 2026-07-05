@@ -1244,4 +1244,6 @@
     <string name="user_profile_following_tag">フォロー中</string>
     <string name="user_profile_no_posts">まだ作品を公開していません</string>
     <string name="user_profile_load_failed">ユーザー情報の読み込みに失敗しました</string>
+    <string name="market_mine_skills">マイスキル</string>
+    <string name="market_mine_apps">マイアプリ</string>
 </resources>

@@ -23,11 +23,13 @@ import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Monitor
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.SettingsAccessibility
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -67,6 +69,9 @@ import com.apk.claw.android.ui.compose.theme.OctopusSpacing
 import com.apk.claw.android.ui.compose.theme.OctopusType
 import com.apk.claw.android.ui.compose.theme.OctopusThemeStyle
 import com.apk.claw.android.ui.compose.theme.UiStyle
+import com.apk.claw.android.ui.featurescreens.EvolutionActivity
+import com.apk.claw.android.ui.featurescreens.MemoryActivity
+import com.apk.claw.android.ui.featurescreens.TrustCenterActivity
 import com.apk.claw.android.ui.settings.GlassSettingsActivity
 import com.apk.claw.android.ui.settings.LlmConfigActivity
 import com.apk.claw.android.ui.settings.RuntimeConfigActivity
@@ -609,6 +614,35 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}, onNavigateToCreatorCenter: 
                             context.startActivity(Intent(context, GlassSettingsActivity::class.java))
                         }
                     )
+                }
+            }
+        }
+
+        // ── 高级功能:市场重构分流 —— 自我优化 / 信任中心 / 记忆 ──
+        item {
+            SettingsCard(stringResource(R.string.feat_section_advanced), Icons.Filled.TrendingUp, compact = true) {
+                ClickableSettingsRow(
+                    Icons.Filled.TrendingUp,
+                    stringResource(R.string.feat_evolution),
+                    stringResource(R.string.feat_evolution_desc),
+                ) {
+                    context.startActivity(Intent(context, EvolutionActivity::class.java))
+                }
+                SettingsDivider()
+                ClickableSettingsRow(
+                    Icons.Filled.Shield,
+                    stringResource(R.string.feat_trust),
+                    stringResource(R.string.feat_trust_desc),
+                ) {
+                    context.startActivity(Intent(context, TrustCenterActivity::class.java))
+                }
+                SettingsDivider()
+                ClickableSettingsRow(
+                    Icons.Filled.Psychology,
+                    stringResource(R.string.feat_memory),
+                    stringResource(R.string.feat_memory_desc),
+                ) {
+                    context.startActivity(Intent(context, MemoryActivity::class.java))
                 }
             }
         }
