@@ -67,6 +67,7 @@ def clean_state():
     init_db()
     with closing(db()) as c:
         for t in ("users", "sms_codes", "email_codes", "orders", "usage_log", "admin_log",
+                  "idempotency_keys",
                   "credit_transactions", "device_reports", "remote_devices", "remote_pair_codes",
                   "registry_assets", "crash_reports"):
             c.execute(f"DELETE FROM {t}")
@@ -1902,3 +1903,130 @@ class TestAppUpdate:
         dep_calls = [d.call for d in route.dependant.dependencies]
         assert app_module.actor not in dep_calls
         assert app_module.admin_guard not in dep_calls
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# 24. 创作者分成(/plugin/pay 分账 · 幂等 · 脱敏 · 排行榜)
+# ═══════════════════════════════════════════════════════════════════════
+def _seed_asset(author_id, plugin_id="myapp", status="approved"):
+    """造一个已审核、归 author_id 所有的 plugin 资产。"""
+    with closing(db()) as c:
+        now = _now_ms()
+        c.execute(
+            "INSERT OR REPLACE INTO registry_assets("
+            "id, slug, type, kind, version, name, description, category, tags, platforms, mode, "
+            "author_id, status, checksum, body, body_size, created_at, updated_at) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (f"plugin/{plugin_id}", plugin_id, "plugin", "mini-app", "1.0.0", plugin_id, "", "",
+             "[]", '["mobile"]', "mini-app", author_id, status, "", "", 0, now, now),
+        )
+        c.commit()
+
+
+def _credits_of(user_id):
+    with closing(db()) as c:
+        row = c.execute("SELECT credits FROM users WHERE user_id=?", (user_id,)).fetchone()
+        return int(row["credits"]) if row else 0
+
+
+class TestCreatorRevenue:
+    def test_split_pays_author_70pct_atomically(self, client):
+        """买家扣 100、作者(另一账号)得 70,两条流水都写,余额一致。"""
+        buyer_tok, buyer = _email_register(client, "buyer@example.com")
+        _, author = _email_register(client, "author@example.com")
+        _seed_asset(author, "myapp")
+        author_before = _credits_of(author)
+
+        r = client.post("/plugin/pay",
+                        json={"plugin_id": "myapp", "item": "vip", "credits": 100},
+                        headers={"Authorization": f"Bearer {buyer_tok}"})
+        assert r.status_code == 200, r.text
+        d = r.json()["data"]
+        assert d["creator_earned"] == 70
+        assert _credits_of(author) == author_before + 70
+        assert _credits_of(buyer) == 100 - 100  # 注册奖励 100 - 花掉 100
+        # 响应绝不含原始 author_id,只有脱敏 handle
+        assert "author_id" not in d
+        assert d["author"] and d["author"] != author
+
+    def test_self_purchase_no_split(self, client):
+        """自购(买家==作者):不分成,不写第二条流水。"""
+        tok, uid = _email_register(client, "solo@example.com")
+        _seed_asset(uid, "myapp")
+        r = client.post("/plugin/pay",
+                        json={"plugin_id": "myapp", "item": "x", "credits": 50},
+                        headers={"Authorization": f"Bearer {tok}"})
+        assert r.json()["data"]["creator_earned"] == 0
+
+    def test_insufficient_balance_402_no_payout(self, client):
+        """余额不足 → 402,且作者一分不进(整笔回滚)。"""
+        buyer_tok, _ = _email_register(client, "poor@example.com")
+        _, author = _email_register(client, "rich_author@example.com")
+        _seed_asset(author, "myapp")
+        author_before = _credits_of(author)
+        r = client.post("/plugin/pay",
+                        json={"plugin_id": "myapp", "item": "x", "credits": 999},
+                        headers={"Authorization": f"Bearer {buyer_tok}"})
+        assert r.status_code == 402
+        assert _credits_of(author) == author_before  # 没被加钱
+
+    def test_idempotency_key_blocks_double_charge(self, client):
+        """同一 idempotency_key 重复请求:只扣一次、只分一次,第二次标 duplicate。"""
+        buyer_tok, buyer = _email_register(client, "retry@example.com")
+        _, author = _email_register(client, "retry_author@example.com")
+        _seed_asset(author, "myapp")
+        body = {"plugin_id": "myapp", "item": "vip", "credits": 40, "idempotency_key": "abc-123"}
+        h = {"Authorization": f"Bearer {buyer_tok}"}
+
+        r1 = client.post("/plugin/pay", json=body, headers=h)
+        assert r1.status_code == 200
+        assert r1.json()["data"].get("duplicate") in (None, False)
+        bal_after_first = _credits_of(buyer)
+        author_after_first = _credits_of(author)
+
+        r2 = client.post("/plugin/pay", json=body, headers=h)  # 重试同 key
+        assert r2.status_code == 200
+        assert r2.json()["data"]["duplicate"] is True
+        # 第二次不再扣款/不再分成
+        assert _credits_of(buyer) == bal_after_first
+        assert _credits_of(author) == author_after_first
+
+    def test_rounding_one_credit_pays_zero(self, client):
+        """取整:1 积分购买 → int(1*0.7)=0,作者拿 0(已知行为,锁死防回归)。"""
+        buyer_tok, _ = _email_register(client, "penny@example.com")
+        _, author = _email_register(client, "penny_author@example.com")
+        _seed_asset(author, "myapp")
+        before = _credits_of(author)
+        r = client.post("/plugin/pay",
+                        json={"plugin_id": "myapp", "item": "x", "credits": 1},
+                        headers={"Authorization": f"Bearer {buyer_tok}"})
+        assert r.json()["data"]["creator_earned"] == 0
+        assert _credits_of(author) == before
+
+    def test_ranking_masks_internal_user_id(self, client):
+        """排行榜绝不下发原始 author_id:user_id 是哈希、nickname 是展示名。"""
+        buyer_tok, buyer = _email_register(client, "rbuyer@example.com")
+        _, author = _email_register(client, "rauthor@example.com")
+        _seed_asset(author, "myapp")
+        client.post("/plugin/pay",
+                    json={"plugin_id": "myapp", "item": "vip", "credits": 100},
+                    headers={"Authorization": f"Bearer {buyer_tok}"})
+        r = client.get("/creator/ranking", headers={"Authorization": f"Bearer {buyer_tok}"})
+        assert r.status_code == 200
+        leaders = r.json()["data"]["leaders"]
+        assert leaders, "应有至少一个上榜作者"
+        top = leaders[0]
+        assert top["user_id"] != author          # 不是原始账号 id
+        assert len(top["user_id"]) == 12          # 是 12 位哈希
+        assert "nickname" in top
+
+    def test_dashboard_only_shows_own_assets(self, client):
+        """看板只返回本人作品,不泄露他人。"""
+        tok_a, a = _email_register(client, "da@example.com")
+        _, b = _email_register(client, "db@example.com")
+        _seed_asset(a, "app_a")
+        _seed_asset(b, "app_b")
+        r = client.get("/creator/dashboard", headers={"Authorization": f"Bearer {tok_a}"})
+        ids = {x["id"] for x in r.json()["data"]["assets"]}
+        assert "plugin/app_a" in ids
+        assert "plugin/app_b" not in ids

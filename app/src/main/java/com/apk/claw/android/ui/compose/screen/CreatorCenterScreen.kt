@@ -479,7 +479,7 @@ private fun LeaderRow(leader: CreatorLeader) {
             contentAlignment = Alignment.Center,
         ) {
             Text(
-                leader.userId.take(2).uppercase(),
+                leader.displayName.take(2).uppercase(),
                 color = TextMuted, fontSize = OctopusType.tag,
                 fontWeight = FontWeight.Bold, maxLines = 1,
             )
@@ -487,7 +487,7 @@ private fun LeaderRow(leader: CreatorLeader) {
         Spacer(Modifier.width(OctopusSpacing.md))
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                leader.userId,
+                leader.displayName,
                 color = TextPrimary, fontSize = OctopusType.body, maxLines = 1,
             )
             Text(

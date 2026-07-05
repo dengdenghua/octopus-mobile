@@ -257,11 +257,16 @@ data class CreatorDashboardResult(
 )
 
 data class CreatorLeader(
+    // user_id 现为服务端下发的不可逆哈希(仅作列表 key,不是真实账号 id);展示用 nickname。
     @SerializedName("user_id") val userId: String = "",
+    val nickname: String = "",
     val earnings: Int = 0,
     val downloads: Int = 0,
     val works: Int = 0,
-)
+) {
+    /** 榜单展示名:优先昵称,兜底一个稳定短码,绝不显示内部账号 id。 */
+    val displayName: String get() = nickname.ifBlank { userId.take(6) }
+}
 
 data class CreatorRankingData(
     @SerializedName("my_rank") val myRank: Int = 0,
