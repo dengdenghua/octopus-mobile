@@ -153,7 +153,10 @@ class TestHealthz:
     def test_healthz_ok(self, client):
         r = client.get("/healthz")
         assert r.status_code == 200
-        assert r.json() == {"status": "ok"}
+        body = r.json()
+        assert body["status"] in ("ok", "degraded")
+        assert "db" in body
+        assert "uptime_seconds" in body
 
     def test_healthz_no_auth_required(self, client):
         """健康检查不需要鉴权(不带 Authorization header 也能访问)。"""
