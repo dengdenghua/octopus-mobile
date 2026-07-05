@@ -32,7 +32,7 @@ from contextlib import closing
 from typing import Any
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 # ─────────────────────────── 配置(env 可覆盖) ───────────────────────────
@@ -412,6 +412,13 @@ def init_db() -> None:
                 device_name TEXT NOT NULL DEFAULT '', expires_at INTEGER NOT NULL,
                 claimed_device_id TEXT DEFAULT '', created_at INTEGER NOT NULL
             );
+            -- 个人网页:公开短链 slug → 某台设备。访客走 /u/<slug>/ 匿名访问,
+            -- 请求经设备 WS 中转到手机,手机只回 filesDir/site 里的静态字节(见 /u/ 路由)。
+            CREATE TABLE IF NOT EXISTS remote_sites(
+                slug TEXT PRIMARY KEY, user_id TEXT NOT NULL, device_id TEXT NOT NULL,
+                created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+                disabled INTEGER NOT NULL DEFAULT 0
+            );
             CREATE TABLE IF NOT EXISTS credit_transactions(
                 id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL,
                 delta INTEGER NOT NULL, balance_after INTEGER NOT NULL,
@@ -713,6 +720,9 @@ class RemoteRelayHub:
         self._devices: dict[str, WebSocket] = {}
         self._consoles: dict[str, set[WebSocket]] = {}
         self._device_info: dict[str, dict[str, str]] = {}
+        # 个人网页 HTTP 隧道:请求 id → 等待手机回包的 Future。fire-and-forget 的
+        # 中转本身没有请求/响应关联,这里补上(见 open_http_request/resolve_http_response)。
+        self._http_pending: dict[str, "asyncio.Future[dict[str, Any]]"] = {}
 
     async def attach_device(self, device_id: str, ws: WebSocket) -> None:
         async with self._lock:
@@ -776,6 +786,27 @@ class RemoteRelayHub:
         async with self._lock:
             targets = list(self._consoles.get(device_id, set()))
         await self._broadcast(targets, message)
+
+    async def open_http_request(self, req_id: str) -> "asyncio.Future[dict[str, Any]]":
+        """登记一个等待手机 http_response 的 Future。调用方负责 wait_for + cancel_http_request 兜底。"""
+        fut: "asyncio.Future[dict[str, Any]]" = asyncio.get_running_loop().create_future()
+        async with self._lock:
+            self._http_pending[req_id] = fut
+        return fut
+
+    async def resolve_http_response(self, req_id: str, payload: dict[str, Any]) -> bool:
+        """手机回包时按 id 兑现 Future。命中返回 True(此消息即被消费,不再转发 console)。"""
+        async with self._lock:
+            fut = self._http_pending.pop(req_id, None)
+        if fut is None or fut.done():
+            return False
+        fut.set_result(payload)
+        return True
+
+    async def cancel_http_request(self, req_id: str) -> None:
+        """超时/设备掉线时清理登记,避免 pending 泄漏。"""
+        async with self._lock:
+            self._http_pending.pop(req_id, None)
 
     async def is_online(self, device_id: str) -> bool:
         async with self._lock:
@@ -1252,6 +1283,155 @@ async def remote_device_revoke(device_id: str, u: sqlite3.Row = Depends(actor)) 
     return {"ok": True}
 
 
+# ─────────────────────────── endpoints: 个人网页短链绑定 + 公网中转 ───────────────────────────
+_SITE_SLUG_RE = re.compile(r"[a-z0-9][a-z0-9-]{1,30}")
+_SITE_REQUEST_TIMEOUT_S = 15.0
+
+
+def _site_public_url(slug: str) -> str:
+    base = os.environ.get("PUBLIC_BASE_URL", "https://api.octoapk.com").rstrip("/")
+    return f"{base}/u/{slug}/"
+
+
+def _load_site(slug: str) -> sqlite3.Row | None:
+    with closing(db()) as c:
+        return c.execute("SELECT * FROM remote_sites WHERE slug = ?", (slug,)).fetchone()
+
+
+@app.post("/remote/sites/bind")
+def remote_site_bind(body: dict[str, Any], u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    """把一个公开短链 slug 绑定到自己名下的某台设备,访客即可 /u/<slug>/ 访问该机的个人网页。"""
+    slug = str(body.get("slug", "")).strip().lower()
+    device_id = str(body.get("deviceId", "")).strip()
+    if not _SITE_SLUG_RE.fullmatch(slug):
+        raise HTTPException(status_code=400, detail="短链仅限小写字母/数字/连字符,2-31 位且以字母或数字开头")
+    with closing(db()) as c:
+        dev = c.execute("SELECT user_id FROM remote_devices WHERE device_id = ?", (device_id,)).fetchone()
+        if dev is None or dev["user_id"] != u["user_id"]:
+            raise HTTPException(status_code=404, detail="设备不存在或不属于当前账号")
+        existing = c.execute("SELECT user_id FROM remote_sites WHERE slug = ?", (slug,)).fetchone()
+        if existing and existing["user_id"] != u["user_id"]:
+            raise HTTPException(status_code=409, detail="该短链已被占用")
+        c.execute(
+            "INSERT INTO remote_sites(slug, user_id, device_id, created_at, updated_at, disabled) "
+            "VALUES(?,?,?,?,?,0) "
+            "ON CONFLICT(slug) DO UPDATE SET device_id=excluded.device_id, "
+            "updated_at=excluded.updated_at, disabled=0",
+            (slug, u["user_id"], device_id, now_ms(), now_ms()),
+        )
+        c.commit()
+    return {"slug": slug, "deviceId": device_id, "publicUrl": _site_public_url(slug)}
+
+
+@app.get("/remote/sites")
+def remote_sites_list(u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    with closing(db()) as c:
+        rows = c.execute(
+            "SELECT slug, device_id, created_at, updated_at, disabled FROM remote_sites "
+            "WHERE user_id = ? ORDER BY updated_at DESC",
+            (u["user_id"],),
+        ).fetchall()
+    return {"items": [{
+        "slug": r["slug"],
+        "deviceId": r["device_id"],
+        "createdAt": r["created_at"],
+        "updatedAt": r["updated_at"],
+        "disabled": bool(r["disabled"]),
+        "publicUrl": _site_public_url(r["slug"]),
+    } for r in rows]}
+
+
+@app.post("/remote/sites/{slug}/unbind")
+def remote_site_unbind(slug: str, u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    with closing(db()) as c:
+        cur = c.execute(
+            "DELETE FROM remote_sites WHERE slug = ? AND user_id = ?",
+            (slug.strip().lower(), u["user_id"]),
+        )
+        c.commit()
+    if cur.rowcount == 0:
+        raise HTTPException(status_code=404, detail="短链不存在")
+    return {"ok": True}
+
+
+_SITE_OFFLINE_HTML = (
+    "<!doctype html><html lang=zh><meta charset=utf-8>"
+    "<meta name=viewport content='width=device-width,initial-scale=1'>"
+    "<title>主人不在线</title>"
+    "<style>body{font-family:-apple-system,system-ui,sans-serif;background:#0b0f17;color:#e6e8ee;"
+    "display:flex;min-height:100vh;margin:0;align-items:center;justify-content:center;text-align:center}"
+    "div{max-width:20rem;padding:2rem}h1{font-size:1.3rem;margin:.5rem 0}p{opacity:.7;line-height:1.6}</style>"
+    "<div><h1>📴 主人的手机暂时离线</h1><p>这个个人网页托管在主人手机上,现在连不上。"
+    "稍后再来看看吧。</p></div></html>"
+)
+_SITE_NOTFOUND_HTML = (
+    "<!doctype html><html lang=zh><meta charset=utf-8>"
+    "<meta name=viewport content='width=device-width,initial-scale=1'>"
+    "<title>站点不存在</title>"
+    "<style>body{font-family:-apple-system,system-ui,sans-serif;background:#0b0f17;color:#e6e8ee;"
+    "display:flex;min-height:100vh;margin:0;align-items:center;justify-content:center;text-align:center}"
+    "div{max-width:20rem;padding:2rem}h1{font-size:1.3rem;margin:.5rem 0}p{opacity:.7;line-height:1.6}</style>"
+    "<div><h1>🔍 站点不存在</h1><p>这个短链还没有绑定任何个人网页。</p></div></html>"
+)
+# 个人网页页面 CSP:内容与本 API 同源,但页面只可读、访客无任何 token,同源 fetch 打 /api 也拿 401。
+# 仍收紧 CSP + nosniff 兜底,连出仅限自身与图片。
+_SITE_PAGE_CSP = (
+    "default-src 'self'; img-src 'self' data: https:; media-src 'self' data: https:; "
+    "style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; "
+    "base-uri 'none'; form-action 'none'"
+)
+
+
+@app.api_route("/u/{slug}", methods=["GET", "HEAD"], include_in_schema=False)
+@app.api_route("/u/{slug}/{path:path}", methods=["GET", "HEAD"], include_in_schema=False)
+async def public_site(slug: str, request: Request, path: str = "") -> Response:
+    """公开、无鉴权:把访客请求经设备 WS 中转到手机,手机只回 filesDir/site 里的静态字节。
+    手机离线 → 503;短链无绑定 → 404;手机超时无回包 → 504。绝不触达任何带权控制通道。"""
+    binding = _load_site(slug.strip().lower())
+    if binding is None or binding["disabled"]:
+        return HTMLResponse(_SITE_NOTFOUND_HTML, status_code=404)
+    if ".." in path:
+        return PlainTextResponse("非法路径", status_code=400)
+    device_id = binding["device_id"]
+    if not await remote_hub.is_online(device_id):
+        return HTMLResponse(_SITE_OFFLINE_HTML, status_code=503)
+
+    req_id = secrets.token_hex(12)
+    fut = await remote_hub.open_http_request(req_id)
+    sent = await remote_hub.send_to_device(device_id, {
+        "type": "http",
+        "id": req_id,
+        "method": request.method,
+        "path": path or "index.html",  # 相对 site 根;手机侧再做 canonicalPath 沙箱
+    })
+    if not sent:
+        await remote_hub.cancel_http_request(req_id)
+        return HTMLResponse(_SITE_OFFLINE_HTML, status_code=503)
+    try:
+        reply = await asyncio.wait_for(fut, timeout=_SITE_REQUEST_TIMEOUT_S)
+    except asyncio.TimeoutError:
+        await remote_hub.cancel_http_request(req_id)
+        return PlainTextResponse("设备响应超时", status_code=504)
+
+    status = int(reply.get("status", 200) or 200)
+    body = b""
+    b64 = reply.get("bodyB64")
+    if b64:
+        try:
+            body = base64.b64decode(b64)
+        except Exception:
+            body = b""
+    media = str(reply.get("contentType") or "application/octet-stream")
+    if request.method == "HEAD":
+        body = b""
+    return Response(content=body, status_code=status, media_type=media, headers={
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+        "Content-Security-Policy": _SITE_PAGE_CSP,
+        "Referrer-Policy": "no-referrer",
+    })
+
+
 @app.get("/remote/console", response_class=HTMLResponse)
 @app.get("/remote/console/", response_class=HTMLResponse)
 def remote_console_page() -> HTMLResponse:
@@ -1291,6 +1471,9 @@ async def remote_device_ws(ws: WebSocket, device_id: str = "", device_token: str
                 msg.setdefault("deviceId", device_id)
                 if msg.get("type") == "device_info":
                     await remote_hub.update_device_info(device_id, msg)
+                elif msg.get("type") == "http_response":
+                    # 个人网页隧道回包:兑现对应 /u 请求的 Future,不外泄给控制台。
+                    await remote_hub.resolve_http_response(str(msg.get("id", "")), msg)
                 else:
                     await remote_hub.send_to_consoles(device_id, msg)
     except WebSocketDisconnect:
