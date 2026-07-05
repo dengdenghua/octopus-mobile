@@ -35,6 +35,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
@@ -203,8 +204,29 @@ fun BrowserScreen(
         // 背景
         BrowserWallpaper()
 
-        // 内容层
+        // 内容层:网页在上,地址栏移到底部(手机习惯)
         Column(modifier = Modifier.fillMaxSize()) {
+            BrowserWebViewWithHome(
+                engine = engine,
+                isHomeVisible = isHomeVisible,
+                onOpenUrl = { url -> url?.takeIf { it.isNotBlank() }?.let { navigate(it) } },
+                onClose = onClose,
+                modifier = Modifier.weight(1f).statusBarsPadding(),
+            )
+
+            // 进度条(贴在底部地址栏上方)
+            if (isLoading) {
+                LinearProgressIndicator(
+                    progress = { progress.coerceIn(0, 100) / 100f },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(2.dp),
+                    color = OctopusColors.Primary,
+                    trackColor = Color.Transparent,
+                )
+            }
+
+            // 底部地址栏 —— 含 菜单/窗口(合并了原浮动底栏)
             BrowserTopBar(
                 urlText = urlText,
                 onUrlTextChange = { urlText = it },
@@ -227,44 +249,39 @@ fun BrowserScreen(
                         }
                     }
                 },
-                modifier = Modifier.statusBarsPadding(),
+                onSettingsClick = { showSettings = true },
+                onWindowsClick = { showWindows = true },
+                windowCount = BrowserTabsStore.count().coerceAtLeast(1),
+                modifier = Modifier.navigationBarsPadding(),
             )
-
-            BrowserWebViewWithHome(
-                engine = engine,
-                isHomeVisible = isHomeVisible,
-                onOpenUrl = { url -> url?.takeIf { it.isNotBlank() }?.let { navigate(it) } },
-                onClose = onClose,
-                modifier = Modifier.weight(1f),
-            )
-
-            // 进度条
-            if (isLoading) {
-                LinearProgressIndicator(
-                    progress = { progress.coerceIn(0, 100) / 100f },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(2.dp),
-                    color = OctopusColors.Primary,
-                    trackColor = Color.Transparent,
-                )
-            }
         }
 
-        // 底栏
+        // 悬浮 AI 气泡:取代底栏里的「问 AI」按钮,右下、抬高一点,浮在网页内容上
         AnimatedVisibility(
             visible = !isHomeVisible,
             enter = fadeIn(),
             exit = fadeOut(),
-            modifier = Modifier.align(Alignment.BottomCenter),
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .navigationBarsPadding()
+                .padding(end = 18.dp, bottom = 96.dp),
         ) {
-            BrowserBottomBar(
-                windowCount = BrowserTabsStore.count().coerceAtLeast(1),
-                onSettingsClick = { showSettings = true },
-                onAiClick = { showAi = true },
-                onWindowsClick = { showWindows = true },
-                modifier = Modifier.navigationBarsPadding(),
-            )
+            Box(
+                modifier = Modifier
+                    .size(54.dp)
+                    .shadow(10.dp, CircleShape)
+                    .clip(CircleShape)
+                    .background(OctopusColors.Primary)
+                    .clickable { showAi = true },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "AI",
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = OctopusColors.OnPrimary,
+                )
+            }
         }
 
         // 各种 Sheet / Dialog
@@ -350,6 +367,9 @@ private fun BrowserTopBar(
     onHomeClick: () -> Unit,
     onRefreshClick: () -> Unit,
     onSubmit: () -> Unit,
+    onSettingsClick: () -> Unit,
+    onWindowsClick: () -> Unit,
+    windowCount: Int,
     modifier: Modifier = Modifier,
 ) {
     val textColor = OctopusColors.TextPrimary
@@ -368,6 +388,18 @@ private fun BrowserTopBar(
             modifier = Modifier.size(36.dp),
         ) {
             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.advanced_action_close), tint = mutedColor, modifier = Modifier.size(20.dp))
+        }
+
+        Spacer(Modifier.width(6.dp))
+
+        // 菜单(设置)—— 合并自原浮动底栏
+        BrowserCapsuleButton(onClick = onSettingsClick, modifier = Modifier.size(36.dp)) {
+            Icon(
+                Icons.Filled.Menu,
+                contentDescription = stringResource(R.string.browser_settings_title),
+                tint = mutedColor,
+                modifier = Modifier.size(20.dp),
+            )
         }
 
         Spacer(Modifier.width(6.dp))
@@ -444,55 +476,13 @@ private fun BrowserTopBar(
         BrowserCapsuleButton(onClick = onHomeClick, modifier = Modifier.size(36.dp)) {
             Icon(Icons.Filled.Home, contentDescription = stringResource(R.string.browser_home_button), tint = mutedColor, modifier = Modifier.size(20.dp))
         }
-    }
-}
 
-@Composable
-private fun BrowserBottomBar(
-    windowCount: Int,
-    onSettingsClick: () -> Unit,
-    onAiClick: () -> Unit,
-    onWindowsClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier = modifier
-            .padding(horizontal = 16.dp, vertical = 16.dp)
-            .wrapContentSize()
-            .clip(OctopusShape.xl)
-            .background(OctopusColors.Surface)
-            .border(
-                width = 1.dp,
-                color = OctopusColors.Border,
-                shape = OctopusShape.xl,
-            )
-            .padding(6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        BrowserCapsuleButton(onClick = onSettingsClick, modifier = Modifier.size(40.dp)) {
-            Icon(Icons.Filled.Menu, contentDescription = stringResource(R.string.browser_settings_title), tint = OctopusColors.TextPrimary, modifier = Modifier.size(22.dp))
-        }
+        Spacer(Modifier.width(6.dp))
 
-        BrowserCapsuleButton(
-            onClick = onAiClick,
-            modifier = Modifier
-                .padding(horizontal = 2.dp)
-                .height(40.dp)
-                .wrapContentWidth(),
-            backgroundColor = OctopusColors.Primary,
-        ) {
-            Text(
-                text = stringResource(R.string.browser_ask_ai_button),
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                color = OctopusColors.OnPrimary,
-                modifier = Modifier.padding(horizontal = 12.dp),
-            )
-        }
-
+        // 窗口数 —— 合并自原浮动底栏
         BrowserCapsuleButton(
             onClick = onWindowsClick,
-            modifier = Modifier.size(40.dp),
+            modifier = Modifier.size(36.dp),
             backgroundColor = OctopusColors.SurfaceVariant,
         ) {
             Text(

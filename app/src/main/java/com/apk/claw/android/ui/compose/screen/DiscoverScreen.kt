@@ -68,6 +68,7 @@ import com.apk.claw.android.ui.featurescreens.MultiWindowActivity
 import com.apk.claw.android.ui.featurescreens.RoutinesActivity
 import com.apk.claw.android.ui.featurescreens.VideoLibraryActivity
 import com.apk.claw.android.ui.compose.theme.OctopusBackground
+import androidx.compose.ui.window.Dialog
 import com.apk.claw.android.ui.compose.theme.OctopusColors
 import com.apk.claw.android.ui.compose.theme.OctopusIconSize
 import com.apk.claw.android.ui.compose.theme.OctopusLayout
@@ -91,10 +92,6 @@ private val BorderColor get() = OctopusColors.Border
 @Composable
 private fun BrowserHomeTextColor(): Color = TextPrimary
 
-/** 浏览器首页次级文字色。 */
-@Composable
-private fun BrowserHomeMutedTextColor(): Color = TextSecondary
-
 private enum class SearchMode { Web, Ai, All }
 
 private data class BrowserSearchOption(
@@ -114,6 +111,7 @@ private fun openBrowser(context: Context, query: String?) {
 }
 
 @Composable
+@Suppress("CyclomaticComplexMethod", "LongMethod")  // 桌面屏:状态 + LazyColumn + 文件夹/删除弹窗,天然偏长
 fun DiscoverScreen(onOpenUrl: ((String?) -> Unit)? = null) {
     val context = LocalContext.current
     // 默认：启动独立浏览器 Activity（底部导航 Tab 用）。
@@ -155,6 +153,7 @@ fun DiscoverScreen(onOpenUrl: ((String?) -> Unit)? = null) {
     val commonSites = remember(refreshTick) { CommonSiteStore.getAll() }
     var siteToDelete by remember { mutableStateOf<CommonSiteItem?>(null) }
     var appToDelete by remember { mutableStateOf<PluginManifest?>(null) }
+    var openFolder by remember { mutableStateOf<BrowserFolder?>(null) }
 
     val wallpaper = remember(refreshTick) { BrowserWallpaperStore.loadBitmap(context)?.asImageBitmap() }
     Box(modifier = Modifier.fillMaxSize()) {
@@ -176,15 +175,11 @@ fun DiscoverScreen(onOpenUrl: ((String?) -> Unit)? = null) {
         contentPadding = PaddingValues(
             start = OctopusSpacing.lg,
             end = OctopusSpacing.lg,
-            top = OctopusSpacing.sm,
+            top = HOME_TOP_GAP,
             bottom = OctopusLayout.bottomNavContentPadding,
         ),
         verticalArrangement = Arrangement.spacedBy(OctopusSpacing.md),
     ) {
-        item {
-            BrowserHomeTopBar()
-        }
-
         item {
             BrowserOmnibox(
                 value = query,
@@ -204,40 +199,22 @@ fun DiscoverScreen(onOpenUrl: ((String?) -> Unit)? = null) {
             )
         }
 
-        // ── 手机桌面主页式 launcher:每个数据类别一个分区标题 + 图标网格,直接铺在壁纸上 ──
-        // ── 我的应用(小程序):agent 可发现并操作的原生 app ──
-        if (miniApps.isNotEmpty()) {
-            item { LauncherSectionHeader(stringResource(R.string.browser_home_miniapps)) }
-            item {
-                MiniAppsSection(
-                    apps = miniApps,
-                    onLaunch = { id -> MiniAppRegistry.launch(context, id) },
-                    onLongPress = { appToDelete = it },
-                )
-            }
-        }
+        // 搜索框与应用图标之间多留白,别挤在一起
+        item { Spacer(Modifier.height(OctopusSpacing.lg)) }
 
-        // ── 书签 ──
-        if (bookmarks.isNotEmpty()) {
-            item { LauncherSectionHeader(stringResource(R.string.browser_home_bookmarks)) }
-            item { BookmarksSection(bookmarks = bookmarks) { openUrl(it) } }
+        // ── 极简手机桌面:统一图标网格(iOS/HyperOS 风),少分类;工具、书签收进文件夹 ──
+        item {
+            LauncherHomeGrid(
+                miniApps = miniApps,
+                commonSites = commonSites,
+                bookmarks = bookmarks,
+                onLaunchApp = { MiniAppRegistry.launch(context, it) },
+                onLongPressApp = { appToDelete = it },
+                onOpenSite = { openUrl(it) },
+                onLongPressSite = { siteToDelete = it },
+                onOpenFolder = { openFolder = it },
+            )
         }
-
-        // ── 常用网站(长按删除) ──
-        if (commonSites.isNotEmpty()) {
-            item { LauncherSectionHeader(stringResource(R.string.browser_home_common_sites)) }
-            item {
-                CommonSitesSection(
-                    sites = commonSites,
-                    onOpen = { openUrl(it) },
-                    onLongPress = { siteToDelete = it },
-                )
-            }
-        }
-
-        // ── 浏览器工具:从「广场 → 更多」分流来的浏览器相关工具(浏览器设置/多窗口/云盘/例程/视频库) ──
-        item { LauncherSectionHeader(stringResource(R.string.browser_home_tools)) }
-        item { BrowserToolsSection { context.startActivity(Intent(context, it)) } }
     }
     }
 
@@ -279,68 +256,42 @@ fun DiscoverScreen(onOpenUrl: ((String?) -> Unit)? = null) {
             },
         )
     }
-}
 
-@Composable
-private fun BrowserHomeTopBar() {
-    val calendar = remember { Calendar.getInstance() }
-    val monthText = remember {
-        SimpleDateFormat("MMM yyyy", Locale.getDefault()).format(calendar.time)
-    }
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        OctopusPanel(
-            modifier = Modifier.size(width = 76.dp, height = 60.dp),
-            shape = RoundedCornerShape(20.dp),
-            backgroundColor = PrimaryColor,
-            contentPadding = OctopusSpacing.xs,
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    calendar.get(Calendar.DAY_OF_MONTH).toString(),
-                    color = Color.White,
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.sp,
-                )
-                Text(monthText, color = Color.White.copy(alpha = 0.78f), fontSize = OctopusType.tag, maxLines = 1)
+    // 文件夹弹窗:工具 / 书签 的收纳,点开在卡片里铺图标网格(复用现成 Section)
+    openFolder?.let { folder ->
+        Dialog(onDismissRequest = { openFolder = null }) {
+            OctopusPanel(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(OctopusSpacing.md)) {
+                    Text(
+                        stringResource(
+                            if (folder == BrowserFolder.Tools) R.string.browser_home_tools
+                            else R.string.browser_home_bookmarks,
+                        ),
+                        color = TextPrimary,
+                        fontSize = OctopusType.bodyStrong,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    when (folder) {
+                        BrowserFolder.Tools -> BrowserToolsSection {
+                            openFolder = null
+                            context.startActivity(Intent(context, it))
+                        }
+                        BrowserFolder.Bookmarks -> BookmarksSection(bookmarks) {
+                            openFolder = null
+                            openUrl(it)
+                        }
+                    }
+                }
             }
         }
-        Spacer(Modifier.width(OctopusSpacing.md))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                stringResource(R.string.browser_home_title),
-                color = BrowserHomeTextColor(),
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 0.sp,
-            )
-            Text(
-                SimpleDateFormat("EEEE", Locale.getDefault()).format(calendar.time),
-                color = BrowserHomeMutedTextColor(),
-                fontSize = OctopusType.body,
-                maxLines = 1,
-            )
-        }
     }
-}
-
-/** launcher 分区标题(小程序 / 书签 / 常用网站 / 浏览器工具)—— 直接压在壁纸上,像手机桌面的分屏/分组标签。 */
-@Composable
-private fun LauncherSectionHeader(text: String) {
-    Text(
-        text,
-        color = BrowserHomeTextColor(),
-        fontSize = OctopusType.bodyStrong,
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(start = OctopusSpacing.xs, top = OctopusSpacing.xs),
-    )
 }
 
 /** 每行固定列数的 launcher 图标网格:最后一行落单补等宽 Spacer 保持左对齐(手机桌面观感)。 */
 private const val LAUNCHER_COLUMNS = 4
+
+/** 桌面整体下移量:搜索框不贴顶,重心往下一点。 */
+private val HOME_TOP_GAP = 40.dp
 
 /** 书签在首页最多铺两排图标(4 列 × 2 行),多的在浏览器书签页看全。 */
 private const val MAX_BOOKMARK_ICONS = LAUNCHER_COLUMNS * 2
@@ -363,9 +314,27 @@ private const val WALLPAPER_SCRIM_ALPHA = 0.32f
 @Composable
 private fun browserWallpaperBrush(): Brush = SolidColor(OctopusColors.Background)
 
-/** Google s2 favicon 服务地址;host 为空时返回 null,走各自的 fallback 图标。 */
+/** unavatar.io:按域名聚合各家真·官方 logo(Clearbit/Twitter/favicon…),比 s2 favicon 清晰;host 空返回 null。 */
 private fun faviconUrl(host: String): String? =
-    host.takeIf { it.isNotBlank() }?.let { "https://www.google.com/s2/favicons?sz=64&domain=$it" }
+    host.takeIf { it.isNotBlank() }?.let { "https://unavatar.io/$it" }
+
+/** 站点磁贴图标:官方 logo 铺满圆角磁贴;加载中/失败落回彩色首字母(比绿地球好看)。 */
+@Composable
+private fun SiteLogo(host: String, title: String, key: String) {
+    val url = faviconUrl(host)
+    if (url == null) {
+        MiniAppTileIcon(name = title, id = key)
+        return
+    }
+    coil.compose.SubcomposeAsyncImage(
+        model = url,
+        contentDescription = title,
+        modifier = Modifier.fillMaxSize().background(Color.White),
+        contentScale = ContentScale.Fit,
+        loading = { MiniAppTileIcon(name = title, id = key) },
+        error = { MiniAppTileIcon(name = title, id = key) },
+    )
+}
 
 /** 小程序图标配色:每个按 name+id 哈希取一组渐变 + 首字母,像真·App 图标一样彩色可区分。 */
 private val MINI_APP_GRADS = listOf(
@@ -398,88 +367,15 @@ private fun LauncherIconSquare(content: @Composable () -> Unit) {
     Box(modifier = Modifier.fillMaxSize().background(SurfaceColor), contentAlignment = Alignment.Center) { content() }
 }
 
-/** 我的小程序：[MiniAppRegistry] 里已注册的小程序（含 generate_app 现场生成的），点了直接启动;长按删除。 */
-@Composable
-private fun MiniAppsSection(
-    apps: List<PluginManifest>,
-    onLaunch: (String) -> Unit,
-    onLongPress: (PluginManifest) -> Unit,
-) {
-    LauncherGrid(apps) { m, mod ->
-        LauncherIcon(
-            label = m.name.ifBlank { m.id },
-            modifier = mod,
-            onClick = { onLaunch(m.id) },
-            onLongClick = { onLongPress(m) },
-        ) {
-            MiniAppTileIcon(name = m.name.ifBlank { m.id }, id = m.id)
-        }
-    }
-}
-
 /** 书签：[BookmarkManager] 里存的收藏，图标尝试用站点自己的 favicon.ico，加载失败落回书签图标。 */
 @Composable
 private fun BookmarksSection(bookmarks: List<BookmarkItem>, onOpen: (String) -> Unit) {
     LauncherGrid(bookmarks.take(MAX_BOOKMARK_ICONS)) { b, mod ->
         val host = remember(b.url) { urlHost(b.url) }
         LauncherIcon(label = b.title.ifBlank { host }, modifier = mod, onClick = { onOpen(b.url) }) {
-            LauncherIconSquare {
-                FaviconIcon(
-                    url = faviconUrl(host),
-                    tint = OctopusTints.CatKnowledge,
-                    fallback = Icons.Filled.Bookmark,
-                    contentDescription = b.title,
-                )
-            }
+            SiteLogo(host = host, title = b.title.ifBlank { host }, key = b.url)
         }
     }
-}
-
-/**
- * 常用网站：[CommonSiteStore] 里存的站点(首次为内置默认值)。长按删除——添加走浏览器内
- * "收藏"弹窗的"添加到主页"，不在这个首页单独做加号入口。
- */
-@Composable
-private fun CommonSitesSection(
-    sites: List<CommonSiteItem>,
-    onOpen: (String) -> Unit,
-    onLongPress: (CommonSiteItem) -> Unit,
-) {
-    LauncherGrid(sites) { site, mod ->
-        val host = remember(site.url) { urlHost(site.url) }
-        LauncherIcon(
-            label = site.title.ifBlank { host },
-            modifier = mod,
-            onClick = { onOpen(site.url) },
-            onLongClick = { onLongPress(site) },
-        ) {
-            LauncherIconSquare {
-                FaviconIcon(
-                    url = faviconUrl(host),
-                    tint = OctopusTints.CatKnowledge,
-                    fallback = Icons.Filled.Public,
-                    contentDescription = site.title,
-                )
-            }
-        }
-    }
-}
-
-/** favicon 加载中/失败都落回同一个矢量图标兜底，三个小节共用，别各写一份。 */
-@Composable
-private fun FaviconIcon(url: String?, tint: Color, fallback: ImageVector, contentDescription: String?) {
-    if (url == null) {
-        Icon(fallback, contentDescription = null, tint = tint, modifier = Modifier.size(OctopusIconSize.medium))
-        return
-    }
-    coil.compose.SubcomposeAsyncImage(
-        model = url,
-        contentDescription = contentDescription,
-        modifier = Modifier.size(20.dp).clip(RoundedCornerShape(6.dp)),
-        contentScale = ContentScale.Fit,
-        loading = { Icon(fallback, contentDescription = null, tint = tint, modifier = Modifier.size(OctopusIconSize.medium)) },
-        error = { Icon(fallback, contentDescription = null, tint = tint, modifier = Modifier.size(OctopusIconSize.medium)) },
-    )
 }
 
 @Composable
@@ -642,6 +538,92 @@ private fun OctopusPanel(
 }
 
 /** 从「广场 → 更多」分流来的浏览器相关工具入口(市场重构第二阶段)。 */
+private enum class BrowserFolder { Tools, Bookmarks }
+
+/** 统一桌面网格的一格:小程序 / 常用网站 / 文件夹 三态。 */
+private sealed interface LauncherEntry {
+    data class App(val manifest: PluginManifest) : LauncherEntry
+    data class Site(val site: CommonSiteItem) : LauncherEntry
+    data class Folder(val folder: BrowserFolder, val labelRes: Int) : LauncherEntry
+}
+
+/** 统一桌面网格:小程序 + 常用网站 铺图标,工具/书签各收一个文件夹 tile(点开走 onOpenFolder)。 */
+@Composable
+private fun LauncherHomeGrid(
+    miniApps: List<PluginManifest>,
+    commonSites: List<CommonSiteItem>,
+    bookmarks: List<BookmarkItem>,
+    onLaunchApp: (String) -> Unit,
+    onLongPressApp: (PluginManifest) -> Unit,
+    onOpenSite: (String) -> Unit,
+    onLongPressSite: (CommonSiteItem) -> Unit,
+    onOpenFolder: (BrowserFolder) -> Unit,
+) {
+    val entries = buildList {
+        miniApps.forEach { add(LauncherEntry.App(it)) }
+        commonSites.forEach { add(LauncherEntry.Site(it)) }
+        add(LauncherEntry.Folder(BrowserFolder.Tools, R.string.browser_home_tools))
+        if (bookmarks.isNotEmpty()) {
+            add(LauncherEntry.Folder(BrowserFolder.Bookmarks, R.string.browser_home_bookmarks))
+        }
+    }
+    LauncherGrid(entries) { entry, mod ->
+        when (entry) {
+            is LauncherEntry.App -> {
+                val name = entry.manifest.name.ifBlank { entry.manifest.id }
+                LauncherIcon(
+                    label = name,
+                    modifier = mod,
+                    onClick = { onLaunchApp(entry.manifest.id) },
+                    onLongClick = { onLongPressApp(entry.manifest) },
+                ) { MiniAppTileIcon(name = name, id = entry.manifest.id) }
+            }
+            is LauncherEntry.Site -> {
+                val host = urlHost(entry.site.url)
+                LauncherIcon(
+                    label = entry.site.title.ifBlank { host },
+                    modifier = mod,
+                    onClick = { onOpenSite(entry.site.url) },
+                    onLongClick = { onLongPressSite(entry.site) },
+                ) { SiteLogo(host = host, title = entry.site.title.ifBlank { host }, key = entry.site.url) }
+            }
+            is LauncherEntry.Folder -> LauncherIcon(
+                label = stringResource(entry.labelRes),
+                modifier = mod,
+                onClick = { onOpenFolder(entry.folder) },
+            ) { FolderIcon(folder = entry.folder, bookmarks = bookmarks) }
+        }
+    }
+}
+
+/** 文件夹图标:iOS/HyperOS 风,圆角磨砂底 + 2×2 内容预览小图标。 */
+@Composable
+@Suppress("MagicNumber")  // 文件夹预览小图标的间距/尺寸,就地写数值更直观
+private fun FolderIcon(folder: BrowserFolder, bookmarks: List<BookmarkItem>) {
+    val previews: List<Pair<ImageVector, Color>> = when (folder) {
+        BrowserFolder.Tools -> BROWSER_TOOLS.take(4).map { it.icon to it.tint }
+        BrowserFolder.Bookmarks ->
+            List(minOf(4, bookmarks.size).coerceAtLeast(1)) { Icons.Filled.Bookmark to OctopusTints.CatKnowledge }
+    }
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .clip(RoundedCornerShape(16.dp))
+            .background(SurfaceColor.copy(alpha = 0.55f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            previews.chunked(2).forEach { pair ->
+                Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                    pair.forEach { (ic, tint) ->
+                        Icon(ic, contentDescription = null, tint = tint, modifier = Modifier.size(13.dp))
+                    }
+                }
+            }
+        }
+    }
+}
+
 private data class BrowserToolEntry(
     val labelRes: Int,
     val descRes: Int,
