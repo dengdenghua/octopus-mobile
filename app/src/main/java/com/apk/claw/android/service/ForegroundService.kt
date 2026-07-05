@@ -12,7 +12,6 @@ import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.apk.claw.android.R
-import com.apk.claw.android.server.ConfigServerManager
 import com.apk.claw.android.ui.home.HomeActivity
 import com.apk.claw.android.utils.XLog
 
@@ -36,8 +35,9 @@ class ForegroundService : Service() {
          * 检查进程是否已被保活（前台服务或无障碍服务前台状态）
          */
         fun isRunning(): Boolean {
-            // 无障碍服务自身已作为前台服务运行时，进程已被保活
-            if (ClawAccessibilityService.isRunning()) return true
+            // 无障碍服务自身已作为前台服务运行时，进程已被保活。
+            // 用 isConnected 不用 isRunning:enabled 列表回退会在服务已死的窗口误判「已保活」。
+            if (ClawAccessibilityService.isConnected()) return true
             return _isRunning
         }
 
@@ -86,18 +86,18 @@ class ForegroundService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         _isRunning = false
-        ConfigServerManager.stop()
-        // 只有当无障碍服务未运行时才需要重启本服务保活进程；
-        // 若无障碍服务在运行，它自身已作为前台服务保活，无需重启本服务。
-        if (!ClawAccessibilityService.isRunning()) {
+        // ConfigServer(:9527)不归本服务所有(由设置页/生命周期管理器/远程网关按需启停),
+        // 这里不能停:降级弹回时进程仍活着,停了没人再拉起。
+        // 只有无障碍未实际连接时,本服务的销毁才意味着保活缺位,需要排闹钟重启。
+        if (!ClawAccessibilityService.isConnected()) {
             scheduleRestart(0)
         }
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
-        // 同 onDestroy：仅当无障碍服务未运行时才需要保活重启
-        if (!ClawAccessibilityService.isRunning()) {
+        // 同 onDestroy：仅当无障碍服务未实际连接时才需要保活重启
+        if (!ClawAccessibilityService.isConnected()) {
             scheduleRestart(1)
         }
     }
@@ -118,17 +118,26 @@ class ForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // 如果无障碍服务已经在运行且自己是前台服务，本服务可以降级——
-        // ClawAccessibilityService 自身已通过 startForeground 保活进程，无需双通知
-        if (ClawAccessibilityService.isRunning()) {
+        // 如果无障碍服务实际连接中且自己是前台服务，本服务可以降级——
+        // ClawAccessibilityService 自身已通过 startForeground 保活进程，无需双通知。
+        // 必须用 isConnected:enabled 列表回退会在「列表仍启用但服务已死」时误降级,保活全丢。
+        if (ClawAccessibilityService.isConnected()) {
             XLog.i(TAG, "A11y service already foreground, stopping this duplicate foreground")
+            // FGS 契约:凡经 startForegroundService 拉起,必须先调一次 startForeground 才能停,
+            // 否则 AMS 异步抛 RemoteServiceException(runCatching 拦不住)炸掉托管无障碍的进程,
+            // 反复崩溃触发系统自动禁用无障碍 ——「侧滑清任务无障碍开关被扳关」的确定性根因
+            // (2026-07-05 定位)。先履约提升,再用 REMOVE 收走重复通知(DETACH 会留孤儿通知)。
+            runCatching { startForeground(NOTIFICATION_ID, createNotification()) }
+                .onFailure { android.util.Log.w("ForegroundService", "contract startForeground failed: ${it.message}") }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                stopForeground(STOP_FOREGROUND_DETACH)
+                stopForeground(STOP_FOREGROUND_REMOVE)
             } else {
                 @Suppress("DEPRECATION")
                 stopForeground(true)
             }
-            stopSelf()
+            // stopSelf(startId) 而非 stopSelf():若并发的 startForegroundService 已插队重新
+            // 武装 fgRequired,AMS 会拒绝本次拆除,让新 onStartCommand 重新履约,避免带契约自停
+            stopSelf(startId)
             return START_NOT_STICKY
         }
         val notification = createNotification()

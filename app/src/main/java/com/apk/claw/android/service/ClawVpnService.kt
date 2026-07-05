@@ -37,7 +37,9 @@ class ClawVpnService : VpnService() {
         private const val VPN_ROUTE = "0.0.0.0"
         private const val VPN_DNS = "8.8.8.8"
         private const val CHANNEL_ID = "vpn_channel"
-        private const val NOTIFICATION_ID = 1001
+        // 不能与 ForegroundService(1001)/无障碍(1002) 撞车:保活降级的 stopForeground(REMOVE)
+        // 按 ID 取消通知,撞车会误伤正在运行的 VPN 通知
+        private const val NOTIFICATION_ID = 1003
 
         // IP 包解析常量
         private const val IP_HEADER_MIN_LEN = 20

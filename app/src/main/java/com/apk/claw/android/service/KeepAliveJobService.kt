@@ -84,7 +84,9 @@ class KeepAliveJobService : JobService() {
             return false
         }
 
-        val a11yRunning = ClawAccessibilityService.isRunning()
+        // 用 isConnected 不用 isRunning:巡检要的是「服务真活着」,enabled 列表回退会在
+        // 服务已死但列表仍启用的窗口(如崩溃惩罚期)误判在跑,跳过自愈和恢复。
+        val a11yRunning = ClawAccessibilityService.isConnected()
         val fgsRunning = ForegroundService.isRunning()
         XLog.i(TAG, "KeepAlive tick — a11y=$a11yRunning fgs=$fgsRunning")
 
