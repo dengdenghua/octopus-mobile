@@ -1,6 +1,7 @@
 package com.apk.claw.android.ui.featurescreens
 
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -12,6 +13,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,8 +26,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.apk.claw.android.R
-import com.apk.claw.android.octopus_mobile.browser.BrowserEngineFactory
 import com.apk.claw.android.octopus_mobile.browser.SearchEngines
+import com.apk.claw.android.octopus_mobile.browser.SystemWebViewEngine
 import com.apk.claw.android.utils.KVUtils
 
 /**
@@ -39,15 +42,21 @@ class BrowserSettingsActivity : ComponentActivity() {
 }
 
 private val ChipBg = Color(0xFF1A2029)
+private const val ZOOM_SMALL = 85
+private const val ZOOM_NORMAL = 100
+private const val ZOOM_LARGE = 120
+private const val ZOOM_XLARGE = 150
 
 @Composable
 private fun BrowserSettingsScreen(onBack: () -> Unit) {
     val ctx = LocalContext.current
     var engineId by remember { mutableStateOf(KVUtils.getSearchEngine()) }
-    val kernel = remember { runCatching { BrowserEngineFactory.selectBest(ctx).name }.getOrDefault("—") }
+    var desktopMode by remember { mutableStateOf(KVUtils.getBrowserDesktopMode()) }
+    var textZoom by remember { mutableIntStateOf(KVUtils.getBrowserTextZoom()) }
 
     FeatureScaffold(title = stringResource(R.string.browser_settings_title), onBack = onBack) {
         Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+            // 默认搜索引擎(改动即时,搜索框也读同一偏好)。
             FSectionTitle(stringResource(R.string.browser_settings_search_engine))
             GroupCard {
                 SearchEngines.ALL.forEachIndexed { i, e ->
@@ -61,17 +70,106 @@ private fun BrowserSettingsScreen(onBack: () -> Unit) {
                 }
             }
 
-            FSectionTitle(stringResource(R.string.browser_settings_engine_kernel))
+            // 浏览:桌面模式 + 文字大小(下次打开页面/刷新生效)。
+            FSectionTitle(stringResource(R.string.browser_settings_browsing))
             GroupCard {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
-                ) {
-                    Text(stringResource(R.string.browser_settings_engine_kernel), color = FText, fontSize = 16.sp, modifier = Modifier.weight(1f))
-                    Text(kernel, color = FMuted, fontSize = 14.sp)
-                }
+                SwitchRow(
+                    title = stringResource(R.string.browser_settings_desktop_mode),
+                    subtitle = stringResource(R.string.browser_settings_desktop_mode_hint),
+                    checked = desktopMode,
+                    onCheckedChange = { desktopMode = it; KVUtils.setBrowserDesktopMode(it) },
+                )
+                RowDivider()
+                TextSizeRow(
+                    current = textZoom,
+                    onSelect = { textZoom = it; KVUtils.setBrowserTextZoom(it) },
+                )
+            }
+
+            // 清除浏览数据:缓存 / Cookie / 网站存储。
+            FSectionTitle(stringResource(R.string.browser_settings_clear_data))
+            GroupCard {
+                ClickableRow(
+                    title = stringResource(R.string.browser_settings_clear_data),
+                    subtitle = stringResource(R.string.browser_settings_clear_data_hint),
+                    onClick = {
+                        SystemWebViewEngine.clearBrowsingData(ctx)
+                        Toast.makeText(ctx, ctx.getString(R.string.browser_settings_cleared), Toast.LENGTH_SHORT).show()
+                    },
+                )
             }
             Spacer(Modifier.height(24.dp))
+        }
+    }
+}
+
+@Composable
+private fun SwitchRow(title: String, subtitle: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, color = FText, fontSize = 16.sp)
+            Text(subtitle, color = FMuted, fontSize = 13.sp)
+        }
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = FPrimary,
+                checkedTrackColor = FPrimary.copy(alpha = 0.3f),
+            ),
+        )
+    }
+}
+
+@Composable
+private fun TextSizeRow(current: Int, onSelect: (Int) -> Unit) {
+    val options = listOf(
+        stringResource(R.string.browser_settings_text_small) to ZOOM_SMALL,
+        stringResource(R.string.browser_settings_text_normal) to ZOOM_NORMAL,
+        stringResource(R.string.browser_settings_text_large) to ZOOM_LARGE,
+        stringResource(R.string.browser_settings_text_xlarge) to ZOOM_XLARGE,
+    )
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+    ) {
+        Text(
+            stringResource(R.string.browser_settings_text_size),
+            color = FText, fontSize = 16.sp, modifier = Modifier.weight(1f),
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            options.forEach { (label, zoom) ->
+                val on = zoom == current
+                Box(
+                    modifier = Modifier
+                        .background(if (on) FPrimary.copy(alpha = 0.18f) else ChipBg, RoundedCornerShape(8.dp))
+                        .clickable { onSelect(zoom) }
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                ) {
+                    Text(
+                        label,
+                        color = if (on) FPrimary else FMuted,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ClickableRow(title: String, subtitle: String, onClick: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 10.dp),
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, color = FText, fontSize = 16.sp)
+            Text(subtitle, color = FMuted, fontSize = 13.sp)
         }
     }
 }

@@ -851,6 +851,17 @@
     <string name="browser_settings_title">浏览器设置</string>
     <string name="browser_settings_search_engine">默认搜索引擎</string>
     <string name="browser_settings_engine_kernel">浏览器内核</string>
+    <string name="browser_settings_browsing">浏览</string>
+    <string name="browser_settings_desktop_mode">桌面模式</string>
+    <string name="browser_settings_desktop_mode_hint">以电脑版网页显示</string>
+    <string name="browser_settings_text_size">文字大小</string>
+    <string name="browser_settings_text_small">小</string>
+    <string name="browser_settings_text_normal">标准</string>
+    <string name="browser_settings_text_large">大</string>
+    <string name="browser_settings_text_xlarge">特大</string>
+    <string name="browser_settings_clear_data">清除浏览数据</string>
+    <string name="browser_settings_clear_data_hint">缓存 · Cookie · 网站数据</string>
+    <string name="browser_settings_cleared">已清除</string>
     <string name="browser_settings_kernel_value">自动选择</string>
     <string name="feat_browser_settings">浏览器设置</string>
     <string name="settings_remote_pc_title">远程控制电脑</string>

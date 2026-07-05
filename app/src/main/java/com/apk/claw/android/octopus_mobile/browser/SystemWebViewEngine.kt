@@ -71,7 +71,8 @@ class SystemWebViewEngine : BrowserEngine {
             builtInZoomControls = true
             displayZoomControls = false
             setSupportZoom(true)
-            textZoom = 100
+            // 文字大小:浏览器设置里可调(默认 100)。
+            textZoom = com.apk.claw.android.utils.KVUtils.getBrowserTextZoom()
 
             allowFileAccess = true
             allowContentAccess = true
@@ -82,7 +83,10 @@ class SystemWebViewEngine : BrowserEngine {
 
             mediaPlaybackRequiresUserGesture = false
 
-            userAgentString = DESKTOP_CHROME_UA
+            // 桌面模式:开(默认)→ 桌面版 Chrome UA;关 → 保留 WebView 默认移动 UA。浏览器设置里可切。
+            if (com.apk.claw.android.utils.KVUtils.getBrowserDesktopMode()) {
+                userAgentString = DESKTOP_CHROME_UA
+            }
 
             // 安全:HTTPS 页面只放行被动混合内容(图片等),拦截 HTTP 脚本/iframe,
             // 防中间人注入。ALWAYS_ALLOW 会让"安全"连接被降级,改用 COMPATIBILITY。
@@ -275,5 +279,18 @@ class SystemWebViewEngine : BrowserEngine {
         private const val DESKTOP_CHROME_UA =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+
+        /** 清除浏览数据:Cookie + 网站存储(localStorage/IndexedDB)+ 缓存 + 表单。供浏览器设置调用。 */
+        fun clearBrowsingData(context: Context) {
+            runCatching {
+                android.webkit.CookieManager.getInstance().apply { removeAllCookies(null); flush() }
+                android.webkit.WebStorage.getInstance().deleteAllData()
+                val wv = WebView(context)
+                wv.clearCache(true)
+                wv.clearFormData()
+                wv.clearHistory()
+                wv.destroy()
+            }
+        }
     }
 }

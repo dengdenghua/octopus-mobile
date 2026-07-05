@@ -322,6 +322,22 @@ object KVUtils {
 
     fun setSearchEngine(id: String) = putString(KEY_SEARCH_ENGINE, id)
 
+    // 浏览器设置:桌面模式(默认 true=保持原有桌面 UA 行为)+ 文字大小(textZoom 百分比,默认 100)。
+    private const val KEY_BROWSER_DESKTOP_MODE = "KEY_BROWSER_DESKTOP_MODE"
+    private const val KEY_BROWSER_TEXT_ZOOM = "KEY_BROWSER_TEXT_ZOOM"
+    private const val BROWSER_TEXT_ZOOM_DEFAULT = 100
+    private const val BROWSER_TEXT_ZOOM_MIN = 50
+    private const val BROWSER_TEXT_ZOOM_MAX = 200
+
+    fun getBrowserDesktopMode(): Boolean = getBoolean(KEY_BROWSER_DESKTOP_MODE, true)
+
+    fun setBrowserDesktopMode(on: Boolean) = putBoolean(KEY_BROWSER_DESKTOP_MODE, on)
+
+    fun getBrowserTextZoom(): Int = getInt(KEY_BROWSER_TEXT_ZOOM, BROWSER_TEXT_ZOOM_DEFAULT)
+
+    fun setBrowserTextZoom(percent: Int) =
+        putInt(KEY_BROWSER_TEXT_ZOOM, percent.coerceIn(BROWSER_TEXT_ZOOM_MIN, BROWSER_TEXT_ZOOM_MAX))
+
     /** 明亮主题开关(默认 false=深色)。OctopusColors.isLight 启动时据此初始化。 */
     fun isLightTheme(): Boolean = getBoolean("KEY_LIGHT_THEME", false)
     fun setLightTheme(light: Boolean) = putBoolean("KEY_LIGHT_THEME", light)

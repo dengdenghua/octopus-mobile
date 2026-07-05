@@ -728,6 +728,17 @@
     <string name="browser_settings_title">ブラウザ設定</string>
     <string name="browser_settings_search_engine">既定の検索エンジン</string>
     <string name="browser_settings_engine_kernel">エンジン</string>
+    <string name="browser_settings_browsing">表示</string>
+    <string name="browser_settings_desktop_mode">デスクトップ表示</string>
+    <string name="browser_settings_desktop_mode_hint">PC版サイトで表示</string>
+    <string name="browser_settings_text_size">文字サイズ</string>
+    <string name="browser_settings_text_small">小</string>
+    <string name="browser_settings_text_normal">標準</string>
+    <string name="browser_settings_text_large">大</string>
+    <string name="browser_settings_text_xlarge">特大</string>
+    <string name="browser_settings_clear_data">閲覧データを削除</string>
+    <string name="browser_settings_clear_data_hint">キャッシュ · Cookie · サイトデータ</string>
+    <string name="browser_settings_cleared">削除しました</string>
     <string name="browser_settings_kernel_value">自動選択</string>
     <string name="feat_browser_settings">ブラウザ設定</string>
     <string name="settings_remote_pc_title">PCをリモート操作</string>
