@@ -31,8 +31,9 @@ import asyncio
 from contextlib import closing
 from typing import Any
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 
 # ─────────────────────────── 配置(env 可覆盖) ───────────────────────────
 DB_PATH = os.environ.get("OCTO_DB", os.path.join(os.path.dirname(__file__), "octo.db"))
@@ -109,6 +110,20 @@ CREDIT_PRICE = float(os.environ.get("CREDIT_PRICE", "0.05"))        # ¥/积分(
 # 创作者分成比例(用户支付 100 积分 → 创作者得 70,平台得 30)。
 # 创作者收益以积分形式发放(不可提现),用于驱动 LLM 再创作,形成数据飞轮。
 CREATOR_REVENUE_SHARE = float(os.environ.get("CREATOR_REVENUE_SHARE", "0.7"))
+# ── 广场图文帖图片存储(本地文件, MVP 方案; 后续可平滑迁移 OSS) ──
+# 上传根目录:服务端进程工作目录下的 uploads/(生产用 nginx 直接 alias 此目录到 /static/)
+UPLOAD_DIR = os.environ.get("UPLOAD_DIR", os.path.join(os.path.dirname(__file__), "uploads"))
+# 图片对外暴露的 URL 前缀。客户端用此 + 文件名拼成完整 URL。
+# 本地直跑 FastAPI 时用 /static/<file>;生产 nginx alias 时也用 /static/<file> 保持一致。
+UPLOAD_URL_PREFIX = os.environ.get("UPLOAD_URL_PREFIX", "/static")
+# 单图上限 8MB(图文帖不需要原图,客户端压缩后再传);总计上限 9 张图/帖。
+MAX_IMAGE_BYTES = int(os.environ.get("MAX_IMAGE_BYTES", str(8 * 1024 * 1024)))
+MAX_IMAGES_PER_POST = int(os.environ.get("MAX_IMAGES_PER_POST", "9"))
+# 允许的图片 MIME(白名单,防伪装扩展名)
+ALLOWED_IMAGE_MIME = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+# 广场发帖限流(每分钟每用户)
+SQUARE_POST_RATE_PER_MINUTE = int(os.environ.get("SQUARE_POST_RATE_PER_MINUTE", "5"))
+SQUARE_COMMENT_RATE_PER_MINUTE = int(os.environ.get("SQUARE_COMMENT_RATE_PER_MINUTE", "20"))
 # 是否仍吃 qwen 免费额度:决定「当前」成本口径(True→当前上游≈0;满负荷口径恒按真实价)
 QWEN_FREE_QUOTA = os.environ.get("QWEN_FREE_QUOTA", "1") not in ("0", "false", "False", "")
 # 无限额度白名单(管理员/内部账号邮箱):走中转不预扣、不扣费、不被余额拦,仍记 usage_log(credits=0)。
@@ -403,6 +418,12 @@ def init_db() -> None:
                 source TEXT NOT NULL, detail TEXT DEFAULT '', ref_id TEXT DEFAULT '',
                 ts INTEGER NOT NULL
             );
+            -- 幂等键:防同一笔支付被客户端重试/双击重复扣款(见 /plugin/pay)。
+            -- (user_id, key) 复合主键:key 由客户端生成(建议 UUID),按用户隔离,重复插入即冲突。
+            CREATE TABLE IF NOT EXISTS idempotency_keys(
+                user_id TEXT NOT NULL, key TEXT NOT NULL, scope TEXT NOT NULL DEFAULT '',
+                ts INTEGER NOT NULL, PRIMARY KEY(user_id, key)
+            );
             CREATE TABLE IF NOT EXISTS device_reports(
                 id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL,
                 device_id TEXT NOT NULL, report_type TEXT NOT NULL,
@@ -448,6 +469,53 @@ def init_db() -> None:
                 client_ip TEXT DEFAULT '',
                 created_at INTEGER NOT NULL
             );
+            -- ── 广场图文帖(小红书式) ──
+            -- 与 registry_assets(小程序资产)分表:语义/审核流程/权限模型不同,混用会让创作者分成
+            -- 与下载计数纠缠。帖子走独立表 + 独立审核队列。
+            CREATE TABLE IF NOT EXISTS square_posts(
+                id TEXT PRIMARY KEY,             -- "post/<uuid>"
+                author_id TEXT NOT NULL,
+                title TEXT NOT NULL,
+                content TEXT DEFAULT '',
+                cover_url TEXT DEFAULT '',        -- 第一张图 URL(冗余,列表用,避免解 images JSON)
+                images TEXT DEFAULT '[]',         -- JSON array of URL strings
+                tag TEXT DEFAULT '',
+                status TEXT DEFAULT 'pending',    -- pending | approved | rejected
+                reject_reason TEXT DEFAULT '',
+                moderation_status TEXT DEFAULT '',
+                moderation_reason TEXT DEFAULT '',
+                likes_count INTEGER NOT NULL DEFAULT 0,
+                comments_count INTEGER NOT NULL DEFAULT 0,
+                favorites_count INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS square_comments(
+                id TEXT PRIMARY KEY,             -- uuid
+                post_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                content TEXT NOT NULL,
+                parent_id TEXT DEFAULT '',        -- 父评论 id(空=顶级评论);二级回复用
+                created_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS square_likes(
+                post_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                PRIMARY KEY(post_id, user_id)
+            );
+            CREATE TABLE IF NOT EXISTS square_follows(
+                follower_id TEXT NOT NULL,        -- 关注者
+                followee_id TEXT NOT NULL,        -- 被关注者
+                created_at INTEGER NOT NULL,
+                PRIMARY KEY(follower_id, followee_id)
+            );
+            CREATE TABLE IF NOT EXISTS square_favorites(
+                user_id TEXT NOT NULL,
+                post_id TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                PRIMARY KEY(user_id, post_id)
+            );
             """
         )
         # 迁移:给已存在的 users 表补 email 列(幂等)
@@ -486,6 +554,12 @@ def init_db() -> None:
         c.execute("CREATE INDEX IF NOT EXISTS idx_device_reports_user ON device_reports(user_id, device_id, ts)")
         c.execute("CREATE INDEX IF NOT EXISTS idx_registry_type_status ON registry_assets(type, status, updated_at)")
         c.execute("CREATE INDEX IF NOT EXISTS idx_crash_reports_created ON crash_reports(created_at)")
+        # 广场图文帖索引(列表分页/作者主页/点赞查询)
+        c.execute("CREATE INDEX IF NOT EXISTS idx_square_posts_status_created ON square_posts(status, created_at DESC)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_square_posts_author ON square_posts(author_id, created_at DESC)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_square_comments_post ON square_comments(post_id, created_at)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_square_follows_followee ON square_follows(followee_id)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_square_favorites_user ON square_favorites(user_id)")
         # 迁移:给已存在的 remote_devices 表补新列(幂等)
         for _col in (
             "push_token TEXT DEFAULT ''", "os_version TEXT DEFAULT ''",
@@ -519,6 +593,12 @@ def init_db() -> None:
 @app.on_event("startup")
 def _startup() -> None:
     init_db()
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+
+# 静态文件服务:暴露 uploads/ 目录到 /static/<file>(图片 URL 用此前缀)
+# 生产环境建议 nginx 直接 alias 此目录,跳过 Python 处理;本地直跑用此 mount。
+app.mount(UPLOAD_URL_PREFIX, StaticFiles(directory=UPLOAD_DIR), name="static")
 
 
 # ─────────────────────────── auth ───────────────────────────
@@ -1519,10 +1599,397 @@ def goods(u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
     return {"items": [_present_goods(g) for g in GOODS]}
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# endpoints: square posts (小红书式图文帖)
+# ══════════════════════════════════════════════════════════════════════════════
+# 数据模型:square_posts(图文帖) + square_comments + square_likes + square_follows
+# + square_favorites。与 registry_assets(小程序资产)分表,语义/审核流程独立。
+# 图片存储:本地文件 + StaticFiles mount(后续可平滑迁移 OSS)。
+
+
+@app.post("/square/upload-image")
+async def square_upload_image(
+    file: UploadFile = File(...),
+    u: sqlite3.Row = Depends(actor),
+) -> dict[str, Any]:
+    """广场图文帖图片上传(单张)。
+
+    - 鉴权:必须登录
+    - 限流:每用户每分钟 20 张(防滥用)
+    - 校验:MIME 白名单(image/jpeg|png|webp|gif)+ 大小上限 MAX_IMAGE_BYTES
+    - 存储:落地到 UPLOAD_DIR,文件名 = <user_id短哈希>_<时间戳>_<6位随机>.<ext>
+    - 返回:{ url, width, height }(width/height 暂不解析,留给客户端展示时按需读)
+    """
+    rate_limit(f"sq_img:{u['user_id']}", 20, 60)
+    raw = await file.read()
+    if len(raw) > MAX_IMAGE_BYTES:
+        raise HTTPException(413, f"图片过大(上限 {MAX_IMAGE_BYTES // 1048576}MB)")
+    if file.content_type not in ALLOWED_IMAGE_MIME:
+        raise HTTPException(415, f"不支持的图片类型(仅 jpeg/png/webp/gif)")
+    ext = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif"}[file.content_type]
+    # 文件名:用户短哈希 + 时间戳 + 随机串,防碰撞 + 防遍历
+    short_uid = hashlib.sha256(u["user_id"].encode()).hexdigest()[:8]
+    fname = f"{short_uid}_{int(time.time())}_{secrets.token_hex(3)}.{ext}"
+    path = os.path.join(UPLOAD_DIR, fname)
+    with open(path, "wb") as f:
+        f.write(raw)
+    url = f"{UPLOAD_URL_PREFIX}/{fname}"
+    return {"url": url, "width": 0, "height": 0}
+
+
+@app.post("/square/posts/publish")
+async def square_publish_post(body: dict[str, Any], u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    """广场图文帖发布(小红书式)。
+
+    契约:
+      { title: str, content: str, images: [url], tag: str }
+    - title 必填 1-100 字;content 选填,上限 5000 字;images 上限 MAX_IMAGES_PER_POST
+    - 自动审核:复用 _scan_keywords(硬规则) + _qwen_moderate(文本),违规 → auto_rejected
+    - 图片内容审核暂未接入(需 OCR/鉴黄 API),先靠文本审核 + 人工复核兜底
+    - 通过自动审核 → status='pending'(从不自动通过,人工审核后才进 feed)
+    """
+    rate_limit(f"sq_post:{u['user_id']}", SQUARE_POST_RATE_PER_MINUTE, 60)
+    title = str(body.get("title") or "").strip()
+    if not title or len(title) > 100:
+        raise HTTPException(400, "标题必填,1-100 字")
+    content = str(body.get("content") or "").strip()
+    if len(content) > 5000:
+        raise HTTPException(400, "正文上限 5000 字")
+    images = [str(x) for x in (body.get("images") or []) if str(x).startswith("/static/") or str(x).startswith("http")]
+    if len(images) > MAX_IMAGES_PER_POST:
+        raise HTTPException(400, f"图片上限 {MAX_IMAGES_PER_POST} 张")
+    tag = str(body.get("tag") or "").strip()[:20]
+
+    # ── 自动审核:文本部分(图片审核待接入) ──
+    mod_status, mod_reason = "", ""
+    kw_hit = _scan_keywords(f"{title} {content} {tag}")
+    if kw_hit:
+        mod_status, mod_reason = "auto_rejected", kw_hit
+    else:
+        qwen_verdict = await _qwen_moderate(title, content, content[:1500])
+        if qwen_verdict and qwen_verdict.startswith("违规-"):
+            mod_status, mod_reason = "auto_rejected", f"qwen 判定:{qwen_verdict}"
+        elif qwen_verdict and qwen_verdict.startswith("可疑-"):
+            mod_status, mod_reason = "flagged", f"qwen 判定:{qwen_verdict}"
+
+    final_status = "rejected" if mod_status == "auto_rejected" else "pending"
+    cover = images[0] if images else ""
+    post_id = f"post/{secrets.token_hex(8)}"
+    now = now_ms()
+    with closing(db()) as c:
+        c.execute("""
+            INSERT INTO square_posts(id, author_id, title, content, cover_url, images,
+                tag, status, reject_reason, moderation_status, moderation_reason,
+                likes_count, comments_count, favorites_count, created_at, updated_at)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,0,0,0,?,?)
+        """, (
+            post_id, u["user_id"], title, content, cover, json.dumps(images),
+            tag, final_status, (mod_reason if final_status == "rejected" else ""),
+            mod_status, mod_reason, now, now,
+        ))
+        c.commit()
+
+    if final_status == "rejected":
+        return {"ok": False, "status": "rejected", "reason": mod_reason or "内容违规"}
+    return {"ok": True, "status": "pending", "postId": post_id, "message": "已提交,审核通过后就会出现在广场"}
+
+
+@app.get("/square/posts/{post_id}")
+def square_post_detail(post_id: str, request: Request) -> dict[str, Any]:
+    """帖子详情(公开,登录态带 liked/favorited)。"""
+    viewer = ""
+    auth = request.headers.get("authorization") or ""
+    if auth.lower().startswith("bearer "):
+        try:
+            claims = jwt_decode(auth[7:], JWT_SECRET)
+            if claims and claims.get("sub"):
+                viewer = claims["sub"]
+        except Exception:
+            viewer = ""
+    with closing(db()) as c:
+        r = c.execute("SELECT * FROM square_posts WHERE id=? AND status='approved'", (post_id,)).fetchone()
+        if r is None:
+            raise HTTPException(404, "帖子不存在或未审核通过")
+        return {"post": _present_post(c, r, viewer)}
+
+
+@app.post("/square/posts/{post_id}/like")
+def square_like_post(post_id: str, u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    """点赞(幂等:已点过则保持点赞态,不重复加 count)。"""
+    rate_limit(f"sq_like:{u['user_id']}", 60, 60)
+    with closing(db()) as c:
+        r = c.execute("SELECT id, likes_count FROM square_posts WHERE id=? AND status='approved'", (post_id,)).fetchone()
+        if r is None:
+            raise HTTPException(404, "帖子不存在")
+        existed = c.execute("SELECT 1 FROM square_likes WHERE post_id=? AND user_id=?", (post_id, u["user_id"])).fetchone()
+        if not existed:
+            now = now_ms()
+            c.execute("INSERT OR IGNORE INTO square_likes(post_id, user_id, created_at) VALUES(?,?,?)",
+                      (post_id, u["user_id"], now))
+            c.execute("UPDATE square_posts SET likes_count = likes_count + 1, updated_at = ? WHERE id = ?", (now, post_id))
+            c.commit()
+        return {"ok": True, "liked": True, "likesCount": r["likes_count"] + (0 if existed else 1)}
+
+
+@app.delete("/square/posts/{post_id}/like")
+def square_unlike_post(post_id: str, u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    """取消点赞(幂等)。"""
+    with closing(db()) as c:
+        r = c.execute("SELECT id, likes_count FROM square_posts WHERE id=?", (post_id,)).fetchone()
+        if r is None:
+            raise HTTPException(404, "帖子不存在")
+        existed = c.execute("SELECT 1 FROM square_likes WHERE post_id=? AND user_id=?", (post_id, u["user_id"])).fetchone()
+        if existed:
+            c.execute("DELETE FROM square_likes WHERE post_id=? AND user_id=?", (post_id, u["user_id"]))
+            c.execute("UPDATE square_posts SET likes_count = MAX(0, likes_count - 1), updated_at = ? WHERE id = ?",
+                      (now_ms(), post_id))
+            c.commit()
+        return {"ok": True, "liked": False, "likesCount": max(0, r["likes_count"] - (1 if existed else 0))}
+
+
+@app.post("/square/posts/{post_id}/favorite")
+def square_favorite_post(post_id: str, u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    """收藏(幂等)。"""
+    rate_limit(f"sq_fav:{u['user_id']}", 60, 60)
+    with closing(db()) as c:
+        r = c.execute("SELECT id, favorites_count FROM square_posts WHERE id=? AND status='approved'", (post_id,)).fetchone()
+        if r is None:
+            raise HTTPException(404, "帖子不存在")
+        existed = c.execute("SELECT 1 FROM square_favorites WHERE user_id=? AND post_id=?", (u["user_id"], post_id)).fetchone()
+        if not existed:
+            c.execute("INSERT OR IGNORE INTO square_favorites(user_id, post_id, created_at) VALUES(?,?,?)",
+                      (u["user_id"], post_id, now_ms()))
+            c.execute("UPDATE square_posts SET favorites_count = favorites_count + 1, updated_at = ? WHERE id = ?",
+                      (now_ms(), post_id))
+            c.commit()
+        return {"ok": True, "favorited": True, "favoritesCount": r["favorites_count"] + (0 if existed else 1)}
+
+
+@app.delete("/square/posts/{post_id}/favorite")
+def square_unfavorite_post(post_id: str, u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    """取消收藏(幂等)。"""
+    with closing(db()) as c:
+        r = c.execute("SELECT id, favorites_count FROM square_posts WHERE id=?", (post_id,)).fetchone()
+        if r is None:
+            raise HTTPException(404, "帖子不存在")
+        existed = c.execute("SELECT 1 FROM square_favorites WHERE user_id=? AND post_id=?", (u["user_id"], post_id)).fetchone()
+        if existed:
+            c.execute("DELETE FROM square_favorites WHERE user_id=? AND post_id=?", (u["user_id"], post_id))
+            c.execute("UPDATE square_posts SET favorites_count = MAX(0, favorites_count - 1), updated_at = ? WHERE id = ?",
+                      (now_ms(), post_id))
+            c.commit()
+        return {"ok": True, "favorited": False, "favoritesCount": max(0, r["favorites_count"] - (1 if existed else 0))}
+
+
+@app.get("/square/posts/{post_id}/comments")
+def square_list_comments(post_id: str, limit: int = 50, offset: int = 0) -> dict[str, Any]:
+    """评论列表(公开,按时间正序)。"""
+    limit = max(1, min(limit, 100))
+    offset = max(0, offset)
+    with closing(db()) as c:
+        rows = c.execute(
+            "SELECT * FROM square_comments WHERE post_id=? ORDER BY created_at ASC LIMIT ? OFFSET ?",
+            (post_id, limit, offset),
+        ).fetchall()
+        items = [{
+            "id": r["id"],
+            "postId": r["post_id"],
+            "author": _display_handle(c, r["user_id"]),
+            "authorId": _opaque_uid(r["user_id"]),
+            "content": r["content"],
+            "parentId": r["parent_id"],
+            "createdAt": r["created_at"],
+        } for r in rows]
+    return {"comments": items, "has_more": len(items) >= limit}
+
+
+@app.post("/square/posts/{post_id}/comments")
+def square_post_comment(
+    post_id: str,
+    body: dict[str, Any],
+    u: sqlite3.Row = Depends(actor),
+) -> dict[str, Any]:
+    """发评论。契约:{ content: str, parentId?: str }"""
+    rate_limit(f"sq_cmt:{u['user_id']}", SQUARE_COMMENT_RATE_PER_MINUTE, 60)
+    content = str(body.get("content") or "").strip()
+    if not content or len(content) > 500:
+        raise HTTPException(400, "评论内容 1-500 字")
+    parent_id = str(body.get("parentId") or "").strip()
+    with closing(db()) as c:
+        r = c.execute("SELECT id FROM square_posts WHERE id=? AND status='approved'", (post_id,)).fetchone()
+        if r is None:
+            raise HTTPException(404, "帖子不存在")
+        # 简单文本审核(走硬规则,不调 qwen 避免每条评论都花一次推理)
+        kw_hit = _scan_keywords(content)
+        if kw_hit:
+            raise HTTPException(400, "评论包含违规内容")
+        cid = secrets.token_hex(8)
+        now = now_ms()
+        c.execute("""INSERT INTO square_comments(id, post_id, user_id, content, parent_id, created_at)
+                     VALUES(?,?,?,?,?,?)""",
+                  (cid, post_id, u["user_id"], content, parent_id, now))
+        c.execute("UPDATE square_posts SET comments_count = comments_count + 1, updated_at = ? WHERE id = ?", (now, post_id))
+        c.commit()
+        return {"ok": True, "comment": {
+            "id": cid, "postId": post_id,
+            "author": _display_handle(c, u["user_id"]),
+            "authorId": _opaque_uid(u["user_id"]),
+            "content": content, "parentId": parent_id, "createdAt": now,
+        }}
+
+
+@app.delete("/square/comments/{comment_id}")
+def square_delete_comment(comment_id: str, u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    """删评论(仅作者本人或管理员)。"""
+    with closing(db()) as c:
+        r = c.execute("SELECT * FROM square_comments WHERE id=?", (comment_id,)).fetchone()
+        if r is None:
+            raise HTTPException(404, "评论不存在")
+        if r["user_id"] != u["user_id"] and not _is_admin(u):
+            raise HTTPException(403, "无权删除他人评论")
+        c.execute("DELETE FROM square_comments WHERE id=?", (comment_id,))
+        c.execute("UPDATE square_posts SET comments_count = MAX(0, comments_count - 1) WHERE id = ?", (r["post_id"],))
+        c.commit()
+    return {"ok": True}
+
+
+@app.post("/square/users/{user_id}/follow")
+def square_follow_user(user_id: str, u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    """关注用户(用 opaque uid)。幂等。"""
+    rate_limit(f"sq_follow:{u['user_id']}", 30, 60)
+    target = _from_opaque_uid(user_id)
+    if not target:
+        raise HTTPException(404, "用户不存在")
+    if target == u["user_id"]:
+        raise HTTPException(400, "不能关注自己")
+    with closing(db()) as c:
+        existed = c.execute("SELECT 1 FROM square_follows WHERE follower_id=? AND followee_id=?",
+                            (u["user_id"], target)).fetchone()
+        if not existed:
+            c.execute("INSERT OR IGNORE INTO square_follows(follower_id, followee_id, created_at) VALUES(?,?,?)",
+                      (u["user_id"], target, now_ms()))
+            c.commit()
+        followers = c.execute("SELECT COUNT(*) AS n FROM square_follows WHERE followee_id=?", (target,)).fetchone()["n"]
+    return {"ok": True, "following": True, "followersCount": followers}
+
+
+@app.delete("/square/users/{user_id}/follow")
+def square_unfollow_user(user_id: str, u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    """取消关注(幂等)。"""
+    target = _from_opaque_uid(user_id)
+    if not target:
+        raise HTTPException(404, "用户不存在")
+    with closing(db()) as c:
+        existed = c.execute("SELECT 1 FROM square_follows WHERE follower_id=? AND followee_id=?",
+                            (u["user_id"], target)).fetchone()
+        if existed:
+            c.execute("DELETE FROM square_follows WHERE follower_id=? AND followee_id=?", (u["user_id"], target))
+            c.commit()
+        followers = c.execute("SELECT COUNT(*) AS n FROM square_follows WHERE followee_id=?", (target,)).fetchone()["n"]
+    return {"ok": True, "following": False, "followersCount": followers}
+
+
+@app.get("/square/users/{user_id}")
+def square_user_profile(user_id: str, request: Request) -> dict[str, Any]:
+    """用户主页:昵称、关注/粉丝数、是否已关注、TA 的帖子列表。"""
+    viewer = ""
+    auth = request.headers.get("authorization") or ""
+    if auth.lower().startswith("bearer "):
+        try:
+            claims = jwt_decode(auth[7:], JWT_SECRET)
+            if claims and claims.get("sub"):
+                viewer = claims["sub"]
+        except Exception:
+            viewer = ""
+    target = _from_opaque_uid(user_id)
+    if not target:
+        raise HTTPException(404, "用户不存在")
+    with closing(db()) as c:
+        urow = c.execute("SELECT nickname FROM users WHERE user_id=?", (target,)).fetchone()
+        if urow is None:
+            raise HTTPException(404, "用户不存在")
+        nickname = (urow["nickname"] if "nickname" in urow.keys() else "") or f"创作者{target[-4:]}"
+        following = c.execute("SELECT COUNT(*) AS n FROM square_follows WHERE follower_id=?", (target,)).fetchone()["n"]
+        followers = c.execute("SELECT COUNT(*) AS n FROM square_follows WHERE followee_id=?", (target,)).fetchone()["n"]
+        is_following = bool(viewer) and c.execute(
+            "SELECT 1 FROM square_follows WHERE follower_id=? AND followee_id=?", (viewer, target)
+        ).fetchone() is not None
+        rows = c.execute(
+            "SELECT * FROM square_posts WHERE author_id=? AND status='approved' ORDER BY created_at DESC LIMIT 50",
+            (target,),
+        ).fetchall()
+        posts = [_present_post(c, r, viewer) for r in rows]
+    return {
+        "user": {
+            "userId": user_id,
+            "nickname": nickname,
+            "followingCount": following,
+            "followersCount": followers,
+            "isFollowing": is_following,
+        },
+        "posts": posts,
+    }
+
+
 @app.get("/square/feed")
-def square_feed() -> dict[str, Any]:
-    """广场目录(公开，无需登录)。后台改 SQUARE_FEED 即可全量下发，App 无需发版。"""
-    return SQUARE_FEED
+def square_feed(request: Request, limit: int = 20, offset: int = 0, q: str = "") -> dict[str, Any]:
+    """广场目录(公开,无需登录)。
+
+    改造为数据库驱动:从 square_posts 取已审核通过的图文帖,按创建时间倒序分页。
+    同时合并 registry_assets 中 status='approved' 的小程序帖(标记 kind='mini-app'),
+    形成"图文 + 小程序"混合 feed。无帖时回退到内置 SQUARE_FEED 静态示例(向后兼容)。
+
+    - limit: 每页数量(上限 50)
+    - offset: 偏移量
+    - q: 搜索关键词(标题/正文模糊匹配,空=不筛选)
+    """
+    limit = max(1, min(limit, 50))
+    offset = max(0, offset)
+    items: list[dict[str, Any]] = []
+    # 可选鉴权:登录态时返回 liked/favorited 当前用户态;未登录或 token 失效 → 空字符串
+    viewer = ""
+    auth = request.headers.get("authorization") or ""
+    if auth.lower().startswith("bearer "):
+        try:
+            claims = jwt_decode(auth[7:], JWT_SECRET)
+            if claims and claims.get("sub"):
+                viewer = claims["sub"]
+        except Exception:
+            viewer = ""
+    with closing(db()) as c:
+        # ── 图文帖 ──
+        if q.strip():
+            like = f"%{q.strip()}%"
+            rows = c.execute(
+                "SELECT * FROM square_posts WHERE status='approved' "
+                "AND (title LIKE ? OR content LIKE ? OR tag LIKE ?) "
+                "ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                (like, like, like, limit, offset),
+            ).fetchall()
+        else:
+            rows = c.execute(
+                "SELECT * FROM square_posts WHERE status='approved' "
+                "ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                (limit, offset),
+            ).fetchall()
+        for r in rows:
+            items.append(_present_post(c, r, viewer))
+
+        # ── 小程序帖(混合展示;只在首页 offset=0 且未搜索时追加,避免分页错乱) ──
+        if not q.strip() and offset == 0:
+            mini_rows = c.execute(
+                "SELECT * FROM registry_assets WHERE type='plugin' AND kind='mini-app' "
+                "AND status='approved' ORDER BY updated_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+            for r in mini_rows:
+                items.append(_present_miniapp_as_post(c, r, viewer))
+
+    # 数据库为空时回退到内置静态示例(向后兼容,首次部署无帖也能展示)
+    if not items and offset == 0 and not q.strip():
+        return SQUARE_FEED
+
+    return {"posts": items, "has_more": len(items) >= limit}
 
 
 @app.get("/square/discovery")
@@ -2349,15 +2816,130 @@ def _reconcile_usage(user_id: str, model: str, tin: int, tout: int, mult: float,
 
 # ── 插件积分支付 ──────────────────────────────────────────────────────────────
 
+def _display_handle(c: sqlite3.Connection, user_id: str) -> str:
+    """把内部 user_id 换成可公开展示的 handle —— 有昵称用昵称,否则「创作者+尾4位」。
+    绝不把原始 user_id(=JWT sub/鉴权主体)下发到客户端(全站其它公开响应也都剥掉它)。"""
+    if not user_id:
+        return ""
+    row = c.execute("SELECT nickname FROM users WHERE user_id=?", (user_id,)).fetchone()
+    nick = (row["nickname"] if row and "nickname" in row.keys() else "") or ""
+    nick = str(nick).strip()
+    return nick if nick else f"创作者{user_id[-4:]}"
+
+
+def _present_post(c: sqlite3.Connection, r: sqlite3.Row, viewer_id: str = "") -> dict[str, Any]:
+    """把 square_posts 行组装成客户端可展示的帖子 DTO。
+
+    - 剥离 author_id(用 _display_handle 转 handle);viewer_id 用于标记 liked/favorited 当前用户态
+    - images JSON 反序列化成列表;cover_url 优先取首图
+    """
+    images = json.loads(r["images"]) if r["images"] else []
+    cover = r["cover_url"] or (images[0] if images else "")
+    liked = bool(viewer_id) and c.execute(
+        "SELECT 1 FROM square_likes WHERE post_id=? AND user_id=?",
+        (r["id"], viewer_id),
+    ).fetchone() is not None
+    favorited = bool(viewer_id) and c.execute(
+        "SELECT 1 FROM square_favorites WHERE user_id=? AND post_id=?",
+        (viewer_id, r["id"]),
+    ).fetchone() is not None
+    return {
+        "id": r["id"],
+        "kind": "post",
+        "title": r["title"],
+        "content": r["content"],
+        "coverUrl": cover,
+        "images": images,
+        "tag": r["tag"],
+        "author": _display_handle(c, r["author_id"]),
+        "authorId": _opaque_uid(r["author_id"]),
+        "authorInitial": (_display_handle(c, r["author_id"]) or "?")[0],
+        "authorColor": "#7C6FF0",
+        "likes": str(r["likes_count"]),
+        "likesCount": r["likes_count"],
+        "commentsCount": r["comments_count"],
+        "favoritesCount": r["favorites_count"],
+        "liked": liked,
+        "favorited": favorited,
+        "coverHeightDp": 200 if cover else 160,
+        "coverGradient": ["#667EEA", "#764BA2"],
+        "tagColor": "#6366F1",
+        "createdAt": r["created_at"],
+    }
+
+
+def _present_miniapp_as_post(c: sqlite3.Connection, r: sqlite3.Row, viewer_id: str = "") -> dict[str, Any]:
+    """把 registry_assets 的小程序行伪装成帖子 DTO,混入广场 feed。
+
+    小程序无图片/正文,用 name 当 title、description 当 content、渐变占位当封面。
+    标记 kind='mini-app' 让客户端识别并展示"打开小程序"按钮。
+    """
+    return {
+        "id": r["id"],
+        "kind": "mini-app",
+        "title": r["name"],
+        "content": r["description"],
+        "coverUrl": "",
+        "images": [],
+        "tag": r["category"] or "小程序",
+        "author": _display_handle(c, r["author_id"]),
+        "authorId": _opaque_uid(r["author_id"]),
+        "authorInitial": (_display_handle(c, r["author_id"]) or "?")[0],
+        "authorColor": "#10B981",
+        "likes": str(r["download_count"]),
+        "likesCount": r["download_count"],
+        "commentsCount": 0,
+        "favoritesCount": 0,
+        "liked": False,
+        "favorited": False,
+        "coverHeightDp": 160,
+        "coverGradient": ["#11998E", "#38EF7D"],
+        "tagColor": "#10B981",
+        "createdAt": r["created_at"],
+    }
+
+
+def _opaque_uid(user_id: str) -> str:
+    """内部 user_id → 稳定、不可逆、唯一的对外 id(仅作客户端列表 key 用,不泄露鉴权主体)。"""
+    if not user_id:
+        return ""
+    return hashlib.sha256(user_id.encode("utf-8")).hexdigest()[:12]
+
+
+def _from_opaque_uid(opaque: str) -> str:
+    """对外 opaque id → 内部 user_id。
+
+    _opaque_uid 是单向 sha256 截断,无法算法反推;用 users 表全表扫比对。
+    用户量 <10w 时全表扫 <50ms,可接受;后续若用户量上来再建反向索引表。
+    """
+    if not opaque:
+        return ""
+    with closing(db()) as c:
+        for r in c.execute("SELECT user_id FROM users").fetchall():
+            if _opaque_uid(r["user_id"]) == opaque:
+                return r["user_id"]
+    return ""
+
+
+def _is_admin(u: sqlite3.Row) -> bool:
+    """是否管理员(基于 UNLIMITED_EMAILS 白名单;无独立角色字段,复用既有机制)。"""
+    email = (u["email"] if "email" in u.keys() else "") or ""
+    return email.lower() in UNLIMITED_EMAILS
+
+
 @app.post("/plugin/pay")
 def plugin_pay(body: dict[str, Any], u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
     """Mini-app 积分支付:从用户余额原子扣除 credits 给插件内购消费。
     余额不足立即以 402 拒绝(不透支);成功后按 [CREATOR_REVENUE_SHARE] 给插件作者分成。
-    分成以积分形式发放到作者账户(不可提现,用于驱动 LLM 再创作)。"""
+    分成以积分形式发放到作者账户(不可提现,用于驱动 LLM 再创作)。
+
+    幂等:客户端应带 idempotency_key(建议 UUID);同 key 重复请求不再重复扣款/分成,
+    直接返回当前余额(标 duplicate=true)。防超时重试/双击导致买家双扣、作者双付。"""
     plugin_id = str(body.get("plugin_id") or "").strip()
     item      = str(body.get("item") or "").strip()
     credits   = int(body.get("credits") or 0)
     description = str(body.get("description") or "")[:200]
+    idem_key  = str(body.get("idempotency_key") or "").strip()[:80]
 
     if not plugin_id or not item:
         raise HTTPException(status_code=400, detail="plugin_id and item required")
@@ -2365,50 +2947,77 @@ def plugin_pay(body: dict[str, Any], u: sqlite3.Row = Depends(actor)) -> dict[st
         raise HTTPException(status_code=400, detail="credits must be 1–1000 per transaction")
 
     user_id = u["user_id"]
-    ref = f"plugin/{plugin_id}/{item}/{now_ms()}"
+    ref = idem_key or f"plugin/{plugin_id}/{item}/{now_ms()}"
     txn_detail = (description or item)[:200]
 
-    with closing(db()) as c:
-        # 1. 扣款(原子:余额不足直接 402)
-        cur = c.execute(
-            "UPDATE users SET credits = credits - ? WHERE user_id = ? AND credits >= ?",
-            (credits, user_id, credits),
-        )
-        if cur.rowcount == 0:
-            row = c.execute("SELECT credits FROM users WHERE user_id=?", (user_id,)).fetchone()
-            bal = int(row["credits"]) if row else 0
-            raise HTTPException(status_code=402,
-                                detail=f"积分不足: 需要 {credits},当前余额 {bal}")
-        _record_credit_txn(c, user_id, -credits, source="plugin_pay",
-                           detail=txn_detail, ref_id=ref)
-
-        # 2. 创作者分成:查插件 author_id,按比例给作者加积分
-        creator_earned = 0
-        author_id = ""
-        aid = f"plugin/{plugin_id}" if not plugin_id.startswith("plugin/") else plugin_id
-        asset = c.execute(
-            "SELECT author_id, author_earnings FROM registry_assets WHERE id=?", (aid,)
-        ).fetchone()
-        if asset and asset["author_id"] and asset["author_id"] != user_id:
-            author_id = asset["author_id"]
-            creator_earned = int(credits * CREATOR_REVENUE_SHARE)
-            if creator_earned > 0:
-                c.execute(
-                    "UPDATE users SET credits = credits + ? WHERE user_id = ?",
-                    (creator_earned, author_id),
-                )
-                _record_credit_txn(c, author_id, creator_earned,
-                                   source="creator_revenue",
-                                   detail=f"插件「{plugin_id}」内购分成",
-                                   ref_id=ref)
-                c.execute(
-                    "UPDATE registry_assets SET author_earnings = author_earnings + ? WHERE id = ?",
-                    (creator_earned, aid),
-                )
-
-        c.commit()
+    def _balance(c: sqlite3.Connection) -> int:
         row = c.execute("SELECT credits FROM users WHERE user_id=?", (user_id,)).fetchone()
-        bal_after = int(row["credits"]) if row else 0
+        return int(row["credits"]) if row else 0
+
+    with closing(db()) as c:
+        # 写事务锁:对齐 _reserve_usage_credits 的原子写模式,别再靠隐式 BEGIN 碰运气。
+        c.execute("BEGIN IMMEDIATE")
+        try:
+            # 0. 幂等闸(带 key 才生效):同 (user_id, key) 已处理过 → 直接短路,不重复扣款。
+            if idem_key:
+                try:
+                    c.execute(
+                        "INSERT INTO idempotency_keys(user_id, key, scope, ts) VALUES(?,?,?,?)",
+                        (user_id, idem_key, "plugin_pay", now_ms()),
+                    )
+                except sqlite3.IntegrityError:
+                    c.execute("ROLLBACK")
+                    return {"success": True, "data": {
+                        "balance_after": _balance(c), "plugin_id": plugin_id, "item": item,
+                        "creator_earned": 0, "author": "", "duplicate": True,
+                    }}
+
+            # 1. 扣款(原子:余额不足直接 402)
+            cur = c.execute(
+                "UPDATE users SET credits = credits - ? WHERE user_id = ? AND credits >= ?",
+                (credits, user_id, credits),
+            )
+            if cur.rowcount == 0:
+                bal = _balance(c)
+                c.execute("ROLLBACK")
+                raise HTTPException(status_code=402,
+                                    detail=f"积分不足: 需要 {credits},当前余额 {bal}")
+            _record_credit_txn(c, user_id, -credits, source="plugin_pay",
+                               detail=txn_detail, ref_id=ref)
+
+            # 2. 创作者分成:查插件 author_id,按比例给作者加积分(自购不分成)
+            creator_earned = 0
+            author_id = ""
+            aid = f"plugin/{plugin_id}" if not plugin_id.startswith("plugin/") else plugin_id
+            asset = c.execute(
+                "SELECT author_id FROM registry_assets WHERE id=?", (aid,)
+            ).fetchone()
+            if asset and asset["author_id"] and asset["author_id"] != user_id:
+                author_id = asset["author_id"]
+                creator_earned = int(credits * CREATOR_REVENUE_SHARE)
+                if creator_earned > 0:
+                    c.execute(
+                        "UPDATE users SET credits = credits + ? WHERE user_id = ?",
+                        (creator_earned, author_id),
+                    )
+                    _record_credit_txn(c, author_id, creator_earned,
+                                       source="creator_revenue",
+                                       detail=f"插件「{plugin_id}」内购分成",
+                                       ref_id=ref)
+                    c.execute(
+                        "UPDATE registry_assets SET author_earnings = author_earnings + ? WHERE id = ?",
+                        (creator_earned, aid),
+                    )
+
+            # 作者展示名在提交前查(同事务内可见),响应绝不含原始 author_id。
+            author_handle = _display_handle(c, author_id) if author_id else ""
+            c.commit()
+            bal_after = _balance(c)
+        except HTTPException:
+            raise
+        except Exception:
+            c.execute("ROLLBACK")
+            raise
 
     return {
         "success": True,
@@ -2417,7 +3026,7 @@ def plugin_pay(body: dict[str, Any], u: sqlite3.Row = Depends(actor)) -> dict[st
             "plugin_id": plugin_id,
             "item": item,
             "creator_earned": creator_earned,
-            "author_id": author_id,
+            "author": author_handle,
         },
     }
 
@@ -2518,7 +3127,11 @@ def creator_ranking(u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
                 "my_earnings": user_earnings,
                 "leaders": [
                     {
-                        "user_id": r["author_id"],
+                        # 榜单公开可见,绝不下发原始 author_id(=鉴权主体)。
+                        # user_id 字段沿用作客户端列表 key,值换成稳定不可逆哈希(唯一、防撞 key、不泄露);
+                        # nickname 给展示(昵称/尾号 handle)。
+                        "user_id": _opaque_uid(r["author_id"]),
+                        "nickname": _display_handle(c, r["author_id"]),
                         "earnings": int(r["total_earnings"] or 0),
                         "downloads": int(r["total_downloads"] or 0),
                         "works": int(r["work_count"] or 0),
@@ -2570,22 +3183,29 @@ def registry_list(type: str = "", kind: str = "", category: str = "", q: str = "
 
 
 @app.get("/square/assets/{asset_type}/{slug}/download")
-def registry_download(asset_type: str, slug: str) -> dict[str, Any]:
-    """下载单个资产(含 body)。skill→ markdown 文本;plugin→ base64 ZIP。"""
+def registry_download(asset_type: str, slug: str, request: Request) -> dict[str, Any]:
+    """下载单个资产(含 body)。skill→ markdown 文本;plugin→ base64 ZIP。
+    download_count 只喂推荐/排序权重、不进任何分成,但公开免鉴权易被 curl 循环刷,
+    故按 (IP, 资产) 限流:同一 IP 对同一资产每分钟最多计一次,超出仍正常返回内容、只是不再计数。"""
     aid = f"{asset_type}/{slug}"
+    countable = True
+    try:
+        rate_limit(f"dl:{client_ip(request)}:{aid}", 1, 60)
+    except HTTPException:
+        countable = False  # 限流命中:内容照给,只是这次不计入下载量(防刷榜)
     with closing(db()) as c:
         r = c.execute("SELECT * FROM registry_assets WHERE id=? AND status='approved'", (aid,)).fetchone()
         if not r:
             raise HTTPException(status_code=404, detail="资产不存在或未审核通过")
-        # 下载量计数(幂等自增,用于推荐权重)
-        c.execute(
-            "UPDATE registry_assets SET download_count = download_count + 1 WHERE id = ?",
-            (aid,),
-        )
-        c.commit()
+        if countable:
+            c.execute(
+                "UPDATE registry_assets SET download_count = download_count + 1 WHERE id = ?",
+                (aid,),
+            )
+            c.commit()
         d = _registry_row_to_asset(r)
     d["body"] = r["body"] or ""
-    d["download_count"] = int(r["download_count"] or 0) + 1
+    d["download_count"] = int(r["download_count"] or 0) + (1 if countable else 0)
     return {"success": True, "data": d}
 
 
@@ -2802,6 +3422,12 @@ def admin_profit_timeseries(days: int = 30, _: bool = Depends(admin_guard)) -> d
             "SELECT date(ts/1000,'unixepoch') d, COALESCE(SUM(ABS(delta)),0) cr, COUNT(*) n "
             "FROM credit_transactions WHERE source='plugin_pay' AND ts>=? GROUP BY d", (cutoff,)
         ).fetchall()
+        # 创作者分成:平台凭空铸给作者的可花积分(写进永久 credits 桶),是真实 COGS 负债,
+        # 单列出来别再对 P&L 隐形——之前利润表只算 plugin_pay 流入、漏了这 70% 流出。
+        creator_rows = c.execute(
+            "SELECT date(ts/1000,'unixepoch') d, COALESCE(SUM(delta),0) cr, COUNT(*) n "
+            "FROM credit_transactions WHERE source='creator_revenue' AND ts>=? GROUP BY d", (cutoff,)
+        ).fetchall()
 
     # 合并到 day→dict
     days_map: dict[str, dict[str, Any]] = {}
@@ -2817,6 +3443,9 @@ def admin_profit_timeseries(days: int = 30, _: bool = Depends(admin_guard)) -> d
     for r in plugin_rows:
         days_map.setdefault(r["d"], {})["pluginPayCredits"] = r["cr"]
         days_map[r["d"]]["pluginPayOrders"] = r["n"]
+    for r in creator_rows:
+        days_map.setdefault(r["d"], {})["creatorPayoutCredits"] = r["cr"]
+        days_map[r["d"]]["creatorPayoutCount"] = r["n"]
 
     data = sorted([{"date": d, **v} for d, v in days_map.items()])
     return {"success": True, "days": days, "data": data}

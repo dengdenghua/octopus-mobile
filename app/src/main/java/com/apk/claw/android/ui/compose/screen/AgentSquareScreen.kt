@@ -41,11 +41,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.apk.claw.android.R
 import com.apk.claw.android.ui.compose.theme.OctopusBackground
 import com.apk.claw.android.ui.compose.theme.OctopusThemeStyle
@@ -58,6 +60,9 @@ import com.apk.claw.android.ui.compose.theme.OctopusType
 
 /**
  * 灵感广场 —— 双列灵感瀑布流，展示自动化技能、用法、作品卡片。
+ *
+ * 支持图文帖(小红书式,有图片封面)与小程序分享帖(渐变封面)混合展示。
+ * 卡片点击跳详情页(PostDetailScreen),+ 号跳发帖页(CreatePostScreen)。
  */
 private val tabs = listOf(
     R.string.agent_square_tab_recommend,
@@ -70,6 +75,7 @@ fun AgentSquareScreen(
     onBack: () -> Unit,
     onOpenSearch: () -> Unit = {},
     onCreatePost: () -> Unit = {},
+    onOpenPost: (String) -> Unit = {},
 ) {
     // 广场目录来自服务端 API（可后台随意改），null=加载中；本地技能走本地注册表。
     val remote by produceState<List<AgentPost>?>(initialValue = null) {
@@ -85,7 +91,7 @@ fun AgentSquareScreen(
     ) {
         AgentSquareTopBar(onBack, onOpenSearch, onCreatePost)
         CategoryTabs()
-        AgentFeed(remote = remote, local = local)
+        AgentFeed(remote = remote, local = local, onOpenPost = onOpenPost)
     }
 }
 
@@ -165,7 +171,11 @@ private fun CategoryTabs() {
 }
 
 @Composable
-private fun AgentFeed(remote: List<AgentPost>?, local: List<AgentPost>) {
+private fun AgentFeed(
+    remote: List<AgentPost>?,
+    local: List<AgentPost>,
+    onOpenPost: (String) -> Unit,
+) {
     // 加载中且无本地内容 → 居中转圈；否则本地技能在前 + 服务端目录在后，合成一个瀑布流。
     if (remote == null && local.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -182,13 +192,20 @@ private fun AgentFeed(remote: List<AgentPost>?, local: List<AgentPost>) {
         verticalItemSpacing = OctopusSpacing.md,
     ) {
         items(posts, key = { it.id }) { post ->
-            AgentPostCard(post)
+            AgentPostCard(post, onClick = { onOpenPost(post.id) })
         }
     }
 }
 
 @Composable
-private fun AgentPostCard(post: AgentPost) {
+private fun AgentPostCard(post: AgentPost, onClick: () -> Unit = {}) {
+    val isMiniApp = post.kind == "mini-app"
+    val hasImageCover = post.coverUrl.isNotBlank()
+    val likeText = when {
+        post.likesCount > 0 -> formatCount(post.likesCount)
+        post.likes.isNotBlank() -> post.likes
+        else -> ""
+    }
     Surface(
         shape = OctopusShape.large,
         // 帖子是文字密集内容,用实底表面 —— 不跟随玻璃透明度,玻璃调到最透也可读。
@@ -198,17 +215,25 @@ private fun AgentPostCard(post: AgentPost) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(OctopusShape.large)
-            .clickable { },
+            .clickable(onClick = onClick),
     ) {
         Column {
-            // 封面
+            // 封面:图文帖有图片封面优先用 AsyncImage;否则回退渐变封面
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(post.coverHeightDp.dp)
                     .background(Brush.verticalGradient(post.coverGradient)),
             ) {
-                // 深色 scrim 胶囊 + 彩色圆点 + 白字：在深/浅封面上都清晰可读，同时保留分类色彩标识
+                if (hasImageCover) {
+                    AsyncImage(
+                        model = post.coverUrl,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop,
+                    )
+                }
+                // 标签胶囊(优先显示"小程序"标识;否则用 post.tag)
                 Row(
                     modifier = Modifier
                         .align(Alignment.TopStart)
@@ -220,7 +245,7 @@ private fun AgentPostCard(post: AgentPost) {
                     Box(modifier = Modifier.size(6.dp).background(post.tagColor, CircleShape))
                     Spacer(Modifier.width(OctopusSpacing.xs))
                     Text(
-                        post.tag,
+                        if (isMiniApp) "小程序" else post.tag,
                         color = Color.White,
                         fontSize = OctopusType.tag,
                         fontWeight = FontWeight.SemiBold,
@@ -237,6 +262,17 @@ private fun AgentPostCard(post: AgentPost) {
                     overflow = TextOverflow.Ellipsis,
                     lineHeight = 18.sp,
                 )
+                if (post.content.isNotBlank() && !isMiniApp) {
+                    // 图文帖正文预览:1 行省略
+                    Spacer(Modifier.height(OctopusSpacing.xs))
+                    Text(
+                        post.content,
+                        color = OctopusColors.TextMuted,
+                        fontSize = OctopusType.caption,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
                 Spacer(Modifier.height(OctopusSpacing.sm))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
@@ -261,20 +297,29 @@ private fun AgentPostCard(post: AgentPost) {
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    Icon(
-                        Icons.Filled.Favorite,
-                        contentDescription = null,
-                        tint = OctopusColors.TextMuted.copy(alpha = 0.6f),
-                        modifier = Modifier.size(OctopusIconSize.small),
-                    )
-                    Spacer(Modifier.width(OctopusSpacing.xs))
-                    Text(
-                        post.likes,
-                        color = OctopusColors.TextMuted,
-                        fontSize = OctopusType.tag,
-                    )
+                    if (likeText.isNotBlank()) {
+                        Icon(
+                            Icons.Filled.Favorite,
+                            contentDescription = null,
+                            tint = OctopusColors.TextMuted.copy(alpha = 0.6f),
+                            modifier = Modifier.size(OctopusIconSize.small),
+                        )
+                        Spacer(Modifier.width(OctopusSpacing.xs))
+                        Text(
+                            likeText,
+                            color = OctopusColors.TextMuted,
+                            fontSize = OctopusType.tag,
+                        )
+                    }
                 }
             }
         }
     }
+}
+
+/** 数值缩写:<1k 直显,>=1k 用 1.2w 形式。 */
+private fun formatCount(count: Int): String = when {
+    count < 1000 -> count.toString()
+    count < 10000 -> String.format("%.1fk", count / 1000.0)
+    else -> String.format("%.1fw", count / 10000.0)
 }

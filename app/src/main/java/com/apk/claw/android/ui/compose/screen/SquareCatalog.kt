@@ -4,6 +4,7 @@ import com.apk.claw.android.utils.OctoHttp
 import androidx.compose.ui.graphics.Color
 import com.apk.claw.android.R
 import com.apk.claw.android.account.AccountConfig
+import com.apk.claw.android.account.AccountStore
 import com.apk.claw.android.ui.compose.theme.OctopusTints
 import com.apk.claw.android.utils.KVUtils
 import com.google.gson.Gson
@@ -37,23 +38,59 @@ internal data class AgentPost(
     val coverGradient: List<Color>,
     /** true = 本地注册的技能/插件（非服务端目录）。 */
     val local: Boolean = false,
+    /** 帖子类型:"post"=图文帖(小红书式), "mini-app"=小程序分享帖, ""=旧式种子/静态示例。 */
+    val kind: String = "",
+    /** 图文帖正文(仅 kind="post" 有)。 */
+    val content: String = "",
+    /** 图文帖封面图 URL(优先于 coverGradient 展示)。 */
+    val coverUrl: String = "",
+    /** 图文帖图片列表(详情页用)。 */
+    val images: List<String> = emptyList(),
+    /** 作者 opaque uid(点击作者头像跳主页用)。 */
+    val authorId: String = "",
+    /** 点赞数(数值形式,便于展示与排序;旧式卡片用 likes 字符串)。 */
+    val likesCount: Int = 0,
+    /** 评论数。 */
+    val commentsCount: Int = 0,
+    /** 收藏数。 */
+    val favoritesCount: Int = 0,
+    /** 当前用户是否已点赞。 */
+    val liked: Boolean = false,
+    /** 当前用户是否已收藏。 */
+    val favorited: Boolean = false,
+    /** 创建时间(epoch millis)。 */
+    val createdAt: Long = 0,
 )
 
 /** 服务端下发的广场卡片：颜色用 "#RRGGBB" 字符串，方便后台随意编辑。 */
 internal data class SquarePostDto(
     val id: String = "",
+    val kind: String = "",
     val title: String = "",
+    val content: String = "",
+    val coverUrl: String = "",
+    val images: List<String> = emptyList(),
     val author: String = "",
+    val authorId: String = "",
     val authorInitial: String = "",
     val authorColor: String = "#7C6FF0",
     val likes: String = "",
+    @com.google.gson.annotations.SerializedName("likesCount") val likesCount: Int = 0,
+    @com.google.gson.annotations.SerializedName("commentsCount") val commentsCount: Int = 0,
+    @com.google.gson.annotations.SerializedName("favoritesCount") val favoritesCount: Int = 0,
+    val liked: Boolean = false,
+    val favorited: Boolean = false,
     val tag: String = "",
     val tagColor: String = "#7C6FF0",
     val coverHeightDp: Int = 160,
     val coverGradient: List<String> = emptyList(),
+    @com.google.gson.annotations.SerializedName("createdAt") val createdAt: Long = 0,
 )
 
-internal data class SquareFeedDto(val posts: List<SquarePostDto> = emptyList())
+internal data class SquareFeedDto(
+    val posts: List<SquarePostDto> = emptyList(),
+    @com.google.gson.annotations.SerializedName("has_more") val hasMore: Boolean = false,
+)
 
 private fun parseColor(hex: String, fallback: Color): Color =
     runCatching { Color(android.graphics.Color.parseColor(hex.trim())) }.getOrDefault(fallback)
@@ -65,7 +102,7 @@ private val RoutineTint get() = OctopusTints.Routine
 private val CloudTint get() = OctopusTints.Cloud
 private val WindowTint get() = OctopusTints.Window
 
-private fun SquarePostDto.toAgentPost(): AgentPost {
+internal fun SquarePostDto.toAgentPost(): AgentPost {
     val grad = coverGradient
         .mapNotNull { runCatching { Color(android.graphics.Color.parseColor(it.trim())) }.getOrNull() }
         .ifEmpty { listOf(Color(0xFF667EEA), Color(0xFF764BA2)) }
@@ -80,6 +117,17 @@ private fun SquarePostDto.toAgentPost(): AgentPost {
         tagColor = parseColor(tagColor, OctopusTints.Routine),
         coverHeightDp = coverHeightDp.coerceIn(120, 240),
         coverGradient = grad,
+        kind = kind,
+        content = content,
+        coverUrl = coverUrl,
+        images = images,
+        authorId = authorId,
+        likesCount = likesCount,
+        commentsCount = commentsCount,
+        favoritesCount = favoritesCount,
+        liked = liked,
+        favorited = favorited,
+        createdAt = createdAt,
     )
 }
 
@@ -130,8 +178,11 @@ internal object SquareRepository {
         val base = AccountConfig.squareBaseUrl.trim().trimEnd('/')
         if (base.isNotBlank()) {
             runCatching {
-                val req = Request.Builder().url("$base/square/feed").get().build()
-                http.newCall(req).execute().use { resp ->
+                val builder = Request.Builder().url("$base/square/feed").get()
+                // 携带登录态:让服务端能返回 liked/favorited 当前用户态(未登录时服务端忽略)
+                val tok = AccountStore.token
+                if (tok.isNotBlank()) builder.header("Authorization", "Bearer $tok")
+                http.newCall(builder.build()).execute().use { resp ->
                     val body = resp.body?.string().orEmpty()
                     if (resp.isSuccessful && body.isNotBlank()) {
                         val feed = gson.fromJson(body, SquareFeedDto::class.java)

@@ -238,12 +238,43 @@ fun OctopusNavHost(
         composable(Screen.AgentSquare.route) {
             AgentSquareScreen(
                 onBack = { navController.popBackStack() },
-                onOpenSearch = { /* TODO */ },
-                onCreatePost = {
-                    val ctx = navController.context
-                    val target = com.apk.claw.android.ui.featurescreens.MiniAppListActivity::class.java
-                    ctx.startActivity(android.content.Intent(ctx, target))
+                onOpenSearch = { navController.navigate("square_search") },
+                onCreatePost = { navController.navigate("square_create_post") },
+                onOpenPost = { postId -> navController.navigate("square_post/$postId") },
+            )
+        }
+        composable("square_create_post") {
+            com.apk.claw.android.ui.compose.screen.CreatePostScreen(
+                onBack = { navController.popBackStack() },
+                onPublished = {
+                    navController.popBackStack()
+                    showMessage("发布成功,等待审核")
                 },
+                onMessage = showMessage,
+            )
+        }
+        composable("square_post/{postId}") { backStackEntry ->
+            val pid = backStackEntry.arguments?.getString("postId").orEmpty()
+            com.apk.claw.android.ui.compose.screen.PostDetailScreen(
+                postId = pid,
+                onBack = { navController.popBackStack() },
+                onOpenAuthor = { uid -> navController.navigate("square_user/$uid") },
+                onMessage = showMessage,
+            )
+        }
+        composable("square_search") {
+            com.apk.claw.android.ui.compose.screen.SearchScreen(
+                onBack = { navController.popBackStack() },
+                onOpenPost = { pid -> navController.navigate("square_post/$pid") },
+            )
+        }
+        composable("square_user/{userId}") { backStackEntry ->
+            val uid = backStackEntry.arguments?.getString("userId").orEmpty()
+            com.apk.claw.android.ui.compose.screen.UserProfileScreen(
+                userId = uid,
+                onBack = { navController.popBackStack() },
+                onOpenPost = { pid -> navController.navigate("square_post/$pid") },
+                onMessage = showMessage,
             )
         }
         composable(Screen.Universe.route) {

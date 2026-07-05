@@ -23,6 +23,7 @@
     <ID>CyclomaticComplexMethod:ClawAccessibilityService.kt$ClawAccessibilityService$private fun buildNodeTreeFull(node: AccessibilityNodeInfo, sb: StringBuilder, depth: Int)</ID>
     <ID>CyclomaticComplexMethod:CloudDriveActivity.kt$@Composable fun CloudDriveScreen(onBack: () -&gt; Unit)</ID>
     <ID>CyclomaticComplexMethod:ConfigServer.kt$ConfigServer$override fun serve(session: IHTTPSession): Response</ID>
+    <ID>CyclomaticComplexMethod:CreatePostScreen.kt$@Composable fun CreatePostScreen( onBack: () -&gt; Unit, onPublished: () -&gt; Unit = {}, onMessage: (String) -&gt; Unit = {}, )</ID>
     <ID>CyclomaticComplexMethod:DefaultAgentService.kt$DefaultAgentService$private fun AgentLoopState.executeSingleTool(toolRequest: ToolExecutionRequest, callback: AgentCallback): ToolHandleResult</ID>
     <ID>CyclomaticComplexMethod:DefaultAgentService.kt$DefaultAgentService$private fun compressHistoryForSend(messages: MutableList&lt;ChatMessage&gt;)</ID>
     <ID>CyclomaticComplexMethod:DefaultAgentService.kt$DefaultAgentService$private fun handleSystemDialogWithVision( messages: MutableList&lt;ChatMessage&gt;, callback: AgentCallback, iterations: Int ): Boolean</ID>
@@ -53,6 +54,7 @@
     <ID>CyclomaticComplexMethod:PluginManager.kt$PluginManager$fun loadAndRegister(pluginId: String): Boolean</ID>
     <ID>CyclomaticComplexMethod:PluginRegistryStore.kt$PluginRegistryStore$suspend fun install(context: Context, asset: RegistryAsset, data: RegistryDownloadData): String?</ID>
     <ID>CyclomaticComplexMethod:PopupDetector.kt$PopupDetector$fun tryDismiss(): Boolean</ID>
+    <ID>CyclomaticComplexMethod:PostDetailScreen.kt$@Composable fun PostDetailScreen( postId: String, onBack: () -&gt; Unit, onOpenAuthor: (String) -&gt; Unit = {}, onMessage: (String) -&gt; Unit = {}, )</ID>
     <ID>CyclomaticComplexMethod:RoutineRunner.kt$RoutineRunner$fun run(ctx: Context, r: RoutineStore.Routine, actualPrompt: String? = null): String</ID>
     <ID>CyclomaticComplexMethod:RuntimeConfigActivity.kt$RuntimeConfigActivity$private fun buildLayout()</ID>
     <ID>CyclomaticComplexMethod:ScreenCastActivity.kt$ScreenCastActivity$private fun buildLayout(): ScrollView</ID>
@@ -91,12 +93,14 @@
     <ID>FunctionOnlyReturningConstant:MpvController.kt$MpvController$fun getPositionMs(): Long</ID>
     <ID>FunctionOnlyReturningConstant:MpvController.kt$MpvController$fun getVolume(): Int</ID>
     <ID>FunctionOnlyReturningConstant:MpvController.kt$MpvController$fun isPlaying(): Boolean</ID>
+    <ID>ImplicitDefaultLocale:AgentSquareScreen.kt$String.format("%.1fk", count / 1000.0)</ID>
+    <ID>ImplicitDefaultLocale:AgentSquareScreen.kt$String.format("%.1fw", count / 10000.0)</ID>
     <ID>ImplicitDefaultLocale:ConfigServerManager.kt$ConfigServerManager$String.format( "%d.%d.%d.%d", ipInt and 0xff, ipInt shr 8 and 0xff, ipInt shr 16 and 0xff, ipInt shr 24 and 0xff )</ID>
     <ID>InstanceOfCheckForException:ToolRegistry.kt$ToolRegistry$e is IllegalArgumentException</ID>
     <ID>LargeClass:DefaultAgentService.kt$DefaultAgentService : AgentService</ID>
     <ID>LargeClass:ShizukuShellService.kt$ShizukuShellService</ID>
     <ID>LongMethod:AgentPresentation.kt$AgentPresentation$private fun buildWorkspaceUI(): View</ID>
-    <ID>LongMethod:AgentSquareScreen.kt$@Composable private fun AgentPostCard(post: AgentPost)</ID>
+    <ID>LongMethod:AgentSquareScreen.kt$@Composable private fun AgentPostCard(post: AgentPost, onClick: () -&gt; Unit = {})</ID>
     <ID>LongMethod:AppViewModel.kt$AppViewModel$fun initOctopusMobile()</ID>
     <ID>LongMethod:ApprovalFlow.kt$ApprovalFlow$fun requestApproval( context: Context?, toolName: String, params: Map&lt;String, Any&gt;, riskDesc: String, timeoutMs: Long = DEFAULT_TIMEOUT_MS, ): Boolean</ID>
     <ID>LongMethod:BrowserScreen.kt$@Composable fun BrowserScreen( initialUrl: String? = null, onClose: () -&gt; Unit = {}, )</ID>
@@ -113,6 +117,7 @@
     <ID>LongMethod:ChatScreen.kt$@OptIn(ExperimentalMaterial3Api::class) @Composable fun ChatScreen()</ID>
     <ID>LongMethod:ClawAccessibilityService.kt$ClawAccessibilityService$private fun buildNodeTree(node: AccessibilityNodeInfo, sb: StringBuilder, depth: Int)</ID>
     <ID>LongMethod:CloudDriveActivity.kt$@Composable fun CloudDriveScreen(onBack: () -&gt; Unit)</ID>
+    <ID>LongMethod:CreatePostScreen.kt$@Composable fun CreatePostScreen( onBack: () -&gt; Unit, onPublished: () -&gt; Unit = {}, onMessage: (String) -&gt; Unit = {}, )</ID>
     <ID>LongMethod:DefaultAgentService.kt$DefaultAgentService$private fun AgentLoopState.executeSingleTool(toolRequest: ToolExecutionRequest, callback: AgentCallback): ToolHandleResult</ID>
     <ID>LongMethod:DefaultAgentService.kt$DefaultAgentService$private fun handleSystemDialogWithVision( messages: MutableList&lt;ChatMessage&gt;, callback: AgentCallback, iterations: Int ): Boolean</ID>
     <ID>LongMethod:DesktopActivity.kt$@Composable private fun DesktopReplyBar(running: Boolean, onSend: (String) -&gt; Unit, onStop: () -&gt; Unit)</ID>
@@ -143,15 +148,17 @@
     <ID>LongMethod:MemoryActivity.kt$@Composable fun MemoryScreen(onBack: () -&gt; Unit)</ID>
     <ID>LongMethod:MobileQualityGate.kt$MobileQualityGate$fun evaluate( registeredTools: Set&lt;String&gt; = registeredToolNames(), rpcUrl: String = KVUtils.getOctopusRpcUrl(), allowInsecureRuntime: Boolean = KVUtils.isInsecureOctopusRuntimeAllowed(), ): Report</ID>
     <ID>LongMethod:NavigateTool.kt$NavigateTool$override fun execute(params: Map&lt;String, Any&gt;): ToolResult</ID>
-    <ID>LongMethod:OctopusMobileClient.kt$OctopusMobileClient$internal fun handleIncomingMessage(text: String)</ID>
     <ID>LongMethod:NavigationGraph.kt$@Composable fun OctopusNavHost( navController: androidx.navigation.NavHostController, showMessage: (String) -&gt; Unit = {}, modifier: Modifier = Modifier )</ID>
+    <ID>LongMethod:OctopusMobileClient.kt$OctopusMobileClient$internal fun handleIncomingMessage(text: String)</ID>
     <ID>LongMethod:PcRemoteActivity.kt$@Composable private fun PcRemoteScreen(onBack: () -&gt; Unit)</ID>
     <ID>LongMethod:PluginMarketplaceScreen.kt$@Composable fun PluginMarketplaceScreen(onBack: () -&gt; Unit)</ID>
+    <ID>LongMethod:PostDetailScreen.kt$@Composable fun PostDetailScreen( postId: String, onBack: () -&gt; Unit, onOpenAuthor: (String) -&gt; Unit = {}, onMessage: (String) -&gt; Unit = {}, )</ID>
     <ID>LongMethod:ProactiveRuleEngine.kt$ProactiveRuleEngine$private fun executeRule(rule: ProactiveRule, paramOverrides: Map&lt;String, Any&gt;? = null): TriggerResult</ID>
     <ID>LongMethod:RuntimeConfigActivity.kt$RuntimeConfigActivity$private fun buildLayout()</ID>
     <ID>LongMethod:ScreenCastActivity.kt$ScreenCastActivity$private fun buildLayout(): ScrollView</ID>
     <ID>LongMethod:ScreenHandler.kt$ScreenHandler$private fun handleScreenStream(session: NanoHTTPD.IHTTPSession, ctx: RouteContext): NanoHTTPD.Response</ID>
     <ID>LongMethod:ScriptSandbox.kt$ScriptSandbox$fun execute( code: String, timeoutMs: Long, cancellationToken: CancellationToken? = null, ): ToolResult</ID>
+    <ID>LongMethod:SearchScreen.kt$@Composable private fun SearchPostCard(post: AgentPost, onClick: () -&gt; Unit)</ID>
     <ID>LongMethod:SettingsActivity.kt$SettingsActivity$private fun initMenuGroups()</ID>
     <ID>LongMethod:SettingsActivity.kt$SettingsActivity$private fun observeViewModel()</ID>
     <ID>LongMethod:SettingsScreen.kt$@Composable fun SettingsScreen(onMessage: (String) -&gt; Unit = {}, onNavigateToCreatorCenter: () -&gt; Unit = {})</ID>
@@ -166,6 +173,8 @@
     <ID>LongMethod:UniverseScreen.kt$@Composable internal fun UniverseScreen( onBack: () -&gt; Unit, onOpenGhostChat: (UniverseFeedDto) -&gt; Unit = {}, )</ID>
     <ID>LongMethod:UniverseScreen.kt$@Composable private fun UniverseEconomyCard( products: List&lt;EconomyProductDto&gt;, economy: EconomySummaryDto?, loading: Boolean, onGrantCredits: () -&gt; Unit, onBuyGhostLife: () -&gt; Unit, onBuyAtlasPass: () -&gt; Unit, onBuyGhostCourtPass: () -&gt; Unit, )</ID>
     <ID>LongMethod:UniverseScreen.kt$@Composable private fun UniverseFeedCard( feed: UniverseFeedDto, loading: Boolean, onTick: () -&gt; Unit, onOpenChat: () -&gt; Unit, ghostInput: String, onGhostInputChange: (String) -&gt; Unit, ghostChatHistory: List&lt;GhostChatMessage&gt;, ghostChatRunning: Boolean, onGhostSend: () -&gt; Unit, )</ID>
+    <ID>LongMethod:UserProfileScreen.kt$@Composable fun UserProfileScreen( userId: String, onBack: () -&gt; Unit, onOpenPost: (String) -&gt; Unit = {}, onMessage: (String) -&gt; Unit = {}, )</ID>
+    <ID>LongMethod:UserProfileScreen.kt$@Composable private fun ProfileHeader( nickname: String, posts: Int, followingCount: Int, followersCount: Int, isFollowing: Boolean, followBusy: Boolean, canFollow: Boolean, onToggleFollow: () -&gt; Unit, )</ID>
     <ID>LongMethod:WeChatChannelHandler.kt$WeChatChannelHandler$private fun processInboundMessage(msg: WeChatMessage)</ID>
     <ID>LongMethod:WeChatChannelHandler.kt$WeChatChannelHandler$private fun runMonitorLoop()</ID>
     <ID>LongParameterList:AccountGateway.kt$AccountGateway$( token: String, deviceId: String, battery: Int? = null, isCharging: Boolean = false, currentApp: String? = null, screenHash: String? = null, )</ID>
@@ -232,6 +241,10 @@
     <ID>MagicNumber:AgentPresentation.kt$AgentPresentation$32</ID>
     <ID>MagicNumber:AgentPresentation.kt$AgentPresentation$48</ID>
     <ID>MagicNumber:AgentPresentation.kt$AgentPresentation$8</ID>
+    <ID>MagicNumber:AgentSquareScreen.kt$1000</ID>
+    <ID>MagicNumber:AgentSquareScreen.kt$1000.0</ID>
+    <ID>MagicNumber:AgentSquareScreen.kt$10000</ID>
+    <ID>MagicNumber:AgentSquareScreen.kt$10000.0</ID>
     <ID>MagicNumber:AlertDialog.kt$AlertDialog$0.8</ID>
     <ID>MagicNumber:AppViewModel.kt$AppViewModel$0.1</ID>
     <ID>MagicNumber:AppViewModel.kt$AppViewModel$60</ID>
@@ -337,6 +350,8 @@
     <ID>MagicNumber:ContextSummarizer.kt$ContextSummarizer$0.2</ID>
     <ID>MagicNumber:ContextSummarizer.kt$ContextSummarizer$160</ID>
     <ID>MagicNumber:ContextSummarizer.kt$ContextSummarizer$900</ID>
+    <ID>MagicNumber:CreatePostScreen.kt$50</ID>
+    <ID>MagicNumber:CreatePostScreen.kt$9</ID>
     <ID>MagicNumber:DeclarativePluginTool.kt$DeclarativePluginTool$300</ID>
     <ID>MagicNumber:DefaultAgentService.kt$DefaultAgentService$0.97</ID>
     <ID>MagicNumber:DefaultAgentService.kt$DefaultAgentService$100</ID>
@@ -673,6 +688,12 @@
     <ID>MagicNumber:PmTaskTools.kt$ListPmProjectsTool$200</ID>
     <ID>MagicNumber:PopupDetector.kt$PopupDetector$3</ID>
     <ID>MagicNumber:PopupDetector.kt$PopupDetector$99</ID>
+    <ID>MagicNumber:PostDetailScreen.kt$0xFFE53935</ID>
+    <ID>MagicNumber:PostDetailScreen.kt$1000</ID>
+    <ID>MagicNumber:PostDetailScreen.kt$1000.0</ID>
+    <ID>MagicNumber:PostDetailScreen.kt$10000</ID>
+    <ID>MagicNumber:PostDetailScreen.kt$10000.0</ID>
+    <ID>MagicNumber:PostDetailScreen.kt$50</ID>
     <ID>MagicNumber:PreviewHtmlTool.kt$PreviewHtmlTool$100</ID>
     <ID>MagicNumber:PreviewHtmlTool.kt$PreviewHtmlTool$4096</ID>
     <ID>MagicNumber:PreviewHtmlTool.kt$PreviewHtmlTool$600</ID>
@@ -738,6 +759,10 @@
     <ID>MagicNumber:ScriptSandbox.kt$ScriptSandbox$1_000_000</ID>
     <ID>MagicNumber:ScriptSandbox.kt$ScriptSandbox.TimedContextFactory$5_000</ID>
     <ID>MagicNumber:SearchFilesTool.kt$SearchFilesTool$30</ID>
+    <ID>MagicNumber:SearchScreen.kt$1000</ID>
+    <ID>MagicNumber:SearchScreen.kt$1000.0</ID>
+    <ID>MagicNumber:SearchScreen.kt$10000</ID>
+    <ID>MagicNumber:SearchScreen.kt$10000.0</ID>
     <ID>MagicNumber:SettingsScreen.kt$3</ID>
     <ID>MagicNumber:SettingsScreen.kt$4</ID>
     <ID>MagicNumber:SettingsScreen.kt$5</ID>
@@ -820,6 +845,10 @@
     <ID>MagicNumber:UrlGuard.kt$UrlGuard$15</ID>
     <ID>MagicNumber:UrlGuard.kt$UrlGuard$16</ID>
     <ID>MagicNumber:UrlGuard.kt$UrlGuard$9</ID>
+    <ID>MagicNumber:UserProfileScreen.kt$1000</ID>
+    <ID>MagicNumber:UserProfileScreen.kt$1000.0</ID>
+    <ID>MagicNumber:UserProfileScreen.kt$10000</ID>
+    <ID>MagicNumber:UserProfileScreen.kt$10000.0</ID>
     <ID>MagicNumber:VisionMarkersTool.kt$VisionMarkersTool$12f</ID>
     <ID>MagicNumber:VisionMarkersTool.kt$VisionMarkersTool$28f</ID>
     <ID>MagicNumber:VisionMarkersTool.kt$VisionMarkersTool$36f</ID>
@@ -980,6 +1009,7 @@
     <ID>MaxLineLength:ConfigServerTest.kt$ConfigServerTest$setLateinitField(app, "deviceDiscoveryManager", com.apk.claw.android.octopus_mobile.DeviceDiscoveryManager(app, app.deviceRegistry))</ID>
     <ID>MaxLineLength:ContextCompressor.kt$ContextCompressor$return if (full.length &gt; config.summaryMaxChars) full.take(config.summaryMaxChars) + "\n...[truncated]" else full</ID>
     <ID>MaxLineLength:ContextCompressor.kt$ContextCompressor$return if (llm.length &gt; config.summaryMaxChars) llm.take(config.summaryMaxChars) + "\n...[truncated]" else llm</ID>
+    <ID>MaxLineLength:CreatePostScreen.kt$Text(stringResource(R.string.create_post_publishing), color = Color.White, fontSize = OctopusType.body)</ID>
     <ID>MaxLineLength:DebugRouteHandler.kt$DebugRouteHandler$return ctx.corsResponse(NanoHTTPD.newFixedLengthResponse(NanoHTTPD.Response.Status.OK, MIME_JSON, result.toString()))</ID>
     <ID>MaxLineLength:DebugRouteHandler.kt$DebugRouteHandler$return ctx.corsResponse(NanoHTTPD.newFixedLengthResponse(NanoHTTPD.Response.Status.OK, mime, file.inputStream(), file.length()))</ID>
     <ID>MaxLineLength:DebugRouteHandler.kt$DebugRouteHandler$session.uri == "/api/debug/execute" &amp;&amp; session.method == NanoHTTPD.Method.POST -&gt; handleExecuteTool(session, ctx)</ID>
@@ -1198,6 +1228,16 @@
     <ID>MaxLineLength:PluginMarketplaceScreen.kt$stringResource(if (loadFailed) R.string.plugin_marketplace_load_failed else R.string.plugin_marketplace_empty)</ID>
     <ID>MaxLineLength:PluginMarketplaceScreen.kt$textStyle = androidx.compose.ui.text.TextStyle(color = OctopusColors.TextPrimary, fontSize = OctopusType.body)</ID>
     <ID>MaxLineLength:PopupDetector.kt$PopupDetector$val btn = nodes.firstOrNull { (it.text?.toString()?.trim() == g) || (it.contentDescription?.toString()?.trim() == g) }</ID>
+    <ID>MaxLineLength:PostDetailScreen.kt$Box</ID>
+    <ID>MaxLineLength:PostDetailScreen.kt$Column</ID>
+    <ID>MaxLineLength:PostDetailScreen.kt$Text(DATE_FMT.format(Date(c.createdAt)), color = OctopusColors.TextMuted, fontSize = OctopusType.tag, maxLines = 1)</ID>
+    <ID>MaxLineLength:PostDetailScreen.kt$Text(DATE_FMT.format(Date(post.createdAt)), color = OctopusColors.TextMuted, fontSize = OctopusType.caption, maxLines = 1)</ID>
+    <ID>MaxLineLength:PostDetailScreen.kt$Text(c.author, color = OctopusColors.TextSecondary, fontSize = OctopusType.caption, fontWeight = FontWeight.SemiBold, maxLines = 1)</ID>
+    <ID>MaxLineLength:PostDetailScreen.kt$Text(post.author, color = OctopusColors.TextPrimary, fontSize = OctopusType.body, fontWeight = FontWeight.SemiBold, maxLines = 1)</ID>
+    <ID>MaxLineLength:PostDetailScreen.kt$Text(stringResource(R.string.post_detail_no_comments), color = OctopusColors.TextMuted, fontSize = OctopusType.caption)</ID>
+    <ID>MaxLineLength:PostDetailScreen.kt$modifier = Modifier.padding(start = OctopusSpacing.lg, top = OctopusSpacing.md, bottom = OctopusSpacing.xs)</ID>
+    <ID>MaxLineLength:PostDetailScreen.kt$placeholder = { Text(stringResource(R.string.post_detail_comment_hint), color = OctopusColors.TextMuted, fontSize = OctopusType.body) }</ID>
+    <ID>MaxLineLength:PostDetailScreen.kt$val r = if (p.favorited) SquarePostApi.unfavorite(p.id) else SquarePostApi.favorite(p.id)</ID>
     <ID>MaxLineLength:PreviewHtmlTool.kt$PreviewHtmlTool$"Complete HTML/CSS/JS to preview. Rendered directly in the web console as a sandboxed iframe. External CDN scripts work if the user's browser has internet."</ID>
     <ID>MaxLineLength:ProactiveRuleEngine.kt$ProactiveRuleEngine$val params = if (paramOverrides != null) rule.action.toolParams + paramOverrides else rule.action.toolParams</ID>
     <ID>MaxLineLength:ReflexRouter.kt$ReflexRouter$*</ID>
@@ -1746,6 +1786,7 @@
     <ID>SwallowedException:ScriptSandbox.kt$ScriptSandbox$e: Exception</ID>
     <ID>SwallowedException:ScriptSandbox.kt$ScriptSandbox$e: SecurityException</ID>
     <ID>SwallowedException:SearchEngines.kt$SearchEngine$e: Exception</ID>
+    <ID>SwallowedException:SearchScreen.kt$e: Exception</ID>
     <ID>SwallowedException:SemanticSkillRanker.kt$SemanticSkillRanker$e: Exception</ID>
     <ID>SwallowedException:ShizukuManager.kt$ShizukuManager$e: PackageManager.NameNotFoundException</ID>
     <ID>SwallowedException:ShizukuShellService.kt$ShizukuShellService$e: Exception</ID>
@@ -1755,6 +1796,7 @@
     <ID>SwallowedException:TurnScorer.kt$TurnScorer$e: Exception</ID>
     <ID>SwallowedException:UrlGuard.kt$UrlGuard$e: Exception</ID>
     <ID>SwallowedException:UrlGuard.kt$UrlGuard$e: UnknownHostException</ID>
+    <ID>SwallowedException:UserProfileScreen.kt$e: Exception</ID>
     <ID>SwallowedException:WeChatApiClient.kt$WeChatApiClient$e: java.net.SocketTimeoutException</ID>
     <ID>SwallowedException:WeChatLoginActivity.kt$e: Exception</ID>
     <ID>SwallowedException:WebDAVScanner.kt$WebDAVScanner$e: Exception</ID>
@@ -1784,6 +1826,7 @@
     <ID>TooGenericExceptionCaught:ConfigServerManager.kt$ConfigServerManager$e: Exception</ID>
     <ID>TooGenericExceptionCaught:ConfigServerManager.kt$ConfigServerManager.&lt;no name provided&gt;$e: Exception</ID>
     <ID>TooGenericExceptionCaught:ContextSummarizer.kt$ContextSummarizer$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:CreatePostScreen.kt$e: Exception</ID>
     <ID>TooGenericExceptionCaught:DebugRouteHandler.kt$DebugRouteHandler$e: Exception</ID>
     <ID>TooGenericExceptionCaught:DeclarativePluginTool.kt$DeclarativePluginTool$e: Exception</ID>
     <ID>TooGenericExceptionCaught:DefaultAgentService.kt$DefaultAgentService$e: Exception</ID>
@@ -1835,6 +1878,7 @@
     <ID>TooGenericExceptionCaught:PmTaskTools.kt$CreatePmTaskTool$e: Exception</ID>
     <ID>TooGenericExceptionCaught:PmTaskTools.kt$ListPmProjectsTool$e: Exception</ID>
     <ID>TooGenericExceptionCaught:PmTaskTools.kt$PmConfig$e: Throwable</ID>
+    <ID>TooGenericExceptionCaught:PostDetailScreen.kt$e: Exception</ID>
     <ID>TooGenericExceptionCaught:ProactiveRuleEngine.kt$ProactiveRuleEngine$e: Exception</ID>
     <ID>TooGenericExceptionCaught:QQChannelHandler.kt$QQChannelHandler$e: Exception</ID>
     <ID>TooGenericExceptionCaught:RoutineStore.kt$RoutineStore$e: Exception</ID>
@@ -1846,6 +1890,7 @@
     <ID>TooGenericExceptionCaught:ScreenStreamer.kt$ScreenStreamer.Companion$e: Exception</ID>
     <ID>TooGenericExceptionCaught:ScriptSandbox.kt$ScriptSandbox$e: Exception</ID>
     <ID>TooGenericExceptionCaught:SearchEngines.kt$SearchEngine$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:SearchScreen.kt$e: Exception</ID>
     <ID>TooGenericExceptionCaught:SemanticSkillRanker.kt$SemanticSkillRanker$e: Exception</ID>
     <ID>TooGenericExceptionCaught:SettingsViewModel.kt$SettingsViewModel$e: Exception</ID>
     <ID>TooGenericExceptionCaught:ShizukuManager.kt$ShizukuManager$e: Exception</ID>
@@ -1863,6 +1908,7 @@
     <ID>TooGenericExceptionCaught:ToolRegistry.kt$ToolRegistry$e: Exception</ID>
     <ID>TooGenericExceptionCaught:TurnScorer.kt$TurnScorer$e: Exception</ID>
     <ID>TooGenericExceptionCaught:UrlGuard.kt$UrlGuard$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:UserProfileScreen.kt$e: Exception</ID>
     <ID>TooGenericExceptionCaught:WeChatApiClient.kt$WeChatApiClient$e: Exception</ID>
     <ID>TooGenericExceptionCaught:WeChatCdn.kt$WeChatCdn$e: Exception</ID>
     <ID>TooGenericExceptionCaught:WeChatChannelHandler.kt$WeChatChannelHandler$e: Exception</ID>
@@ -1878,6 +1924,8 @@
     <ID>TooGenericExceptionThrown:MediaRepository.kt$MediaRepository$throw RuntimeException(serverError(text) ?: "HTTP ${resp.code}: ${text.take(200)}")</ID>
     <ID>TooGenericExceptionThrown:RemoteConsoleGateway.kt$RemoteConsoleGateway$throw RuntimeException("服务端返回的设备凭证不完整")</ID>
     <ID>TooGenericExceptionThrown:RemoteConsoleGateway.kt$RemoteConsoleGateway$throw RuntimeException(serverDetail(text) ?: "配对失败: HTTP ${resp.code}")</ID>
+    <ID>TooGenericExceptionThrown:SquarePostApi.kt$SquarePostApi$throw RuntimeException("评论失败")</ID>
+    <ID>TooGenericExceptionThrown:SquarePostApi.kt$SquarePostApi$throw RuntimeException(serverDetail(text) ?: "HTTP ${resp.code}")</ID>
     <ID>TooManyFunctions:AccountActivity.kt$AccountActivity : BaseActivity</ID>
     <ID>TooManyFunctions:AccountGateway.kt$AccountGateway</ID>
     <ID>TooManyFunctions:AccountRepository.kt$AccountRepository</ID>
@@ -1936,6 +1984,7 @@
     <ID>TooManyFunctions:SettingsScreen.kt$com.apk.claw.android.ui.compose.screen.SettingsScreen.kt</ID>
     <ID>TooManyFunctions:SettingsViewModel.kt$SettingsViewModel : ViewModel</ID>
     <ID>TooManyFunctions:ShizukuShellService.kt$ShizukuShellService</ID>
+    <ID>TooManyFunctions:SquarePostApi.kt$SquarePostApi</ID>
     <ID>TooManyFunctions:SystemWebViewEngine.kt$SystemWebViewEngine : BrowserEngine</ID>
     <ID>TooManyFunctions:TaskOrchestrator.kt$TaskOrchestrator</ID>
     <ID>TooManyFunctions:TaskQueue.kt$TaskQueue</ID>
@@ -1981,6 +2030,7 @@
     <ID>UnusedPrivateProperty:AgentPresentation.kt$AgentPresentation$/** 当前在外接屏上运行的 App 列表 */ private val runningApps = mutableListOf&lt;RunningAppInfo&gt;()</ID>
     <ID>UnusedPrivateProperty:BitReader.kt$BitReader$i</ID>
     <ID>UnusedPrivateProperty:ClawVpnService.kt$ClawVpnService$val output = FileOutputStream(pfd.fileDescriptor)</ID>
+    <ID>UnusedPrivateProperty:CreatePostScreen.kt$val uploadedUrls = remember { mutableStateListOf&lt;String&gt;() }</ID>
     <ID>UnusedPrivateProperty:DefaultAgentService.kt$DefaultAgentService$val msgCountBefore = messages.size</ID>
     <ID>UnusedPrivateProperty:DeviceListActivity.kt$DeviceListActivity.Companion$private const val TAG = "DeviceListActivity"</ID>
     <ID>UnusedPrivateProperty:ErrorClassifier.kt$ErrorClassifier$private const val TAG = "ErrorClassifier"</ID>

@@ -1212,4 +1212,36 @@ Shizuku 是安全、开源的本地辅助工具。</string>
     <string name="creator_center_rank_format">第 %1$d 名</string>
     <string name="creator_center_retry">重试</string>
 
+    <!-- 发帖(小红书式图文帖) -->
+    <string name="create_post_title">发帖</string>
+    <string name="create_post_publish">发布</string>
+    <string name="create_post_publishing">发布中</string>
+    <string name="create_post_title_label">标题(必填)</string>
+    <string name="create_post_content_label">说点什么...</string>
+    <string name="create_post_images_label">图片(最多 9 张)</string>
+    <string name="create_post_tag_label">标签(选填)</string>
+
+    <!-- 帖子详情 -->
+    <string name="post_detail_title">帖子详情</string>
+    <string name="post_detail_comments_section">评论 %1$d</string>
+    <string name="post_detail_no_comments">还没有评论,来抢沙发</string>
+    <string name="post_detail_comment_hint">说点什么...</string>
+    <string name="post_detail_send">发送</string>
+
+    <string name="square_search_title">搜索</string>
+    <string name="square_search_hint">搜索玩法、教程、作品</string>
+    <string name="square_search_empty">输入关键词搜索广场内容</string>
+    <string name="square_search_no_result">没有找到相关内容</string>
+    <string name="square_search_loading">搜索中…</string>
+    <string name="square_search_failed">搜索失败,请稍后重试</string>
+
+    <string name="user_profile_title">用户主页</string>
+    <string name="user_profile_posts">作品 %1$d</string>
+    <string name="user_profile_following">关注 %1$d</string>
+    <string name="user_profile_followers">粉丝 %1$d</string>
+    <string name="user_profile_follow">关注</string>
+    <string name="user_profile_following_tag">已关注</string>
+    <string name="user_profile_no_posts">还没有发布作品</string>
+    <string name="user_profile_load_failed">加载用户信息失败</string>
+
 </resources>
