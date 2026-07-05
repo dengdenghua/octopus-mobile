@@ -20,7 +20,7 @@ import com.apk.claw.android.R
 import com.apk.claw.android.base.BaseActivity
 import com.apk.claw.android.octopus_mobile.DeviceInfo
 import com.apk.claw.android.octopus_mobile.DeviceRemoteControl
-import com.apk.claw.android.utils.KVUtils
+import com.apk.claw.android.octopus_mobile.RemoteStreamPrefs
 import com.apk.claw.android.widget.MjpegImageView
 import kotlinx.coroutines.launch
 import java.net.URLEncoder
@@ -37,9 +37,6 @@ class RemoteControlActivity : BaseActivity() {
 
     companion object {
         const val EXTRA_DEVICE_ID = "device_id"
-        private const val MODE_KEY = "REMOTE_STREAM_MODE"
-        private const val MODE_SMOOTH = "smooth"
-        private const val MODE_SHARP = "sharp"
         fun start(ctx: Context, deviceId: String) {
             ctx.startActivity(Intent(ctx, RemoteControlActivity::class.java).putExtra(EXTRA_DEVICE_ID, deviceId))
         }
@@ -83,20 +80,14 @@ class RemoteControlActivity : BaseActivity() {
     /** 按当前画质档拼流地址并开播。token 由 [MjpegImageView] 自动转成 Authorization: Bearer 头。 */
     private fun startStream() {
         val token = URLEncoder.encode(device.authToken, "UTF-8")
-        mjpeg.start("${device.getBaseUrl()}/api/screen/stream?${streamParams(streamMode())}&token=$token")
+        val params = RemoteStreamPrefs.streamParams()
+        mjpeg.start("${device.getBaseUrl()}/api/screen/stream?$params&token=$token")
     }
 
-    private fun streamMode(): String = KVUtils.getString(MODE_KEY, MODE_SMOOTH)
-
-    /** 流畅=高帧率小画面(30fps);清晰=高分辨率高质量、帧率略降(24fps)。局域网带宽足,主要权衡编解码开销。 */
-    private fun streamParams(mode: String): String =
-        if (mode == MODE_SHARP) "quality=82&maxWidth=1080&fps=24" else "quality=60&maxWidth=720&fps=30"
-
-    private fun modeLabel(): String = if (streamMode() == MODE_SHARP) "🔎 清晰" else "⚡ 流畅"
-
     private fun toggleMode() {
-        KVUtils.putString(MODE_KEY, if (streamMode() == MODE_SHARP) MODE_SMOOTH else MODE_SHARP)
-        modeButton?.text = modeLabel()
+        val next = if (RemoteStreamPrefs.isSharp()) RemoteStreamPrefs.SMOOTH else RemoteStreamPrefs.SHARP
+        RemoteStreamPrefs.setMode(next)
+        modeButton?.text = RemoteStreamPrefs.label()
         mjpeg.stop()
         startStream()
     }
@@ -147,7 +138,7 @@ class RemoteControlActivity : BaseActivity() {
                 bottomMargin = dp(14)
             }
             val gap = dp(10)
-            modeButton = btn(modeLabel()) { toggleMode() }
+            modeButton = btn(RemoteStreamPrefs.label()) { toggleMode() }
             addView(modeButton, lp(gap))
             addView(btn("‹ ${getString(R.string.remote_back)}") { act { remote.pressBack(device) } }, lp(gap))
             addView(btn("⌂ ${getString(R.string.remote_home)}") { act { remote.pressHome(device) } }, lp(gap))

@@ -54,6 +54,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.apk.claw.android.BuildConfig
 import com.apk.claw.android.capture.ScreenCaptureService
 import com.apk.claw.android.server.ConfigServerManager
+import com.apk.claw.android.octopus_mobile.RemoteStreamPrefs
 import com.apk.claw.android.server.RemoteConsoleGateway
 import com.apk.claw.android.service.ClawAccessibilityService
 import com.apk.claw.android.shizuku.ShizukuManager
@@ -436,6 +437,17 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}, onNavigateToCreatorCenter: 
                     } else {
                         showRemotePairDialog = true
                     }
+                }
+                SettingsDivider()
+                val streamQuality = remember(refreshTick) { RemoteStreamPrefs.label() }
+                ClickableSettingsRow(
+                    Icons.Filled.GraphicEq,
+                    "远程画质",
+                    "$streamQuality · 点击切换(流畅 30fps / 清晰 1080p)",
+                ) {
+                    val next = if (RemoteStreamPrefs.isSharp()) RemoteStreamPrefs.SMOOTH else RemoteStreamPrefs.SHARP
+                    RemoteStreamPrefs.setMode(next)
+                    refreshTick++
                 }
             }
         }
