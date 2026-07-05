@@ -233,6 +233,7 @@ object ToolRegistry {
         register(SearchFilesTool())
         register(FileOpsTool())
         register(AppBackupTool())
+        register(com.apk.claw.android.tool.impl.EditFileTool())
 
         // UI 导航知识图谱工具(明确指 impl/NavigateTool.kt,
         // 跟 impl/browser/BrowserTools.kt 里的 NavigateTool 重名)

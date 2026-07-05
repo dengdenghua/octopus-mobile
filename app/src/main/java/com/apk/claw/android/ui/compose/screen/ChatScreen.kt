@@ -165,6 +165,26 @@ sealed class ChatMessage {
         override val id: Long = nextId()
     ) : ChatMessage()
     data class Thinking(val text: String, override val id: Long = nextId()) : ChatMessage()
+
+    /**
+     * 产物消息 —— 类似 ChatGPT/Claude 的 Artifacts 面板,展示工具产生的结构化产物。
+     *
+     * Agent 工具(preview_html / generate_app / take_screenshot / run_code writeFile 等)
+     * 产生的 HTML/图片/文件/diff 不再只藏在 48 字符摘要里,而是作为独立消息卡片展示,
+     * 提供「预览」「打开」等入口。
+     *
+     * 持久化策略:大 payload(HTML/图片 base64)存到独立的 MMKV 键([artifactPayloadKey]),
+     * 主消息列表只存引用键 + 元信息(类型/标题/路径),避免主列表臃肿。
+     */
+    data class Artifact(
+        val kind: ArtifactKind,
+        val title: String,
+        /** 文件路径(文件类产物用)或 payload 引用键(HTML/图片用)。 */
+        val payloadRef: String,
+        override val id: Long = nextId(),
+    ) : ChatMessage()
+
+    enum class ArtifactKind { HTML, IMAGE, FILE, DIFF }
 }
 
 /** 自增 ID 计数器（线程安全）。仅用于 UI 层稳定 key，不参与业务逻辑。 */
@@ -463,6 +483,55 @@ fun ChatScreen() {
                         messages.add(ChatMessage.AgentMessage("⚠️ $e"))
                         isRunning = false; scrollEnd(); persist()
                     },
+                    // ── 产物回调(类 Claude Artifacts)──
+                    // HTML 产物:preview_html / generate_app 产生的 HTML 字符串。
+                    // payload 格式 "$height\n$html"(PreviewHtmlTool 注入),解析时按首个 \n 分割。
+                    onHtml = { toolName, htmlPayload ->
+                        val refId = "${currentId}_${System.currentTimeMillis()}_html"
+                        // payload 格式 "$height\n$html",剥掉首行高度信息取实际 HTML
+                        val actualHtml = htmlPayload.substringAfter('\n', htmlPayload)
+                        ChatStore.savePayload(refId, actualHtml)
+                        val title = if (toolName == "generate_app") "生成的小应用"
+                            else "HTML 预览"
+                        messages.add(ChatMessage.Artifact(
+                            ChatMessage.ArtifactKind.HTML, title, refId,
+                        ))
+                        scrollEnd(); persist()
+                    },
+                    // 图片产物:take_screenshot 等产生的 JPEG base64
+                    onImage = { toolName, imageBase64 ->
+                        val refId = "${currentId}_${System.currentTimeMillis()}_img"
+                        ChatStore.savePayload(refId, imageBase64)
+                        val title = if (toolName == "take_screenshot") "截图" else "图片"
+                        messages.add(ChatMessage.Artifact(
+                            ChatMessage.ArtifactKind.IMAGE, title, refId,
+                        ))
+                        scrollEnd(); persist()
+                    },
+                    // 文件产物:run_code writeFile / file_ops write / generate_app 等产生的文件路径
+                    onFile = { toolName, filePath ->
+                        val title = when (toolName) {
+                            "generate_app" -> "生成的小应用"
+                            "file_ops" -> "写入的文件"
+                            "run_code", "run_python" -> "脚本产出文件"
+                            else -> "产出的文件"
+                        }
+                        // payloadRef 直接存文件路径(无需独立 payload 键,路径本身很短)
+                        messages.add(ChatMessage.Artifact(
+                            ChatMessage.ArtifactKind.FILE, title, filePath,
+                        ))
+                        scrollEnd(); persist()
+                    },
+                    // diff 产物:edit_file 等产生的 unified diff
+                    onDiff = { toolName, diff ->
+                        val refId = "${currentId}_${System.currentTimeMillis()}_diff"
+                        ChatStore.savePayload(refId, diff)
+                        val title = if (toolName == "edit_file") "代码改动" else "diff"
+                        messages.add(ChatMessage.Artifact(
+                            ChatMessage.ArtifactKind.DIFF, title, refId,
+                        ))
+                        scrollEnd(); persist()
+                    },
                 )
             } else {
                 messages.add(ChatMessage.AgentMessage(ackText))
@@ -738,6 +807,7 @@ fun ChatScreen() {
                                     is ChatMessage.AgentMessage -> AgentBubble(msg.text)
                                     is ChatMessage.ToolCall -> ToolCallItem(msg)
                                     is ChatMessage.Thinking -> ThinkingItem(msg.text)
+                                    is ChatMessage.Artifact -> ArtifactCard(msg)
                                 }
                                 is ChatRow.ToolGroup -> ToolGroupItem(
                                     tools = row.tools,
@@ -2013,6 +2083,184 @@ private fun ThinkingItem(text: String) {
         }
     }
 }
+
+/**
+ * 产物卡片(类 Claude Artifacts)—— 在对话流中展示工具产生的结构化产物。
+ *
+ * - HTML: 「预览」按钮,点击调 [com.apk.claw.android.ui.web.WebActivity.startHtml] 全屏预览
+ *   (preview_html / generate_app 产生的 HTML 字符串)。
+ * - IMAGE: 缩略图,点击在 WebActivity 中全屏查看(take_screenshot 等)。
+ * - FILE: 文件路径卡片(run_code writeFile / file_ops / generate_app 等产生的文件)。
+ * - DIFF: diff 文本渲染块(edit_file 等)。
+ *
+ * 大 payload(HTML/图片 base64)从 [ChatStore.loadPayload] 按需读取,主消息列表只存引用。
+ */
+@Composable
+private fun ArtifactCard(artifact: ChatMessage.Artifact) {
+    val tint = artifactTint(artifact.kind)
+    val icon = artifactIcon(artifact.kind)
+    Surface(
+        shape = OctopusShape.medium,
+        color = tint.copy(alpha = 0.08f),
+        border = BorderStroke(1.dp, tint.copy(alpha = 0.18f)),
+        shadowElevation = OctopusThemeStyle.cardShadow(1.dp),
+    ) {
+        Column(modifier = Modifier.padding(horizontal = OctopusSpacing.md, vertical = OctopusSpacing.sm)) {
+            ArtifactHeader(artifact, tint, icon)
+            ArtifactBody(artifact, kind = artifact.kind)
+        }
+    }
+}
+
+@Composable
+private fun ArtifactHeader(artifact: ChatMessage.Artifact, tint: Color, icon: androidx.compose.ui.graphics.vector.ImageVector) {
+    val context = LocalContext.current
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(OctopusIconSize.small))
+        Spacer(modifier = Modifier.width(OctopusSpacing.sm))
+        Text(
+            artifact.title,
+            modifier = Modifier.weight(1f),
+            fontSize = OctopusType.caption,
+            color = TextPrimary,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        if (artifact.kind == ChatMessage.ArtifactKind.HTML) {
+            TextButton(
+                onClick = {
+                    val html = ChatStore.loadPayload(artifact.payloadRef) ?: return@TextButton
+                    com.apk.claw.android.ui.web.WebActivity.startHtml(context, html, artifact.title)
+                },
+                contentPadding = PaddingValues(horizontal = OctopusSpacing.sm, vertical = 0.dp),
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Filled.OpenInNew,
+                    contentDescription = null,
+                    modifier = Modifier.size(OctopusIconSize.small),
+                )
+                Spacer(modifier = Modifier.width(ARTIFACT_BTN_GAP))
+                Text(stringResource(R.string.chat_artifact_preview), fontSize = OctopusType.caption)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ArtifactBody(artifact: ChatMessage.Artifact, kind: ChatMessage.ArtifactKind) {
+    val context = LocalContext.current
+    when (kind) {
+        ChatMessage.ArtifactKind.IMAGE -> ArtifactImage(artifact, context)
+        ChatMessage.ArtifactKind.FILE -> Text(
+            artifact.payloadRef,
+            fontSize = OctopusType.caption,
+            color = TextMuted,
+            fontFamily = FontFamily.Monospace,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = OctopusSpacing.xs),
+        )
+        ChatMessage.ArtifactKind.DIFF -> {
+            val diff = remember(artifact.payloadRef) { ChatStore.loadPayload(artifact.payloadRef) }
+            if (diff != null) DiffView(diff)
+        }
+        ChatMessage.ArtifactKind.HTML -> Unit // 只显示预览按钮
+    }
+}
+
+@Composable
+private fun ArtifactImage(artifact: ChatMessage.Artifact, context: android.content.Context) {
+    val base64 = remember(artifact.payloadRef) { ChatStore.loadPayload(artifact.payloadRef) } ?: return
+    val bytes = remember(base64) {
+        runCatching { android.util.Base64.decode(base64, android.util.Base64.DEFAULT) }.getOrNull()
+    } ?: return
+    coil.compose.AsyncImage(
+        model = bytes,
+        contentDescription = artifact.title,
+        contentScale = androidx.compose.ui.layout.ContentScale.FillWidth,
+        modifier = Modifier
+            .padding(top = OctopusSpacing.sm)
+            .fillMaxWidth()
+            .heightIn(max = ARTIFACT_IMG_MAX_HEIGHT)
+            .clip(RoundedCornerShape(8.dp))
+            .clickable {
+                // 用 WebActivity 全屏查看:包一层最简 HTML
+                val html = imagePreviewHtml(base64)
+                com.apk.claw.android.ui.web.WebActivity.startHtml(context, html, artifact.title)
+            },
+    )
+}
+
+private fun imagePreviewHtml(base64: String): String =
+    "<html><head><meta name='viewport' content='width=device-width,initial-scale=1'>" +
+        "<style>body{margin:0;background:#000;display:flex;min-height:100vh;" +
+        "align-items:center;justify-content:center}" +
+        "img{max-width:100%;max-height:100vh;object-fit:contain}</style>" +
+        "</head><body><img src='data:image/jpeg;base64,$base64'></body></html>"
+
+private fun artifactTint(kind: ChatMessage.ArtifactKind): Color = when (kind) {
+    ChatMessage.ArtifactKind.HTML -> OctopusTints.Browser
+    ChatMessage.ArtifactKind.IMAGE -> OctopusTints.Video
+    ChatMessage.ArtifactKind.FILE -> OctopusTints.Memory
+    ChatMessage.ArtifactKind.DIFF -> PrimaryColor
+}
+
+private fun artifactIcon(kind: ChatMessage.ArtifactKind): androidx.compose.ui.graphics.vector.ImageVector = when (kind) {
+    ChatMessage.ArtifactKind.HTML -> Icons.AutoMirrored.Filled.OpenInNew
+    ChatMessage.ArtifactKind.IMAGE -> Icons.Filled.CameraAlt
+    ChatMessage.ArtifactKind.FILE -> Icons.Filled.Storage
+    ChatMessage.ArtifactKind.DIFF -> Icons.Filled.Build
+}
+
+/** diff 渲染块:增行绿色 / 删行红色 / hunk 头主色 / 其余次要色,过长截断。 */
+@Composable
+private fun DiffView(diff: String) {
+    val lines = remember(diff) { diff.lineSequence().toList() }
+    val shown = remember(lines) { lines.take(DIFF_MAX_LINES) }
+    Surface(
+        shape = OctopusShape.small,
+        color = SurfaceDeepColor,
+        modifier = Modifier.fillMaxWidth().padding(top = OctopusSpacing.sm),
+    ) {
+        Column(modifier = Modifier.padding(OctopusSpacing.sm)) {
+            shown.forEach { line -> DiffLine(line) }
+            if (lines.size > shown.size) {
+                Text(
+                    "… (共 ${lines.size} 行,已截断)",
+                    fontSize = DIFF_TRUNCATED_FONT,
+                    color = TextMuted,
+                    modifier = Modifier.padding(top = DIFF_TRUNCATED_GAP),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DiffLine(line: String) {
+    val color = when {
+        line.startsWith("+") && !line.startsWith("+++") -> SuccessColor
+        line.startsWith("-") && !line.startsWith("---") -> ErrorColor
+        line.startsWith("@@") -> PrimaryColor
+        else -> TextSecondary
+    }
+    Text(
+        line,
+        fontSize = DIFF_LINE_FONT,
+        color = color,
+        fontFamily = FontFamily.Monospace,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
+}
+
+private const val DIFF_MAX_LINES = 50
+private val DIFF_LINE_FONT = 11.sp
+private val DIFF_TRUNCATED_FONT = 10.sp
+private val ARTIFACT_BTN_GAP = 4.dp
+private val ARTIFACT_IMG_MAX_HEIGHT = 240.dp
+private val DIFF_TRUNCATED_GAP = 4.dp
 
 @Composable
 private fun ScrollToBottomButton(visible: Boolean, onClick: () -> Unit) {

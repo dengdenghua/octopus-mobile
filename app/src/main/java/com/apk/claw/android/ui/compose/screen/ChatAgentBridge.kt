@@ -240,6 +240,8 @@ object ChatAgentBridge {
         untrusted: Boolean = false,
         onImage: ((toolName: String, imageBase64: String) -> Unit)? = null,
         onHtml: ((toolName: String, htmlContent: String) -> Unit)? = null,
+        onFile: ((toolName: String, filePath: String) -> Unit)? = null,
+        onDiff: ((toolName: String, diff: String) -> Unit)? = null,
         conversationContext: String? = null,
         persona: String? = null,
         workspace: String? = null,
@@ -309,6 +311,14 @@ object ChatAgentBridge {
                 val html = result.htmlContent
                 if (html != null && onHtml != null) {
                     main.post { onHtml(toolName, html) }
+                }
+                val fp = result.filePath
+                if (fp != null && onFile != null) {
+                    main.post { onFile(toolName, fp) }
+                }
+                val df = result.diff
+                if (df != null && onDiff != null) {
+                    main.post { onDiff(toolName, df) }
                 }
             }
 

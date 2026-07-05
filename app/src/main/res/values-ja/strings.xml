@@ -1172,6 +1172,8 @@
     <string name="chat_workspace_pick_title">この会話のワークスペースを選択</string>
     <string name="chat_workspace_pick_desc">Codex 起動時の --cd のようにプロジェクトディレクトリを選択。Agent はそのディレクトリ内のコードやファイルを読み取れ、run_code/run_python の WORKSPACE もここに切り替わります。空欄ならグローバル既定を使用。</string>
     <string name="chat_workspace_change">ワークスペースを変更</string>
+    <string name="chat_artifact_preview">プレビュー</string>
+    <string name="chat_artifact_open">開く</string>
     <!-- 技能商城 -->
     <string name="skill_empty">一致するスキルがありません</string>
     <string name="skill_filter_all">すべて</string>
