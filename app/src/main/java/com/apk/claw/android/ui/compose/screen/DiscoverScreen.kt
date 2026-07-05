@@ -151,6 +151,7 @@ fun DiscoverScreen(onOpenUrl: ((String?) -> Unit)? = null) {
     val bookmarks = remember(refreshTick) { BookmarkManager.getAll() }
     val commonSites = remember(refreshTick) { CommonSiteStore.getAll() }
     var siteToDelete by remember { mutableStateOf<CommonSiteItem?>(null) }
+    var appToDelete by remember { mutableStateOf<PluginManifest?>(null) }
 
     LazyColumn(
         modifier = Modifier
@@ -193,7 +194,11 @@ fun DiscoverScreen(onOpenUrl: ((String?) -> Unit)? = null) {
         if (miniApps.isNotEmpty()) {
             item { LauncherSectionHeader(stringResource(R.string.browser_home_miniapps)) }
             item {
-                MiniAppsSection(apps = miniApps) { id -> MiniAppRegistry.launch(context, id) }
+                MiniAppsSection(
+                    apps = miniApps,
+                    onLaunch = { id -> MiniAppRegistry.launch(context, id) },
+                    onLongPress = { appToDelete = it },
+                )
             }
         }
 
@@ -235,6 +240,26 @@ fun DiscoverScreen(onOpenUrl: ((String?) -> Unit)? = null) {
             },
             dismissButton = {
                 TextButton(onClick = { siteToDelete = null }) { Text(stringResource(R.string.common_cancel)) }
+            },
+        )
+    }
+
+    // 长按「我的应用(小程序)」图标 → 确认删除(卸载目录 + 移出注册 + 刷新首页)。
+    appToDelete?.let { app ->
+        AlertDialog(
+            onDismissRequest = { appToDelete = null },
+            title = { Text("删除应用") },
+            text = { Text(app.name.ifBlank { app.id }) },
+            confirmButton = {
+                TextButton(onClick = {
+                    com.apk.claw.android.ClawApplication.instance.pluginManager.uninstallMiniApp(app.id)
+                    appToDelete = null
+                    Toast.makeText(context, context.getString(R.string.browser_home_removed_toast), Toast.LENGTH_SHORT).show()
+                    refreshTick++
+                }) { Text(stringResource(R.string.common_delete)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { appToDelete = null }) { Text(stringResource(R.string.common_cancel)) }
             },
         )
     }
@@ -355,11 +380,20 @@ private fun LauncherIconSquare(content: @Composable () -> Unit) {
     Box(modifier = Modifier.fillMaxSize().background(SurfaceColor), contentAlignment = Alignment.Center) { content() }
 }
 
-/** 我的小程序：[MiniAppRegistry] 里已注册的小程序（含 generate_app 现场生成的），点了直接启动。 */
+/** 我的小程序：[MiniAppRegistry] 里已注册的小程序（含 generate_app 现场生成的），点了直接启动;长按删除。 */
 @Composable
-private fun MiniAppsSection(apps: List<PluginManifest>, onLaunch: (String) -> Unit) {
+private fun MiniAppsSection(
+    apps: List<PluginManifest>,
+    onLaunch: (String) -> Unit,
+    onLongPress: (PluginManifest) -> Unit,
+) {
     LauncherGrid(apps) { m, mod ->
-        LauncherIcon(label = m.name.ifBlank { m.id }, modifier = mod, onClick = { onLaunch(m.id) }) {
+        LauncherIcon(
+            label = m.name.ifBlank { m.id },
+            modifier = mod,
+            onClick = { onLaunch(m.id) },
+            onLongClick = { onLongPress(m) },
+        ) {
             MiniAppTileIcon(name = m.name.ifBlank { m.id }, id = m.id)
         }
     }
