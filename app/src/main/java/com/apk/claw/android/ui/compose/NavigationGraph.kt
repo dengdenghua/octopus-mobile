@@ -220,6 +220,7 @@ fun OctopusNavHost(
                 onNavigateToUniverse = { navController.navigate(Screen.Universe.route) },
                 onNavigateToSkillMarketplace = { navController.navigate(Screen.SkillMarketplace.route) },
                 onNavigateToPluginMarketplace = { navController.navigate(Screen.PluginMarketplace.route) },
+                onOpenPostDetail = { pid -> navController.navigate("square_post/$pid") },
             )
         }
         composable(Screen.SkillMarketplace.route) {

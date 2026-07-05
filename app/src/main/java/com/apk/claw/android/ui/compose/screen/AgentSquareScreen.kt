@@ -198,7 +198,8 @@ private fun AgentFeed(
 }
 
 @Composable
-private fun AgentPostCard(post: AgentPost, onClick: () -> Unit = {}) {
+@Suppress("LongMethod")
+internal fun AgentPostCard(post: AgentPost, onClick: () -> Unit = {}) {
     val isMiniApp = post.kind == "mini-app"
     val hasImageCover = post.coverUrl.isNotBlank()
     val likeText = when {
