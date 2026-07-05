@@ -648,6 +648,15 @@ class ClawAccessibilityService : AccessibilityService() {
         }
 
         /**
+         * 是否「实际连接中」(进程内 instance 存活,自托管前台服务在岗)。
+         * 保活决策(前台服务降级/重启闹钟/自愈判断)必须用这个而非 [isRunning]:
+         * 后者带 enabled 列表回退,在「系统仍列为启用但服务已死」的窗口(如崩溃惩罚期)
+         * 会误判成在跑,导致既不拉前台服务也不排重启,保活静默丢失。UI 展示仍用 [isRunning]。
+         */
+        @JvmStatic
+        fun isConnected(): Boolean = instance != null
+
+        /**
          * 通过 AccessibilityManager 检查本服务是否仍处于系统已启用列表。
          * 用于覆盖 onServiceConnected/onDestroy 之间的重启窗口期。
          */

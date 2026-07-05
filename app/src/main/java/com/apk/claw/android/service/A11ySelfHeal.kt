@@ -40,7 +40,7 @@ object A11ySelfHeal {
         return runCatching {
             // 三个前置门任一不满足就不自愈:从没开过 / 还活着 / 没 shell 能力。
             val eligible = KVUtils.getBoolean(KEY_A11Y_WANTED, false) &&
-                !ClawAccessibilityService.isRunning() &&
+                !ClawAccessibilityService.isConnected() &&
                 ShizukuManager.isAvailable()
             if (!eligible) {
                 false
