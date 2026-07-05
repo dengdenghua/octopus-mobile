@@ -131,6 +131,8 @@ object ToolRegistry {
         // 生视频:提交返回 video_id,check_video 凭它轮询 /agnesapi(视频约 2 分钟生成)
         register(com.apk.claw.android.tool.impl.GenerateVideoTool())
         register(com.apk.claw.android.tool.impl.CheckVideoTool())
+        // 搜图(免 key,Openverse 图库照片 + Clearbit 品牌 logo):给「产品设计工作流」配真实素材,不烧积分。
+        register(com.apk.claw.android.tool.impl.SearchImageTool())
         // 企业版 PM 编程接入(D①):未配置 octopus.pm.url 时工具会返回错误而非崩溃。
         register(CreatePmTaskTool())
         register(ListPmProjectsTool())

@@ -132,6 +132,8 @@ open class ClawApplication : BaseApp() {
 
         // 轻量初始化（主线程）
         appViewModelInstance.initCommon()
+        // 种下/更新内置技能(产品设计工作流 / 手机自动化编排);放启动处,不污染 buildPromptSection 读路径。
+        runCatching { com.apk.claw.android.octopus_mobile.skill.PromptSkillStore.ensureSeeded() }
         if (!ForegroundService.isRunning()) {
             val started = ForegroundService.start(this)
             if (!started) {

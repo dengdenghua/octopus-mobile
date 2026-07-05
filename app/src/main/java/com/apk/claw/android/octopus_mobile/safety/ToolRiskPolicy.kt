@@ -68,6 +68,9 @@ object ToolRiskPolicy {
         // Agnes 生成类：调用外部付费 API，消耗用户积分，纳入审计。
         "generate_image",
         "generate_video",
+        // 搜图:向外部图库/logo 服务发出用户查询词(数据出口),返回的图片 URL 会被嵌进生成物。
+        // 不烧积分、不改设备状态,但有外部 egress + 影响产物 → 纳入审计(仅审计,不上高危闸门)。
+        "search_image",
         // HTML 预览：离屏 WebView 执行任意 JS，纳入审计（与 browser_navigate 同级）。
         "preview_html",
         // 生成应用：内部自带两次 LLM 调用（消耗积分，与 generate_image/video 同类），

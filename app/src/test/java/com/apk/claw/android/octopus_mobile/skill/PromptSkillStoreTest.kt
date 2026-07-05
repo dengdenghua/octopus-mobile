@@ -1,6 +1,7 @@
 package com.apk.claw.android.octopus_mobile.skill
 
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -58,5 +59,37 @@ class PromptSkillStoreTest {
         PromptSkillStore.add(mk("s1", "invoice", "when the user asks to create an invoice"))
         assertTrue(PromptSkillStore.buildPromptSection("please make an invoice for me").contains("invoice"))
         assertTrue(PromptSkillStore.buildPromptSection("what's the weather").isEmpty())
+    }
+
+    @Test
+    fun `ensureSeeded seeds both builtins and they trigger on relevant prompts`() {
+        PromptSkillStore.ensureSeeded()
+        val names = PromptSkillStore.all().map { it.name }
+        assertTrue("应种下产品设计工作流", names.contains("产品设计工作流"))
+        assertTrue("应种下手机自动化编排", names.contains("手机自动化编排"))
+        assertTrue(
+            "设计 prompt 应命中设计技能",
+            PromptSkillStore.buildPromptSection("帮我做个好看的页面").contains("产品设计工作流"),
+        )
+        assertTrue(
+            "自动化 prompt 应命中手机技能",
+            PromptSkillStore.buildPromptSection("打开微信点一下发送按钮").contains("手机自动化编排"),
+        )
+    }
+
+    @Test
+    fun `ensureSeeded is idempotent`() {
+        PromptSkillStore.ensureSeeded()
+        PromptSkillStore.ensureSeeded()
+        assertEquals(1, PromptSkillStore.all().count { it.name == "产品设计工作流" })
+    }
+
+    @Test
+    fun `design style library triggers on brand name`() {
+        PromptSkillStore.ensureSeeded()
+        assertTrue("应种下设计风格库", PromptSkillStore.all().any { it.name == "设计风格库" })
+        val section = PromptSkillStore.buildPromptSection("帮我做个 vercel 风格的落地页")
+        assertTrue("提到品牌名应命中风格库", section.contains("设计风格库"))
+        assertTrue("命中后应带出该风格 token", section.contains("Geist"))
     }
 }

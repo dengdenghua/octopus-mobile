@@ -39,6 +39,7 @@ class GenerateAppTool : BaseTool() {
 
     companion object {
         private const val MAX_DESC_LEN = 2000
+        private const val MAX_ASSETS_LEN = 2000
         private const val PREVIEW_HEIGHT = 700
         private const val MANIFEST_VERSION = "1.0.0"
         /** 生成后自动修复的最大轮数(每轮:离屏渲染抓错 → LLM 修 → 再渲染)。 */
@@ -76,6 +77,15 @@ class GenerateAppTool : BaseTool() {
         ),
         ToolParameter("app_name", "string", "Short app name/title shown as the preview title.", false),
         ToolParameter(
+            "assets", "string",
+            "Optional REAL image assets to bake into the app so it looks polished (not flat CSS). " +
+                "Get URLs first via search_image (real photos/logos) or generate_image (AI art), then pass " +
+                "them here as 'role=URL' entries separated by ';' or newlines, e.g. " +
+                "'hero=https://…; icon_food=https://…; bg=https://…'. When present, the generator embeds " +
+                "these URLs and follows a proper design system.",
+            false,
+        ),
+        ToolParameter(
             "clarified", "boolean",
             "Leave false/unset on the FIRST attempt — the tool may return 2-3 clarifying questions for " +
                 "you to ask the user. Set true ONLY after you've asked the user those questions and folded " +
@@ -87,6 +97,7 @@ class GenerateAppTool : BaseTool() {
     override fun execute(params: Map<String, Any>): ToolResult {
         val description = requireString(params, "description").take(MAX_DESC_LEN)
         val appName = optionalString(params, "app_name", "").ifBlank { "我的应用" }
+        val assets = optionalString(params, "assets", "").take(MAX_ASSETS_LEN)
 
         val eff = LlmRouting.effective()
         if (eff.apiKey.isBlank()) return ToolResult.error("未配置模型，无法生成应用")
@@ -111,7 +122,7 @@ class GenerateAppTool : BaseTool() {
             .getOrElse { return ToolResult.error("规划阶段失败: ${it.message}") }
 
         com.apk.claw.android.agent.AgentProgressBus.set("生成代码中…")
-        val raw = runCatching { callLlm(eff, codePrompt(appName, description, plan)) }
+        val raw = runCatching { callLlm(eff, codePrompt(appName, description, plan, assets)) }
             .getOrElse { return ToolResult.error("生成代码阶段失败: ${it.message}") }
 
         var html = extractHtml(raw)
@@ -241,7 +252,8 @@ class GenerateAppTool : BaseTool() {
         直接输出条目列表，不要输出代码，不要输出多余解释。
     """.trimIndent()
 
-    private fun codePrompt(appName: String, description: String, plan: String) = """
+    private fun codePrompt(appName: String, description: String, plan: String, assets: String = ""): String {
+        val base = """
         你是资深前端工程师。根据以下产品方案，实现一个单文件 HTML 应用（内联 CSS/JS，默认不依赖
         外部资源；确有需要用图表库等时才用 CDN）。
 
@@ -269,7 +281,37 @@ class GenerateAppTool : BaseTool() {
         - 在 </html> **之后**追加一行 HTML 注释,声明你实现了哪些 action(供宿主发现,数组可为空):
           <!--OCTOPUS_ACTIONS:[{"name":"动作名","description":"一句话说明","params":[{"name":"参数名","type":"string","description":"说明","required":true}]}]-->
         - 只输出 HTML 代码本身(可含上面两行注释)，不要用 markdown 代码块包裹，不要输出任何解释文字
-    """.trimIndent()
+        """.trimIndent()
+        val design = designAssetsBlock(assets)
+        return if (design.isBlank()) base else base + "\n\n" + design
+    }
+
+    /**
+     * 「产品设计工作流」传来真实素材时,生成一段"设计系统 + 必须用上这些图"的提示块拼到 codePrompt 末尾;
+     * 没传素材(assets 空)则返回空串 —— 普通 generate_app 行为完全不变。
+     * assets 形如 "hero=URL; icon1=URL"(分号或换行分隔),见 SearchImageTool / 设计 skill。
+     */
+    private fun designAssetsBlock(assets: String): String {
+        val lines = assets.split(';', '\n')
+            .mapNotNull { it.trim().takeIf(String::isNotEmpty) }
+            .joinToString("\n") { entry ->
+                val i = entry.indexOf('=')
+                val role = if (i > 0) entry.take(i).trim() else "图"
+                val url = if (i > 0) entry.substring(i + 1).trim() else entry
+                "          · $role：$url"
+            }
+        if (lines.isBlank()) return ""
+        return """
+
+        设计要求(重要，直接决定成品质感)：
+        - 按一套明确的设计系统落地:统一主色 + 中性色阶、清晰的字体层级、8pt 间距节奏、圆角/阴影一致;
+          有留白、有层次,不要白底黑字的"半成品感"。
+        - 下列是已备好的**真实素材**,必须把它们用进界面(<img src="URL"> 或 CSS background),
+          不要再用纯色方块 / emoji / 占位图替代;首屏大图用 hero,图标位用图标,背景用背景:
+$lines
+        - 图片统一加 loading="lazy" 和合理的 object-fit;首屏图要撑满视觉焦点。
+        """.trimIndent()
+    }
 
     /** 视觉修复 prompt:渲染截图经 VLM 判定"没实现需求"时,把用户需求 + 判定原因喂回让 LLM 修功能。 */
     private fun repairPromptVisual(html: String, description: String, reason: String) = """
