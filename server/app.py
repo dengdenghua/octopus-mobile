@@ -110,6 +110,10 @@ CREDIT_PRICE = float(os.environ.get("CREDIT_PRICE", "0.05"))        # ¥/积分(
 # 创作者分成比例(用户支付 100 积分 → 创作者得 70,平台得 30)。
 # 创作者收益以积分形式发放(不可提现),用于驱动 LLM 再创作,形成数据飞轮。
 CREATOR_REVENUE_SHARE = float(os.environ.get("CREATOR_REVENUE_SHARE", "0.7"))
+# 灵感广场分类 key(小红书式分类 chips)。recommend=For You=全部,不参与过滤;其余为真过滤维度。
+SQUARE_TOPIC_KEYS = ("recommend", "automation", "efficiency", "life", "learning", "device")
+# 单帖复刻定价上限(积分);与 plugin_pay 单笔上限对齐,防标天价。
+SQUARE_PRICE_MAX = 1000
 # ── 广场图文帖图片存储(本地文件, MVP 方案; 后续可平滑迁移 OSS) ──
 # 上传根目录:服务端进程工作目录下的 uploads/(生产用 nginx 直接 alias 此目录到 /static/)
 UPLOAD_DIR = os.environ.get("UPLOAD_DIR", os.path.join(os.path.dirname(__file__), "uploads"))
@@ -567,6 +571,26 @@ def init_db() -> None:
         c.execute("CREATE INDEX IF NOT EXISTS idx_square_comments_post ON square_comments(post_id, created_at)")
         c.execute("CREATE INDEX IF NOT EXISTS idx_square_follows_followee ON square_follows(followee_id)")
         c.execute("CREATE INDEX IF NOT EXISTS idx_square_favorites_user ON square_favorites(user_id)")
+        # 迁移:给 square_posts 补「可复刻应用 + 付费积分 + 分类」列(幂等)。
+        # app_ref 空 = 纯图文帖;非空 = 关联一个可运行物,卡片显示「复刻」。
+        for _col in (
+            "app_ref TEXT DEFAULT ''",                      # 关联可运行物 id(mini-app slug / routine)
+            "app_kind TEXT DEFAULT ''",                     # mini-app | routine | skill
+            "price_credits INTEGER NOT NULL DEFAULT 0",     # 0=免费复刻,>0=付费积分
+            "topic TEXT DEFAULT 'recommend'",               # 分类 key(见 SQUARE_TOPIC_KEYS)
+        ):
+            try:
+                c.execute(f"ALTER TABLE square_posts ADD COLUMN {_col}")
+            except sqlite3.OperationalError:
+                pass  # 列已存在
+        # 复刻/购买解锁台账:PK(user_id, post_id) 天然幂等,已解锁再下载免费。
+        c.execute(
+            "CREATE TABLE IF NOT EXISTS square_unlocks("
+            "user_id TEXT NOT NULL, post_id TEXT NOT NULL, "
+            "paid_credits INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL, "
+            "PRIMARY KEY(user_id, post_id))"
+        )
+        c.execute("CREATE INDEX IF NOT EXISTS idx_square_unlocks_post ON square_unlocks(post_id)")
         # 迁移:给已存在的 remote_devices 表补新列(幂等)
         for _col in (
             "push_token TEXT DEFAULT ''", "os_version TEXT DEFAULT ''",
@@ -1873,6 +1897,23 @@ async def square_publish_post(body: dict[str, Any], u: sqlite3.Row = Depends(act
     if len(images) > MAX_IMAGES_PER_POST:
         raise HTTPException(400, f"图片上限 {MAX_IMAGES_PER_POST} 张")
     tag = str(body.get("tag") or "").strip()[:20]
+    # ── 分类 + 可复刻应用 + 定价 ──
+    topic = str(body.get("topic") or "recommend").strip()
+    if topic not in SQUARE_TOPIC_KEYS:
+        topic = "recommend"
+    app_ref = str(body.get("appRef") or body.get("app_ref") or "").strip()[:128]
+    app_kind = str(body.get("appKind") or body.get("app_kind") or "").strip()
+    if app_kind not in ("mini-app", "routine", "skill"):
+        app_kind = ""
+    try:
+        price_credits = int(body.get("priceCredits") or body.get("price_credits") or 0)
+    except (TypeError, ValueError):
+        price_credits = 0
+    price_credits = max(0, min(price_credits, SQUARE_PRICE_MAX))
+    if not app_ref:            # 纯图文帖:无关联物 → 清空定价/类型
+        app_kind, price_credits = "", 0
+    elif not app_kind:         # 有 ref 未标类型 → 默认 mini-app
+        app_kind = "mini-app"
 
     # ── 自动审核:文本部分(图片审核待接入) ──
     mod_status, mod_reason = "", ""
@@ -1886,28 +1927,141 @@ async def square_publish_post(body: dict[str, Any], u: sqlite3.Row = Depends(act
         elif qwen_verdict and qwen_verdict.startswith("可疑-"):
             mod_status, mod_reason = "flagged", f"qwen 判定:{qwen_verdict}"
 
-    final_status = "rejected" if mod_status == "auto_rejected" else "pending"
+    # 机审策略(用户选定):违规→拒;可疑→留人工;干净→自动上架进 feed。
+    if mod_status == "auto_rejected":
+        final_status = "rejected"
+    elif mod_status == "flagged":
+        final_status = "pending"
+    else:
+        final_status = "approved"
     cover = images[0] if images else ""
     # id 用下划线前缀(post_<hex>)而非斜杠:帖子 id 会被客户端直接拼进 URL 路径
     # (/square/posts/<id>),Starlette 单段路由 {post_id} 用 [^/]+ 不匹配斜杠,含斜杠会 404。
     post_id = f"post_{secrets.token_hex(8)}"
     now = now_ms()
     with closing(db()) as c:
+        # 付费/关联应用:只能挂自己发布的 mini-app,防止盗挂他人应用收费。
+        if app_ref and app_kind == "mini-app":
+            aid = app_ref if "/" in app_ref else f"plugin/{app_ref}"
+            owner = c.execute("SELECT author_id FROM registry_assets WHERE id=?", (aid,)).fetchone()
+            if not owner:
+                raise HTTPException(400, "关联的应用不存在")
+            if owner["author_id"] != u["user_id"] and not _is_admin(u):
+                raise HTTPException(403, "只能关联自己发布的应用")
         c.execute("""
             INSERT INTO square_posts(id, author_id, title, content, cover_url, images,
                 tag, status, reject_reason, moderation_status, moderation_reason,
-                likes_count, comments_count, favorites_count, created_at, updated_at)
-            VALUES(?,?,?,?,?,?,?,?,?,?,?,0,0,0,?,?)
+                likes_count, comments_count, favorites_count, created_at, updated_at,
+                app_ref, app_kind, price_credits, topic)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,0,0,0,?,?,?,?,?,?)
         """, (
             post_id, u["user_id"], title, content, cover, json.dumps(images),
             tag, final_status, (mod_reason if final_status == "rejected" else ""),
             mod_status, mod_reason, now, now,
+            app_ref, app_kind, price_credits, topic,
         ))
         c.commit()
 
     if final_status == "rejected":
         return {"ok": False, "status": "rejected", "reason": mod_reason or "内容违规"}
-    return {"ok": True, "status": "pending", "postId": post_id, "message": "已提交,审核通过后就会出现在广场"}
+    if final_status == "approved":
+        return {"ok": True, "status": "approved", "postId": post_id, "message": "已发布,现在就能在灵感看到"}
+    return {"ok": True, "status": "pending", "postId": post_id, "message": "已提交,审核通过后就会出现在灵感"}
+
+
+def _load_acquirable(c: sqlite3.Connection, app_kind: str, app_ref: str) -> dict[str, Any] | None:
+    """取出帖子关联的可运行物,组装成客户端可安装的载荷。
+    mini-app → registry plugin(含 body);其余类型暂回传引用让客户端自行解析。
+    返回 None 表示 mini-app 关联的资产不存在 —— 交付前校验,避免扣了款却交付不出。"""
+    ref = (app_ref or "").strip()
+    if not ref:
+        return None
+    if app_kind in ("mini-app", "skill", ""):
+        aid = ref if "/" in ref else f"plugin/{ref}"
+        r = c.execute("SELECT * FROM registry_assets WHERE id=?", (aid,)).fetchone()
+        if not r:
+            return None
+        d = _registry_row_to_asset(r)
+        d["body"] = r["body"] or ""
+        return d
+    return {"kind": app_kind, "ref": ref}  # routine 等:无服务端资产,回传引用
+
+
+@app.post("/square/posts/{post_id}/acquire")
+def square_acquire(post_id: str, u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    """复刻/下载帖子关联的可运行物。
+    - 纯图文帖(无 app_ref)→ 400
+    - 已解锁 → 直接交付(免费重装,幂等)
+    - 免费/自购 → 记 unlock 后交付
+    - 付费 → 原子扣积分(不透支,余额不足 402)+ 记 unlock + 按 CREATOR_REVENUE_SHARE 分成 + 交付
+    幂等:unlock PK(user_id, post_id),重复 acquire 不重复扣款。"""
+    user_id = u["user_id"]
+    rate_limit(f"acquire:{user_id}", 30, 60)
+    with closing(db()) as c:
+        post = c.execute(
+            "SELECT * FROM square_posts WHERE id=? AND status='approved'", (post_id,),
+        ).fetchone()
+        if not post:
+            raise HTTPException(404, "帖子不存在或未通过审核")
+        app_ref = (post["app_ref"] or "").strip()
+        app_kind = (post["app_kind"] or "").strip()
+        if not app_ref:
+            raise HTTPException(400, "该帖子没有可复刻的应用")
+        # 交付前先确认可交付,避免扣款后交付不出
+        payload = _load_acquirable(c, app_kind, app_ref)
+        if payload is None:
+            raise HTTPException(404, "关联的应用不存在")
+        price = int(post["price_credits"] or 0)
+        author_id = post["author_id"]
+        creator_earned = 0
+
+        c.execute("BEGIN IMMEDIATE")
+        try:
+            newly = False
+            try:
+                c.execute(
+                    "INSERT INTO square_unlocks(user_id, post_id, paid_credits, created_at) "
+                    "VALUES(?,?,?,?)",
+                    (user_id, post_id, 0, now_ms()),
+                )
+                newly = True
+            except sqlite3.IntegrityError:
+                newly = False  # 已解锁 → 免费重发,不扣款(语句级 ABORT,事务仍有效)
+            # 付费 & 首次 & 非自购 → 扣款 + 分成
+            if newly and price > 0 and author_id and author_id != user_id:
+                cur = c.execute(
+                    "UPDATE users SET credits = credits - ? WHERE user_id = ? AND credits >= ?",
+                    (price, user_id, price),
+                )
+                if cur.rowcount == 0:
+                    bal_row = c.execute("SELECT credits FROM users WHERE user_id=?", (user_id,)).fetchone()
+                    bal_now = int(bal_row["credits"]) if bal_row else 0
+                    c.execute("ROLLBACK")
+                    raise HTTPException(402, f"积分不足: 需要 {price},当前余额 {bal_now}")
+                _record_credit_txn(c, user_id, -price, source="square_acquire",
+                                   detail=f"复刻「{post['title'][:40]}」", ref_id=f"acquire/{post_id}")
+                c.execute("UPDATE square_unlocks SET paid_credits=? WHERE user_id=? AND post_id=?",
+                          (price, user_id, post_id))
+                creator_earned = int(price * CREATOR_REVENUE_SHARE)
+                if creator_earned > 0:
+                    c.execute("UPDATE users SET credits = credits + ? WHERE user_id = ?",
+                              (creator_earned, author_id))
+                    _record_credit_txn(c, author_id, creator_earned, source="creator_revenue",
+                                       detail=f"帖子「{post['title'][:40]}」复刻分成",
+                                       ref_id=f"acquire/{post_id}")
+            c.commit()
+        except HTTPException:
+            raise
+        except Exception:
+            c.execute("ROLLBACK")
+            raise
+
+        bal_row = c.execute("SELECT credits FROM users WHERE user_id=?", (user_id,)).fetchone()
+        balance = int(bal_row["credits"]) if bal_row else 0
+    return {
+        "ok": True, "owned": True, "appKind": app_kind, "appRef": app_ref,
+        "creatorEarned": creator_earned, "balance": balance, "app": payload,
+    }
 
 
 @app.get("/square/posts/{post_id}")
@@ -2148,7 +2302,7 @@ def square_user_profile(user_id: str, request: Request) -> dict[str, Any]:
 
 
 @app.get("/square/feed")
-def square_feed(request: Request, limit: int = 20, offset: int = 0, q: str = "") -> dict[str, Any]:
+def square_feed(request: Request, limit: int = 20, offset: int = 0, q: str = "", topic: str = "") -> dict[str, Any]:
     """广场目录(公开,无需登录)。
 
     改造为数据库驱动:从 square_posts 取已审核通过的图文帖,按创建时间倒序分页。
@@ -2172,27 +2326,30 @@ def square_feed(request: Request, limit: int = 20, offset: int = 0, q: str = "")
                 viewer = claims["sub"]
         except Exception:
             viewer = ""
+    topic = (topic or "").strip()
+    # recommend=For You=全部,不过滤;其余按 topic 精确过滤
+    filter_topic = topic if (topic in SQUARE_TOPIC_KEYS and topic != "recommend") else ""
     with closing(db()) as c:
-        # ── 图文帖 ──
+        # ── 图文帖(WHERE 动态拼接:子句为字面量、用户输入一律走占位符,无注入) ──
+        where = "status='approved'"
+        params: list[Any] = []
         if q.strip():
             like = f"%{q.strip()}%"
-            rows = c.execute(
-                "SELECT * FROM square_posts WHERE status='approved' "
-                "AND (title LIKE ? OR content LIKE ? OR tag LIKE ?) "
-                "ORDER BY created_at DESC LIMIT ? OFFSET ?",
-                (like, like, like, limit, offset),
-            ).fetchall()
-        else:
-            rows = c.execute(
-                "SELECT * FROM square_posts WHERE status='approved' "
-                "ORDER BY created_at DESC LIMIT ? OFFSET ?",
-                (limit, offset),
-            ).fetchall()
+            where += " AND (title LIKE ? OR content LIKE ? OR tag LIKE ?)"
+            params += [like, like, like]
+        if filter_topic:
+            where += " AND topic=?"
+            params.append(filter_topic)
+        rows = c.execute(
+            f"SELECT * FROM square_posts WHERE {where} "
+            "ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            (*params, limit, offset),
+        ).fetchall()
         for r in rows:
             items.append(_present_post(c, r, viewer))
 
-        # ── 小程序帖(混合展示;只在首页 offset=0 且未搜索时追加,避免分页错乱) ──
-        if not q.strip() and offset == 0:
+        # ── 小程序帖(混合展示;仅首页、无搜索、无分类过滤时追加,避免分页错乱) ──
+        if not q.strip() and not filter_topic and offset == 0:
             mini_rows = c.execute(
                 "SELECT * FROM registry_assets WHERE type='plugin' AND kind='mini-app' "
                 "AND status='approved' ORDER BY updated_at DESC LIMIT ?",
@@ -2201,8 +2358,9 @@ def square_feed(request: Request, limit: int = 20, offset: int = 0, q: str = "")
             for r in mini_rows:
                 items.append(_present_miniapp_as_post(c, r, viewer))
 
-    # 数据库为空时回退到内置静态示例(向后兼容,首次部署无帖也能展示)
-    if not items and offset == 0 and not q.strip():
+    # 数据库为空时回退到内置静态示例(向后兼容,首次部署无帖也能展示);
+    # 带搜索/分类过滤时不回退,否则会无视过滤条件返回全量示例。
+    if not items and offset == 0 and not q.strip() and not filter_topic:
         return SQUARE_FEED
 
     return {"posts": items, "has_more": len(items) >= limit}
@@ -3080,6 +3238,15 @@ def _present_post(c: sqlite3.Connection, r: sqlite3.Row, viewer_id: str = "") ->
         "coverHeightDp": 200 if cover else 160,
         "coverGradient": ["#667EEA", "#764BA2"],
         "tagColor": "#6366F1",
+        # 可复刻应用 + 付费积分 + 分类。appRef 空 = 纯图文帖,客户端只显示点赞/评论。
+        "appRef": (r["app_ref"] if "app_ref" in r.keys() else "") or "",
+        "appKind": (r["app_kind"] if "app_kind" in r.keys() else "") or "",
+        "priceCredits": int(r["price_credits"]) if ("price_credits" in r.keys() and r["price_credits"]) else 0,
+        "topic": (r["topic"] if "topic" in r.keys() else "") or "recommend",
+        "owned": bool(viewer_id) and c.execute(
+            "SELECT 1 FROM square_unlocks WHERE user_id=? AND post_id=?",
+            (viewer_id, r["id"]),
+        ).fetchone() is not None,
         "createdAt": r["created_at"],
     }
 
@@ -3111,6 +3278,12 @@ def _present_miniapp_as_post(c: sqlite3.Connection, r: sqlite3.Row, viewer_id: s
         "coverHeightDp": 160,
         "coverGradient": ["#11998E", "#38EF7D"],
         "tagColor": "#10B981",
+        # 小程序帖:天然可复刻(免费),走既有下载/安装路径;appRef=slug,kind 已标 mini-app 供客户端区分。
+        "appRef": r["id"].split("/", 1)[-1],
+        "appKind": "mini-app",
+        "priceCredits": 0,
+        "topic": "recommend",
+        "owned": False,
         "createdAt": r["created_at"],
     }
 

@@ -69,7 +69,9 @@ def clean_state():
         for t in ("users", "sms_codes", "email_codes", "orders", "usage_log", "admin_log",
                   "idempotency_keys",
                   "credit_transactions", "device_reports", "remote_devices", "remote_pair_codes",
-                  "registry_assets", "crash_reports"):
+                  "registry_assets", "crash_reports",
+                  "square_posts", "square_comments", "square_likes", "square_follows",
+                  "square_favorites", "square_unlocks"):
             c.execute(f"DELETE FROM {t}")
         c.commit()
     app_module._rl.clear()
@@ -2208,3 +2210,128 @@ class TestSquarePostIdNoSlash:
         init_db()
         with closing(db()) as c:
             assert c.execute("SELECT COUNT(*) FROM square_posts WHERE id=?", (migrated_id,)).fetchone()[0] == 1
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 灵感广场:小红书式图文社区 + 可复刻应用 + 付费积分复刻(作者自定价 + 平台抽成 + 机审自动上架)
+# ══════════════════════════════════════════════════════════════════════════════
+class TestSquareAppPosts:
+    """覆盖:机审干净自动上架、分类过滤、acquire 免费/付费/幂等/402/400/401、盗挂防护。"""
+
+    @pytest.fixture(autouse=True)
+    def _no_qwen(self, monkeypatch):
+        """屏蔽外部 Qwen 审核 → 机审干净,发帖走自动上架路径(确定性,不依赖网络/密钥)。"""
+        async def _clean(*_a, **_k):
+            return None
+        monkeypatch.setattr(app_module, "_qwen_moderate", _clean)
+
+    @staticmethod
+    def _auth(tok):
+        return {"Authorization": f"Bearer {tok}"}
+
+    @staticmethod
+    def _set_credits(uid, credits):
+        with closing(db()) as c:
+            c.execute("UPDATE users SET credits=? WHERE user_id=?", (credits, uid))
+            c.commit()
+
+    @staticmethod
+    def _insert_paid_post(author_id, price, app_ref="r1", app_kind="routine", status="approved"):
+        pid = f"post_{app_ref}"
+        now = _now_ms()
+        with closing(db()) as c:
+            c.execute(
+                "INSERT INTO square_posts(id, author_id, title, content, cover_url, images, "
+                "tag, status, reject_reason, moderation_status, moderation_reason, "
+                "likes_count, comments_count, favorites_count, created_at, updated_at, "
+                "app_ref, app_kind, price_credits, topic) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?,0,0,0,?,?,?,?,?,?)",
+                (pid, author_id, "付费例程", "", "", "[]", "", status, "", "", "",
+                 now, now, app_ref, app_kind, price, "automation"),
+            )
+            c.commit()
+        return pid
+
+    def test_text_post_auto_approved_and_in_feed(self, client):
+        tok, _uid = _email_register(client, "poster@x.com")
+        r = client.post("/square/posts/publish", headers=self._auth(tok),
+                        json={"title": "灵感一则", "content": "自动化真香", "topic": "automation"})
+        assert r.status_code == 200, r.text
+        j = r.json()
+        assert j["status"] == "approved"          # 机审干净 → 自动上架
+        pid = j["postId"]
+        posts = client.get("/square/feed").json()["posts"]
+        p = next((x for x in posts if x["id"] == pid), None)
+        assert p is not None
+        assert p["appRef"] == "" and p["priceCredits"] == 0 and p["topic"] == "automation"
+        assert "owned" in p
+
+    def test_topic_filter(self, client):
+        tok, _uid = _email_register(client, "poster2@x.com")
+        client.post("/square/posts/publish", headers=self._auth(tok),
+                    json={"title": "AA", "content": "x", "topic": "automation"})
+        client.post("/square/posts/publish", headers=self._auth(tok),
+                    json={"title": "BB", "content": "y", "topic": "life"})
+        auto = client.get("/square/feed", params={"topic": "automation"}).json()["posts"]
+        life = client.get("/square/feed", params={"topic": "life"}).json()["posts"]
+        assert any(p["title"] == "AA" for p in auto)
+        assert all(p["title"] != "BB" for p in auto)
+        assert any(p["title"] == "BB" for p in life)
+
+    def test_acquire_text_post_returns_400(self, client):
+        tok, _uid = _email_register(client, "u400@x.com")
+        pid = client.post("/square/posts/publish", headers=self._auth(tok),
+                          json={"title": "纯图文", "content": "无应用"}).json()["postId"]
+        r = client.post(f"/square/posts/{pid}/acquire", headers=self._auth(tok))
+        assert r.status_code == 400
+
+    def test_paid_acquire_deducts_and_shares(self, client):
+        _atok, author = _email_register(client, "author@x.com")
+        self._set_credits(author, 0)
+        btok, _buyer = _email_register(client, "buyer@x.com")
+        self._set_credits(_buyer, 100)
+        pid = self._insert_paid_post(author, 50)
+        r = client.post(f"/square/posts/{pid}/acquire", headers=self._auth(btok))
+        assert r.status_code == 200, r.text
+        j = r.json()
+        assert j["balance"] == 50 and j["owned"] is True
+        assert j["creatorEarned"] == 35           # int(50 * 0.7)
+        assert (j["app"] or {}).get("ref") == "r1"
+        with closing(db()) as c:
+            ac = c.execute("SELECT credits FROM users WHERE user_id=?", (author,)).fetchone()["credits"]
+        assert ac == 35
+
+    def test_acquire_is_idempotent(self, client):
+        _atok, author = _email_register(client, "a2@x.com")
+        btok, buyer = _email_register(client, "b2@x.com")
+        self._set_credits(buyer, 100)
+        pid = self._insert_paid_post(author, 30, app_ref="r2")
+        client.post(f"/square/posts/{pid}/acquire", headers=self._auth(btok))
+        j = client.post(f"/square/posts/{pid}/acquire", headers=self._auth(btok)).json()
+        assert j["balance"] == 70                  # 只扣一次 30,不二次扣款
+        assert j["creatorEarned"] == 0
+
+    def test_acquire_insufficient_credits_402_no_charge(self, client):
+        _atok, author = _email_register(client, "a3@x.com")
+        btok, buyer = _email_register(client, "b3@x.com")
+        self._set_credits(buyer, 10)
+        pid = self._insert_paid_post(author, 50, app_ref="r3")
+        r = client.post(f"/square/posts/{pid}/acquire", headers=self._auth(btok))
+        assert r.status_code == 402
+        with closing(db()) as c:
+            bc = c.execute("SELECT credits FROM users WHERE user_id=?", (buyer,)).fetchone()["credits"]
+            un = c.execute("SELECT 1 FROM square_unlocks WHERE user_id=? AND post_id=?",
+                           (buyer, pid)).fetchone()
+        assert bc == 10 and un is None             # 回滚干净:余额未动、无解锁记录
+
+    def test_acquire_requires_auth(self, client):
+        _atok, author = _email_register(client, "a4@x.com")
+        pid = self._insert_paid_post(author, 50, app_ref="r4")
+        assert client.post(f"/square/posts/{pid}/acquire").status_code == 401
+
+    def test_publish_miniapp_ref_must_exist(self, client):
+        tok, _uid = _email_register(client, "a5@x.com")
+        r = client.post("/square/posts/publish", headers=self._auth(tok),
+                        json={"title": "挂个不存在的应用", "content": "x",
+                              "appRef": "nonexistent_app", "appKind": "mini-app", "priceCredits": 20})
+        assert r.status_code == 400                # 关联的应用不存在
