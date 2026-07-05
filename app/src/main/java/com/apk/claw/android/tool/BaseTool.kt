@@ -44,6 +44,7 @@ abstract class BaseTool {
             "shell_exec",
             "preview_html",
             "generate_app",
+            "edit_file",
             "spawn_subagent"
         )
 
@@ -84,7 +85,7 @@ abstract class BaseTool {
     fun getParametersWithWaitAfter(): List<ToolParameter> {
         val params = getParameters().toMutableList()
         // 不给 wait / finish / get_screen_info 等观察类工具加 wait_after
-        if (getName() !in listOf("wait", "finish", "get_screen_info", "take_screenshot", "get_installed_apps", "find_node_info", "scroll_to_find", "list_scheduled_tasks", "schedule_task", "cancel_scheduled_task", "read_sms", "read_calendar", "get_usage_stats", "send_intent", "send_sms", "get_window_info", "resize_window", "launch_freeform", "browse_files", "search_files", "file_ops", "backup_app", "navigate", "media_player")) {
+        if (getName() !in listOf("wait", "finish", "get_screen_info", "take_screenshot", "get_installed_apps", "find_node_info", "scroll_to_find", "list_scheduled_tasks", "schedule_task", "cancel_scheduled_task", "read_sms", "read_calendar", "get_usage_stats", "send_intent", "send_sms", "get_window_info", "resize_window", "launch_freeform", "browse_files", "search_files", "file_ops", "backup_app", "navigate", "media_player", "edit_file")) {
             params.add(WAIT_AFTER_PARAM)
         }
         return params

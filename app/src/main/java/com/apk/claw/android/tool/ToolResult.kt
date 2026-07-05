@@ -1,5 +1,6 @@
 package com.apk.claw.android.tool
 
+@Suppress("LongParameterList") // 工具产物多通道:截图/HTML/文件路径/diff 各自独立,收拢成对象要连改多处调用点
 class ToolResult private constructor(
     val isSuccess: Boolean,
     val data: String?,
@@ -16,6 +17,19 @@ class ToolResult private constructor(
     val errorCode: String? = null,
     /** 出错源码行号（run_code / 脚本类工具可用），无则 null。 */
     val errorLine: Int? = null,
+    /**
+     * 工具产出的文件绝对路径(类 Claude Artifacts 的 FILE 产物)。
+     * run_code writeFile / file_ops write / generate_app 等产生文件时填上,
+     * 对话页据此生成 FILE 类 Artifact 卡片,展示路径并支持打开。
+     * 多个文件用换行分隔;为 null 表示该工具调用未产生文件。
+     */
+    val filePath: String? = null,
+    /**
+     * 工具产出的 diff 文本(unified diff 格式,类 Claude Artifacts 的 DIFF 产物)。
+     * edit_file 等修改文件的工具填上,对话页据此生成 DIFF 类 Artifact 卡片渲染。
+     * 为 null 表示该工具调用未产生 diff。
+     */
+    val diff: String? = null,
 ) {
     companion object {
         @JvmStatic
@@ -42,11 +56,23 @@ class ToolResult private constructor(
         @JvmStatic
         fun successWithHtml(data: String, htmlContent: String): ToolResult =
             ToolResult(true, data, null, null, htmlContent)
+
+        /** 返回成功结果，同时携带产出的文件路径(多个用换行分隔)。 */
+        @JvmStatic
+        fun successWithFile(data: String, filePath: String): ToolResult =
+            ToolResult(true, data, null, null, null, null, null, filePath)
+
+        /** 返回成功结果，同时携带 diff 文本(unified diff 格式)。 */
+        @JvmStatic
+        fun successWithDiff(data: String, diff: String): ToolResult =
+            ToolResult(true, data, null, null, null, null, null, null, diff)
     }
 
     override fun toString(): String = when {
         imageBase64 != null -> "ToolResult{success=$isSuccess, data='$data', imageBase64='${imageBase64.take(30)}...'}"
         htmlContent != null -> "ToolResult{success=$isSuccess, data='$data', htmlContent=${htmlContent.length}chars}"
+        diff != null -> "ToolResult{success=$isSuccess, data='$data', diff=${diff.length}chars}"
+        filePath != null -> "ToolResult{success=$isSuccess, data='$data', filePath='$filePath'}"
         isSuccess -> "ToolResult{success=true, data='$data'}"
         else -> "ToolResult{success=false, error='$error'${errorCode?.let { ", code=$it" } ?: ""}}"
     }

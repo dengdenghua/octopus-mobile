@@ -24,6 +24,7 @@ object ToolRiskPolicy {
         "send_sms",
         "send_intent",
         "file_ops",
+        "edit_file",
         "backup_app",
         "launch_freeform",
         "resize_window",
