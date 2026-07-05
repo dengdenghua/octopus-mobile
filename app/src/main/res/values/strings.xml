@@ -1,4 +1,4 @@
-<resources>
+﻿<resources>
     <string name="app_name">Octopus Mobile</string>
 
     <!-- Common -->
@@ -822,7 +822,7 @@ Shizuku 是安全、开源的本地辅助工具。</string>
     <string name="feat_multiwindow">多窗口</string>
     <string name="feat_evolution">自我优化</string>
     <string name="feat_trust">信任中心</string>
-    <string name="feat_toolbox_title">能力</string>
+    <string name="feat_toolbox_title">市场</string>
     <string name="feat_explore">探索</string>
     <string name="feat_explore_title">灵感</string>
     <string name="feat_explore_hot">热门</string>
@@ -1244,4 +1244,13 @@ Shizuku 是安全、开源的本地辅助工具。</string>
     <string name="user_profile_no_posts">还没有发布作品</string>
     <string name="user_profile_load_failed">加载用户信息失败</string>
 
+    <string name="market_kind_skill">技能</string>
+    <string name="market_kind_plugin">插件</string>
+    <string name="market_kind_app">应用</string>
+    <string name="market_sort_ranking">排行</string>
+    <string name="market_sort_latest">最新</string>
+    <string name="market_sort_trending">趋势</string>
+    <string name="market_category_all">全部</string>
+    <string name="market_empty">这个分类下还没有内容,晚点再来看看</string>
+    <string name="feat_more_title">更多</string>
 </resources>

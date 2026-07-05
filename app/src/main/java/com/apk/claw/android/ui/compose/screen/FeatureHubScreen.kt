@@ -94,6 +94,7 @@ import com.apk.claw.android.ui.featurescreens.EvolutionActivity
 import com.apk.claw.android.ui.featurescreens.MemoryActivity
 import com.apk.claw.android.ui.featurescreens.MultiWindowActivity
 import com.apk.claw.android.ui.featurescreens.MiniAppListActivity
+import com.apk.claw.android.ui.featurescreens.MiniAppMarketplaceActivity
 import com.apk.claw.android.ui.featurescreens.RoutinesActivity
 import com.apk.claw.android.ui.featurescreens.SkillsActivity
 import com.apk.claw.android.ui.featurescreens.TrustCenterActivity
@@ -186,6 +187,9 @@ fun FeatureHubScreen(
                 TabLabel(stringResource(R.string.feat_explore_title), selected = tab == 0) { tab = 0 }
                 Spacer(Modifier.width(OctopusSpacing.xl))
                 TabLabel(stringResource(R.string.feat_toolbox_title), selected = tab == 1) { tab = 1 }
+                Spacer(Modifier.width(OctopusSpacing.xl))
+                // 「更多」= 旧的功能入口大杂烩(ToolboxTab),过渡用 —— 分流到浏览器/设置后删除。
+                TabLabel(stringResource(R.string.feat_more_title), selected = tab == 2) { tab = 2 }
             }
 
             when (tab) {
@@ -194,6 +198,11 @@ fun FeatureHubScreen(
                     onNavigateToAgentSquare = onNavigateToAgentSquare,
                     onNavigateToUniverse = onNavigateToUniverse,
                     onOpenPost = { selectedPost = it },
+                )
+                1 -> MarketTab(
+                    onOpenSkillStore = onNavigateToSkillMarketplace,
+                    onOpenPluginStore = onNavigateToPluginMarketplace,
+                    onOpenAppStore = { ctx.open(MiniAppMarketplaceActivity::class.java) },
                 )
                 else -> ToolboxTab(sections, onNavigateToSkillMarketplace, onNavigateToPluginMarketplace) { ctx.open(it.target) }
             }
