@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>无障碍开启与保活指南 · 八爪鱼官方教程</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","HarmonyOS Sans SC","MiSans","Noto Sans SC","Helvetica Neue",Arial,sans-serif;
+  background:#f4f7fb;color:#1f2937;line-height:1.75;-webkit-font-smoothing:antialiased;
+}
+.page{max-width:430px;margin:0 auto;padding:20px 16px 56px}
+
+/* ===== 头部 ===== */
+.hero{
+  background:linear-gradient(150deg,#eaf2ff 0%,#ffffff 70%);
+  border:1px solid #dbe7fb;border-radius:20px;
+  padding:22px 18px 18px;margin-bottom:18px;
+}
+.badge{
+  display:inline-flex;align-items:center;gap:5px;
+  background:#2563eb;color:#fff;font-size:12px;font-weight:600;
+  padding:3px 12px;border-radius:999px;letter-spacing:.5px;
+}
+.badge::before{content:"✓";font-size:11px;font-weight:800}
+.hero h1{font-size:23px;font-weight:800;color:#0f172a;margin:12px 0 6px;letter-spacing:.3px}
+.hero p{font-size:14px;color:#475569}
+.hero .icon{font-size:30px;line-height:1}
+
+/* ===== 通用卡片与步骤 ===== */
+.section-label{
+  display:flex;align-items:center;gap:8px;
+  font-size:13px;font-weight:700;color:#2563eb;
+  margin:26px 2px 12px;letter-spacing:1px;
+}
+.section-label::after{content:"";flex:1;height:1px;background:#d7e3f4}
+.step{
+  background:#fff;border-radius:16px;padding:18px 16px;margin-bottom:14px;
+  box-shadow:0 1px 3px rgba(15,23,42,.06);
+}
+.step-head{display:flex;align-items:center;gap:11px;margin-bottom:10px}
+.step-num{
+  flex:none;width:31px;height:31px;border-radius:10px;
+  background:linear-gradient(135deg,#3b82f6,#2456d6);color:#fff;
+  font-weight:800;font-size:16px;display:flex;align-items:center;justify-content:center;
+  box-shadow:0 2px 6px rgba(37,99,235,.35);
+}
+.step-title{font-size:16.5px;font-weight:800;color:#0f172a}
+.step p{font-size:14.5px;color:#374151;margin-bottom:6px}
+.step p:last-child{margin-bottom:0}
+
+/* 按钮/开关名 高亮块 */
+.k{
+  display:inline-block;background:#e8f0fe;color:#1d4ed8;
+  border:1px solid #c9dcfb;padding:0 8px;border-radius:7px;
+  font-weight:700;font-size:13.5px;line-height:1.6;margin:1px 1px;white-space:nowrap;
+}
+.k.on{background:#e5f7ed;color:#0e7a45;border-color:#bce6cf}
+.k.warn{background:#fdf1e2;color:#b45309;border-color:#f5ddb8}
+.arrow{color:#94a3b8;font-weight:400;margin:0 3px;font-size:13px}
+.path{
+  background:#f8fafc;border:1px dashed #cbd5e1;border-radius:12px;
+  padding:10px 12px;margin:8px 0;font-size:14px;line-height:2.1;
+}
+
+/* 提示条 */
+.tip,.warn-box,.ok-box{
+  border-radius:12px;padding:12px 14px;margin:10px 0;
+  font-size:13.5px;line-height:1.7;display:flex;gap:9px;align-items:flex-start;
+}
+.tip{background:#eef4ff;color:#1e3a8a;border:1px solid #d6e3fb}
+.warn-box{background:#fff7ec;color:#92400e;border:1px solid #f7e2c0}
+.ok-box{background:#effaf3;color:#14532d;border:1px solid #cdeeda}
+.tip .i,.warn-box .i,.ok-box .i{flex:none;font-size:15px;line-height:1.5}
+
+/* 厂商卡片 */
+.vendor{
+  background:#fff;border-radius:16px;margin-bottom:14px;overflow:hidden;
+  box-shadow:0 1px 3px rgba(15,23,42,.06);border-left:5px solid #94a3b8;
+}
+.vendor.vivo{border-left-color:#3d6bff}
+.vendor.mi{border-left-color:#ff6900}
+.vendor.oppo{border-left-color:#0faa62}
+.vendor.hw{border-left-color:#d64545}
+.vendor-head{display:flex;align-items:center;gap:9px;padding:15px 16px 4px}
+.vendor-name{font-size:16.5px;font-weight:800;color:#0f172a}
+.vendor-os{
+  font-size:11.5px;font-weight:600;color:#64748b;background:#f1f5f9;
+  padding:1px 8px;border-radius:999px;border:1px solid #e2e8f0;
+}
+.vendor-body{padding:6px 16px 16px}
+.vendor-body h4{
+  font-size:13px;font-weight:700;color:#475569;margin:12px 0 4px;
+  display:flex;align-items:center;gap:6px;
+}
+.vendor-body h4::before{content:"";width:6px;height:6px;border-radius:50%;background:#3b82f6}
+.vendor-body h4:first-child{margin-top:4px}
+
+/* 目录 */
+.toc{background:#fff;border-radius:16px;padding:14px 16px;box-shadow:0 1px 3px rgba(15,23,42,.06);margin-bottom:4px}
+.toc-title{font-size:13px;font-weight:700;color:#64748b;margin-bottom:8px;letter-spacing:1px}
+.toc a{
+  display:flex;align-items:center;gap:8px;color:#1d4ed8;text-decoration:none;
+  font-size:14.5px;font-weight:600;padding:7px 2px;border-bottom:1px solid #f1f5f9;
+}
+.toc a:last-child{border-bottom:none}
+.toc a::before{content:"›";color:#93b4f2;font-weight:800}
+
+footer{margin-top:30px;text-align:center;font-size:12px;color:#94a3b8;line-height:1.9}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="hero">
+    <div class="icon">🐙</div>
+    <span class="badge">官方教程</span>
+    <h1>无障碍开启与保活指南</h1>
+    <p>无障碍服务是八爪鱼操控手机的核心能力。本篇教你开启它,并按手机品牌做好「保活」设置,让八爪鱼不被系统悄悄杀掉。</p>
+  </div>
+
+  <div class="toc">
+    <div class="toc-title">本篇内容</div>
+    <a href="#part1">第一步:开启无障碍服务</a>
+    <a href="#part2">第二步:分品牌保活设置</a>
+    <a href="#part3">通用注意事项(必读)</a>
+  </div>
+
+  <div class="section-label" id="part1">第一步 · 开启无障碍服务</div>
+
+  <div class="step">
+    <div class="step-head"><div class="step-num">1</div><div class="step-title">从 App 首页快捷进入</div></div>
+    <p>打开八爪鱼,首页的 <span class="k">任务控制台</span> 卡片上有 <span class="k on">去设置</span> 按钮,点它可直接跳到系统无障碍设置页。</p>
+  </div>
+
+  <div class="step">
+    <div class="step-head"><div class="step-num">2</div><div class="step-title">在系统设置中开启</div></div>
+    <p>如果想手动操作,路径是:</p>
+    <div class="path"><span class="k">设置</span><span class="arrow">→</span><span class="k">无障碍</span><span class="arrow">→</span><span class="k">已下载的应用</span><span class="arrow">→</span><span class="k">八爪鱼</span><span class="arrow">→</span><span class="k on">开启</span></div>
+    <p>系统会弹出授权确认,点同意即可。部分机型「无障碍」在「更多设置 / 辅助功能」里,搜索"无障碍"最快。</p>
+  </div>
+
+  <div class="step">
+    <div class="step-head"><div class="step-num">3</div><div class="step-title">确认保活标志:常驻通知</div></div>
+    <p>开启成功后,通知栏会出现一条八爪鱼的<b>常驻通知</b>——这是前台保活生效的标志。</p>
+    <div class="warn-box"><span class="i">⚠️</span><span>请<b>不要</b>在系统「通知管理」里把这条通知关掉,它一直在,八爪鱼才能稳定在后台待命。</span></div>
+  </div>
+
+  <div class="section-label" id="part2">第二步 · 分品牌保活设置</div>
+  <div class="tip"><span class="i">💡</span><span>国产系统对后台管控很严,只开无障碍还不够。请找到你的手机品牌,把下面几项都设置好。</span></div>
+
+  <!-- vivo / iQOO -->
+  <div class="vendor vivo">
+    <div class="vendor-head"><span class="vendor-name">vivo / iQOO</span><span class="vendor-os">OriginOS</span></div>
+    <div class="vendor-body">
+      <h4>允许自启动</h4>
+      <div class="path"><span class="k">i管家</span><span class="arrow">→</span><span class="k">应用管理</span><span class="arrow">→</span><span class="k">权限</span><span class="arrow">→</span><span class="k">自启动</span><span class="arrow">→</span>找到八爪鱼<span class="arrow">→</span><span class="k on">允许</span></div>
+      <h4>允许后台高耗电</h4>
+      <div class="path"><span class="k">设置</span><span class="arrow">→</span><span class="k">电池</span><span class="arrow">→</span><span class="k">后台耗电管理</span><span class="arrow">→</span>找到八爪鱼<span class="arrow">→</span><span class="k on">允许后台高耗电</span></div>
+      <h4>最近任务加锁</h4>
+      <p>打开最近任务(多任务界面),<b>下拉</b>八爪鱼的卡片,出现 <span class="k on">锁定</span> 图标即加锁成功,防止一键清理时被杀。</p>
+    </div>
+  </div>
+
+  <!-- 小米 / 红米 -->
+  <div class="vendor mi">
+    <div class="vendor-head"><span class="vendor-name">小米 / 红米</span><span class="vendor-os">MIUI / HyperOS</span></div>
+    <div class="vendor-body">
+      <h4>允许自启动</h4>
+      <div class="path"><span class="k">设置</span><span class="arrow">→</span><span class="k">应用设置</span><span class="arrow">→</span><span class="k">应用管理</span><span class="arrow">→</span><span class="k">八爪鱼</span><span class="arrow">→</span><span class="k on">自启动</span> 打开</div>
+      <h4>省电策略改为无限制</h4>
+      <div class="path">同一页面<span class="arrow">→</span><span class="k">省电策略</span><span class="arrow">→</span>选择 <span class="k on">无限制</span></div>
+      <h4>最近任务加锁</h4>
+      <p>打开最近任务,<b>下拉</b>八爪鱼的卡片出现锁标即已锁定,清理后台时不会被杀。</p>
+    </div>
+  </div>
+
+  <!-- OPPO / 一加 -->
+  <div class="vendor oppo">
+    <div class="vendor-head"><span class="vendor-name">OPPO / 一加</span><span class="vendor-os">ColorOS</span></div>
+    <div class="vendor-body">
+      <h4>允许完全后台行为</h4>
+      <div class="path"><span class="k">设置</span><span class="arrow">→</span><span class="k">电池</span><span class="arrow">→</span><span class="k">更多</span><span class="arrow">→</span><span class="k">应用耗电管理</span><span class="arrow">→</span>找到八爪鱼<span class="arrow">→</span><span class="k on">允许完全后台行为</span></div>
+      <h4>允许自启动</h4>
+      <div class="path">在 <span class="k">自启动管理</span> 中找到八爪鱼<span class="arrow">→</span><span class="k on">允许自启动</span></div>
+    </div>
+  </div>
+
+  <!-- 华为 / 荣耀 -->
+  <div class="vendor hw">
+    <div class="vendor-head"><span class="vendor-name">华为 / 荣耀</span><span class="vendor-os">HarmonyOS / MagicOS</span></div>
+    <div class="vendor-body">
+      <h4>应用启动管理改为手动</h4>
+      <div class="path"><span class="k">设置</span><span class="arrow">→</span><span class="k">电池</span><span class="arrow">→</span><span class="k">应用启动管理</span><span class="arrow">→</span>找到八爪鱼<span class="arrow">→</span>关闭"自动管理"改为 <span class="k warn">手动管理</span></div>
+      <p>然后把三个开关全部打开:</p>
+      <p><span class="k on">允许自启动</span> <span class="k on">允许关联启动</span> <span class="k on">允许后台活动</span></p>
+    </div>
+  </div>
+
+  <div class="section-label" id="part3">通用注意事项(必读)</div>
+
+  <div class="step">
+    <div class="step-head"><div class="step-num">!</div><div class="step-title">App 更新后要重开无障碍</div></div>
+    <p>八爪鱼<b>覆盖安装更新后</b>,Android 系统会自动关闭它的无障碍服务——这是系统机制,所有同类 App 都一样。</p>
+    <p>更新完请回到首页,通过 <span class="k">任务控制台</span> 卡片的 <span class="k on">去设置</span> 重新开启一次即可。</p>
+  </div>
+
+  <div class="step">
+    <div class="step-head"><div class="step-num">!</div><div class="step-title">常驻通知别关</div></div>
+    <p>那条常驻通知是保活生效的标志。用「通知管理」把它隐藏或关闭,可能导致八爪鱼在后台被系统回收,任务中途失败。</p>
+  </div>
+
+  <div class="ok-box"><span class="i">✅</span><span><b>自查清单:</b>无障碍已开启 ✚ 通知栏有常驻通知 ✚ 品牌保活三件套(自启动 / 耗电不限制 / 任务加锁)都设置好——八爪鱼就能长期稳定待命了。</span></div>
+
+  <footer>八爪鱼 Octopus · 官方教程<br>让 AI 替你动手</footer>
+</div>
+</body>
+</html>

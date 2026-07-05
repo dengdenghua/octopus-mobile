@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>远程指挥你的手机 · 八爪鱼官方教程</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","HarmonyOS Sans SC","MiSans","Noto Sans SC","Helvetica Neue",Arial,sans-serif;
+  background:#f4f7fb;color:#1f2937;line-height:1.75;-webkit-font-smoothing:antialiased;
+}
+.page{max-width:430px;margin:0 auto;padding:20px 16px 56px}
+
+.hero{
+  background:linear-gradient(150deg,#eaf2ff 0%,#ffffff 70%);
+  border:1px solid #dbe7fb;border-radius:20px;
+  padding:22px 18px 18px;margin-bottom:18px;
+}
+.badge{
+  display:inline-flex;align-items:center;gap:5px;
+  background:#2563eb;color:#fff;font-size:12px;font-weight:600;
+  padding:3px 12px;border-radius:999px;letter-spacing:.5px;
+}
+.badge::before{content:"✓";font-size:11px;font-weight:800}
+.hero h1{font-size:23px;font-weight:800;color:#0f172a;margin:12px 0 6px;letter-spacing:.3px}
+.hero p{font-size:14px;color:#475569}
+.hero .icon{font-size:30px;line-height:1}
+
+.section-label{
+  display:flex;align-items:center;gap:8px;
+  font-size:13px;font-weight:700;color:#2563eb;
+  margin:26px 2px 12px;letter-spacing:1px;
+}
+.section-label::after{content:"";flex:1;height:1px;background:#d7e3f4}
+
+.step{
+  background:#fff;border-radius:16px;padding:18px 16px;margin-bottom:14px;
+  box-shadow:0 1px 3px rgba(15,23,42,.06);
+}
+.step-head{display:flex;align-items:center;gap:11px;margin-bottom:10px}
+.step-num{
+  flex:none;width:31px;height:31px;border-radius:10px;
+  background:linear-gradient(135deg,#3b82f6,#2456d6);color:#fff;
+  font-weight:800;font-size:16px;display:flex;align-items:center;justify-content:center;
+  box-shadow:0 2px 6px rgba(37,99,235,.35);
+}
+.step-title{font-size:16.5px;font-weight:800;color:#0f172a}
+.step p{font-size:14.5px;color:#374151;margin-bottom:6px}
+.step p:last-child{margin-bottom:0}
+
+.k{
+  display:inline-block;background:#e8f0fe;color:#1d4ed8;
+  border:1px solid #c9dcfb;padding:0 8px;border-radius:7px;
+  font-weight:700;font-size:13.5px;line-height:1.6;margin:1px 1px;white-space:nowrap;
+}
+.k.on{background:#e5f7ed;color:#0e7a45;border-color:#bce6cf}
+.k.deny{background:#fdecec;color:#b91c1c;border-color:#f5c6c6}
+.arrow{color:#94a3b8;font-weight:400;margin:0 3px;font-size:13px}
+.path{
+  background:#f8fafc;border:1px dashed #cbd5e1;border-radius:12px;
+  padding:10px 12px;margin:8px 0;font-size:14px;line-height:2.1;
+}
+
+.tip,.warn-box,.ok-box{
+  border-radius:12px;padding:12px 14px;margin:10px 0;
+  font-size:13.5px;line-height:1.7;display:flex;gap:9px;align-items:flex-start;
+}
+.tip{background:#eef4ff;color:#1e3a8a;border:1px solid #d6e3fb}
+.warn-box{background:#fff7ec;color:#92400e;border:1px solid #f7e2c0}
+.ok-box{background:#effaf3;color:#14532d;border:1px solid #cdeeda}
+.tip .i,.warn-box .i,.ok-box .i{flex:none;font-size:15px;line-height:1.5}
+
+/* 渠道图标墙 */
+.channels{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 2px}
+.ch{
+  flex:none;display:flex;align-items:center;gap:6px;
+  background:#f8fafc;border:1px solid #e2e8f0;border-radius:999px;
+  padding:5px 13px;font-size:13.5px;font-weight:700;color:#334155;
+}
+.ch .dot{width:9px;height:9px;border-radius:50%}
+.ch .d1{background:#2f7bff}.ch .d2{background:#00b96b}.ch .d3{background:#e8493a}
+.ch .d4{background:#5865f2}.ch .d5{background:#2aa9e8}.ch .d6{background:#09bb07}
+
+/* 授权示意 */
+.auth-demo{margin:12px 0 4px}
+.auth-row{
+  display:flex;align-items:center;gap:10px;background:#f8fafc;
+  border:1px solid #e2e8f0;border-radius:12px;padding:10px 12px;margin-bottom:8px;
+}
+.auth-row .avatar{
+  flex:none;width:34px;height:34px;border-radius:50%;font-size:17px;
+  display:flex;align-items:center;justify-content:center;background:#e8f0fe;
+}
+.auth-row.stranger .avatar{background:#fdecec}
+.auth-row .who{flex:1;min-width:0}
+.auth-row .who b{display:block;font-size:14px;color:#0f172a}
+.auth-row .who span{font-size:12px;color:#64748b}
+
+/* 场景剧 */
+.scene{background:#fff;border-radius:16px;padding:16px;margin-bottom:14px;box-shadow:0 1px 3px rgba(15,23,42,.06)}
+.scene-title{font-size:14px;font-weight:800;color:#0f172a;margin-bottom:10px;display:flex;align-items:center;gap:7px}
+.msg{max-width:86%;border-radius:14px;padding:9px 13px;font-size:13.5px;line-height:1.6;margin-bottom:8px}
+.msg.me{background:linear-gradient(135deg,#3b82f6,#2456d6);color:#fff;margin-left:auto;border-bottom-right-radius:4px}
+.msg.bot{background:#f1f5f9;color:#1f2937;border-bottom-left-radius:4px}
+.msg .from{display:block;font-size:10.5px;opacity:.75;margin-bottom:2px}
+
+footer{margin-top:30px;text-align:center;font-size:12px;color:#94a3b8;line-height:1.9}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="hero">
+    <div class="icon">📡</div>
+    <span class="badge">官方教程</span>
+    <h1>远程指挥你的手机</h1>
+    <p>把八爪鱼接到钉钉、Telegram、微信等聊天工具里——人在天边,发条消息就能让手机替你干活。</p>
+  </div>
+
+  <div class="section-label">支持的远程渠道</div>
+
+  <div class="step">
+    <div class="step-head"><div class="step-num">1</div><div class="step-title">六大渠道,任选接入</div></div>
+    <div class="channels">
+      <span class="ch"><span class="dot d1"></span>钉钉</span>
+      <span class="ch"><span class="dot d2"></span>飞书</span>
+      <span class="ch"><span class="dot d3"></span>QQ</span>
+      <span class="ch"><span class="dot d4"></span>Discord</span>
+      <span class="ch"><span class="dot d5"></span>Telegram</span>
+      <span class="ch"><span class="dot d6"></span>微信</span>
+    </div>
+    <p style="margin-top:10px">接入后,在这些聊天工具里给八爪鱼发消息,就等于在对话页下达指令——手机在哪儿都听你的。</p>
+  </div>
+
+  <div class="step">
+    <div class="step-head"><div class="step-num">2</div><div class="step-title">入口在设置里</div></div>
+    <p>接入入口统一在 App 的设置中:</p>
+    <div class="path">八爪鱼<span class="arrow">→</span><span class="k">设置</span><span class="arrow">→</span>找到<b>远程渠道</b>相关配置<span class="arrow">→</span>选择要接入的渠道(钉钉 / 飞书 / QQ / Discord / Telegram / 微信)<span class="arrow">→</span>按页面指引完成绑定</div>
+    <p>每个渠道的绑定流程略有不同,跟着 App 内的指引一步步走即可。</p>
+  </div>
+
+  <div class="section-label">授权模型:陌生人指挥不动</div>
+
+  <div class="step">
+    <div class="step-head"><div class="step-num">3</div><div class="step-title">按发送者逐人授权</div></div>
+    <p>八爪鱼的远程授权是<b>按消息发送者逐人授权</b>的:只有你明确授权过的人,发的消息才会被执行。</p>
+    <div class="auth-demo">
+      <div class="auth-row">
+        <span class="avatar">🙋</span>
+        <span class="who"><b>你自己</b><span>已授权的发送者</span></span>
+        <span class="k on">可指挥</span>
+      </div>
+      <div class="auth-row">
+        <span class="avatar">👩</span>
+        <span class="who"><b>你授权的家人</b><span>已授权的发送者</span></span>
+        <span class="k on">可指挥</span>
+      </div>
+      <div class="auth-row stranger">
+        <span class="avatar">🕵️</span>
+        <span class="who"><b>陌生人</b><span>未经授权的发送者</span></span>
+        <span class="k deny">指挥不动</span>
+      </div>
+    </div>
+    <div class="tip"><span class="i">🔒</span><span>即使有人加到了同一个群、拿到了机器人账号,只要你没授权他,他发的指令一律不执行。</span></div>
+  </div>
+
+  <div class="section-label">典型用法</div>
+
+  <div class="scene">
+    <div class="scene-title">🏢 人在公司,让家里的手机干活</div>
+    <div class="msg me"><span class="from">你 · 在公司用钉钉发消息</span>帮我看看家里手机还有多少电</div>
+    <div class="msg bot"><span class="from">八爪鱼 · 家里的手机</span>当前电量 83%,正在充电。</div>
+    <div class="msg me"><span class="from">你</span>把今晚 8 点的闹钟改到 7 点半</div>
+    <div class="msg bot"><span class="from">八爪鱼</span>已把闹钟从 20:00 调整为 19:30 ✅</div>
+  </div>
+
+  <div class="step">
+    <div class="step-head"><div class="step-num">＋</div><div class="step-title">更多场景灵感</div></div>
+    <p><b>备用机当分身:</b>旧手机常驻家里/办公室,通过 Telegram 远程差遣它查信息、发消息。</p>
+    <p><b>帮长辈远程代劳:</b>在长辈手机上装好并授权你自己,长辈不会操作时,你发条消息就能远程帮忙搞定。</p>
+    <p><b>通勤路上先安排:</b>人还在地铁上,先让家里手机把要用的东西查好、备好。</p>
+  </div>
+
+  <div class="warn-box"><span class="i">⚠️</span><span><b>前提提醒:</b>远程指挥要求手机上的八爪鱼保持存活——请确保无障碍已开启、常驻通知没被关,并按《无障碍开启与保活指南》做好各品牌保活设置。</span></div>
+
+  <footer>八爪鱼 Octopus · 官方教程<br>让 AI 替你动手</footer>
+</div>
+</body>
+</html>

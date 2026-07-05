@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Shizuku 全自动配置 · 八爪鱼官方教程</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","HarmonyOS Sans SC","MiSans","Noto Sans SC","Helvetica Neue",Arial,sans-serif;
+  background:#f4f7fb;color:#1f2937;line-height:1.75;-webkit-font-smoothing:antialiased;
+}
+.page{max-width:430px;margin:0 auto;padding:20px 16px 56px}
+
+.hero{
+  background:linear-gradient(150deg,#eaf2ff 0%,#ffffff 70%);
+  border:1px solid #dbe7fb;border-radius:20px;
+  padding:22px 18px 18px;margin-bottom:18px;
+}
+.badge{
+  display:inline-flex;align-items:center;gap:5px;
+  background:#2563eb;color:#fff;font-size:12px;font-weight:600;
+  padding:3px 12px;border-radius:999px;letter-spacing:.5px;
+}
+.badge::before{content:"✓";font-size:11px;font-weight:800}
+.hero h1{font-size:23px;font-weight:800;color:#0f172a;margin:12px 0 6px;letter-spacing:.3px}
+.hero p{font-size:14px;color:#475569}
+.hero .icon{font-size:30px;line-height:1}
+.optional-tag{
+  display:inline-block;margin-left:6px;background:#f1f5f9;color:#64748b;
+  font-size:11.5px;font-weight:600;padding:3px 10px;border-radius:999px;border:1px solid #e2e8f0;
+}
+
+.section-label{
+  display:flex;align-items:center;gap:8px;
+  font-size:13px;font-weight:700;color:#2563eb;
+  margin:26px 2px 12px;letter-spacing:1px;
+}
+.section-label::after{content:"";flex:1;height:1px;background:#d7e3f4}
+
+.step{
+  background:#fff;border-radius:16px;padding:18px 16px;margin-bottom:14px;
+  box-shadow:0 1px 3px rgba(15,23,42,.06);
+}
+.step-head{display:flex;align-items:center;gap:11px;margin-bottom:10px}
+.step-num{
+  flex:none;width:31px;height:31px;border-radius:10px;
+  background:linear-gradient(135deg,#3b82f6,#2456d6);color:#fff;
+  font-weight:800;font-size:16px;display:flex;align-items:center;justify-content:center;
+  box-shadow:0 2px 6px rgba(37,99,235,.35);
+}
+.step-title{font-size:16.5px;font-weight:800;color:#0f172a}
+.step p{font-size:14.5px;color:#374151;margin-bottom:6px}
+.step p:last-child{margin-bottom:0}
+
+.k{
+  display:inline-block;background:#e8f0fe;color:#1d4ed8;
+  border:1px solid #c9dcfb;padding:0 8px;border-radius:7px;
+  font-weight:700;font-size:13.5px;line-height:1.6;margin:1px 1px;white-space:nowrap;
+}
+.k.on{background:#e5f7ed;color:#0e7a45;border-color:#bce6cf}
+.arrow{color:#94a3b8;font-weight:400;margin:0 3px;font-size:13px}
+.path{
+  background:#f8fafc;border:1px dashed #cbd5e1;border-radius:12px;
+  padding:10px 12px;margin:8px 0;font-size:14px;line-height:2.1;
+}
+
+.tip,.warn-box,.ok-box{
+  border-radius:12px;padding:12px 14px;margin:10px 0;
+  font-size:13.5px;line-height:1.7;display:flex;gap:9px;align-items:flex-start;
+}
+.tip{background:#eef4ff;color:#1e3a8a;border:1px solid #d6e3fb}
+.warn-box{background:#fff7ec;color:#92400e;border:1px solid #f7e2c0}
+.ok-box{background:#effaf3;color:#14532d;border:1px solid #cdeeda}
+.tip .i,.warn-box .i,.ok-box .i{flex:none;font-size:15px;line-height:1.5}
+
+/* 能力对比 */
+.compare{display:flex;gap:10px;margin:12px 0 4px}
+.compare .col{
+  flex:1;border-radius:14px;padding:13px 12px;font-size:13px;line-height:1.8;
+}
+.compare .basic{background:#f8fafc;border:1px solid #e2e8f0}
+.compare .pro{background:#eef4ff;border:1px solid #c9dcfb}
+.compare .col b{display:block;font-size:13.5px;margin-bottom:4px}
+.compare .basic b{color:#475569}
+.compare .pro b{color:#1d4ed8}
+.compare li{list-style:none;padding-left:16px;position:relative;color:#475569}
+.compare .pro li{color:#1e3a8a}
+.compare li::before{content:"·";position:absolute;left:4px;font-weight:800}
+
+/* FAQ */
+details{
+  background:#fff;border-radius:14px;margin-bottom:10px;
+  box-shadow:0 1px 3px rgba(15,23,42,.06);overflow:hidden;
+}
+summary{
+  list-style:none;cursor:pointer;padding:14px 16px;
+  font-size:14.5px;font-weight:700;color:#0f172a;
+  display:flex;align-items:center;gap:9px;
+}
+summary::-webkit-details-marker{display:none}
+summary::before{content:"Q";flex:none;width:22px;height:22px;border-radius:7px;background:#e8f0fe;color:#1d4ed8;font-size:12.5px;font-weight:800;display:flex;align-items:center;justify-content:center}
+summary::after{content:"＋";margin-left:auto;color:#94a3b8;font-weight:400}
+details[open] summary::after{content:"－"}
+details .a{padding:0 16px 14px 47px;font-size:14px;color:#374151}
+
+footer{margin-top:30px;text-align:center;font-size:12px;color:#94a3b8;line-height:1.9}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="hero">
+    <div class="icon">⚡</div>
+    <span class="badge">官方教程</span><span class="optional-tag">进阶 · 可选</span>
+    <h1>Shizuku 全自动配置</h1>
+    <p>不用连电脑、不用敲命令——在八爪鱼里一键完成 Shizuku 配置,解锁更强的自动化能力。</p>
+  </div>
+
+  <div class="section-label">Shizuku 是什么</div>
+
+  <div class="step">
+    <div class="step-head"><div class="step-num">?</div><div class="step-title">一句话解释</div></div>
+    <p>Shizuku 是一个让 App 获得<b>接近 ADB(调试)级别权限</b>的开源工具。有了它,八爪鱼能做到许多普通权限做不到的系统级操作,自动化更快、更稳。</p>
+    <div class="compare">
+      <div class="col basic"><b>不装 Shizuku</b><li>基础功能全部可用</li><li>靠无障碍执行任务</li></div>
+      <div class="col pro"><b>装了 Shizuku</b><li>解锁进阶自动化</li><li>系统级操作能力</li><li>执行更快更稳</li></div>
+    </div>
+    <div class="tip"><span class="i">💡</span><span>Shizuku 是<b>可选项</b>:不配置也能正常使用八爪鱼的基础功能。想进阶再来配即可。</span></div>
+  </div>
+
+  <div class="section-label">App 内一键配置(免电脑)</div>
+
+  <div class="tip"><span class="i">✨</span><span>传统 Shizuku 激活要连电脑跑 ADB 命令,很劝退。八爪鱼内置了<b>无线 ADB 自动配对</b>,全程在手机上完成。</span></div>
+
+  <div class="step">
+    <div class="step-head"><div class="step-num">1</div><div class="step-title">进入 Shizuku 引导页</div></div>
+    <p>打开八爪鱼,进入 App 内的 <span class="k">Shizuku 引导页</span>,按页面提示开始配置。</p>
+  </div>
+
+  <div class="step">
+    <div class="step-head"><div class="step-num">2</div><div class="step-title">一键完成自动配对</div></div>
+    <p>点击引导页的一键配置按钮,八爪鱼会通过内置的无线 ADB <b>自动完成配对与激活</b>,无需电脑、无需手动输入配对码。</p>
+    <p>过程中系统可能弹出「无线调试」相关的确认提示,按提示允许即可。</p>
+  </div>
+
+  <div class="step">
+    <div class="step-head"><div class="step-num">3</div><div class="step-title">确认激活成功</div></div>
+    <p>引导页显示配置完成后,Shizuku 即已激活,八爪鱼的进阶自动化能力随之解锁。</p>
+  </div>
+
+  <div class="ok-box"><span class="i">✅</span><span>整个过程通常不到一分钟,全程免电脑。</span></div>
+
+  <div class="section-label">常见问题</div>
+
+  <details>
+    <summary>重启手机后 Shizuku 失效了?</summary>
+    <div class="a">正常现象。Shizuku 的激活状态<b>不会跨重启保留</b>——手机每次重启后都需要重新激活。回到八爪鱼的 <span class="k">Shizuku 引导页</span> 再一键配置即可,同样免电脑。</div>
+  </details>
+
+  <details>
+    <summary>不配置 Shizuku 会影响使用吗?</summary>
+    <div class="a">不影响基础功能。登录并开启无障碍后,日常对话、执行任务都能正常用。Shizuku 只是进阶能力的钥匙,按需配置。</div>
+  </details>
+
+  <details>
+    <summary>配对过程卡住 / 失败了怎么办?</summary>
+    <div class="a">先确认手机已连接 Wi-Fi(无线调试依赖网络),然后回到引导页重试一次。若系统弹出过「无线调试」授权提示,请确认已允许。</div>
+  </details>
+
+  <details>
+    <summary>Shizuku 安全吗?</summary>
+    <div class="a">Shizuku 是社区广泛使用的开源项目,权限来自系统自带的调试机制。八爪鱼只在你主动发起配置时使用它,你随时可以在系统设置中关闭无线调试来收回权限。</div>
+  </details>
+
+  <footer>八爪鱼 Octopus · 官方教程<br>让 AI 替你动手</footer>
+</div>
+</body>
+</html>

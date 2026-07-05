@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>新手上手指南 · 八爪鱼官方教程</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","HarmonyOS Sans SC","MiSans","Noto Sans SC","Helvetica Neue",Arial,sans-serif;
+  background:#f4f7fb;color:#1f2937;line-height:1.75;-webkit-font-smoothing:antialiased;
+}
+.page{max-width:430px;margin:0 auto;padding:20px 16px 56px}
+
+.hero{
+  background:linear-gradient(150deg,#eaf2ff 0%,#ffffff 70%);
+  border:1px solid #dbe7fb;border-radius:20px;
+  padding:22px 18px 18px;margin-bottom:18px;
+}
+.badge{
+  display:inline-flex;align-items:center;gap:5px;
+  background:#2563eb;color:#fff;font-size:12px;font-weight:600;
+  padding:3px 12px;border-radius:999px;letter-spacing:.5px;
+}
+.badge::before{content:"✓";font-size:11px;font-weight:800}
+.hero h1{font-size:23px;font-weight:800;color:#0f172a;margin:12px 0 6px;letter-spacing:.3px}
+.hero p{font-size:14px;color:#475569}
+.hero .icon{font-size:30px;line-height:1}
+
+/* 流程总览 */
+.flow{
+  display:flex;align-items:center;justify-content:space-between;
+  background:#fff;border-radius:16px;padding:14px 10px;margin-bottom:4px;
+  box-shadow:0 1px 3px rgba(15,23,42,.06);
+}
+.flow .node{flex:1;text-align:center;font-size:11.5px;font-weight:700;color:#334155}
+.flow .node .em{
+  display:block;width:38px;height:38px;margin:0 auto 5px;border-radius:12px;
+  background:#eef4ff;border:1px solid #d6e3fb;font-size:19px;line-height:37px;
+}
+.flow .sep{color:#c3d3ea;font-weight:800;font-size:14px;flex:none;padding:0 1px;margin-top:-16px}
+
+.section-label{
+  display:flex;align-items:center;gap:8px;
+  font-size:13px;font-weight:700;color:#2563eb;
+  margin:26px 2px 12px;letter-spacing:1px;
+}
+.section-label::after{content:"";flex:1;height:1px;background:#d7e3f4}
+
+.step{
+  background:#fff;border-radius:16px;padding:18px 16px;margin-bottom:14px;
+  box-shadow:0 1px 3px rgba(15,23,42,.06);
+}
+.step-head{display:flex;align-items:center;gap:11px;margin-bottom:10px}
+.step-num{
+  flex:none;width:31px;height:31px;border-radius:10px;
+  background:linear-gradient(135deg,#3b82f6,#2456d6);color:#fff;
+  font-weight:800;font-size:16px;display:flex;align-items:center;justify-content:center;
+  box-shadow:0 2px 6px rgba(37,99,235,.35);
+}
+.step-title{font-size:16.5px;font-weight:800;color:#0f172a}
+.step p{font-size:14.5px;color:#374151;margin-bottom:6px}
+.step p:last-child{margin-bottom:0}
+
+.k{
+  display:inline-block;background:#e8f0fe;color:#1d4ed8;
+  border:1px solid #c9dcfb;padding:0 8px;border-radius:7px;
+  font-weight:700;font-size:13.5px;line-height:1.6;margin:1px 1px;white-space:nowrap;
+}
+.k.on{background:#e5f7ed;color:#0e7a45;border-color:#bce6cf}
+.arrow{color:#94a3b8;font-weight:400;margin:0 3px;font-size:13px}
+.path{
+  background:#f8fafc;border:1px dashed #cbd5e1;border-radius:12px;
+  padding:10px 12px;margin:8px 0;font-size:14px;line-height:2.1;
+}
+
+.tip,.warn-box,.ok-box{
+  border-radius:12px;padding:12px 14px;margin:10px 0;
+  font-size:13.5px;line-height:1.7;display:flex;gap:9px;align-items:flex-start;
+}
+.tip{background:#eef4ff;color:#1e3a8a;border:1px solid #d6e3fb}
+.warn-box{background:#fff7ec;color:#92400e;border:1px solid #f7e2c0}
+.ok-box{background:#effaf3;color:#14532d;border:1px solid #cdeeda}
+.tip .i,.warn-box .i,.ok-box .i{flex:none;font-size:15px;line-height:1.5}
+
+/* 示例指令气泡 */
+.say{
+  background:linear-gradient(135deg,#3b82f6,#2456d6);color:#fff;
+  border-radius:16px 16px 4px 16px;padding:10px 14px;margin:9px 0 9px 34px;
+  font-size:14.5px;font-weight:600;line-height:1.6;
+  box-shadow:0 2px 8px rgba(37,99,235,.25);position:relative;
+}
+.say::before{
+  content:"试试说";position:absolute;left:-36px;top:50%;transform:translateY(-50%);
+  font-size:10.5px;color:#94a3b8;font-weight:600;writing-mode:vertical-lr;letter-spacing:2px;
+}
+.say small{display:block;font-weight:400;font-size:12px;opacity:.85;margin-top:2px}
+
+footer{margin-top:30px;text-align:center;font-size:12px;color:#94a3b8;line-height:1.9}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="hero">
+    <div class="icon">🐙</div>
+    <span class="badge">官方教程</span>
+    <h1>新手上手指南</h1>
+    <p>5 分钟从零开始:注册登录 → 开无障碍 → 说出第一句指令,让八爪鱼替你动手操作手机。</p>
+  </div>
+
+  <div class="flow">
+    <div class="node"><span class="em">📧</span>注册登录</div>
+    <span class="sep">›</span>
+    <div class="node"><span class="em">♿</span>开无障碍</div>
+    <span class="sep">›</span>
+    <div class="node"><span class="em">🔋</span>保活设置</div>
+    <span class="sep">›</span>
+    <div class="node"><span class="em">💬</span>开始对话</div>
+  </div>
+
+  <div class="section-label">开始之前</div>
+
+  <div class="step">
+    <div class="step-head"><div class="step-num">1</div><div class="step-title">邮箱注册,登录即用</div></div>
+    <p>打开八爪鱼,用<b>邮箱 + 验证码</b>登录:输入邮箱,收验证码,填入即完成。</p>
+    <div class="ok-box"><span class="i">✅</span><span>平台自带模型积分,<b>登录后直接就能用</b>,不需要自己去申请、填写任何 API Key。</span></div>
+  </div>
+
+  <div class="step">
+    <div class="step-head"><div class="step-num">2</div><div class="step-title">开启无障碍服务(核心)</div></div>
+    <p>无障碍服务是八爪鱼替你点击屏幕、操作 App 的核心能力,<b>必须开启</b>。</p>
+    <p>首页 <span class="k">任务控制台</span> 卡片上点 <span class="k on">去设置</span>,或手动:</p>
+    <div class="path"><span class="k">设置</span><span class="arrow">→</span><span class="k">无障碍</span><span class="arrow">→</span><span class="k">已下载的应用</span><span class="arrow">→</span><span class="k">八爪鱼</span><span class="arrow">→</span><span class="k on">开启</span></div>
+    <p>开启后通知栏会出现一条<b>常驻通知</b>,这是服务正常运行的标志,别关它。</p>
+    <div class="warn-box"><span class="i">⚠️</span><span>App 覆盖安装更新后,系统会自动关闭无障碍,记得回来重新开启一次。</span></div>
+  </div>
+
+  <div class="step">
+    <div class="step-head"><div class="step-num">3</div><div class="step-title">做好保活设置(强烈建议)</div></div>
+    <p>国产手机的省电机制容易把后台 App 杀掉,导致任务中断。建议花两分钟按品牌设置:自启动、后台耗电不限制、最近任务加锁。</p>
+    <div class="tip"><span class="i">📖</span><span>各品牌(小米 / vivo / OPPO / 华为等)的详细路径,见官方教程<b>《无障碍开启与保活指南》</b>。</span></div>
+  </div>
+
+  <div class="section-label">说出第一句指令</div>
+
+  <div class="step">
+    <div class="step-head"><div class="step-num">4</div><div class="step-title">在对话页下达任务</div></div>
+    <p>进入对话页,用底部的<b>输入框</b>打字,或<b>按住说话</b>直接语音下单。试试这些:</p>
+    <div class="say">帮我打开 Wi-Fi 设置,连一下家里的网络</div>
+    <div class="say">点一杯奶茶,少糖去冰,送到我常用的地址</div>
+    <div class="say">查一下明天的天气,下雨的话提醒我带伞</div>
+    <p>八爪鱼支持<b>多轮对话</b>,能记住上文——你可以像和真人聊天一样追问、补充、改主意。</p>
+    <div class="tip"><span class="i">💡</span><span>它还会记住你的偏好:说一句「我用饿了么不用美团」,以后点外卖它就默认用饿了么。</span></div>
+  </div>
+
+  <div class="step">
+    <div class="step-head"><div class="step-num">5</div><div class="step-title">看它怎么执行</div></div>
+    <p>任务开始后,<b>对话页的消息流</b>里会持续给出执行进展和结果;需要操作其他 App 时,你能直接看到屏幕被自动点击、滑动——全程可见,随时能接手。</p>
+    <p>首页的 <span class="k">任务控制台</span> 卡片也能看到任务相关状态。</p>
+  </div>
+
+  <div class="section-label">再往前一步</div>
+
+  <div class="step">
+    <div class="step-head"><div class="step-num">＋</div><div class="step-title">更多玩法</div></div>
+    <p><b>浏览器:</b>底部 <span class="k">浏览器</span> 标签,首页有搜索框(Google 等引擎可切换)和常用网站。</p>
+    <p><b>小程序:</b>在对话里直接说需求,八爪鱼能为你生成小程序;<span class="k">广场</span> 里还能浏览、安装社区小程序。</p>
+    <p><b>远程渠道:</b>在设置里接入钉钉 / Telegram / 微信等,人不在手机旁也能远程指挥,详见《远程指挥你的手机》。</p>
+    <p><b>进阶能力:</b>可选配置 Shizuku(App 内一键免电脑),详见《Shizuku 全自动配置》。</p>
+  </div>
+
+  <footer>八爪鱼 Octopus · 官方教程<br>让 AI 替你动手</footer>
+</div>
+</body>
+</html>
