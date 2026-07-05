@@ -73,7 +73,10 @@ CREATE TABLE IF NOT EXISTS registry_assets(
 
 
 def seed(db_path: str) -> None:
-    now = int(time.time())
+    # 毫秒!registry_assets 全表 created_at/updated_at 用 app.py now_ms()=int(time.time()*1000) 存,
+    # 若这里用秒(int(time.time())),教程行时间戳会比别人小 1000 倍 → 「最新」排序永远沉底、
+    # trending「上架时长」算错,官方教程反而不显示。必须与表约定一致用毫秒。
+    now = int(time.time() * 1000)
     conn = sqlite3.connect(db_path)
     try:
         conn.execute(DDL)
