@@ -274,6 +274,18 @@ object PythonSandbox {
 
         fun nowMs(): Long = System.currentTimeMillis()
 
+        /**
+         * 返回当前脚本工作空间路径(由 KVUtils.getScriptWorkspace() 配置,默认 /sdcard/Download/Octopus/)。
+         * Python 入口 [octopus_sandbox.run] 会把它注入为全局变量 WORKSPACE 并 os.chdir 进去,
+         * 使 open("file.txt") 等相对路径默认落到工作空间目录,与 JS 沙箱行为一致。
+         */
+        fun getWorkspace(): String {
+            val ws = com.apk.claw.android.utils.KVUtils.getScriptWorkspace()
+            // 确保目录存在(与 ScriptSandbox.createScope 行为一致)
+            runCatching { File(ws).mkdirs() }
+            return ws
+        }
+
         // ── helpers ──
 
         /** 文件操作统一前缀校验:复用 JS 沙箱的 [ScriptSandbox.isSafePath] 白名单。 */

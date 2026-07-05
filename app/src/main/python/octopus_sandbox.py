@@ -44,6 +44,20 @@ def run(code, host=None):
         "datetime": _dt,
         "host": host,
     }
+    # 注入工作空间常量 + chdir 进去,使 open("file.txt") 等相对路径默认落到工作空间目录
+    # (与 JS 沙箱的 WORKSPACE 全局常量行为一致)。host=None 时退化为不 chdir。
+    if host is not None:
+        try:
+            workspace = host.getWorkspace()
+            g["WORKSPACE"] = workspace
+            # 切到工作空间目录,让相对路径(open/os.listdir/Path)默认解析到这里。
+            # 失败不致命:用户仍可用绝对路径或 WORKSPACE 拼接。
+            try:
+                os.chdir(workspace)
+            except Exception:
+                pass
+        except Exception:
+            pass
     # 便捷别名:让用户代码可直接调 readFile / fetch / callTool 等,无需 host. 前缀
     if host is not None:
         g["read_file"] = lambda p: host.readFile(p)
