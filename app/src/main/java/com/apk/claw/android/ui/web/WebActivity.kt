@@ -6,6 +6,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import android.webkit.WebChromeClient
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.ProgressBar
@@ -159,6 +160,8 @@ class WebActivity : BaseActivity() {
                 domStorageEnabled = true
                 useWideViewPort = true
                 loadWithOverviewMode = true
+                // 允许预览里的远程图片素材(<img>/CSS 背景)加载,兼容模式兜底 http 图。
+                mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
             }
             webViewClient = object : WebViewClient() {
                 override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
@@ -184,8 +187,11 @@ class WebActivity : BaseActivity() {
                     }
                 }
             }
-            // about:blank 作 baseUrl:让相对路径可解析,且不暴露 file:// scheme
-            loadDataWithBaseURL("about:blank", html, "text/html", "utf-8", null)
+            // baseUrl 用一个合法但**永不解析**的 https 源(.invalid 保留域):
+            //  - 给文档一个真实 https origin,远程绝对 URL 的图片素材才能加载
+            //    (about:blank / null 源会阻断网络子资源 —— 正是预览图全坏的根因);
+            //  - .invalid 域 DNS 必失败,相对/同源请求自然打不出去,不暴露 file://、无真实同源可打。
+            loadDataWithBaseURL("https://preview.invalid/", html, "text/html", "utf-8", null)
         }
     }
 
