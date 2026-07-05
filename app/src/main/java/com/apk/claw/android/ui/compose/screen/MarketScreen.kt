@@ -70,6 +70,7 @@ private val CardIconBox = 40.dp
 private val CardIconSize = 20.dp
 private val CategoryFontSize = 12.sp
 private val TagFontSize = 11.sp
+private const val COUNT_K = 1000
 
 /** 货架三类。 */
 internal enum class MarketKind(val titleRes: Int, val icon: ImageVector, val tint: Color) {
@@ -79,19 +80,21 @@ internal enum class MarketKind(val titleRes: Int, val icon: ImageVector, val tin
 }
 
 /** 排序维度。RANKING/TRENDING 需服务端下载量数据,未到位前退化为 LATEST 序。 */
-internal enum class MarketSort(val titleRes: Int) {
-    RANKING(R.string.market_sort_ranking),
-    LATEST(R.string.market_sort_latest),
-    TRENDING(R.string.market_sort_trending),
+internal enum class MarketSort(val titleRes: Int, val apiValue: String) {
+    RANKING(R.string.market_sort_ranking, "downloads"),
+    LATEST(R.string.market_sort_latest, "latest"),
+    TRENDING(R.string.market_sort_trending, "trending"),
 }
 
-/** 三类归一的货架条目。 */
+/** 三类归一的货架条目。downloads:累计下载量,仅小程序(走本服务 /square/assets)有真实值;
+ *  技能/插件走 enterprise registry 无此埋点,恒为 0。 */
 internal data class MarketItem(
     val id: String,
     val name: String,
     val description: String,
     val category: String?,
     val version: String,
+    val downloads: Int = 0,
 )
 
 @Composable
@@ -108,17 +111,18 @@ fun MarketTab(
     var loading by remember { mutableStateOf(true) }
     var items by remember { mutableStateOf<List<MarketItem>>(emptyList()) }
 
-    LaunchedEffect(kind) {
+    // 排序在服务端做(小程序按 sort=downloads/trending;趋势=下载速度需 created_at,客户端拿不到),
+    // 故切换 sort 需重新拉取。切 kind 时的 category 复位放在 MarketKindTabs 的回调里。
+    LaunchedEffect(kind, sort) {
         loading = true
-        category = null
-        items = loadMarket(kind)
+        items = loadMarket(kind, sort)
         loading = false
     }
 
     val categories = remember(items) {
         items.mapNotNull { it.category?.takeIf { c -> c.isNotBlank() } }.distinct().sorted()
     }
-    // 排行/趋势的真实排序待服务端下载量数据;当前三档都按加载序(最新在前)。
+    // 列表已按服务端排序返回,这里只做本地分类过滤,不再二次排序。
     val shown = remember(items, category) {
         items.filter { category == null || it.category == category }
     }
@@ -131,7 +135,7 @@ fun MarketTab(
     Column(modifier = Modifier.fillMaxSize()) {
         // 顶部「我的/已安装」入口(用户拍板放这):我的技能 / 我的小程序 —— 已装管理,非货架
         MyStuffRow(onOpenMySkills, onOpenMyApps)
-        MarketKindTabs(kind) { kind = it; sort = MarketSort.LATEST }
+        MarketKindTabs(kind) { kind = it; sort = MarketSort.LATEST; category = null }
         MarketSortRow(sort) { sort = it }
         if (categories.isNotEmpty()) {
             MarketCategoryRow(categories, category) { category = it }
@@ -140,14 +144,16 @@ fun MarketTab(
     }
 }
 
-/** 三类加载归一;应用类 Result 失败退空列表(UI 显示空态)。 */
-private suspend fun loadMarket(kind: MarketKind): List<MarketItem> = when (kind) {
+/** 三类加载归一;应用类 Result 失败退空列表(UI 显示空态)。
+ *  小程序(APP)把 sort 透传服务端拿真实排序 + 下载量;技能/插件走 enterprise registry
+ *  无 sort/无下载埋点,恒按其默认序(最新)返回,sort 对它们是无害的空操作。 */
+private suspend fun loadMarket(kind: MarketKind, sort: MarketSort): List<MarketItem> = when (kind) {
     MarketKind.SKILL -> RegistryClient.listSkills().filter { it.mobileFit }
         .map { MarketItem(it.id, it.name, it.description, it.category, it.version) }
     MarketKind.PLUGIN -> RegistryClient.listPlugins().filter { it.mobileFit }
         .map { MarketItem(it.id, it.name, it.description, it.category, it.version) }
-    MarketKind.APP -> CommunitySquareApi.list().getOrDefault(emptyList())
-        .map { MarketItem(it.effectiveSlug, it.name, it.description, it.category, it.version) }
+    MarketKind.APP -> CommunitySquareApi.list(sort.apiValue).getOrDefault(emptyList())
+        .map { MarketItem(it.effectiveSlug, it.name, it.description, it.category, it.version, it.downloadCount) }
 }
 
 @Composable
@@ -284,9 +290,21 @@ private fun MarketItemCard(item: MarketItem, kind: MarketKind, onClick: () -> Un
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                if (!item.category.isNullOrBlank()) {
+                val meta = buildList {
+                    item.category?.takeIf { it.isNotBlank() }?.let { add(it) }
+                    if (item.downloads > 0) {
+                        // 下载量紧凑显示:≥1000 折成 "1.2k"(内联而非独立函数,避免 TooManyFunctions)。
+                        val label = if (item.downloads >= COUNT_K) {
+                            "%.1fk".format(item.downloads / COUNT_K.toFloat())
+                        } else {
+                            item.downloads.toString()
+                        }
+                        add("↓ $label")
+                    }
+                }
+                if (meta.isNotEmpty()) {
                     Spacer(Modifier.height(4.dp))
-                    Text(item.category, color = kind.tint, fontSize = TagFontSize)
+                    Text(meta.joinToString("  ·  "), color = kind.tint, fontSize = TagFontSize)
                 }
             }
         }

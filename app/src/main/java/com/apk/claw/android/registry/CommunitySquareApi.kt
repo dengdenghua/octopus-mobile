@@ -53,6 +53,8 @@ internal data class CommunityMiniApp(
     val tags: MiniAppTags = MiniAppTags(),
     val platforms: List<String>? = null,
     val mode: String? = null,
+    @com.google.gson.annotations.SerializedName("download_count")
+    val downloadCount: Int = 0,
     val content: RegistryContent? = null,
 ) {
     /** 兜底:服务端若未下发顶层 slug,从 id 尾段取。 */
@@ -94,12 +96,14 @@ internal object CommunitySquareApi {
     /**
      * 列出已审核通过的社区小程序。失败/网络错误返回空列表(不假装成功,由 UI 区分
      * “空列表”与“加载失败”两种状态,故用 [Result] 包一层而非直接吞异常返回空表)。
+     *
+     * @param sort 服务端排序:latest(默认,最近更新)| downloads(累计下载排行)| trending(下载速度趋势)。
      */
-    suspend fun list(): Result<List<CommunityMiniApp>> = withContext(Dispatchers.IO) {
+    suspend fun list(sort: String = "latest"): Result<List<CommunityMiniApp>> = withContext(Dispatchers.IO) {
         val b = base()
         if (b.isEmpty()) return@withContext Result.failure(IllegalStateException("广场服务地址未配置"))
         runCatching {
-            val req = Request.Builder().url("$b$API?type=plugin&kind=mini-app").get().build()
+            val req = Request.Builder().url("$b$API?type=plugin&kind=mini-app&sort=$sort").get().build()
             http.newCall(req).execute().use { resp ->
                 val respBody = resp.body?.string().orEmpty()
                 if (!resp.isSuccessful) error("HTTP ${resp.code} ${respBody.take(ERROR_BODY_TAIL)}")

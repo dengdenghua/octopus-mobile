@@ -1507,6 +1507,54 @@ class TestSquarePublish:
 
 
 # ═══════════════════════════════════════════════════════════════════════
+# 20b. /square/assets 排序:下载量排行 / 趋势(下载速度)/ 最新 + download_count 回传
+# ═══════════════════════════════════════════════════════════════════════
+class TestSquareAssetSort:
+    def _seed(self, slug, dl, created_ms, updated_ms):
+        """直插一个已审核 mini-app,指定累计下载量与上架/更新时间(毫秒)。"""
+        with closing(db()) as c:
+            c.execute(
+                "INSERT OR REPLACE INTO registry_assets("
+                "id, slug, type, kind, version, name, description, category, tags, platforms, mode, "
+                "author_id, status, checksum, body, body_size, download_count, created_at, updated_at) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (f"plugin/{slug}", slug, "plugin", "mini-app", "1.0.0", slug, "", "",
+                 "[]", '["mobile"]', "mini-app", "u_seed", "approved", "", "<html></html>", 13, dl,
+                 created_ms, updated_ms),
+            )
+            c.commit()
+
+    def test_download_count_returned_and_increments(self, client):
+        now = _now_ms()
+        self._seed("app_a", dl=0, created_ms=now, updated_ms=now)
+        # 列表信封回传 download_count(初始 0)
+        item = client.get("/square/assets?type=plugin&kind=mini-app").json()["data"][0]
+        assert item["download_count"] == 0
+        # 下载一次 → +1
+        d = client.get("/square/assets/plugin/app_a/download").json()["data"]
+        assert d["download_count"] == 1
+        # 列表复查已 +1(同 IP 60s 内重复下载不再计数,防刷榜,故这里只下载一次)
+        assert client.get("/square/assets?type=plugin&kind=mini-app").json()["data"][0]["download_count"] == 1
+
+    def test_sort_downloads_trending_latest_distinct(self, client):
+        now = _now_ms()
+        # X:总量最高但上架很久、更新居中;Y:总量最低但刚上架、最近更新;Z:三项都居中。
+        # 三种排序刻意造成两两不同,证明各自走了不同的 ORDER BY。
+        self._seed("app_x", dl=100, created_ms=now - 1_000_000_000, updated_ms=now - 20_000)
+        self._seed("app_y", dl=5,   created_ms=now - 5_000,          updated_ms=now - 10_000)
+        self._seed("app_z", dl=40,  created_ms=now - 200_000,        updated_ms=now - 30_000)
+
+        def slugs(sort):
+            r = client.get(f"/square/assets?type=plugin&kind=mini-app&sort={sort}")
+            assert r.status_code == 200, r.text
+            return [a["slug"] for a in r.json()["data"]]
+
+        assert slugs("downloads") == ["app_x", "app_z", "app_y"]   # 累计下载量降序
+        assert slugs("trending") == ["app_y", "app_z", "app_x"]    # 下载速度(量/上架时长)降序
+        assert slugs("") == ["app_y", "app_x", "app_z"]            # 默认:updated_at 降序
+
+
+# ═══════════════════════════════════════════════════════════════════════
 # 21. 小程序投稿自动审核(硬规则自动拒 / 代码扫描标风险 / 从不自动通过)
 # ═══════════════════════════════════════════════════════════════════════
 class TestSquareModeration:

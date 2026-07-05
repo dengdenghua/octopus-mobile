@@ -3155,16 +3155,26 @@ def _registry_row_to_asset(r: sqlite3.Row) -> dict[str, Any]:
         "tags": json.loads(r["tags"] or "[]"),
         "platforms": json.loads(r["platforms"] or '["mobile"]'),
         "mode": r["mode"] or None,
+        "download_count": int(r["download_count"] or 0),
         "content": {"ref": r["id"], "checksum": r["checksum"]} if r["checksum"] else None,
     }
 
 
 @app.get("/square/assets")
-def registry_list(type: str = "", kind: str = "", category: str = "", q: str = "") -> dict[str, Any]:
+def registry_list(
+    type: str = "", kind: str = "", category: str = "", q: str = "", sort: str = "",
+) -> dict[str, Any]:
     """公开资产目录:?type=skill|plugin  可选 kind(如 mini-app)/category/q 过滤。
     路径故意不用 /api/v1/registry/assets——那个前缀在 api.octoapk.com 的 nginx 上被更早一条
     location 规则拦截转发去了另一个服务(enterprise 角色/技能 registry,8090),会撞名到不了
-    这里,实测过(真机 404 排查发现)。/square/* 前缀没有这个冲突。"""
+    这里,实测过(真机 404 排查发现)。/square/* 前缀没有这个冲突。
+
+    排序 sort:
+      latest(默认/空)  —— 最近更新在前(updated_at DESC)。
+      downloads(排行)  —— 累计下载量降序。
+      trending(趋势)   —— 下载速度 = 累计下载 / 自上架以来的秒数(+1 防除零);
+                           新上架却下载快的排前,避免老资产靠总量长期霸榜。
+                           created_at 只服务端有,故此排序必须在服务端算,客户端拿不到。"""
     with closing(db()) as c:
         sql = "SELECT * FROM registry_assets WHERE status='approved'"
         params: list[Any] = []
@@ -3174,7 +3184,15 @@ def registry_list(type: str = "", kind: str = "", category: str = "", q: str = "
             sql += " AND kind=?"; params.append(kind)
         if category:
             sql += " AND category=?"; params.append(category)
-        rows = c.execute(sql + " ORDER BY updated_at DESC", params).fetchall()
+        if sort == "downloads":
+            order = " ORDER BY download_count DESC, updated_at DESC"
+        elif sort == "trending":
+            # created_at 存的是毫秒(now_ms),故这里也用 now_ms 对齐单位;+1 防除零。
+            order = " ORDER BY (CAST(download_count AS REAL) / (? - created_at + 1)) DESC, download_count DESC"
+            params.append(now_ms())
+        else:
+            order = " ORDER BY updated_at DESC"
+        rows = c.execute(sql + order, params).fetchall()
     data = [_registry_row_to_asset(r) for r in rows]
     if q:
         ql = q.lower()
