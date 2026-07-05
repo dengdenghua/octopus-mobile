@@ -143,6 +143,9 @@ object ToolRegistry {
         register(com.apk.claw.android.tool.impl.RunCodeSessionTool())
         // 会话重置:销毁指定会话,释放持久状态
         register(com.apk.claw.android.tool.impl.RunCodeResetTool())
+        // Python 代码执行(Chaquopy CPython 3.11,纯 App 进程,所有用户可用,登记为 HIGH)
+        // 适合需要丰富标准库 / 列表推导 / 装饰器 / 类继承等 JS 沙箱表达力不足的场景
+        register(com.apk.claw.android.tool.impl.RunPythonTool())
 
         // Shell 命令执行(经 Shizuku,只读查询白名单:pm/dumpsys/getprop/settings get/logcat -d 等)
         // 高危 → 不可信来源走来源闸门;只允许查询类命令,状态变更走 file_ops/tap/input_text

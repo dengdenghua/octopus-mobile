@@ -39,6 +39,7 @@ composeBom = "2025.05.01"
 composeNavigation = "2.9.0"
 kotlin = "2.1.20"
 detekt = "1.23.8"
+chaquopy = "17.0.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -102,4 +103,5 @@ compose-foundation = { group = "androidx.compose.foundation", name = "foundation
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 detekt = { id = "io.gitlab.arturbosch.detekt", version.ref = "detekt" }
+chaquopy = { id = "com.chaquo.python", version.ref = "chaquopy" }
 

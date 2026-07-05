@@ -40,6 +40,7 @@ abstract class BaseTool {
             "search_app_in_store",
             "run_code",
             "run_code_session",
+            "run_python",
             "shell_exec",
             "preview_html",
             "generate_app",

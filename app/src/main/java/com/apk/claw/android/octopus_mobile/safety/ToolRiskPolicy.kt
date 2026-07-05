@@ -45,6 +45,9 @@ object ToolRiskPolicy {
         "run_code",
         // 会话式代码执行:变量/函数持久,跨多次调用累积状态,风险面与 run_code 一致(均能调高危工具)。
         "run_code_session",
+        // Python 代码执行(Chaquopy CPython 3.11):具备 fetch/callTool/文件读写等能力,风险面与 run_code 一致。
+        // 登记 HIGH → 不可信来源弹审批 + 全程审计。见 RunPythonTool/PythonSandbox。
+        "run_python",
         // Shell 命令执行(经 Shizuku,shell UID 2000):虽只允许查询类命令白名单(pm list/dumpsys/
         // getprop/settings get/logcat -d 等),但仍是系统级特权入口,可能读出设备指纹/账号等敏感信息。
         // 登记 HIGH → 不可信来源走来源闸门 + 全程审计。状态变更命令被白名单拦截,走 file_ops/tap。
