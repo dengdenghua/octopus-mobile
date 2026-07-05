@@ -1,3 +1,5 @@
+@file:Suppress("TooManyFunctions")
+
 package com.apk.claw.android.ui.compose.screen
 
 import androidx.compose.foundation.background
@@ -25,16 +27,19 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Comment
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -56,6 +61,8 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.apk.claw.android.R
 import com.apk.claw.android.account.AccountStore
+import com.apk.claw.android.registry.CommunityMiniAppInstaller
+import com.apk.claw.android.registry.CommunitySquareApi
 import com.apk.claw.android.ui.compose.theme.OctopusBackground
 import com.apk.claw.android.ui.compose.theme.OctopusColors
 import com.apk.claw.android.ui.compose.theme.OctopusShape
@@ -82,11 +89,14 @@ fun PostDetailScreen(
     onMessage: (String) -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
+    val ctx = LocalContext.current
     var loading by remember { mutableStateOf(true) }
     var loadFailed by remember { mutableStateOf(false) }
     var post by remember { mutableStateOf<AgentPost?>(null) }
     var comments by remember { mutableStateOf<List<SquarePostApi.CommentDto>>(emptyList()) }
     var newComment by remember { mutableStateOf("") }
+    var acquiring by remember { mutableStateOf(false) }
+    var showPayConfirm by remember { mutableStateOf(false) }
 
     fun reload() {
         scope.launch {
@@ -103,6 +113,32 @@ fun PostDetailScreen(
                 onMessage("加载失败:${e.message ?: e::class.simpleName}")
             }
             loading = false
+        }
+    }
+
+    fun doAcquire() {
+        scope.launch {
+            acquiring = true
+            try {
+                val r = SquarePostApi.acquire(postId)
+                if (r.appKind == "mini-app" && r.app != null) {
+                    val download = CommunitySquareApi.parseDownloadPayload(r.app)
+                    val err = CommunityMiniAppInstaller.install(ctx, download)
+                    if (err != null) {
+                        onMessage("安装失败:$err")
+                    } else {
+                        onMessage("已复刻「${download.name}」,在「小程序」里可打开")
+                        post = post?.copy(owned = true)
+                    }
+                } else {
+                    // routine 等类型的落地由后续增量处理,先标记已获取
+                    onMessage("已复刻")
+                    post = post?.copy(owned = true)
+                }
+            } catch (e: Exception) {
+                onMessage(e.message ?: "复刻失败")
+            }
+            acquiring = false
         }
     }
 
@@ -160,6 +196,23 @@ fun PostDetailScreen(
 
                     // ── 标题 + 正文 + 作者 ──
                     item { PostBody(p, onOpenAuthor = onOpenAuthor) }
+
+                    // ── 可复刻应用帖:复刻/付费按钮 ──
+                    if (p.appRef.isNotBlank()) {
+                        item {
+                            AppAcquireCard(
+                                post = p,
+                                acquiring = acquiring,
+                                onAcquire = {
+                                    when {
+                                        !AccountStore.isLoggedIn -> onMessage("请先登录")
+                                        p.priceCredits > 0 && !p.owned -> showPayConfirm = true
+                                        else -> doAcquire()
+                                    }
+                                },
+                            )
+                        }
+                    }
 
                     // ── 互动栏 ──
                     item {
@@ -235,6 +288,33 @@ fun PostDetailScreen(
                     },
                 )
             }
+        }
+    }
+
+    if (showPayConfirm) {
+        post?.let { p ->
+            AlertDialog(
+                onDismissRequest = { showPayConfirm = false },
+                title = { Text("确认复刻", color = OctopusColors.TextPrimary) },
+                text = {
+                    Text(
+                        "将花费 ${p.priceCredits} 积分复刻「${p.title}」,复刻后可反复安装。",
+                        color = OctopusColors.TextSecondary,
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showPayConfirm = false
+                        doAcquire()
+                    }) { Text("确认复刻", color = OctopusColors.Primary) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showPayConfirm = false }) {
+                        Text("取消", color = OctopusColors.TextSecondary)
+                    }
+                },
+                containerColor = OctopusBackground.cardSurface,
+            )
         }
     }
 }
@@ -468,6 +548,49 @@ private fun CommentInputBar(
                     )
                 }
             }
+        }
+    }
+}
+
+/** 可复刻应用帖的操作按钮:免费复刻 / N 积分复刻 / 已复刻·重新安装(复刻中禁用)。 */
+@Composable
+private fun AppAcquireCard(post: AgentPost, acquiring: Boolean, onAcquire: () -> Unit) {
+    val label = when {
+        acquiring -> "复刻中…"
+        post.owned -> "已复刻 · 重新安装"
+        post.priceCredits > 0 -> "${post.priceCredits} 积分复刻"
+        else -> "免费复刻"
+    }
+    val filled = !post.owned
+    Surface(
+        shape = OctopusShape.medium,
+        color = if (filled) OctopusColors.Primary else OctopusColors.SurfaceVariant,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = OctopusSpacing.lg, vertical = OctopusSpacing.sm)
+            .clip(OctopusShape.medium)
+            .clickable(enabled = !acquiring, onClick = onAcquire),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = OctopusSpacing.md),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Filled.Bolt,
+                contentDescription = null,
+                tint = if (filled) Color.White else OctopusColors.Primary,
+                modifier = Modifier.size(20.dp),
+            )
+            Spacer(Modifier.width(OctopusSpacing.xs))
+            Text(
+                label,
+                color = if (filled) Color.White else OctopusColors.TextPrimary,
+                fontSize = OctopusType.body,
+                fontWeight = FontWeight.Bold,
+            )
         }
     }
 }

@@ -110,6 +110,18 @@ internal object SquarePostApi {
         val post: SquarePostDto = SquarePostDto(),
     )
 
+    /** 复刻/下载响应。app = 关联应用载荷(与社区小程序 download 的 data 同 shape),
+     *  交由 CommunitySquareApi.parseDownloadPayload + CommunityMiniAppInstaller 安装。 */
+    data class AcquireResult(
+        val ok: Boolean = false,
+        val owned: Boolean = false,
+        @SerializedName("appKind") val appKind: String = "",
+        @SerializedName("appRef") val appRef: String = "",
+        @SerializedName("creatorEarned") val creatorEarned: Int = 0,
+        val balance: Int = 0,
+        val app: com.google.gson.JsonObject? = null,
+    )
+
     // ── API 方法 ──────────────────────────────────────────────
 
     /** 上传单张图片(已压缩的 File)。返回服务端 URL。 */
@@ -159,6 +171,17 @@ internal object SquarePostApi {
             val text = resp.body?.string().orEmpty()
             if (!resp.isSuccessful) throw RuntimeException(serverDetail(text) ?: "HTTP ${resp.code}")
             gson.fromJson(text, PostDetailResult::class.java)
+        }
+    }
+
+    /** 复刻/下载帖子关联应用。付费帖首次调用扣积分(服务端原子扣款+分成),已复刻则免费重取;
+     *  返回含 app 载荷(mini-app 走 CommunityMiniAppInstaller 安装)。余额不足服务端返回 402。 */
+    suspend fun acquire(postId: String): AcquireResult = withContext(Dispatchers.IO) {
+        val req = authedBuilder("/square/posts/$postId/acquire").post("{}".toRequestBody(JSON)).build()
+        http.newCall(req).execute().use { resp ->
+            val text = resp.body?.string().orEmpty()
+            if (!resp.isSuccessful) throw RuntimeException(serverDetail(text) ?: "HTTP ${resp.code}")
+            gson.fromJson(text, AcquireResult::class.java)
         }
     }
 

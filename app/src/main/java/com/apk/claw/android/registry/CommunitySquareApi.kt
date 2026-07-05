@@ -166,4 +166,7 @@ internal object CommunitySquareApi {
         val base = gson.fromJson(stripped, CommunityMiniAppDownload::class.java) ?: CommunityMiniAppDownload()
         return base.copy(tags = tags)
     }
+
+    /** 帖子「复刻」复用:acquire 返回的 app 载荷与 download 的 data 同 shape,解析成可安装 DTO。 */
+    fun parseDownloadPayload(obj: JsonObject): CommunityMiniAppDownload = parseDownload(obj)
 }
