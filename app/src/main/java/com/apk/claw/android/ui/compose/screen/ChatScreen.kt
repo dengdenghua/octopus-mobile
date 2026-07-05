@@ -1044,7 +1044,10 @@ private fun ChatSessionDrawer(
     onDelete: (String) -> Unit,
 ) {
     val now = remember { System.currentTimeMillis() }
-    val grouped = remember(sessions, now) { sessions.groupBy { sessionBucket(it.updatedAt, now) } }
+    // 不能用 remember(sessions){…}:sessions 是 mutableStateListOf,in-place 增删时引用不变,
+    // remember 永不失效 → 抽屉首帧(sessions 尚空)把 grouped 永久缓存成空,历史行永不渲染。
+    // 直接在组合期分组:读可观察的 sessions 会订阅其变化,增删即重组重算。
+    val grouped = sessions.groupBy { sessionBucket(it.updatedAt, now) }
     ModalDrawerSheet(
         drawerContainerColor = BackgroundColor,
         drawerContentColor = TextPrimary,
