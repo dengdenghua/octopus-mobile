@@ -121,7 +121,9 @@ object ScriptSandbox {
     /** 返回经规范化 + 危险根拦截的工作空间前缀(带尾分隔符),不合法则 null。 */
     @Suppress("ReturnCount")
     private fun sanitizedWorkspacePrefix(): String? {
-        val ws = KVUtils.getScriptWorkspace()
+        // 优先读会话级工作空间(类似 Codex --cd 选定项目目录),为 null 时回退全局默认。
+        // ToolRegistry.currentWorkspace() 由 ChatAgentBridge.run → service.setWorkspace 注入 ThreadLocal。
+        val ws = ToolRegistry.getInstance().currentWorkspace() ?: KVUtils.getScriptWorkspace()
         if (ws.isBlank()) return null
         val canon = try { File(ws).canonicalPath } catch (_: Exception) { return null }
         if (canon in FORBIDDEN_WORKSPACE_ROOTS) return null
@@ -284,8 +286,8 @@ object ScriptSandbox {
         installDatetime(cx, scope)
         installUuid(scope)
         installCallToolAsync(scope)
-        // WORKSPACE 全局常量
-        val workspace = KVUtils.getScriptWorkspace()
+        // WORKSPACE 全局常量 —— 优先会话级工作空间,回退全局默认
+        val workspace = ToolRegistry.getInstance().currentWorkspace() ?: KVUtils.getScriptWorkspace()
         File(workspace).mkdirs()
         ScriptableObject.putProperty(scope, "WORKSPACE", workspace)
         return scope

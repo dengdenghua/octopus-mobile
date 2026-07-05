@@ -224,6 +224,10 @@ object ChatAgentBridge {
      *                  「换成蓝牙的」这类依赖上文的指代;为 null 时行为与从前完全一致。
      * @param persona 非空时要求 Agent 全程以该人设的第一人称身份/口吻回答(TV 模式的角色扮演),
      *                  拼在任务 prompt 最前;为 null 时不扮演,行为与从前完全一致。
+     * @param workspace 非空时拼进任务 prompt 的「工作空间」区,告诉 Agent 当前会话的项目目录路径,
+     *                  类似 Codex 启动时 --cd 选定项目目录。Agent 可用 file_ops/browse_files
+     *                  读该目录下的代码与文件,run_code/run_python 的 WORKSPACE 也会切到此处。
+     *                  为 null 时不注入(行为与改造前一致)。
      */
     @Suppress("LongParameterList") // 参数主体是一束 UI 回调(onTool/onText/…),收拢成对象要连改 7 个调用点,可读性反而更差
     fun run(
@@ -238,6 +242,7 @@ object ChatAgentBridge {
         onHtml: ((toolName: String, htmlContent: String) -> Unit)? = null,
         conversationContext: String? = null,
         persona: String? = null,
+        workspace: String? = null,
     ) {
         // 忙判断必须在改动任何共享状态(updateConfig/curTask)之前,拒绝并发任务。
         if (!busy.compareAndSet(false, true)) {
@@ -254,6 +259,13 @@ object ChatAgentBridge {
         persona?.takeIf { it.isNotBlank() }?.let {
             taskPrompt = "【角色扮演】$it\n\n$taskPrompt"
         }
+        // 注入工作空间(类似 Codex --cd 选定项目目录):告诉 Agent 当前会话的项目根,
+        // 可用 file_ops/browse_files/read 读取该目录下的代码与文件。
+        workspace?.takeIf { it.isNotBlank() }?.let { ws ->
+            taskPrompt = "【工作空间】本会话已选定项目目录:$ws\n" +
+                "你可以用 file_ops(action=read/browse)、browse_files、search_files 读取该目录下的代码与文件;" +
+                "run_code / run_python 的 WORKSPACE 全局变量也已切到此处,read_file/write_file 默认落到这里。\n\n$taskPrompt"
+        }
         // 审计采集：开始一次任务
         curTask = prompt
         curTarget = ControlTarget.label()
@@ -263,6 +275,9 @@ object ChatAgentBridge {
         LiveControlOverlay.show(ClawApplication.instance.getString(R.string.chat_agent_bridge_preparing)) { cancel() }
         // 流式 token 批量合并:50ms 间隔合并 post,避免每 token 一次 main.post 风暴
         val batcher = StreamBatcher(main) { txt -> onText(txt) }
+        // 注入会话级工作空间(类似 Codex --cd 选定项目目录):execTool 时通过 ThreadLocal
+        // 透传给 ScriptSandbox/PythonSandbox,影响 run_code/run_python 的 WORKSPACE 全局变量。
+        service.setWorkspace(workspace)
         service.executeTask(taskPrompt, object : AgentCallback {
             override fun onLoopStart(round: Int) {
                 LiveControlOverlay.updateStep(ClawApplication.instance.getString(R.string.chat_agent_bridge_thinking))

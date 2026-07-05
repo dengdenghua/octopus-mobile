@@ -10,4 +10,10 @@ interface AgentService {
     fun cancel()
     fun shutdown()
     fun isRunning(): Boolean
+    /**
+     * 设置本次运行的会话级工作空间(类似 Codex --cd 选定项目目录)。
+     * 非空时覆盖全局脚本工作空间,run_code/run_python 的 WORKSPACE 全局变量切到此处。
+     * 在 [executeTask] 之前调用;为 null/空时回退全局默认。
+     */
+    fun setWorkspace(workspace: String?)
 }

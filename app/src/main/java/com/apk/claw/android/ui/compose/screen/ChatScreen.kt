@@ -67,6 +67,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SettingsRemote
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Swipe
 import androidx.compose.material.icons.filled.Timer
@@ -195,6 +196,10 @@ fun ChatScreen() {
     var moreMenuOpen by remember { mutableStateOf(false) }
     var previewDevice by remember { mutableStateOf<DeviceInfo?>(null) }
     val drawerState = rememberDrawerState(DrawerValue.Closed)
+    // 新建对话工作空间选择对话框(类似 Codex 启动时选项目目录)
+    var showNewChatWorkspaceDialog by remember { mutableStateOf(false) }
+    // 当前会话工作空间更改对话框(已有会话改工作空间)
+    var showChangeWorkspaceDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val devices by ClawApplication.instance.deviceRegistry.deviceList.collectAsState()
     // 设备已不再独立成页：在主对话界面启动局域网发现 + 配置服务，
@@ -302,8 +307,14 @@ fun ChatScreen() {
         }
     }
     val newChat = {
+        // 不直接建会话 —— 先弹工作空间选择对话框(可跳过用全局默认),类似 Codex 启动时选项目目录。
+        showNewChatWorkspaceDialog = true
+    }
+    // 真正新建会话:workspace 为 null/空时退化为全局默认(行为与改造前一致)
+    val createNewChatWithWorkspace = { workspace: String? ->
         if (currentId.isNotEmpty()) ChatStore.save(currentId, messages)
-        val meta = SessionStore.create(System.currentTimeMillis(), currentCharacter).copy(title = newChatTitle)
+        val meta = SessionStore.create(System.currentTimeMillis(), currentCharacter, workspace)
+            .copy(title = newChatTitle)
         SessionStore.updateMeta(meta.id, newChatTitle, meta.updatedAt)
         sessions.add(0, meta); currentId = meta.id; messages.clear()
     }
@@ -432,6 +443,9 @@ fun ChatScreen() {
                     // 非默认角色注入人设:该角色第一人称应答;Octopus 本体不扮演(persona=null)。
                     persona = CharacterRegistry.all
                         .firstOrNull { it.id == currentCharacter }?.personaPrompt(),
+                    // 注入当前会话的工作空间(类似 Codex --cd 选定项目目录)。
+                    // SessionMeta.workspace 非空时覆盖全局默认;为 null 时 effectiveWorkspace() 回退全局。
+                    workspace = SessionStore.metaOf(currentId)?.effectiveWorkspace(),
                     onTool = { icon, name, args, res ->
                         com.apk.claw.android.agent.AgentProgressBus.set(null)
                         finalizeStream(null); hideThinking()
@@ -661,6 +675,15 @@ fun ChatScreen() {
                             ChatStore.clear(currentId)
                         },
                     )
+                    // 更改当前会话工作空间(类似 Codex 切项目目录)
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.chat_workspace_change)) },
+                        leadingIcon = { Icon(Icons.Filled.Storage, contentDescription = null, tint = TextMuted) },
+                        onClick = {
+                            moreMenuOpen = false
+                            showChangeWorkspaceDialog = true
+                        },
+                    )
                 }
             }
         }
@@ -861,7 +884,81 @@ fun ChatScreen() {
             }
         }
     }
+    // 新建对话工作空间选择对话框(类似 Codex 启动时选项目目录)
+    if (showNewChatWorkspaceDialog) {
+        WorkspacePickerDialog(
+            title = stringResource(R.string.chat_workspace_pick_title),
+            desc = stringResource(R.string.chat_workspace_pick_desc),
+            initial = "",
+            hint = stringResource(R.string.settings_workspace_hint),
+            onDismiss = { showNewChatWorkspaceDialog = false },
+            onConfirm = { path ->
+                showNewChatWorkspaceDialog = false
+                createNewChatWithWorkspace(path)
+            },
+        )
     }
+    // 当前会话工作空间更改对话框
+    if (showChangeWorkspaceDialog) {
+        WorkspacePickerDialog(
+            title = stringResource(R.string.chat_workspace_change),
+            desc = stringResource(R.string.chat_workspace_pick_desc),
+            initial = SessionStore.metaOf(currentId)?.workspace ?: "",
+            hint = stringResource(R.string.settings_workspace_hint),
+            onDismiss = { showChangeWorkspaceDialog = false },
+            onConfirm = { path ->
+                showChangeWorkspaceDialog = false
+                SessionStore.setWorkspace(currentId, path)
+                // 同步刷新内存中的 sessions 列表(让抽屉显示立即更新)
+                val idx = sessions.indexOfFirst { it.id == currentId }
+                if (idx >= 0) {
+                    val updated = sessions[idx].copy(workspace = path?.takeIf { p -> p.isNotBlank() })
+                    sessions[idx] = updated
+                }
+            },
+        )
+    }
+    }
+}
+
+/**
+ * 工作空间选择对话框 —— 新建对话 / 更改当前对话工作空间共用。
+ * 留空点确认 = 使用全局默认(行为与改造前一致);填路径 = per-session 覆盖。
+ */
+@Composable
+private fun WorkspacePickerDialog(
+    title: String,
+    desc: String,
+    initial: String,
+    hint: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String?) -> Unit,
+) {
+    var draft by remember { mutableStateOf(initial) }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(OctopusSpacing.sm)) {
+                Text(desc, color = TextMuted, fontSize = OctopusType.caption, lineHeight = 16.sp)
+                OutlinedTextField(
+                    value = draft,
+                    onValueChange = { draft = it },
+                    singleLine = true,
+                    label = { Text(hint) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(draft.ifBlank { null }) }) {
+                Text(stringResource(R.string.confirm))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+        },
+    )
 }
 
 @Composable

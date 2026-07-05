@@ -73,6 +73,33 @@ object ToolRegistry {
 
     fun isUntrustedSource(): Boolean = untrustedDepth.get() > 0
 
+    // ── 会话级工作空间(per-conversation workspace) ──
+    // 类似 Codex 启动时 --cd 选定项目目录:当前会话的工作空间路径,覆盖全局脚本工作空间
+    // (KVUtils.getScriptWorkspace)。run_code/run_python 读此处得到 WORKSPACE 全局变量。
+    // 由 ChatAgentBridge.run 在执行任务前通过 [withWorkspace] 注入,任务结束自动清除。
+    private val workspaceOverride = ThreadLocal.withInitial<String?> { null }
+
+    /**
+     * 在 block 内把当前线程的工具调用工作空间设为 [workspace]。
+     * [workspace] 为 null/空时清除覆盖(回退全局默认)。
+     * ScriptSandbox / PythonSandbox 通过 [currentWorkspace] 读取。
+     */
+    fun <T> withWorkspace(workspace: String?, block: () -> T): T {
+        val prev = workspaceOverride.get()
+        workspaceOverride.set(workspace?.takeIf { it.isNotBlank() })
+        return try {
+            block()
+        } finally {
+            workspaceOverride.set(prev)
+        }
+    }
+
+    /**
+     * 当前线程的工作空间覆盖值(由 [withWorkspace] 注入)。
+     * 为 null 时调用方应回退到 [KVUtils.getScriptWorkspace]。
+     */
+    fun currentWorkspace(): String? = workspaceOverride.get()
+
     /**
      * 不可信来源调用高危工具时的确认回调（供 UI 接入"逐次人工确认"）。
      * 返回 true=放行。未注册时回退到 [com.apk.claw.android.utils.KVUtils.isRemoteHighRiskAllowed]

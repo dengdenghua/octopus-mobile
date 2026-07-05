@@ -109,6 +109,14 @@ class DefaultAgentService : AgentService {
     private var untrustedRun = false
 
     /**
+     * 本次运行的会话级工作空间(类似 Codex --cd 选定项目目录)。
+     * 非空时覆盖全局脚本工作空间,run_code/run_python 的 WORKSPACE 全局变量切到此处。
+     * 由 [executeTask] 设置,工具调用时通过 [ToolRegistry.withWorkspace] 注入 ThreadLocal。
+     */
+    @Volatile
+    private var workspaceOverride: String? = null
+
+    /**
      * 动作录制器：Agent 执行任务时录制 UI 动作序列（锚点文字/viewId，非死坐标），
      * 任务成功后存入 [com.apk.claw.android.octopus_mobile.ActionCache]，供下次同指令
      * 快路径确定性重放——跳过 LLM 推理，实现"自进化 RPA"。
@@ -124,11 +132,19 @@ class DefaultAgentService : AgentService {
     /** 不可信来源运行时，把工具调用包进来源闸门：高危工具默认拦截，满血/远程放行时通过。 */
     private fun execTool(toolName: String, params: Map<String, Any>): com.apk.claw.android.tool.ToolResult {
         val reg = ToolRegistry.getInstance()
-        return if (untrustedRun) {
-            ToolRegistry.withUntrustedSource { reg.executeTool(toolName, params, cancelToken) }
-        } else {
-            reg.executeTool(toolName, params, cancelToken)
+        // 会话级工作空间注入 ThreadLocal —— run_code/run_python 通过 currentWorkspace() 读取。
+        // 类似 Codex --cd 选定项目目录,影响 ScriptSandbox/PythonSandbox 的 WORKSPACE 全局变量。
+        return ToolRegistry.withWorkspace(workspaceOverride) {
+            if (untrustedRun) {
+                ToolRegistry.withUntrustedSource { reg.executeTool(toolName, params, cancelToken) }
+            } else {
+                reg.executeTool(toolName, params, cancelToken)
+            }
         }
+    }
+
+    override fun setWorkspace(workspace: String?) {
+        workspaceOverride = workspace?.takeIf { it.isNotBlank() }
     }
 
     override fun executeTask(userPrompt: String, callback: AgentCallback, untrusted: Boolean) {
