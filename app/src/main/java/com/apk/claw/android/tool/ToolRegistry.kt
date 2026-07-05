@@ -137,8 +137,16 @@ object ToolRegistry {
         register(CreatePmTaskTool())
         register(ListPmProjectsTool())
 
-        // 代码执行(QuickJS 纯计算沙箱,Shizuku-only,登记为 HIGH)
+        // 代码执行(Rhino 沙箱,纯 JVM,所有用户可用,登记为 HIGH)
         register(com.apk.claw.android.tool.impl.RunCodeTool())
+        // 会话式代码执行:同一 sessionId 复用 scope,变量/函数定义跨多次执行持久(分步调试/多轮构建)
+        register(com.apk.claw.android.tool.impl.RunCodeSessionTool())
+        // 会话重置:销毁指定会话,释放持久状态
+        register(com.apk.claw.android.tool.impl.RunCodeResetTool())
+
+        // Shell 命令执行(经 Shizuku,只读查询白名单:pm/dumpsys/getprop/settings get/logcat -d 等)
+        // 高危 → 不可信来源走来源闸门;只允许查询类命令,状态变更走 file_ops/tap/input_text
+        register(com.apk.claw.android.tool.impl.ShellExecTool())
 
         // mini-app 双工 action 架构(移植 OpenRoom):两工具间接层,Agent 发现并操作已装 mini-app。
         register(com.apk.claw.android.tool.impl.ListAppsTool())

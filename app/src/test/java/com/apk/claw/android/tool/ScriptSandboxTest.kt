@@ -14,11 +14,9 @@ import java.util.concurrent.atomic.AtomicReference
  */
 class ScriptSandboxTest {
 
-    private val sandbox = ScriptSandbox()
-
     @Test
     fun `basic computation and print`() {
-        val result = sandbox.execute(
+        val result = ScriptSandbox.execute(
             "var x = 2 + 2; print(x);",
             timeoutMs = 5_000
         )
@@ -28,7 +26,7 @@ class ScriptSandboxTest {
 
     @Test
     fun `console log works`() {
-        val result = sandbox.execute(
+        val result = ScriptSandbox.execute(
             """console.log("hello", "world");""",
             timeoutMs = 5_000
         )
@@ -38,7 +36,7 @@ class ScriptSandboxTest {
 
     @Test
     fun `json parse and stringify`() {
-        val result = sandbox.execute(
+        val result = ScriptSandbox.execute(
             """
             var obj = JSON.parse('{"name":"octopus","score":99}');
             print(obj.name + " " + obj.score);
@@ -51,7 +49,7 @@ class ScriptSandboxTest {
 
     @Test
     fun `array operations`() {
-        val result = sandbox.execute(
+        val result = ScriptSandbox.execute(
             """
             var arr = [3,1,4,1,5,9,2,6];
             arr.sort(function(a,b){return a-b;});
@@ -65,7 +63,7 @@ class ScriptSandboxTest {
 
     @Test
     fun `es6 arrow functions and let const`() {
-        val result = sandbox.execute(
+        val result = ScriptSandbox.execute(
             """
             const add = (a, b) => a + b;
             let sum = [1,2,3,4,5].reduce((acc, n) => acc + n, 0);
@@ -79,7 +77,7 @@ class ScriptSandboxTest {
 
     @Test
     fun `template literals`() {
-        val result = sandbox.execute(
+        val result = ScriptSandbox.execute(
             """
             const name = "Octopus";
             print(`Hello, ${"\${name}"}!`);
@@ -92,7 +90,7 @@ class ScriptSandboxTest {
 
     @Test
     fun `multiline output`() {
-        val result = sandbox.execute(
+        val result = ScriptSandbox.execute(
             """
             for (var i = 1; i <= 3; i++) {
                 print("line " + i);
@@ -109,7 +107,7 @@ class ScriptSandboxTest {
 
     @Test
     fun `syntax error returns error result`() {
-        val result = sandbox.execute(
+        val result = ScriptSandbox.execute(
             "var x = ((( broken syntax !!!",
             timeoutMs = 5_000
         )
@@ -119,7 +117,7 @@ class ScriptSandboxTest {
 
     @Test
     fun `runtime error returns error result`() {
-        val result = sandbox.execute(
+        val result = ScriptSandbox.execute(
             "undeclaredFn();",
             timeoutMs = 5_000
         )
@@ -130,7 +128,7 @@ class ScriptSandboxTest {
     @Test
     fun `infinite loop triggers timeout`() {
         val start = System.currentTimeMillis()
-        val result = sandbox.execute(
+        val result = ScriptSandbox.execute(
             "while(true){}",
             timeoutMs = 2_000
         )
@@ -144,7 +142,7 @@ class ScriptSandboxTest {
 
     @Test
     fun `no output returns placeholder`() {
-        val result = sandbox.execute(
+        val result = ScriptSandbox.execute(
             "var x = 1 + 1;",
             timeoutMs = 5_000
         )
@@ -154,7 +152,7 @@ class ScriptSandboxTest {
 
     @Test
     fun `WORKSPACE global is injected`() {
-        val result = sandbox.execute(
+        val result = ScriptSandbox.execute(
             "print(typeof WORKSPACE + ':' + WORKSPACE);",
             timeoutMs = 5_000
         )
@@ -166,7 +164,7 @@ class ScriptSandboxTest {
 
     @Test
     fun `data processing pipeline`() {
-        val result = sandbox.execute("""
+        val result = ScriptSandbox.execute("""
             var sales = [
               {name:"Alice", amount:5200},
               {name:"Bob",   amount:3800},
@@ -189,7 +187,7 @@ class ScriptSandboxTest {
     @Test
     fun `fetch-like simulation with JSON`() {
         // 模拟 API 响应处理（不实际发请求，测试 JSON 解析链路）
-        val result = sandbox.execute("""
+        val result = ScriptSandbox.execute("""
             var mockResponse = '{"code":0,"data":{"users":[{"id":1,"name":"张三"},{"id":2,"name":"李四"}]}}';
             var resp = JSON.parse(mockResponse);
             if (resp.code !== 0) { print("error: " + resp.code); }
@@ -208,7 +206,7 @@ class ScriptSandboxTest {
 
     @Test
     fun `promise then resolves`() {
-        val result = sandbox.execute("""
+        val result = ScriptSandbox.execute("""
             Promise.resolve(42).then(function(v){ print("got " + v); });
         """.trimIndent(), timeoutMs = 5_000)
         assertTrue("Expected success, got: ${result.error}", result.isSuccess)
@@ -217,7 +215,7 @@ class ScriptSandboxTest {
 
     @Test
     fun `setTimeout fires after main script`() {
-        val result = sandbox.execute("""
+        val result = ScriptSandbox.execute("""
             print("start");
             setTimeout(function(){ print("later"); }, 20);
             print("end");
@@ -229,7 +227,7 @@ class ScriptSandboxTest {
 
     @Test
     fun `clearTimeout cancels callback`() {
-        val result = sandbox.execute("""
+        val result = ScriptSandbox.execute("""
             var id = setTimeout(function(){ print("SHOULD NOT RUN"); }, 20);
             clearTimeout(id);
             print("ok");
@@ -240,7 +238,7 @@ class ScriptSandboxTest {
 
     @Test
     fun `setInterval repeats then cleared`() {
-        val result = sandbox.execute("""
+        val result = ScriptSandbox.execute("""
             var n = 0;
             var id = setInterval(function(){
                 n++;
@@ -254,7 +252,7 @@ class ScriptSandboxTest {
 
     @Test
     fun `nested promise inside timeout drains`() {
-        val result = sandbox.execute("""
+        val result = ScriptSandbox.execute("""
             setTimeout(function(){
                 Promise.resolve("inner").then(function(v){ print("nested " + v); });
             }, 10);
@@ -265,7 +263,7 @@ class ScriptSandboxTest {
 
     @Test
     fun `promise chain ordering`() {
-        val result = sandbox.execute("""
+        val result = ScriptSandbox.execute("""
             print("A");
             Promise.resolve().then(function(){ print("C"); }).then(function(){ print("D"); });
             print("B");
@@ -277,7 +275,7 @@ class ScriptSandboxTest {
 
     @Test
     fun `es6 map and filter chaining`() {
-        val result = sandbox.execute("""
+        val result = ScriptSandbox.execute("""
             const nums = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
             const evensDoubled = nums.filter(n => n % 2 === 0).map(n => n * 2);
             print(JSON.stringify(evensDoubled));
@@ -294,7 +292,7 @@ class ScriptSandboxTest {
         val latch = CountDownLatch(1)
         val resultRef = AtomicReference<ToolResult>()
         val thread = Thread {
-            resultRef.set(sandbox.execute(
+            resultRef.set(ScriptSandbox.execute(
                 """setTimeout(function(){ print("should not run"); }, 3000);""".trimIndent(),
                 timeoutMs = 10_000,
                 cancellationToken = token,
@@ -319,7 +317,7 @@ class ScriptSandboxTest {
         val latch = CountDownLatch(1)
         val resultRef = AtomicReference<ToolResult>()
         val thread = Thread {
-            resultRef.set(sandbox.execute(
+            resultRef.set(ScriptSandbox.execute(
                 """setTimeout(function(){ print("should not run"); }, 3000);""".trimIndent(),
                 timeoutMs = 10_000,
             ))
