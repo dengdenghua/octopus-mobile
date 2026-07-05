@@ -180,6 +180,28 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}, onNavigateToCreatorCenter: 
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(OctopusSpacing.sm)) {
                     Text(stringResource(R.string.remote_console_pair_desc), color = TextMuted, fontSize = OctopusType.caption, lineHeight = 16.sp)
+                    // 一键绑定:已登录即可,设备自 start 自 claim,免去手输配对码。
+                    androidx.compose.material3.Button(
+                        enabled = !pairBusy,
+                        onClick = {
+                            scope.launch {
+                                pairBusy = true
+                                val result = runCatching { RemoteConsoleGateway.autoPairWithAccount() }
+                                pairBusy = false
+                                result.onSuccess {
+                                    onMessage(it)
+                                    showRemotePairDialog = false
+                                    refreshTick++
+                                }.onFailure {
+                                    onMessage(it.message ?: context.getString(R.string.remote_console_pair_failed))
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(if (pairBusy) "绑定中…" else "一键绑定到本账号(免输码)")
+                    }
+                    Text("或手动输入配对码:", color = TextMuted, fontSize = OctopusType.caption)
                     OutlinedTextField(
                         value = pairCode,
                         onValueChange = { pairCode = it.filter(Char::isDigit).take(9) },

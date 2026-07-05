@@ -105,6 +105,27 @@ object RemoteConsoleGateway {
     }
 
     /**
+     * 一键绑定:已登录账号即可,设备自行 /remote/pair/start 生成本账号配对码,
+     * 再自行 claim 完成绑定 —— 免去从网页 / PC 手输配对码(纯两台手机也能用)。
+     */
+    suspend fun autoPairWithAccount(name: String = defaultDeviceName()): String = withContext(Dispatchers.IO) {
+        val auth = AccountStore.token.takeIf { it.isNotBlank() }
+            ?: throw IllegalStateException("请先登录账号")
+        val startReq = Request.Builder()
+            .url(AccountConfig.baseUrl.trimEnd('/') + "/remote/pair/start")
+            .header("Authorization", "Bearer $auth")
+            .post(gson.toJson(mapOf("deviceName" to name.ifBlank { defaultDeviceName() })).toRequestBody(JSON))
+            .build()
+        val code = http.newCall(startReq).execute().use { resp ->
+            val text = resp.body?.string().orEmpty()
+            if (!resp.isSuccessful) throw RuntimeException(serverDetail(text) ?: "绑定失败: HTTP ${resp.code}")
+            gson.fromJson(text, JsonObject::class.java)?.get("code")?.asString.orEmpty()
+        }
+        if (code.isBlank()) throw RuntimeException("服务端未返回配对码")
+        claimPairCode(code, name)
+    }
+
+    /**
      * 拉取当前账号下、在线且已上报 LAN 凭证的设备。
      * 用于把对端 ConfigServer 的真实 token 下发到本机 —— beacon 出于明文安全不携带 token,
      * 真 token 通过账号 /remote/devices 通道分发给同账号设备。未登录 / 失败时返回空列表。
