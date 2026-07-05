@@ -61,7 +61,9 @@ android {
         targetSdk = 36
         // versionName 是对外显示名;versionCode 是 Android 升级判据,只能单调递增。
         // 1.0.0 正式版 = versionCode 9(历史:内部 0.0.2–0.0.7 = vc2–7,首个公开 0.0.1 = vc8)。
-        versionCode = 9
+        // vc10 = 1.0.0 换官网品牌图标重打包(内容变但对外仍 1.0.0,让已装 vc9 者可 OTA 覆盖)。
+        // vc11 = 1.0.0 正式合并发布:历史/图片修复 + 玻璃移除 + TV 桌面 + 合入 main 的沙箱安全修复。
+        versionCode = 11
         versionName = "1.0.0"
         buildConfigField("String", "VERSION_INFO", getVersionGit())
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

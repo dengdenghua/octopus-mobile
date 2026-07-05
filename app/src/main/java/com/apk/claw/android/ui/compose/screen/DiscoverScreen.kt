@@ -71,7 +71,6 @@ import com.apk.claw.android.ui.compose.theme.OctopusLayout
 import com.apk.claw.android.ui.compose.theme.OctopusShape
 import com.apk.claw.android.ui.compose.theme.OctopusSpacing
 import com.apk.claw.android.ui.compose.theme.OctopusTints
-import com.apk.claw.android.ui.compose.theme.OctopusThemeStyle
 import com.apk.claw.android.ui.compose.theme.OctopusType
 import com.apk.claw.android.utils.KVUtils
 import java.text.SimpleDateFormat
@@ -85,15 +84,13 @@ private val TextSecondary get() = OctopusColors.TextSecondary
 private val TextMuted get() = OctopusColors.TextMuted
 private val BorderColor get() = OctopusColors.Border
 
-/** 浏览器首页在 Glass（暖色渐变背景）和 Standard（纯色背景）下的标题文字色 */
+/** 浏览器首页标题文字色（纯色背景）。 */
 @Composable
-private fun BrowserHomeTextColor(): Color =
-    if (OctopusThemeStyle.isGlass) Color.White else TextPrimary
+private fun BrowserHomeTextColor(): Color = TextPrimary
 
-/** 浏览器首页在 Glass 和 Standard 下的次级文字色 */
+/** 浏览器首页次级文字色。 */
 @Composable
-private fun BrowserHomeMutedTextColor(): Color =
-    if (OctopusThemeStyle.isGlass) Color.White.copy(alpha = 0.78f) else TextSecondary
+private fun BrowserHomeMutedTextColor(): Color = TextSecondary
 
 private enum class SearchMode { Web, Ai, All }
 
@@ -249,19 +246,14 @@ private fun BrowserHomeTopBar() {
     val monthText = remember {
         SimpleDateFormat("MMM yyyy", Locale.getDefault()).format(calendar.time)
     }
-    val dateCardBg = if (OctopusThemeStyle.isGlass) {
-        OctopusBackground.cardSurface
-    } else {
-        PrimaryColor
-    }
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        GlassPanel(
+        OctopusPanel(
             modifier = Modifier.size(width = 76.dp, height = 60.dp),
             shape = RoundedCornerShape(20.dp),
-            backgroundColor = dateCardBg,
+            backgroundColor = PrimaryColor,
             contentPadding = OctopusSpacing.xs,
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -324,13 +316,9 @@ private fun <T> LauncherGrid(items: List<T>, cell: @Composable (T, Modifier) -> 
     }
 }
 
-/** 浏览器桌面的「壁纸」:柔和极光渐变,替代原来的纯白,给主页一点桌面质感(暗色模式用深色版)。 */
-private val WallpaperAuroraLight = listOf(Color(0xFFE9F0FF), Color(0xFFF1ECFF), Color(0xFFFFEFF6))
-private val WallpaperAuroraDark = listOf(Color(0xFF12131A), Color(0xFF181426), Color(0xFF1B1220))
-
+/** 浏览器桌面的「壁纸」:扁平纯色页面背景。 */
 @Composable
-private fun browserWallpaperBrush(): Brush =
-    Brush.linearGradient(if (OctopusColors.isLight) WallpaperAuroraLight else WallpaperAuroraDark)
+private fun browserWallpaperBrush(): Brush = SolidColor(OctopusColors.Background)
 
 /** Google s2 favicon 服务地址;host 为空时返回 null,走各自的 fallback 图标。 */
 private fun faviconUrl(host: String): String? =
@@ -364,8 +352,7 @@ private fun MiniAppTileIcon(name: String, id: String) {
 /** favicon/glyph 类图标的浅色圆角底座:让小尺寸站点图标在壁纸上也有清晰的「App 图标」轮廓。 */
 @Composable
 private fun LauncherIconSquare(content: @Composable () -> Unit) {
-    val bg = if (OctopusThemeStyle.isGlass) Color.White.copy(alpha = 0.85f) else SurfaceColor
-    Box(modifier = Modifier.fillMaxSize().background(bg), contentAlignment = Alignment.Center) { content() }
+    Box(modifier = Modifier.fillMaxSize().background(SurfaceColor), contentAlignment = Alignment.Center) { content() }
 }
 
 /** 我的小程序：[MiniAppRegistry] 里已注册的小程序（含 generate_app 现场生成的），点了直接启动。 */
@@ -454,18 +441,11 @@ private fun BrowserOmnibox(
     onEngineSelected: (BrowserSearchOption) -> Unit,
     onSubmit: () -> Unit,
 ) {
-    val isGlass = OctopusThemeStyle.isGlass
-    // 玻璃模式:更通透的半透明白 —— 原 0.82 太不透明,搜索框像贴了块实心白横条(用户反馈),
-    // 与其它玻璃组件(tile 0.22 / icon 0.72)也不协调;边框同步调柔和。
-    val omniBg = if (isGlass) Color.White.copy(alpha = 0.55f) else SurfaceColor
-    val omniBorder = if (isGlass) Color.White.copy(alpha = 0.35f) else OctopusBackground.glassBorder
     Surface(
         modifier = Modifier.fillMaxWidth().height(54.dp),
         shape = RoundedCornerShape(22.dp),
-        color = omniBg,
-        border = BorderStroke(0.5.dp, omniBorder),
-        // 去掉阴影:玻璃模式下 8dp 阴影让搜索框"浮起",半透明白本体 + 下方阴影 = 视觉两层,
-        // 就是用户看到的「内层白横条」。平贴后只剩一层半透明,靠 border 保留轮廓。
+        color = SurfaceColor,
+        border = BorderStroke(0.5.dp, OctopusBackground.cardBorder),
         shadowElevation = 0.dp,
     ) {
         Row(
@@ -590,7 +570,7 @@ private fun LauncherIcon(
 }
 
 @Composable
-private fun GlassPanel(
+private fun OctopusPanel(
     modifier: Modifier = Modifier,
     shape: RoundedCornerShape,
     backgroundColor: Color = OctopusBackground.cardSurface,
@@ -601,7 +581,7 @@ private fun GlassPanel(
         modifier = modifier
             .clip(shape)
             .background(backgroundColor, shape)
-            .border(0.5.dp, OctopusBackground.glassBorder, shape)
+            .border(0.5.dp, OctopusBackground.cardBorder, shape)
     ) {
         Box(modifier = Modifier.padding(contentPadding)) {
             content()

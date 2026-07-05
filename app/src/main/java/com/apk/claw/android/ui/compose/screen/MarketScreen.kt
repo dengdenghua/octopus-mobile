@@ -46,7 +46,7 @@ import com.apk.claw.android.R
 import com.apk.claw.android.registry.CommunitySquareApi
 import com.apk.claw.android.registry.RegistryClient
 import com.apk.claw.android.registry.mobileFit
-import com.apk.claw.android.ui.compose.component.GlassCard
+import com.apk.claw.android.ui.compose.component.OctopusCard
 import com.apk.claw.android.ui.compose.theme.OctopusColors
 import com.apk.claw.android.ui.compose.theme.OctopusSpacing
 import com.apk.claw.android.ui.compose.theme.OctopusTints
@@ -260,7 +260,7 @@ private fun CategoryPill(text: String, active: Boolean, onClick: () -> Unit) {
 
 @Composable
 private fun MarketItemCard(item: MarketItem, kind: MarketKind, onClick: () -> Unit) {
-    GlassCard(modifier = Modifier.fillMaxWidth(), onClick = onClick) {
+    OctopusCard(modifier = Modifier.fillMaxWidth(), onClick = onClick) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(OctopusSpacing.md),
             verticalAlignment = Alignment.CenterVertically,

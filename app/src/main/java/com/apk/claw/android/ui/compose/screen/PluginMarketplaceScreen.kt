@@ -52,8 +52,8 @@ import com.apk.claw.android.R
 import com.apk.claw.android.registry.PluginRegistryStore
 import com.apk.claw.android.registry.RegistryAsset
 import com.apk.claw.android.registry.RegistryClient
-import com.apk.claw.android.ui.compose.component.GlassCard
-import com.apk.claw.android.ui.compose.component.GlassTextPill
+import com.apk.claw.android.ui.compose.component.OctopusCard
+import com.apk.claw.android.ui.compose.component.OctopusTextPill
 import com.apk.claw.android.ui.compose.theme.OctopusBackground
 import com.apk.claw.android.ui.compose.theme.OctopusColors
 import com.apk.claw.android.ui.compose.theme.OctopusIconSize
@@ -153,9 +153,13 @@ fun PluginMarketplaceScreen(onBack: () -> Unit) {
                 .padding(horizontal = OctopusSpacing.lg, vertical = OctopusSpacing.xs),
             horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.sm),
         ) {
-            GlassTextPill(text = stringResource(R.string.skill_filter_all), tint = tint, selected = category == null) { category = null }
+            OctopusTextPill(
+                text = stringResource(R.string.skill_filter_all),
+                tint = tint,
+                selected = category == null,
+            ) { category = null }
             categories.forEach { c ->
-                GlassTextPill(text = c, tint = tint, selected = category == c) { category = c }
+                OctopusTextPill(text = c, tint = tint, selected = category == c) { category = c }
             }
         }
 
@@ -215,7 +219,7 @@ fun PluginMarketplaceScreen(onBack: () -> Unit) {
 
 @Composable
 private fun PluginSearchField(query: String, onQuery: (String) -> Unit, modifier: Modifier = Modifier) {
-    GlassCard(modifier = modifier.fillMaxWidth()) {
+    OctopusCard(modifier = modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.padding(horizontal = OctopusSpacing.md, vertical = OctopusSpacing.sm),
             verticalAlignment = Alignment.CenterVertically,
@@ -248,7 +252,7 @@ private fun PluginStoreCard(
     onInstall: () -> Unit,
     onUninstall: () -> Unit,
 ) {
-    GlassCard(modifier = Modifier.fillMaxWidth()) {
+    OctopusCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(OctopusSpacing.md)) {
             Text(
                 asset.name,

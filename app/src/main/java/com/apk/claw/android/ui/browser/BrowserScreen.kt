@@ -4,19 +4,14 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.net.Uri
 import android.speech.tts.TextToSpeech
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -40,11 +35,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -68,28 +60,10 @@ import com.apk.claw.android.tool.ToolRegistry
 import com.apk.claw.android.ui.compose.screen.DiscoverScreen
 import com.apk.claw.android.ui.compose.theme.OctopusColors
 import com.apk.claw.android.ui.compose.theme.OctopusShape
-import com.apk.claw.android.ui.compose.theme.OctopusThemeStyle
 import com.apk.claw.android.utils.KVUtils
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import java.io.File
 import java.util.Locale
 
-private const val PREFS_NAME = "browser_prefs"
-private const val KEY_WALLPAPER_INDEX = "wallpaper_index"
-private const val KEY_USE_CUSTOM_WALLPAPER = "use_custom_wallpaper"
-private const val CUSTOM_WALLPAPER_FILE = "browser_wallpaper.png"
 private const val TAG = "BrowserScreen"
-
-private val wallpaperPresets = listOf(
-    intArrayOf(0xFF0F0C29.toInt(), 0xFF302B63.toInt(), 0xFF24243E.toInt()),
-    intArrayOf(0xFF0D1B2A.toInt(), 0xFF1B2838.toInt(), 0xFF0D1B2A.toInt()),
-    intArrayOf(0xFF1A002E.toInt(), 0xFF3D0066.toInt(), 0xFF1A002E.toInt()),
-    intArrayOf(0xFF002B36.toInt(), 0xFF004D40.toInt(), 0xFF002B36.toInt()),
-    intArrayOf(0xFF2D1B00.toInt(), 0xFF5C3D00.toInt(), 0xFF2D1B00.toInt()),
-    intArrayOf(0xFF1A1A2E.toInt(), 0xFF16213E.toInt(), 0xFF0F3460.toInt()),
-)
 
 @Composable
 fun BrowserScreen(
@@ -98,8 +72,6 @@ fun BrowserScreen(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    val scope = rememberCoroutineScope()
-    val prefs = remember { context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE) }
 
     val engine = remember { BrowserEngineFactory.selectBest(context) }
 
@@ -115,14 +87,8 @@ fun BrowserScreen(
     // Sheet 显示状态
     var showSettings by remember { mutableStateOf(false) }
     var showWindows by remember { mutableStateOf(false) }
-    var showWallpaper by remember { mutableStateOf(false) }
     var showAi by remember { mutableStateOf(false) }
     var showBookmark by remember { mutableStateOf(false) }
-
-    // 壁纸状态
-    var wallpaperIndex by rememberSaveable { mutableIntStateOf(prefs.getInt(KEY_WALLPAPER_INDEX, 0)) }
-    var useCustomWallpaper by rememberSaveable { mutableStateOf(prefs.getBoolean(KEY_USE_CUSTOM_WALLPAPER, false)) }
-    var customBitmap by remember { mutableStateOf<Bitmap?>(null) }
 
     // TTS
     val tts = remember { mutableStateOf<TextToSpeech?>(null) }
@@ -208,32 +174,6 @@ fun BrowserScreen(
         }
     }
 
-    // 加载自定义壁纸
-    LaunchedEffect(useCustomWallpaper) {
-        if (useCustomWallpaper) {
-            customBitmap = withContext(Dispatchers.IO) { loadCustomWallpaper(context) }
-        } else {
-            customBitmap = null
-        }
-    }
-
-    // 图片选择器
-    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let {
-            scope.launch(Dispatchers.IO) {
-                saveCustomWallpaper(context, it)?.let { bmp ->
-                    withContext(Dispatchers.Main) {
-                        customBitmap = bmp
-                        useCustomWallpaper = true
-                        prefs.edit()
-                            .putBoolean(KEY_USE_CUSTOM_WALLPAPER, true)
-                            .apply()
-                    }
-                }
-            }
-        }
-    }
-
     // 导航函数
     val navigate: (String) -> Unit = { input ->
         isHomeVisible = false
@@ -260,12 +200,8 @@ fun BrowserScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // 壁纸 / 背景
-        BrowserWallpaper(
-            wallpaperIndex = wallpaperIndex,
-            useCustomWallpaper = useCustomWallpaper,
-            customBitmap = customBitmap,
-        )
+        // 背景
+        BrowserWallpaper()
 
         // 内容层
         Column(modifier = Modifier.fillMaxSize()) {
@@ -274,11 +210,9 @@ fun BrowserScreen(
                 onUrlTextChange = { urlText = it },
                 aiMode = aiMode,
                 onToggleAiMode = { aiMode = !aiMode },
-                isHomeVisible = isHomeVisible,
                 isLoading = isLoading,
                 onClose = onClose,
                 onHomeClick = { isHomeVisible = !isHomeVisible },
-                onWallpaperClick = { showWallpaper = true },
                 onRefreshClick = {
                     if (isLoading) engine.evaluateJs("window.stop()") else engine.navigate(currentUrl)
                 },
@@ -338,7 +272,6 @@ fun BrowserScreen(
             BrowserSettingsSheet(
                 onDismiss = { showSettings = false },
                 onRefresh = { engine.navigate(currentUrl) },
-                onWallpaper = { showWallpaper = true },
                 onBookmarks = { showBookmark = true },
                 onCopyLink = {
                     val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -373,29 +306,6 @@ fun BrowserScreen(
             )
         }
 
-        if (showWallpaper) {
-            BrowserWallpaperSheet(
-                wallpaperIndex = wallpaperIndex,
-                useCustomWallpaper = useCustomWallpaper,
-                onDismiss = { showWallpaper = false },
-                onSelectPreset = { idx ->
-                    wallpaperIndex = idx
-                    useCustomWallpaper = false
-                    prefs.edit()
-                        .putInt(KEY_WALLPAPER_INDEX, idx)
-                        .putBoolean(KEY_USE_CUSTOM_WALLPAPER, false)
-                        .apply()
-                },
-                onUpload = { imagePicker.launch(arrayOf("image/*")) },
-                onRemoveCustom = {
-                    useCustomWallpaper = false
-                    customBitmap = null
-                    File(context.filesDir, CUSTOM_WALLPAPER_FILE).delete()
-                    prefs.edit().putBoolean(KEY_USE_CUSTOM_WALLPAPER, false).apply()
-                },
-            )
-        }
-
         if (showAi) {
             BrowserAiSheet(
                 onDismiss = { showAi = false },
@@ -424,65 +334,31 @@ fun BrowserScreen(
 }
 
 @Composable
-private fun BrowserWallpaper(
-    wallpaperIndex: Int,
-    useCustomWallpaper: Boolean,
-    customBitmap: Bitmap?,
-) {
-    if (!OctopusThemeStyle.isGlass) {
-        Box(modifier = Modifier.fillMaxSize().background(OctopusColors.Background))
-        return
-    }
-
-    if (useCustomWallpaper && customBitmap != null) {
-        Image(
-            bitmap = customBitmap.asImageBitmap(),
-            contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop,
-        )
-    } else {
-        val idx = wallpaperIndex % wallpaperPresets.size
-        val colors = if (idx == 0) {
-            listOf(
-                OctopusColors.SurfaceDeep,
-                blendColor(OctopusColors.Background, OctopusColors.Primary, 0.30f),
-                OctopusColors.Background,
-            )
-        } else {
-            wallpaperPresets[idx].map { Color(it) }
-        }
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Brush.verticalGradient(colors)),
-        )
-    }
+private fun BrowserWallpaper() {
+    Box(modifier = Modifier.fillMaxSize().background(OctopusColors.Background))
 }
 
 @Composable
+@Suppress("LongMethod")
 private fun BrowserTopBar(
     urlText: String,
     onUrlTextChange: (String) -> Unit,
     aiMode: Boolean,
     onToggleAiMode: () -> Unit,
-    isHomeVisible: Boolean,
     isLoading: Boolean,
     onClose: () -> Unit,
     onHomeClick: () -> Unit,
-    onWallpaperClick: () -> Unit,
     onRefreshClick: () -> Unit,
     onSubmit: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val isGlass = OctopusThemeStyle.isGlass
-    val textColor = if (isGlass && isHomeVisible) Color.White else OctopusColors.TextPrimary
-    val mutedColor = if (isGlass && isHomeVisible) Color.White.copy(alpha = 0.78f) else OctopusColors.TextSecondary
+    val textColor = OctopusColors.TextPrimary
+    val mutedColor = OctopusColors.TextSecondary
 
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .background(if (isGlass) Color.Transparent else OctopusColors.Surface)
+            .background(OctopusColors.Surface)
             .padding(horizontal = 6.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -502,18 +378,10 @@ private fun BrowserTopBar(
                 .weight(1f)
                 .height(40.dp)
                 .clip(OctopusShape.capsule)
-                .background(
-                    if (isGlass) {
-                        OctopusColors.Surface.copy(alpha = 0.55f)
-                    } else {
-                        OctopusColors.SurfaceVariant
-                    }
-                )
+                .background(OctopusColors.SurfaceVariant)
                 .border(
                     width = 1.dp,
-                    // 玻璃模式:与底栏/按钮等其它玻璃组件统一的柔和淡白边,而非突兀的主题紫描边
-                    // —— 修「玻璃模式下贯穿搜索框的紫色细横条」(明亮模式该边本就近乎透明)。
-                    color = if (isGlass) Color.White.copy(alpha = 0.14f) else OctopusColors.Border,
+                    color = OctopusColors.Border,
                     shape = OctopusShape.capsule,
                 )
                 .padding(start = 8.dp, end = 4.dp),
@@ -576,13 +444,6 @@ private fun BrowserTopBar(
         BrowserCapsuleButton(onClick = onHomeClick, modifier = Modifier.size(36.dp)) {
             Icon(Icons.Filled.Home, contentDescription = stringResource(R.string.browser_home_button), tint = mutedColor, modifier = Modifier.size(20.dp))
         }
-
-        Spacer(Modifier.width(2.dp))
-
-        // 壁纸
-        BrowserCapsuleButton(onClick = onWallpaperClick, modifier = Modifier.size(36.dp)) {
-            Icon(Icons.Filled.Image, contentDescription = "Wallpaper", tint = mutedColor, modifier = Modifier.size(20.dp))
-        }
     }
 }
 
@@ -594,18 +455,15 @@ private fun BrowserBottomBar(
     onWindowsClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val isGlass = OctopusThemeStyle.isGlass
     Row(
         modifier = modifier
             .padding(horizontal = 16.dp, vertical = 16.dp)
             .wrapContentSize()
             .clip(OctopusShape.xl)
-            .background(
-                if (isGlass) OctopusColors.Surface.copy(alpha = 0.72f) else OctopusColors.Surface
-            )
+            .background(OctopusColors.Surface)
             .border(
                 width = 1.dp,
-                color = if (isGlass) Color.White.copy(alpha = 0.14f) else OctopusColors.Border,
+                color = OctopusColors.Border,
                 shape = OctopusShape.xl,
             )
             .padding(6.dp),
@@ -635,13 +493,13 @@ private fun BrowserBottomBar(
         BrowserCapsuleButton(
             onClick = onWindowsClick,
             modifier = Modifier.size(40.dp),
-            backgroundColor = if (isGlass) OctopusColors.Primary.copy(alpha = 0.28f) else OctopusColors.SurfaceVariant,
+            backgroundColor = OctopusColors.SurfaceVariant,
         ) {
             Text(
                 text = windowCount.toString(),
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
-                color = if (isGlass) OctopusColors.TextPrimary else OctopusColors.Primary,
+                color = OctopusColors.Primary,
             )
         }
     }
@@ -703,7 +561,6 @@ private fun BrowserHomeLayer(
     onOpenUrl: (String?) -> Unit,
     onClose: () -> Unit,
 ) {
-    val isGlass = OctopusThemeStyle.isGlass
     Box(modifier = Modifier.fillMaxSize()) {
         DiscoverScreen(onOpenUrl = onOpenUrl)
 
@@ -714,7 +571,7 @@ private fun BrowserHomeLayer(
                 .padding(top = 40.dp, end = 12.dp)
                 .size(36.dp)
                 .clip(OctopusShape.large)
-                .background(if (isGlass) OctopusColors.Surface.copy(alpha = 0.72f) else OctopusColors.Surface)
+                .background(OctopusColors.Surface)
                 .clickable { onClose() },
             contentAlignment = Alignment.Center,
         ) {
@@ -728,18 +585,16 @@ private fun BrowserHomeLayer(
 private fun BrowserSettingsSheet(
     onDismiss: () -> Unit,
     onRefresh: () -> Unit,
-    onWallpaper: () -> Unit,
     onBookmarks: () -> Unit,
     onCopyLink: () -> Unit,
     onOpenInSystem: () -> Unit,
     onEngineSettings: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val isGlass = OctopusThemeStyle.isGlass
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = if (isGlass) OctopusColors.Surface.copy(alpha = 0.95f) else OctopusColors.Surface,
+        containerColor = OctopusColors.Surface,
     ) {
         Column(
             modifier = Modifier
@@ -756,7 +611,6 @@ private fun BrowserSettingsSheet(
             Spacer(Modifier.height(12.dp))
             SettingsRow(stringResource(R.string.browser_refresh_page)) { onDismiss(); onRefresh() }
             SettingsRow(stringResource(R.string.browser_engine_settings)) { onDismiss(); onEngineSettings() }
-            SettingsRow(stringResource(R.string.browser_change_wallpaper)) { onDismiss(); onWallpaper() }
             SettingsRow(stringResource(R.string.browser_bookmarks_button)) { onDismiss(); onBookmarks() }
             SettingsRow(stringResource(R.string.browser_copy_link)) { onDismiss(); onCopyLink() }
             SettingsRow(stringResource(R.string.browser_open_in_system)) { onDismiss(); onOpenInSystem() }
@@ -766,7 +620,6 @@ private fun BrowserSettingsSheet(
 
 @Composable
 private fun SettingsRow(title: String, onClick: () -> Unit) {
-    val isGlass = OctopusThemeStyle.isGlass
     Text(
         text = title,
         fontSize = 15.sp,
@@ -775,7 +628,7 @@ private fun SettingsRow(title: String, onClick: () -> Unit) {
             .fillMaxWidth()
             .padding(vertical = 4.dp)
             .clip(OctopusShape.large)
-            .background(if (isGlass) OctopusColors.Surface.copy(alpha = 0.2f) else OctopusColors.SurfaceVariant)
+            .background(OctopusColors.SurfaceVariant)
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 14.dp),
     )
@@ -792,12 +645,11 @@ private fun BrowserWindowsSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val tabs by BrowserTabsStore.tabs.collectAsState()
     val curId by BrowserTabsStore.currentId.collectAsState()
-    val isGlass = OctopusThemeStyle.isGlass
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = if (isGlass) OctopusColors.Surface.copy(alpha = 0.95f) else OctopusColors.Surface,
+        containerColor = OctopusColors.Surface,
     ) {
         Column(
             modifier = Modifier
@@ -835,12 +687,12 @@ private fun BrowserWindowsSheet(
                         .padding(vertical = 4.dp)
                         .clip(OctopusShape.large)
                         .background(
-                            if (active) OctopusColors.Primary.copy(alpha = if (isGlass) 0.25f else 0.15f)
-                            else if (isGlass) OctopusColors.Surface.copy(alpha = 0.12f) else OctopusColors.SurfaceVariant
+                            if (active) OctopusColors.Primary.copy(alpha = 0.15f)
+                            else OctopusColors.SurfaceVariant
                         )
                         .border(
                             width = 1.dp,
-                            color = if (active) OctopusColors.Primary else if (isGlass) Color.White.copy(alpha = 0.1f) else OctopusColors.Border,
+                            color = if (active) OctopusColors.Primary else OctopusColors.Border,
                             shape = OctopusShape.large,
                         )
                         .clickable { onDismiss(); onSwitch(tab) }
@@ -857,7 +709,7 @@ private fun BrowserWindowsSheet(
                         Text(
                             text = tab.url.ifBlank { "—" },
                             fontSize = 11.sp,
-                            color = if (isGlass) Color.White.copy(alpha = 0.7f) else OctopusColors.TextSecondary,
+                            color = OctopusColors.TextSecondary,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -872,135 +724,10 @@ private fun BrowserWindowsSheet(
                         Text(
                             text = "×",
                             fontSize = 18.sp,
-                            color = if (isGlass) Color.White.copy(alpha = 0.7f) else OctopusColors.TextSecondary,
+                            color = OctopusColors.TextSecondary,
                         )
                     }
                 }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun BrowserWallpaperSheet(
-    wallpaperIndex: Int,
-    useCustomWallpaper: Boolean,
-    onDismiss: () -> Unit,
-    onSelectPreset: (Int) -> Unit,
-    onUpload: () -> Unit,
-    onRemoveCustom: () -> Unit,
-) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val isGlass = OctopusThemeStyle.isGlass
-    val textColor = if (isGlass) Color.White else OctopusColors.TextPrimary
-    val mutedColor = if (isGlass) Color.White.copy(alpha = 0.78f) else OctopusColors.TextSecondary
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = if (isGlass) OctopusColors.Surface.copy(alpha = 0.95f) else OctopusColors.Surface,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 20.dp)
-                .padding(bottom = 24.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = stringResource(R.string.browser_wallpaper_title),
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = textColor,
-                    modifier = Modifier.weight(1f),
-                )
-                Text(
-                    text = "×",
-                    fontSize = 20.sp,
-                    color = mutedColor,
-                    modifier = Modifier.clickable { onDismiss() },
-                )
-            }
-            Text(
-                text = stringResource(R.string.browser_wallpaper_presets),
-                fontSize = 13.sp,
-                color = mutedColor,
-                modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
-            )
-
-            for (row in 0..1) {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                    for (col in 0..2) {
-                        val idx = row * 3 + col
-                        if (idx < wallpaperPresets.size) {
-                            val selected = !useCustomWallpaper && wallpaperIndex == idx
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clickable { onDismiss(); onSelectPreset(idx) }
-                                    .padding(4.dp),
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(80.dp)
-                                        .clip(OctopusShape.medium)
-                                        .background(Brush.verticalGradient(wallpaperPresets[idx].map { Color(it) }))
-                                        .border(
-                                            width = if (selected) 2.dp else 0.dp,
-                                            color = OctopusColors.Primary,
-                                            shape = OctopusShape.medium,
-                                        ),
-                                )
-                                Spacer(Modifier.height(4.dp))
-                                Box(
-                                    modifier = Modifier
-                                        .size(if (selected) 6.dp else 0.dp)
-                                        .clip(CircleShape)
-                                        .background(OctopusColors.Primary),
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = if (isGlass) Color.White.copy(alpha = 0.2f) else OctopusColors.Border)
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(OctopusShape.large)
-                    .background(if (isGlass) OctopusColors.Surface.copy(alpha = 0.2f) else OctopusColors.SurfaceVariant)
-                    .border(
-                        width = 1.dp,
-                        color = if (isGlass) Color.White.copy(alpha = 0.1f) else OctopusColors.Border,
-                        shape = OctopusShape.large,
-                    )
-                    .clickable { onDismiss(); onUpload() }
-                    .padding(16.dp),
-            ) {
-                Icon(Icons.Filled.AddPhotoAlternate, contentDescription = null, tint = textColor, modifier = Modifier.size(24.dp))
-                Spacer(Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(text = stringResource(R.string.browser_wallpaper_upload), fontSize = 14.sp, fontWeight = FontWeight.Bold, color = textColor)
-                    Text(text = stringResource(R.string.browser_wallpaper_upload_hint), fontSize = 11.sp, color = mutedColor)
-                }
-            }
-
-            if (useCustomWallpaper) {
-                Text(
-                    text = stringResource(R.string.browser_wallpaper_remove_custom),
-                    fontSize = 12.sp,
-                    color = OctopusColors.Error,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 12.dp)
-                        .clickable { onDismiss(); onRemoveCustom() },
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                )
             }
         }
     }
@@ -1018,7 +745,6 @@ private fun BrowserAiSheet(
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val context = LocalContext.current
-    val isGlass = OctopusThemeStyle.isGlass
     var question by remember { mutableStateOf("") }
     var answer by remember { mutableStateOf("") }
     var thinking by remember { mutableStateOf(false) }
@@ -1031,7 +757,7 @@ private fun BrowserAiSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = if (isGlass) OctopusColors.Surface.copy(alpha = 0.95f) else OctopusColors.Surface,
+        containerColor = OctopusColors.Surface,
     ) {
         Column(
             modifier = Modifier
@@ -1113,7 +839,7 @@ private fun BrowserAiSheet(
                         .weight(1f)
                         .height(44.dp)
                         .clip(OctopusShape.capsule)
-                        .background(if (isGlass) OctopusColors.Surface.copy(alpha = 0.3f) else OctopusColors.SurfaceVariant)
+                        .background(OctopusColors.SurfaceVariant)
                         .padding(horizontal = 16.dp),
                 )
                 Spacer(Modifier.width(8.dp))
@@ -1258,41 +984,6 @@ private fun navigateTo(engine: BrowserEngine, input: String, onUrl: ((String) ->
     }
     onUrl?.invoke(url)
     engine.navigate(url)
-}
-
-private fun loadCustomWallpaper(context: Context): Bitmap? {
-    val file = File(context.filesDir, CUSTOM_WALLPAPER_FILE)
-    if (!file.exists()) return null
-    return runCatching { BitmapFactory.decodeFile(file.absolutePath) }.getOrNull()
-}
-
-private fun saveCustomWallpaper(context: Context, uri: Uri): Bitmap? {
-    return runCatching {
-        context.contentResolver.openInputStream(uri)?.use { input ->
-            val bmp = BitmapFactory.decodeStream(input) ?: return@use null
-            val maxDim = 1920
-            val scale = if (bmp.width > maxDim || bmp.height > maxDim) {
-                maxDim.toFloat() / maxOf(bmp.width, bmp.height)
-            } else 1f
-            val scaled = if (scale < 1f) {
-                Bitmap.createScaledBitmap(bmp, (bmp.width * scale).toInt(), (bmp.height * scale).toInt(), true)
-            } else bmp
-            val file = File(context.filesDir, CUSTOM_WALLPAPER_FILE)
-            file.outputStream().use { out ->
-                scaled.compress(Bitmap.CompressFormat.PNG, 90, out)
-            }
-            scaled
-        }
-    }.getOrNull()
-}
-
-private fun blendColor(a: Color, b: Color, ratio: Float): Color {
-    return Color(
-        red = a.red * (1 - ratio) + b.red * ratio,
-        green = a.green * (1 - ratio) + b.green * ratio,
-        blue = a.blue * (1 - ratio) + b.blue * ratio,
-        alpha = a.alpha * (1 - ratio) + b.alpha * ratio,
-    )
 }
 
 private fun isPageCommand(context: Context, s: String): Boolean {

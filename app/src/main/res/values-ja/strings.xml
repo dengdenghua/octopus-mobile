@@ -807,12 +807,6 @@
     <string name="settings_theme_follow_system">システムに従う</string>
     <string name="settings_theme_light">ライト</string>
     <string name="settings_theme_dark">ダーク</string>
-    <string name="settings_glass_blur">ガラスぼかし強度</string>
-    <string name="settings_glass_blur_hint">低めはすりガラス、高めはリキッドガラス風</string>
-    <string name="settings_glass_refraction">屈折強度</string>
-    <string name="settings_glass_highlight">ハイライト強度</string>
-    <string name="settings_glass_noise">ノイズ質感</string>
-    <string name="settings_glass_animation">動的ハイライト</string>
 
     <!-- ブラウザホームカテゴリ -->
     <string name="browser_app_tongyi_qianwen">Tongyi Qianwen</string>
@@ -1163,9 +1157,6 @@
     <string name="remote_control_notif_text">閲覧 %1$d 人 · 操作 %2$d 人 · 接続元: %3$s</string>
     <string name="remote_control_notif_viewing">リモート閲覧されています</string>
     <!-- 设置 -->
-    <string name="settings_ui_style">インターフェーススタイル</string>
-    <string name="settings_ui_style_glass">ガラステーマ</string>
-    <string name="settings_ui_style_standard">標準テーマ</string>
     <string name="settings_workspace_desc">Agent スクリプトが WORKSPACE 定数でアクセスする既定ディレクトリ。readFile/writeFile はこのディレクトリと Download/Documents 内に制限され、存在しない場合は自動作成されます。</string>
     <string name="settings_workspace_hint">/sdcard/Download/Octopus/</string>
     <string name="settings_workspace_title">スクリプトワークスペース</string>

@@ -219,6 +219,20 @@ class PluginManager(private val context: Context) {
     fun refreshNonDexPlugins() = loadNonDexPlugins()
 
     /**
+     * 卸载一个小程序:删 filesDir/plugins 与 filesDir/generated_apps 下对应目录 + 移出 registry 清单,
+     * 再刷新一次 [MiniAppRegistry](桌面/列表立即消失)。id 可能带前缀(如 plugin/<slug>),两种候选都试。
+     */
+    fun uninstallMiniApp(id: String) {
+        val candidates = linkedSetOf(id, id.substringAfterLast('/'))
+        for (slug in candidates) {
+            runCatching { File(context.filesDir, "$FILES_PLUGIN_DIR/$slug").deleteRecursively() }
+            runCatching { File(context.filesDir, "$GENERATED_APPS_DIR/$slug").deleteRecursively() }
+            runCatching { PluginRegistryStore.uninstall(context, slug) }
+        }
+        refreshNonDexPlugins()
+    }
+
+    /**
      * 加载非 dex 类型插件:browser-script / tool / mini-app。
      *
      * 信任规则(fail-closed):

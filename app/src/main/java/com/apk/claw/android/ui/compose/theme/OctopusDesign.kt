@@ -8,32 +8,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-enum class OctopusGlassQuality {
-    Low,
-    Medium,
-    High,
-    Ultra;
-
-    companion object {
-        fun fromStorage(value: String): OctopusGlassQuality = when (value.lowercase()) {
-            "low" -> Low
-            "medium" -> Medium
-            "ultra" -> Ultra
-            else -> High
-        }
-    }
-}
-
-enum class UiStyle {
-    Glass,
-    Standard;
-    companion object {
-        fun fromStorage(value: String): UiStyle = when (value.lowercase()) {
-            "standard", "solid", "flat" -> Standard
-            else -> Glass
-        }
-    }
-}
+// 玻璃主题(UiStyle.Glass / OctopusGlassQuality / OctopusGlass)已整体移除 —— App 统一扁平 Standard 视觉。
 
 /**
  * 全局配色 —— 与 XML colors.xml 保持视觉一致的单一调色板。
@@ -233,148 +208,26 @@ object OctopusLayout {
  * App 级别 token，避免一级页面各自散落一套颜色。
  */
 object OctopusThemeStyle {
-    private val _style = mutableStateOf(UiStyle.Glass)
-
-    var style: UiStyle
-        get() = _style.value
-        set(value) { _style.value = value }
-
-    val isGlass: Boolean get() = _style.value == UiStyle.Glass
-    val isStandard: Boolean get() = _style.value == UiStyle.Standard
-
-    /**
-     * 卡片阴影:Standard 模式归零(扁平 UI,无阴影),Glass 模式保留传入值。
-     * 用法:shadowElevation = OctopusThemeStyle.cardShadow(6.dp)
-     */
-    fun cardShadow(glassElevation: Dp): Dp =
-        if (isStandard) 0.dp else glassElevation
+    /** 卡片阴影:玻璃主题已移除,统一扁平 UI,恒为 0(保留函数签名,调用点零改动)。 */
+    @Suppress("UnusedParameter")
+    fun cardShadow(elevation: Dp): Dp = 0.dp
 }
 
 object OctopusBackground {
-    fun pageBrush(): Brush = if (OctopusThemeStyle.isStandard) {
+    /** 页面背景:扁平纯色(玻璃主题已移除,不再有暖色/液态渐变)。 */
+    fun pageBrush(): Brush =
         Brush.linearGradient(listOf(OctopusColors.Background, OctopusColors.Background))
-    } else if (OctopusColors.isLight) {
-        Brush.linearGradient(
-            listOf(
-                Color(0xFF91A3B7),
-                Color(0xFFADA9B8),
-                Color(0xFFC0A197),
-            )
-        )
-    } else {
-        Brush.linearGradient(
-            listOf(
-                Color(0xFF17151D),
-                Color(0xFF211C24),
-                Color(0xFF2B2421),
-            )
-        )
-    }
 
-    // 玻璃透明度映射:模糊滑块 0..48 线性映射到 [base, base-span]。
-    // 默认值 18 正好映射回历史写死值(浅 0.82 / 深 0.72),老用户无感知。
-    private const val GLASS_BLUR_FULL_SCALE = 48f
-    private const val GLASS_ALPHA_BASE_LIGHT = 0.94f
-    private const val GLASS_ALPHA_BASE_DARK = 0.84f
-    private const val GLASS_ALPHA_SPAN = 0.32f
+    /** 卡片表面:统一实底(玻璃透明度机制已移除)。 */
+    val cardSurface: Color get() = if (OctopusColors.isLight) Color.White else Color(0xFF272729)
 
-    /** 玻璃卡片透明度:由「玻璃设置」的模糊半径滑块驱动,滑得越大越透。 */
-    private val glassSurfaceAlpha: Float
-        get() {
-            val t = (OctopusGlass.blurRadius.value / GLASS_BLUR_FULL_SCALE).coerceIn(0f, 1f)
-            val base = if (OctopusColors.isLight) GLASS_ALPHA_BASE_LIGHT else GLASS_ALPHA_BASE_DARK
-            return base - t * GLASS_ALPHA_SPAN
-        }
+    /** 卡片描边:统一实底细描边。 */
+    val cardBorder: Color get() = if (OctopusColors.isLight) Color(0x14000000) else Color(0x1AFFFFFF)
 
-    val cardSurface: Color
-        get() = if (OctopusThemeStyle.isGlass) {
-            (if (OctopusColors.isLight) Color.White else Color(0xFF222225)).copy(alpha = glassSurfaceAlpha)
-        } else {
-            solidSurface
-        }
+    /** 实底表面/描边 —— 弹窗、文字密集内容显式引用(与 cardSurface/cardBorder 同义)。 */
+    val solidSurface: Color get() = cardSurface
 
-    /** 玻璃卡片描边:高光滑块(0..2,默认 1)直接缩放描边亮度。 */
-    val cardBorder: Color
-        get() = if (OctopusThemeStyle.isGlass) {
-            val h = OctopusGlass.highlight
-            if (OctopusColors.isLight) Color.White.copy(alpha = (0.82f * h).coerceIn(0f, 1f))
-            else Color.White.copy(alpha = (0.14f * h).coerceIn(0f, 1f))
-        } else {
-            solidBorder
-        }
-
-    val glassSurface: Color get() = cardSurface
-
-    val glassBorder: Color get() = cardBorder
-
-    /**
-     * 不跟随玻璃透明度的实底表面 —— 弹窗、广场帖子等文字密集内容用,
-     * 玻璃再透也保证可读性。
-     */
-    val solidSurface: Color get() = if (OctopusColors.isLight) Color.White else Color(0xFF272729)
-
-    val solidBorder: Color get() = if (OctopusColors.isLight) Color(0x14000000) else Color(0x1AFFFFFF)
-}
-
-/**
- * 全局玻璃效果 token。
- *
- * [blurRadius] 是玻璃层的高斯模糊半径：数值越大越接近液态玻璃，数值越小越接近
- * 普通半透明磨砂。页面组件默认读取这里，也可以在单个组件上传入参数微调。
- */
-object OctopusGlass {
-    // 扁平化：减小模糊半径，弱化液态玻璃效果
-    val defaultBlurRadius: Dp = 8.dp
-
-    private val _blurRadius = mutableStateOf(defaultBlurRadius)
-    private val _quality = mutableStateOf(OctopusGlassQuality.High)
-    private val _refraction = mutableStateOf(1f)
-    private val _highlight = mutableStateOf(1f)
-    private val _noise = mutableStateOf(1f)
-    private val _animationEnabled = mutableStateOf(false)
-
-    var blurRadius: Dp
-        get() = _blurRadius.value
-        set(value) { _blurRadius.value = if (value < 0.dp) 0.dp else value }
-
-    var quality: OctopusGlassQuality
-        get() = _quality.value
-        set(value) { _quality.value = value }
-
-    var refraction: Float
-        get() = _refraction.value
-        set(value) { _refraction.value = value.coerceIn(0f, 2f) }
-
-    var highlight: Float
-        get() = _highlight.value
-        set(value) { _highlight.value = value.coerceIn(0f, 2f) }
-
-    var noise: Float
-        get() = _noise.value
-        set(value) { _noise.value = value.coerceIn(0f, 2f) }
-
-    var animationEnabled: Boolean
-        get() = _animationEnabled.value
-        set(value) { _animationEnabled.value = value }
-
-    val qualityMultiplier: Float
-        get() = when (quality) {
-            OctopusGlassQuality.Low -> 0.35f
-            OctopusGlassQuality.Medium -> 0.68f
-            OctopusGlassQuality.High -> 1f
-            OctopusGlassQuality.Ultra -> 1.25f
-        }
-
-    val refractionOffset: Dp get() = blurRadius * 0.18f * refraction * qualityMultiplier
-    val highlightIntensity: Float get() = (if (OctopusColors.isLight) 0.88f else 0.58f) * highlight * qualityMultiplier
-    val edgeGlowAlpha: Float get() = (if (OctopusColors.isLight) 0.70f else 0.30f) * highlight * qualityMultiplier
-    val innerShadowAlpha: Float get() = if (OctopusColors.isLight) 0.14f else 0.34f
-    val noiseAlpha: Float get() = (if (OctopusColors.isLight) 0.055f else 0.035f) * noise * qualityMultiplier
-    val subtleBlurRadius: Dp get() = blurRadius * (0.38f + qualityMultiplier * 0.17f)
-    val liquidBlurRadius: Dp get() = blurRadius * (0.95f + qualityMultiplier * 0.40f)
-    val useRefraction: Boolean get() = quality != OctopusGlassQuality.Low && refraction > 0.02f
-    val useNoise: Boolean get() = quality != OctopusGlassQuality.Low && noise > 0.02f
-    val useDynamicHighlight: Boolean get() = animationEnabled && quality != OctopusGlassQuality.Low
+    val solidBorder: Color get() = cardBorder
 }
 
 /**

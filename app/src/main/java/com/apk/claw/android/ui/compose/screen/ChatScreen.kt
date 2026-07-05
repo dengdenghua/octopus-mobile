@@ -832,8 +832,8 @@ fun ChatScreen() {
                 .imePadding()
                 .padding(horizontal = OctopusSpacing.lg, vertical = OctopusSpacing.sm),
             shape = OctopusShape.xl,
-            color = OctopusBackground.glassSurface,
-            border = BorderStroke(1.dp, OctopusBackground.glassBorder),
+            color = OctopusBackground.cardSurface,
+            border = BorderStroke(1.dp, OctopusBackground.cardBorder),
             shadowElevation = OctopusThemeStyle.cardShadow(6.dp),
         ) {
             Column(modifier = Modifier.padding(horizontal = OctopusSpacing.lg, vertical = OctopusSpacing.sm)) {
@@ -1044,7 +1044,10 @@ private fun ChatSessionDrawer(
     onDelete: (String) -> Unit,
 ) {
     val now = remember { System.currentTimeMillis() }
-    val grouped = remember(sessions, now) { sessions.groupBy { sessionBucket(it.updatedAt, now) } }
+    // 不能用 remember(sessions){…}:sessions 是 mutableStateListOf,in-place 增删时引用不变,
+    // remember 永不失效 → 抽屉首帧(sessions 尚空)把 grouped 永久缓存成空,历史行永不渲染。
+    // 直接在组合期分组:读可观察的 sessions 会订阅其变化,增删即重组重算。
+    val grouped = sessions.groupBy { sessionBucket(it.updatedAt, now) }
     ModalDrawerSheet(
         drawerContainerColor = BackgroundColor,
         drawerContentColor = TextPrimary,
@@ -1101,8 +1104,8 @@ private fun AgentHomeStatusCard(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = OctopusShape.xl,
-        color = OctopusBackground.glassSurface,
-        border = BorderStroke(1.dp, OctopusBackground.glassBorder),
+        color = OctopusBackground.cardSurface,
+        border = BorderStroke(1.dp, OctopusBackground.cardBorder),
         shadowElevation = OctopusThemeStyle.cardShadow(8.dp),
     ) {
         Column(modifier = Modifier.padding(OctopusSpacing.lg), verticalArrangement = Arrangement.spacedBy(OctopusSpacing.md)) {
@@ -1191,8 +1194,8 @@ private fun ColumnScope.ChatHomeWorkbench(
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = OctopusShape.xl,
-                color = OctopusBackground.glassSurface,
-                border = BorderStroke(1.dp, OctopusBackground.glassBorder),
+                color = OctopusBackground.cardSurface,
+                border = BorderStroke(1.dp, OctopusBackground.cardBorder),
                 shadowElevation = OctopusThemeStyle.cardShadow(10.dp),
             ) {
                 Column(modifier = Modifier.padding(OctopusSpacing.xl)) {
@@ -1330,8 +1333,8 @@ private fun PromptSuggestion(prompt: HomePrompt, onClick: () -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth().padding(vertical = OctopusSpacing.xs).clickable(onClick = onClick),
         shape = OctopusShape.large,
-        color = OctopusBackground.glassSurface,
-        border = BorderStroke(1.dp, OctopusBackground.glassBorder),
+        color = OctopusBackground.cardSurface,
+        border = BorderStroke(1.dp, OctopusBackground.cardBorder),
         shadowElevation = OctopusThemeStyle.cardShadow(1.dp),
     ) {
         Row(modifier = Modifier.padding(horizontal = OctopusSpacing.md, vertical = OctopusSpacing.md), verticalAlignment = Alignment.CenterVertically) {
@@ -1353,8 +1356,8 @@ private fun DrawerStatusPanel(llmOk: Boolean, a11yOk: Boolean, deviceCount: Int)
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = OctopusShape.large,
-        color = OctopusBackground.glassSurface,
-        border = BorderStroke(1.dp, OctopusBackground.glassBorder),
+        color = OctopusBackground.cardSurface,
+        border = BorderStroke(1.dp, OctopusBackground.cardBorder),
         shadowElevation = OctopusThemeStyle.cardShadow(1.dp),
     ) {
         Column(modifier = Modifier.padding(OctopusSpacing.md), verticalArrangement = Arrangement.spacedBy(OctopusSpacing.sm)) {
@@ -2274,8 +2277,8 @@ private fun ScrollToBottomButton(visible: Boolean, onClick: () -> Unit) {
                 .clip(OctopusShape.capsule)
                 .clickable(onClick = onClick),
             shape = OctopusShape.capsule,
-            color = OctopusBackground.glassSurface,
-            border = BorderStroke(1.dp, OctopusBackground.glassBorder),
+            color = OctopusBackground.cardSurface,
+            border = BorderStroke(1.dp, OctopusBackground.cardBorder),
             shadowElevation = OctopusThemeStyle.cardShadow(8.dp),
         ) {
             Row(

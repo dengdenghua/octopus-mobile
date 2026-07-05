@@ -46,9 +46,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.apk.claw.android.account.AccountConfig
-import com.apk.claw.android.ui.compose.component.GlassCard
-import com.apk.claw.android.ui.compose.component.GlassPill
-import com.apk.claw.android.ui.compose.component.GlassTextPill
+import com.apk.claw.android.ui.compose.component.OctopusCard
+import com.apk.claw.android.ui.compose.component.OctopusPill
+import com.apk.claw.android.ui.compose.component.OctopusTextPill
 import com.apk.claw.android.ui.compose.component.TopBarBackButton
 import com.apk.claw.android.ui.compose.theme.OctopusBackground
 import com.apk.claw.android.ui.compose.theme.OctopusColors
@@ -359,7 +359,7 @@ private fun UniverseIdentityCard(
         atlasAccess.allowed -> "Atlas 城市事件：可提交，仍需审核"
         else -> "Atlas 城市事件：未开放"
     }
-    GlassCard(modifier = Modifier.fillMaxWidth()) {
+    OctopusCard(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(OctopusSpacing.lg),
             verticalArrangement = Arrangement.spacedBy(OctopusSpacing.sm),
@@ -377,7 +377,7 @@ private fun UniverseIdentityCard(
                     Text("宇宙身份", color = OctopusColors.TextPrimary, fontSize = OctopusType.titleSm, fontWeight = FontWeight.Bold)
                     Text(current.userId.ifBlank { "本机用户" }, color = OctopusColors.TextMuted, fontSize = OctopusType.caption, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-                GlassPill(
+                OctopusPill(
                     icon = Icons.Filled.Refresh,
                     text = if (loading) "同步" else "权限",
                     tint = OctopusTints.Window,
@@ -440,7 +440,7 @@ private fun UniverseTopBar(
             Text("ECHO Universe", color = OctopusColors.TextPrimary, fontSize = OctopusType.headline, fontWeight = FontWeight.Bold)
             Text("我的 Ghost", color = OctopusColors.TextMuted, fontSize = OctopusType.caption)
         }
-        GlassPill(
+        OctopusPill(
             icon = Icons.Filled.Refresh,
             text = if (loading) "同步中" else "刷新",
             tint = OctopusTints.Browser,
@@ -457,7 +457,7 @@ private fun UniverseEndpointCard(
     onRuntimeValueChange: (String) -> Unit,
     onSave: () -> Unit,
 ) {
-    GlassCard(modifier = Modifier.fillMaxWidth()) {
+    OctopusCard(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(OctopusSpacing.lg),
             verticalArrangement = Arrangement.spacedBy(OctopusSpacing.sm),
@@ -477,7 +477,7 @@ private fun UniverseEndpointCard(
                 label = { Text("母体 Runtime HTTP") },
                 modifier = Modifier.fillMaxWidth(),
             )
-            GlassPill(
+            OctopusPill(
                 icon = Icons.Filled.Save,
                 text = "保存",
                 tint = OctopusTints.Skill,
@@ -496,7 +496,7 @@ private fun CharacterBindCard(
     loading: Boolean,
     onBind: () -> Unit,
 ) {
-    GlassCard(modifier = Modifier.fillMaxWidth()) {
+    OctopusCard(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(OctopusSpacing.lg),
             verticalArrangement = Arrangement.spacedBy(OctopusSpacing.md),
@@ -508,7 +508,7 @@ private fun CharacterBindCard(
             options.chunked(2).forEach { row ->
                 Row(horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.sm), modifier = Modifier.fillMaxWidth()) {
                     row.forEach { option ->
-                        GlassTextPill(
+                        OctopusTextPill(
                             text = "${option.name} · ${option.codename}",
                             tint = if (option.id == selectedCharacterId) OctopusTints.Memory else OctopusTints.Cloud,
                             selected = option.id == selectedCharacterId,
@@ -519,7 +519,7 @@ private fun CharacterBindCard(
                     if (row.size == 1) Spacer(Modifier.weight(1f))
                 }
             }
-            GlassPill(
+            OctopusPill(
                 icon = Icons.Filled.Sync,
                 text = if (loading) "绑定中" else "绑定 Ghost",
                 tint = OctopusTints.Memory,
@@ -544,7 +544,7 @@ private fun UniverseEconomyCard(
     val atlasPass = products.firstOrNull { it.id == "realm_pass_atlas" }
     val courtPass = products.firstOrNull { it.id == "realm_pass_ghost_court" }
     val subscription = economy?.ghostSubscription
-    GlassCard(modifier = Modifier.fillMaxWidth()) {
+    OctopusCard(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(OctopusSpacing.lg),
             verticalArrangement = Arrangement.spacedBy(OctopusSpacing.sm),
@@ -574,14 +574,14 @@ private fun UniverseEconomyCard(
                 .ifBlank { "暂无 Realm Pass" }
             Text(access, color = OctopusColors.TextMuted, fontSize = OctopusType.caption)
             Row(horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.sm), modifier = Modifier.fillMaxWidth()) {
-                GlassPill(
+                OctopusPill(
                     icon = Icons.Filled.Add,
                     text = if (loading) "处理中" else "+500",
                     tint = OctopusTints.Skill,
                     modifier = Modifier.weight(1f),
                     onClick = onGrantCredits,
                 )
-                GlassPill(
+                OctopusPill(
                     icon = Icons.Filled.AutoAwesome,
                     text = "月卡 ${ghostLife?.priceCredits ?: 300}",
                     tint = OctopusTints.Memory,
@@ -590,14 +590,14 @@ private fun UniverseEconomyCard(
                 )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.sm), modifier = Modifier.fillMaxWidth()) {
-                GlassPill(
+                OctopusPill(
                     icon = Icons.Filled.Shield,
                     text = "Atlas ${atlasPass?.priceCredits ?: 120}",
                     tint = OctopusTints.Window,
                     modifier = Modifier.weight(1f),
                     onClick = onBuyAtlasPass,
                 )
-                GlassPill(
+                OctopusPill(
                     icon = Icons.Filled.Shield,
                     text = "Ghost Court ${courtPass?.priceCredits ?: 160}",
                     tint = OctopusTints.Trust,
@@ -627,7 +627,7 @@ private fun UniverseFeedCard(
     ghostChatRunning: Boolean,
     onGhostSend: () -> Unit,
 ) {
-    GlassCard(modifier = Modifier.fillMaxWidth()) {
+    OctopusCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(OctopusSpacing.lg)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
@@ -652,7 +652,7 @@ private fun UniverseFeedCard(
                 DayBadge(feed.day)
             }
             Spacer(Modifier.height(OctopusSpacing.md))
-            GlassPill(
+            OctopusPill(
                 icon = Icons.Filled.Schedule,
                 text = if (loading) "推进中" else "过一天",
                 tint = OctopusTints.Evolve,
@@ -660,7 +660,7 @@ private fun UniverseFeedCard(
                 onClick = onTick,
             )
             Spacer(Modifier.height(OctopusSpacing.sm))
-            GlassPill(
+            OctopusPill(
                 icon = Icons.Filled.ChatBubbleOutline,
                 text = "进入主对话",
                 tint = OctopusTints.Memory,
@@ -746,7 +746,7 @@ private fun GhostChatPanel(
             },
             modifier = Modifier.fillMaxWidth(),
         )
-        GlassPill(
+        OctopusPill(
             icon = Icons.AutoMirrored.Filled.Send,
             text = if (running) "等待回应" else "发送到母体",
             tint = OctopusTints.Memory,
@@ -777,7 +777,7 @@ private fun StatLine(label: String, value: String) {
 
 @Composable
 private fun LoadingCard() {
-    GlassCard(modifier = Modifier.fillMaxWidth()) {
+    OctopusCard(modifier = Modifier.fillMaxWidth()) {
         Box(modifier = Modifier.fillMaxWidth().padding(OctopusSpacing.xl), contentAlignment = Alignment.Center) {
             CircularProgressIndicator(color = OctopusTints.Memory)
         }
@@ -786,7 +786,7 @@ private fun LoadingCard() {
 
 @Composable
 private fun EmptyUniverseCard(message: String) {
-    GlassCard(modifier = Modifier.fillMaxWidth()) {
+    OctopusCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(OctopusSpacing.lg)) {
             Text("尚未进入宇宙", color = OctopusColors.TextPrimary, fontSize = OctopusType.titleSm, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(OctopusSpacing.xs))

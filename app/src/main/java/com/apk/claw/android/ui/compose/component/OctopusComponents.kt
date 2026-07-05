@@ -53,7 +53,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.apk.claw.android.ui.compose.theme.OctopusBackground
 import com.apk.claw.android.ui.compose.theme.OctopusColors
-import com.apk.claw.android.ui.compose.theme.OctopusGlass
 import com.apk.claw.android.ui.compose.theme.OctopusIconSize
 import com.apk.claw.android.ui.compose.theme.OctopusShape
 import com.apk.claw.android.ui.compose.theme.OctopusSpacing
@@ -100,9 +99,9 @@ fun CapsuleButton(
 // 内联的实色卡片 + 细描边方案,该多层液态玻璃叠加组件无调用方,属死代码。
 
 @Composable
-fun rememberGlassPressState(
+fun rememberOctopusPressState(
     enabled: Boolean = true,
-): GlassPressState {
+): OctopusPressState {
     val interactionSource = remember { MutableInteractionSource() }
     var focalX by remember { mutableStateOf(0.5f) }
     var focalY by remember { mutableStateOf(0.28f) }
@@ -129,21 +128,21 @@ fun rememberGlassPressState(
         animationSpec = spring(dampingRatio = 0.78f, stiffness = 420f),
         label = "glass-press-boost",
     )
-    return GlassPressState(
+    return OctopusPressState(
         interactionSource = interactionSource,
         pressed = pressed,
         scale = scale,
         boost = boost,
         focalX = animatedFocalX,
         focalY = animatedFocalY,
-        touchModifier = if (enabled) Modifier.trackGlassTouch { x, y ->
+        touchModifier = if (enabled) Modifier.trackOctopusTouch { x, y ->
             focalX = x
             focalY = y
         } else Modifier,
     )
 }
 
-data class GlassPressState(
+data class OctopusPressState(
     val interactionSource: MutableInteractionSource,
     val pressed: Boolean,
     val scale: Float,
@@ -153,7 +152,7 @@ data class GlassPressState(
     val touchModifier: Modifier,
 )
 
-private fun Modifier.trackGlassTouch(onTouch: (Float, Float) -> Unit): Modifier = pointerInput(Unit) {
+private fun Modifier.trackOctopusTouch(onTouch: (Float, Float) -> Unit): Modifier = pointerInput(Unit) {
     awaitEachGesture {
         val down = awaitPointerEvent().changes.firstOrNull { it.pressed } ?: return@awaitEachGesture
         if (size.width > 0 && size.height > 0) {
@@ -176,12 +175,11 @@ private fun Modifier.trackGlassTouch(onTouch: (Float, Float) -> Unit): Modifier 
     }
 }
 
-// ── Glass Card ──
+// ── Card(实底卡片)──
 @Composable
-fun GlassCard(
+fun OctopusCard(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
-    blurRadius: Dp = OctopusGlass.blurRadius,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val shape = OctopusShape.large
@@ -189,7 +187,7 @@ fun GlassCard(
         modifier = modifier
             .clip(shape)
             .background(OctopusBackground.cardSurface)
-            .border(0.5.dp, OctopusBackground.glassBorder, shape)
+            .border(0.5.dp, OctopusBackground.cardBorder, shape)
             .then(
                 if (onClick != null) Modifier.clickable(
                     interactionSource = null,
@@ -203,7 +201,7 @@ fun GlassCard(
 }
 
 @Composable
-fun GlassPill(
+fun OctopusPill(
     icon: ImageVector,
     text: String,
     tint: Color,
@@ -240,14 +238,14 @@ fun GlassPill(
 }
 
 @Composable
-fun GlassTextPill(
+fun OctopusTextPill(
     text: String,
     tint: Color,
     modifier: Modifier = Modifier,
     selected: Boolean = false,
     onClick: () -> Unit,
 ) {
-    val press = rememberGlassPressState()
+    val press = rememberOctopusPressState()
     Box(
         modifier = modifier
             .graphicsLayer {
@@ -286,7 +284,7 @@ fun GlassTextPill(
 }
 
 @Composable
-fun GlassBottomSheet(
+fun OctopusBottomSheet(
     modifier: Modifier = Modifier,
     maxHeight: Dp? = null,
     content: @Composable ColumnScope.() -> Unit,
@@ -297,7 +295,7 @@ fun GlassBottomSheet(
             .then(if (maxHeight != null) Modifier.heightIn(max = maxHeight) else Modifier)
             .clip(OctopusShape.xl)
             .background(OctopusBackground.cardSurface)
-            .border(1.dp, OctopusBackground.glassBorder, OctopusShape.xl),
+            .border(1.dp, OctopusBackground.cardBorder, OctopusShape.xl),
     ) {
         Column(
             modifier = Modifier

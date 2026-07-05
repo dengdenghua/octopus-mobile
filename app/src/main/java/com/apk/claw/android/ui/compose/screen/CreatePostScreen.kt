@@ -296,8 +296,8 @@ private fun AddImageButton(remaining: Int, onClick: () -> Unit) {
         modifier = Modifier
             .size(96.dp)
             .clip(RoundedCornerShape(12.dp))
-            .background(OctopusBackground.glassSurface)
-            .border(1.dp, OctopusBackground.glassBorder, RoundedCornerShape(12.dp))
+            .background(OctopusBackground.cardSurface)
+            .border(1.dp, OctopusBackground.cardBorder, RoundedCornerShape(12.dp))
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
@@ -315,8 +315,8 @@ private fun AddImageButton(remaining: Int, onClick: () -> Unit) {
 
 @Composable
 private fun fieldColors() = TextFieldDefaults.colors(
-    focusedContainerColor = OctopusBackground.glassSurface,
-    unfocusedContainerColor = OctopusBackground.glassSurface,
+    focusedContainerColor = OctopusBackground.cardSurface,
+    unfocusedContainerColor = OctopusBackground.cardSurface,
     focusedIndicatorColor = OctopusColors.Primary,
     unfocusedIndicatorColor = OctopusColors.Border,
     focusedTextColor = OctopusColors.TextPrimary,
