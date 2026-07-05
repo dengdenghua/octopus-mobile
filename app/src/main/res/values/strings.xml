@@ -28,25 +28,29 @@
     <string name="guide_page_subtitle">开启下列权限后，应用才能稳定执行手机任务</string>
     <string name="guide_skip">跳过</string>
     <string name="guide_start">开始使用</string>
+    <string name="guide_all_done">全部设置已完成</string>
+    <string name="guide_tap_to_setup">点击设置</string>
+    <string name="guide_status_done">已开启</string>
+    <string name="guide_status_pending">未开启</string>
     <string name="guide_title_accessibility">无障碍服务</string>
     <string name="guide_desc_accessibility">这是控制设备的核心权限。
 
 1. 前往系统设置 → 无障碍 → 已下载的应用
-2. 在列表中找到“Octopus Mobile”
+2. 在列表中找到"Octopus Mobile"
 3. 打开开关
 4. 在系统弹窗中确认</string>
     <string name="guide_title_notification">常驻通知</string>
-    <string name="guide_desc_notification">让应用在后台稳定运行，减少被系统结束的概率。\n\n点按首页卡片即可开启。Android 13+ 会先请求通知权限。</string>
+    <string name="guide_desc_notification">让应用在后台稳定运行，减少被系统结束的概率。\n\n点击本项即可开启。Android 13+ 会先请求通知权限。</string>
     <string name="guide_title_overlay">悬浮窗</string>
     <string name="guide_desc_overlay">显示悬浮面板，用来查看任务执行状态。
 
 1. 前往系统设置 → 应用 → Octopus Mobile
-2. 找到“显示在其他应用上层”
+2. 找到"显示在其他应用上层"
 3. 打开开关</string>
     <string name="guide_title_battery">电池白名单</string>
-    <string name="guide_desc_battery">避免系统在后台停止应用。\n\n点按首页卡片后，在系统弹窗中确认“允许”。部分设备需要设置为“不受限制”。</string>
+    <string name="guide_desc_battery">避免系统在后台停止应用。\n\n点击本项后，在系统弹窗中确认"允许"。部分设备需要设置为"不受限制"。</string>
     <string name="guide_title_storage">文件访问</string>
-    <string name="guide_desc_storage">允许读取和写入设备文件。\n\nAndroid 11+：前往系统设置并开启“所有文件访问权限”。\nAndroid 10 及以下：在弹窗中授权即可。</string>
+    <string name="guide_desc_storage">允许读取和写入设备文件。\n\nAndroid 11+：前往系统设置并开启"所有文件访问权限"。\nAndroid 10 及以下：在弹窗中授权即可。</string>
 
     <!-- Advanced (Shizuku) permission card -->
     <string name="home_card_advanced_title">高级能力（可选）</string>

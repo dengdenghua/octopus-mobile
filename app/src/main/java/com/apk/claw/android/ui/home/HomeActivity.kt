@@ -10,6 +10,7 @@ import android.os.Environment
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import com.apk.claw.android.service.ForegroundService
+import com.apk.claw.android.service.KeepAliveJobService
 import androidx.core.content.ContextCompat
 import android.view.View
 import com.apk.claw.android.R
@@ -61,11 +62,13 @@ class HomeActivity : BaseActivity() {
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
+        // 无论通知权限是否授予，保活服务都已经启动（在 requestNotificationPermission 中启动）
+        // 通知权限只影响状态栏通知是否可见，不影响保活功能
+        startNotificationService()
         if (isGranted) {
-            // 授权成功，启动前台服务
-            startNotificationService()
+            Toast.makeText(this, R.string.home_notification_enabled, Toast.LENGTH_SHORT).show()
         } else {
-            Toast.makeText(this, R.string.home_need_notification_permission, Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "保活服务已启动，授予通知权限可在状态栏看到运行状态", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -223,28 +226,24 @@ class HomeActivity : BaseActivity() {
     }
 
     private fun requestNotificationPermission() {
-        // Android 13+ 需要申请通知权限
+        // 关键：先无条件启动保活服务——前台保活不依赖 POST_NOTIFICATIONS 权限，
+        // 该权限仅控制状态栏「运行中」通知是否可见，不影响进程优先级。
+        startNotificationService()
+
+        // Android 13+ 需要申请通知权限（仅用于显示状态栏通知，非保活必需）
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
                     != android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 // 使用 Activity Result API 请求权限
                 notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                return
             }
         }
-
-        startNotificationService()
     }
 
     private fun startNotificationService() {
-        val started = ForegroundService.start(this)
-        if (started) {
-            cardNotification.setPermissionEnabled(true)
-            Toast.makeText(this, R.string.home_notification_enabled, Toast.LENGTH_SHORT).show()
-        } else {
-            Toast.makeText(this, R.string.home_need_notification_permission, Toast.LENGTH_SHORT).show()
-            updateNotificationStatus()
-        }
+        ForegroundService.start(this)
+        runCatching { KeepAliveJobService.schedule(applicationContext) }
+        cardNotification.setPermissionEnabled(ForegroundService.isRunning())
     }
 
     private fun requestSystemWindowPermission() {

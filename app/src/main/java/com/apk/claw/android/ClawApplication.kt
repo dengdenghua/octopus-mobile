@@ -135,9 +135,12 @@ open class ClawApplication : BaseApp() {
         if (!ForegroundService.isRunning()) {
             val started = ForegroundService.start(this)
             if (!started) {
-                XLog.e(TAG, "ForegroundService start failed: notification permission not granted")
+                XLog.e(TAG, "ForegroundService start blocked by system")
             }
         }
+        // 15 分钟守护(FGS 被杀后重拉)必须无条件调度:原来只在 hasLlmConfig(=BYO key)时
+        // 经 onAppInitialized 调度,平台中转登录用户这条防线从未生效过。
+        runCatching { com.apk.claw.android.service.KeepAliveJobService.schedule(this) }
 
         // ── 方案 F · 启动 Octopus Mobile 决策层 ──
         initOctopusMobile()

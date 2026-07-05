@@ -38,10 +38,15 @@ class KeepAliveJobService : JobService() {
     }
 
     override fun onStartJob(params: JobParameters?): Boolean {
-        XLog.i(TAG, "KeepAlive job triggered, ForegroundService running: ${ForegroundService.isRunning()}")
-        if (!ForegroundService.isRunning()) {
+        val a11yRunning = ClawAccessibilityService.isRunning()
+        val fgsRunning = ForegroundService.isRunning()
+        XLog.i(TAG, "KeepAlive job triggered, A11y: $a11yRunning, ForegroundService: $fgsRunning")
+        // 核心保活逻辑：
+        // 1. 如果无障碍服务在运行——它自己已经是前台服务，进程已被保活，无需额外启动ForegroundService
+        // 2. 如果无障碍服务没在运行（用户未开启或被系统杀死），才用ForegroundService保活进程等待重连
+        if (!a11yRunning && !fgsRunning) {
             val started = ForegroundService.start(applicationContext)
-            XLog.i(TAG, "Restarted ForegroundService: $started")
+            XLog.i(TAG, "Restarted ForegroundService (no a11y): $started")
         }
         return false
     }

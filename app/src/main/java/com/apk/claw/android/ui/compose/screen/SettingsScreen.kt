@@ -149,6 +149,7 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
     var pairBusy by remember { mutableStateOf(false) }
     var showWorkspaceDialog by remember { mutableStateOf(false) }
     var workspaceDraft by remember { mutableStateOf("") }
+    var showKeepAliveDialog by remember { mutableStateOf(false) }
     DisposableEffect(lifecycleOwner) {
         val obs = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_RESUME) refreshTick++ }
         lifecycleOwner.lifecycle.addObserver(obs)
@@ -243,6 +244,10 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
         )
     }
 
+    if (showKeepAliveDialog) {
+        KeepAliveCheckDialog(onDismiss = { showKeepAliveDialog = false })
+    }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(OctopusBackground.pageBrush()).statusBarsPadding(),
         contentPadding = PaddingValues(
@@ -322,6 +327,31 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
                                 }
                             }
                         },
+                    )
+                }
+                // 无障碍老掉线的自助排查入口 —— 直达「保活体检」
+                Spacer(Modifier.height(OctopusSpacing.sm))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(OctopusShape.small)
+                        .clickable { showKeepAliveDialog = true }
+                        .padding(vertical = OctopusSpacing.xs),
+                ) {
+                    Icon(
+                        Icons.Filled.SettingsAccessibility, contentDescription = null,
+                        tint = PrimaryColor, modifier = Modifier.size(OctopusIconSize.small),
+                    )
+                    Spacer(Modifier.width(OctopusSpacing.sm))
+                    Text(
+                        "无障碍老掉线?点这里做「保活体检」",
+                        color = PrimaryColor, fontSize = OctopusType.caption,
+                        fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f),
+                    )
+                    Icon(
+                        Icons.Filled.ChevronRight, contentDescription = null,
+                        tint = TextMuted, modifier = Modifier.size(OctopusIconSize.small),
                     )
                 }
             }
