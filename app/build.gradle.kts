@@ -9,6 +9,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.detekt)
+    alias(libs.plugins.chaquopy)
     jacoco
 }
 
@@ -70,8 +71,24 @@ android {
         // 缩减 resources.arsc / res。注意必须含 ja,否则会误删 app 自带的日语翻译。
         resourceConfigurations += setOf("en", "zh", "ja")
 
-        // ABI 由下方 splits 块按架构分包(每个 APK 只带自己架构),这里不再用
-        // abiFilters 限制,否则会与 splits 冲突、把 32 位过滤掉。
+        // ABI 由下方 splits 块按架构分包(每个 APK 只带自己架构);另出一个
+        // universal 通用包(含两套 .so,一个包 32/64 位都能装,省得分辨给哪台)。GeckoView 已移除,
+        // 通用包也就 ~两套 .so 的体积(几十 MB),不像当年 370MB 那么夸张。
+        // Chaquopy(Python 原生解释器)需要 abiFilters 显式声明支持的 ABI,以决定打包哪些
+        // Python .so。此处与 splits.include 保持一致(arm64-v8a + armeabi-v7a),不会冲突。
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+        }
+    }
+
+    // Chaquopy —— Android 上的 Python 解释器(17.0.0 已完全开源免费,Maven Central)。
+    // 选 Python 3.11 而非 3.12+:3.11 同时支持 32 位(armeabi-v7a)和 64 位(arm64-v8a),
+    // 3.12+ 仅支持 64 位,会丢弃 armeabi-v7a 老设备。3.11 生态成熟、纯 Python 包兼容性好。
+    // pip 暂不预装第三方包:run_python 沙箱以标准库为主,需要时由调用方按需 install。
+    chaquopy {
+        defaultConfig {
+            version = "3.11"
+        }
     }
 
     // 按 ABI 分包:arm64-v8a / armeabi-v7a 各生成一个独立 APK,只含自身架构;另出一个
