@@ -1,9 +1,8 @@
 package com.apk.claw.android.tool.impl
 
-import android.content.Intent
-import android.net.VpnService
 import com.apk.claw.android.ClawApplication
 import com.apk.claw.android.service.ClawVpnService
+import com.apk.claw.android.service.VpnPermissionActivity
 import com.apk.claw.android.tool.BaseTool
 import com.apk.claw.android.tool.ToolParameter
 import com.apk.claw.android.tool.ToolResult
@@ -45,7 +44,6 @@ class StartVpnTool : BaseTool() {
     )
 
     override fun execute(params: Map<String, Any>): ToolResult {
-        // 已在运行则拒绝重复启动
         if (ClawVpnService.currentConfig != null) {
             return ToolResult.error("VPN 已在运行中,请先 stop_vpn 再启动")
         }
@@ -59,19 +57,13 @@ class StartVpnTool : BaseTool() {
             val password = optionalString(params, "password", "").trim().ifBlank { null }
 
             val ctx = ClawApplication.instance
-            // 检查用户是否已授权 VPN(系统弹窗)
-            if (VpnService.prepare(ctx) != null) {
-                return@runCatching ToolResult.error(
-                    "需要用户授权 VPN 权限。请在系统弹窗中点击「允许」。" +
-                    "若未弹出,请前往系统设置 → VPN 授权本应用。"
-                )
-            }
-
             val config = ClawVpnService.VpnConfig(host, port, username, password)
-            if (ClawVpnService.start(ctx, config)) {
+
+            val ok = VpnPermissionActivity.requestPermissionAndStart(ctx, config)
+            if (ok) {
                 ToolResult.success("VPN 已启动:流量将经 $host:$port 转发(SOCKS5)")
             } else {
-                ToolResult.error("VPN 启动失败,请检查代理服务器是否可达")
+                ToolResult.error("VPN 启动失败:用户未授权或代理服务器不可达")
             }
         }.getOrElse { ToolResult.error("参数错误: ${it.message}") }
     }

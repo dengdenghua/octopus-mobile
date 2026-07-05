@@ -52,12 +52,19 @@ class GenerateAppTool : BaseTool() {
         /**
          * 生成物可自动获授的「设备能力」白名单——只放**低危、无隐私读取**的工具:生成媒体、预览、
          * 联动其它小程序。刻意不含:截图/剪贴板读取/文件/短信/自动化点击等(会读隐私或改设备状态)。
+         *
+         * VPN 工具(start_vpn/stop_vpn/vpn_status)为例外放行:
+         * - 用户在自己生成的 VPN 面板 UI 里主动点击才触发,代理地址由用户自填,非远端注入;
+         * - 系统级 VPN 授权弹窗本身就是最强保护(无法绕过,必须用户点"允许");
+         * - withUntrustedSource 标记会再走一次高危审批闸门,每次启动都需用户确认;
+         * - VPN 运行时有系统常驻通知,用户随时可感知/关闭。
          * 即便在白名单内,运行时调用仍过 [com.apk.claw.android.tool.ToolRegistry] 的不可信来源闸门,
          * 高危工具(如 run_code)仍会被拦/审批;这里是「第一道:允许声明」。
          */
         private val AGENTIC_TOOL_WHITELIST = setOf(
             "generate_image", "generate_video", "preview_html",
             "list_apps", "app_action", "read_app_events",
+            "start_vpn", "stop_vpn", "vpn_status",
         )
     }
 
@@ -269,13 +276,16 @@ class GenerateAppTool : BaseTool() {
           操作处调用 `octopus.reportAction(actionType, params)` 上报(先判断 `window.octopus` 是否存在)。
         - **让应用能真正「干活」(可选,按需)**:除了纯前端逻辑,你还可以调用宿主设备能力:
           `var r = octopus.callTool("工具名", { 参数 });`(同步返回 `{ok:true,data:"..."}` 或 `{ok:false,error:"..."}`;
-          调用前先判断 `window.octopus`)。**只有以下低危工具可用**(用不到就别声明):
+          调用前先判断 `window.octopus`)。**只有以下工具可用**(用不到就别声明):
             · generate_image {prompt, size?}    → 文生图,data 内含图片链接(如做「AI 头像/海报」应用)
             · generate_video {prompt}           → 文生视频
             · preview_html {html, height?}      → 把一段 HTML 推到控制台预览
             · list_apps {}                      → 列出已装小程序(做启动器/仪表盘)
             · app_action {app_id, action, params?} → 调用另一个小程序的动作(跨应用联动)
             · read_app_events {app_id?}         → 读其它小程序上报的事件
+            · start_vpn {host, port, username?, password?} → 启动 SOCKS5 代理 VPN(需用户授权系统弹窗+确认)
+            · stop_vpn {}                       → 停止 VPN,恢复正常网络
+            · vpn_status {}                     → 查询 VPN 状态,返回 {running, host, port}
           用了哪些,就在 </html> **之后**追加一行声明(没用到就省略这行):
           <!--OCTOPUS_TOOLS:["generate_image","list_apps"]-->
         - 在 </html> **之后**追加一行 HTML 注释,声明你实现了哪些 action(供宿主发现,数组可为空):

@@ -310,6 +310,13 @@
                 android:value="SOCKS5 proxy tunnel for user-generated automation plugins" />
         </service>
 
+        <!-- VPN 系统授权中转 Activity（透明无界面，仅拉起系统 VPN 授权弹窗） -->
+        <activity
+            android:name=".service.VpnPermissionActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
     </application>
 
 </manifest>
