@@ -239,7 +239,11 @@ fun OctopusNavHost(
             AgentSquareScreen(
                 onBack = { navController.popBackStack() },
                 onOpenSearch = { /* TODO */ },
-                onCreatePost = { /* TODO */ },
+                onCreatePost = {
+                    val ctx = navController.context
+                    val target = com.apk.claw.android.ui.featurescreens.MiniAppListActivity::class.java
+                    ctx.startActivity(android.content.Intent(ctx, target))
+                },
             )
         }
         composable(Screen.Universe.route) {

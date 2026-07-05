@@ -284,7 +284,7 @@ private fun ExploreTab(
                 header = data?.header,
                 onSearch = onNavigateToAgentSquare,
                 onUniverse = onNavigateToUniverse,
-                onCreate = { onOpenActivity(SkillsActivity::class.java) },
+                onCreate = { onOpenActivity(MiniAppListActivity::class.java) },
             )
         }
 
