@@ -43,6 +43,12 @@ object ToolRiskPolicy {
         // 受限目录文件读写、callTool(回 ToolRegistry)等能力 —— 非纯计算,最高危一类。
         // 登记 HIGH → 自动获得「不可信来源弹审批 + 全程审计」,无需新增闸门。见 RunCodeTool/ScriptSandbox。
         "run_code",
+        // 会话式代码执行:变量/函数持久,跨多次调用累积状态,风险面与 run_code 一致(均能调高危工具)。
+        "run_code_session",
+        // Shell 命令执行(经 Shizuku,shell UID 2000):虽只允许查询类命令白名单(pm list/dumpsys/
+        // getprop/settings get/logcat -d 等),但仍是系统级特权入口,可能读出设备指纹/账号等敏感信息。
+        // 登记 HIGH → 不可信来源走来源闸门 + 全程审计。状态变更命令被白名单拦截,走 file_ops/tap。
+        "shell_exec",
         // 全自动配置 Shizuku:与本机 adbd 完成 ADB 配对并跑 shell 拉起 Shizuku(shell 级特权入口)。
         // 最高危一类 → 不可信来源须弹审批 + 全程审计,防远端静默给自己开 Shizuku 提权。见 ShizukuAutoSetupTool。
         "shizuku_auto_setup",
@@ -94,6 +100,9 @@ object ToolRiskPolicy {
         "echo_act",            // 写 Echo 虚拟世界
         "echo_bind",           // 绑定角色进 Echo 虚拟世界
         "spawn_subagent",      // 子 Agent 执行子任务（内部各工具再走一遍 executeTool 管线）
+        // 会话重置:销毁会话 scope、释放持久状态。本身无外部副作用,但可丢弃用户/Agent 在会话里
+        // 累积的变量与函数定义 —— 纳入审计便于排查「为何我的会话状态没了」。
+        "run_code_reset",
     )
 
     /**

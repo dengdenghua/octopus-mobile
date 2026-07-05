@@ -26,8 +26,6 @@ class RunCodeTool : BaseTool() {
         private const val MAX_TIMEOUT_MS = 60_000L
     }
 
-    private val sandbox = ScriptSandbox()
-
     override fun getName() = "run_code"
     override fun getDisplayName() = if (useChineseDescription) "运行代码" else "Run Code"
 
@@ -59,7 +57,8 @@ class RunCodeTool : BaseTool() {
         val timeout = optionalLong(params, "timeout_ms", DEFAULT_TIMEOUT_MS)
             .coerceIn(1_000L, MAX_TIMEOUT_MS)
         // 把当前任务取消令牌传给沙箱,使事件循环等待可被中断,避免 Thread.sleep 阻塞。
-        return sandbox.execute(code, timeout, currentCancellationToken())
+        // ScriptSandbox 为 object 单例,RunCodeTool/RunCodeSessionTool/RunCodeResetTool 共享同一份会话状态。
+        return ScriptSandbox.execute(code, timeout, currentCancellationToken())
     }
 
     override fun getDescriptionEN() = """

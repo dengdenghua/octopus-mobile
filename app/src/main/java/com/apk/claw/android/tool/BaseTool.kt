@@ -39,6 +39,8 @@ abstract class BaseTool {
             "browser_evaluate", "browser_install_extension",
             "search_app_in_store",
             "run_code",
+            "run_code_session",
+            "shell_exec",
             "preview_html",
             "generate_app",
             "spawn_subagent"
