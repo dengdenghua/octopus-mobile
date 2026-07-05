@@ -2,6 +2,7 @@ package com.apk.claw.android.ui.featurescreens
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Color
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.Image
@@ -139,14 +140,42 @@ private fun PrimaryButton(text: String, onClick: () -> Unit) {
     }
 }
 
-/** 把服务端返回的二维码图片内容(可能带 data:image;base64, 前缀)解成 Bitmap。 */
+private const val QR_SIZE_PX = 480
+
+/**
+ * 把服务端返回的 `qrcode_img_content` 转成二维码 Bitmap。
+ *
+ * 实测该字段是「要编码成二维码的 URL 字符串」(如 https://liteapp.weixin.qq.com/q/... ),**不是** base64
+ * 图片 —— 旧实现直接 Base64.decode 会因 URL 里的 `:/?&` 非法字符抛异常返回 null,导致二维码出不来。
+ * 现改为:是 base64 图片(data:image / 裸 PNG·JPEG 头)就解码;否则(常态)用 ZXing 把字符串编码成二维码。
+ */
+@Suppress("ReturnCount")
 private fun decodeQr(content: String): Bitmap? {
-    if (content.isBlank()) return null
-    val b64 = if (content.contains("base64,")) content.substringAfter("base64,") else content
-    return try {
-        val bytes = android.util.Base64.decode(b64.trim(), android.util.Base64.DEFAULT)
-        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-    } catch (e: Exception) {
-        null
+    val c = content.trim()
+    if (c.isBlank()) return null
+    if (c.startsWith("data:image") || c.startsWith("iVBOR") || c.startsWith("/9j/")) {
+        val b64 = if (c.contains("base64,")) c.substringAfter("base64,") else c
+        runCatching {
+            val bytes = android.util.Base64.decode(b64, android.util.Base64.DEFAULT)
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+        }.getOrNull()?.let { return it }
     }
+    return encodeQr(c, QR_SIZE_PX)
 }
+
+/** ZXing:把文本编码为二维码 Bitmap(与 SettingsViewModel.generateQrBitmap 同一套)。 */
+private fun encodeQr(content: String, size: Int): Bitmap? = runCatching {
+    val hints = mapOf(
+        com.google.zxing.EncodeHintType.MARGIN to 1,
+        com.google.zxing.EncodeHintType.CHARACTER_SET to "UTF-8",
+    )
+    val matrix = com.google.zxing.qrcode.QRCodeWriter()
+        .encode(content, com.google.zxing.BarcodeFormat.QR_CODE, size, size, hints)
+    val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.RGB_565)
+    for (x in 0 until size) {
+        for (y in 0 until size) {
+            bmp.setPixel(x, y, if (matrix.get(x, y)) Color.BLACK else Color.WHITE)
+        }
+    }
+    bmp
+}.getOrNull()
