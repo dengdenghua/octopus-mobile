@@ -1,3 +1,5 @@
+@file:Suppress("MagicNumber", "MaxLineLength")
+
 package com.apk.claw.android.plugin
 
 import android.os.Bundle
@@ -6,10 +8,13 @@ import android.view.View
 import android.webkit.WebView
 import android.widget.FrameLayout
 import android.widget.ProgressBar
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 
 class MiniAppActivity : AppCompatActivity() {
 
@@ -24,12 +29,27 @@ class MiniAppActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        try {
-            val id = intent.getStringExtra(EXTRA_PLUGIN_ID)
-            val manifest = id?.let { MiniAppRegistry.get(it) }
-            if (manifest == null || manifest.page.isBlank()) { finish(); return }
-            appId = manifest.id
+        val id = intent.getStringExtra(EXTRA_PLUGIN_ID)
+        val manifest = id?.let { MiniAppRegistry.get(it) }
+        if (manifest == null || manifest.page.isBlank()) { finish(); return }
+        appId = manifest.id
+        // 订阅制 mini-app:打开前异步校验订阅有效(不阻塞主线程),失效即拦
+        if (SubscriptionGate.isGated(manifest.id)) {
+            lifecycleScope.launch {
+                if (SubscriptionGate.checkActive(manifest.id)) {
+                    launchWebView(manifest)
+                } else {
+                    Toast.makeText(this@MiniAppActivity, "订阅已过期,续订后可继续使用", Toast.LENGTH_LONG).show()
+                    finish()
+                }
+            }
+        } else {
+            launchWebView(manifest)
+        }
+    }
 
+    private fun launchWebView(manifest: PluginManifest) {
+        try {
             WindowCompat.setDecorFitsSystemWindows(window, false)
 
             val root = FrameLayout(this)
