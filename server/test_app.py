@@ -14,6 +14,7 @@ Octopus 服务端 pytest 测试套件。
 
 运行: cd server && python -m pytest test_app.py -v
 """
+import json
 import math
 import os
 import sys
@@ -73,7 +74,7 @@ def clean_state():
                   "registry_assets", "crash_reports",
                   "square_posts", "square_comments", "square_likes", "square_follows",
                   "square_favorites", "square_unlocks", "plugin_subscriptions", "config_kv",
-                  "cost_snapshots"):
+                  "cost_snapshots", "pricing_proposals"):
             c.execute(f"DELETE FROM {t}")
         c.commit()
     app_module._rl.clear()
@@ -2592,3 +2593,68 @@ class TestCostSnapshots:
         assert "cost_snapshot_interval_hours" in app_module.PRICING_KEYS
         app_module.set_config("cost_snapshot_interval_hours", 12)
         assert app_module.get_config("cost_snapshot_interval_hours", 6) == 12
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# AI 调价建议(提议→人工批准):AI 产结构化建议存 pending,admin 采纳才写 config_kv
+# ══════════════════════════════════════════════════════════════════════════════
+class TestPricingAdvisor:
+    """覆盖:表存在、AI 提议落库(白名单/护栏/去重过滤)、列出、采纳生效、驳回不改、鉴权。"""
+
+    _ADMIN = {"X-Admin-Token": "test-token"}
+
+    @staticmethod
+    def _mock_qwen(monkeypatch, arr):
+        async def _fake(*_a, **_k):
+            return json.dumps(arr, ensure_ascii=False)
+        monkeypatch.setattr(app_module, "_qwen_complete", _fake)
+
+    def test_table_exists(self, client):
+        with closing(db()) as c:
+            tbls = [r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")]
+        assert "pricing_proposals" in tbls
+
+    def test_advise_stores_valid_proposal(self, client, monkeypatch):
+        self._mock_qwen(monkeypatch, [{"key": "voice_credits_per_min", "suggested": 8, "reason": "毛利偏薄"}])
+        r = client.post("/admin/api/pricing/advise", headers=self._ADMIN)
+        assert r.status_code == 200
+        props = r.json()["proposals"]
+        assert len(props) == 1 and props[0]["key"] == "voice_credits_per_min" and props[0]["suggested"] == 8
+        with closing(db()) as c:
+            row = c.execute("SELECT status FROM pricing_proposals").fetchone()
+        assert row["status"] == "pending"     # 未自动生效
+
+    def test_advise_filters_bad_key_and_guardrails(self, client, monkeypatch):
+        self._mock_qwen(monkeypatch, [
+            {"key": "jwt_secret", "suggested": 1, "reason": "非白名单"},          # 白名单外 → 丢
+            {"key": "voice_credits_per_min", "suggested": -3, "reason": "负"},     # 负 → 丢
+            {"key": "voice_credits_per_min", "suggested": 999999, "reason": "离谱"},  # 超护栏 → 夹到上限、仍入库
+        ])
+        r = client.post("/admin/api/pricing/advise", headers=self._ADMIN)
+        props = r.json()["proposals"]
+        assert len(props) == 1                                   # 只剩被夹住的那条
+        assert props[0]["suggested"] <= max(5 * 10, 100)         # 夹在 [0,100] 内(默认5×10=50→上限100)
+
+    def test_approve_applies_config(self, client, monkeypatch):
+        self._mock_qwen(monkeypatch, [{"key": "daily_bonus", "suggested": 33, "reason": "x"}])
+        pid = client.post("/admin/api/pricing/advise", headers=self._ADMIN).json()["proposals"][0]["id"]
+        r = client.post(f"/admin/api/pricing/proposals/{pid}/approve", headers=self._ADMIN)
+        assert r.status_code == 200 and r.json()["value"] == 33
+        assert app_module.get_config("daily_bonus", 20) == 33     # 已写进 config_kv 生效
+        # 重复采纳 → 400(已处理)
+        assert client.post(f"/admin/api/pricing/proposals/{pid}/approve", headers=self._ADMIN).status_code == 400
+
+    def test_reject_does_not_change_config(self, client, monkeypatch):
+        self._mock_qwen(monkeypatch, [{"key": "voice_credits_per_min", "suggested": 9, "reason": "x"}])
+        pid = client.post("/admin/api/pricing/advise", headers=self._ADMIN).json()["proposals"][0]["id"]
+        assert client.post(f"/admin/api/pricing/proposals/{pid}/reject", headers=self._ADMIN).status_code == 200
+        assert app_module.get_config("voice_credits_per_min", 5) == 5   # 未变
+        with closing(db()) as c:
+            assert c.execute("SELECT status FROM pricing_proposals WHERE id=?", (pid,)).fetchone()["status"] == "rejected"
+
+    def test_list_and_auth(self, client, monkeypatch):
+        self._mock_qwen(monkeypatch, [{"key": "daily_bonus", "suggested": 25, "reason": "x"}])
+        client.post("/admin/api/pricing/advise", headers=self._ADMIN)
+        r = client.get("/admin/api/pricing/proposals", headers=self._ADMIN)
+        assert r.status_code == 200 and len(r.json()["proposals"]) == 1
+        assert client.get("/admin/api/pricing/proposals").status_code in (401, 403, 503)

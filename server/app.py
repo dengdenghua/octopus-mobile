@@ -731,6 +731,13 @@ def init_db() -> None:
             "members INTEGER, subsidy_full REAL, payload TEXT)"
         )
         c.execute("CREATE INDEX IF NOT EXISTS idx_cost_snapshots_ts ON cost_snapshots(ts)")
+        # AI 调价建议(提议→人工批准):AI 读成本趋势产建议存这,admin 采纳才写 config_kv。
+        c.execute(
+            "CREATE TABLE IF NOT EXISTS pricing_proposals("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, config_key TEXT NOT NULL, "
+            "current_value TEXT, suggested_value TEXT NOT NULL, reason TEXT, "
+            "status TEXT DEFAULT 'pending', created_at INTEGER NOT NULL, decided_at INTEGER DEFAULT 0)"
+        )
         # 迁移:给已存在的 remote_devices 表补新列(幂等)
         for _col in (
             "push_token TEXT DEFAULT ''", "os_version TEXT DEFAULT ''",
@@ -5025,6 +5032,128 @@ def admin_cost_snapshot_now(_: bool = Depends(admin_guard)) -> dict[str, Any]:
         "revenue": snap.get("revenue", 0), "costFull": snap.get("costFull", 0),
         "grossMarginFull": snap.get("grossMarginFull"), "costPerCreditFull": snap.get("costPerCreditFull", 0),
     }}
+
+
+def _extract_json_array(text: str | None) -> list[Any]:
+    """从 LLM 输出里抠出 JSON 数组(容忍 ```json 围栏/前后废话)。抠不到返回 []。"""
+    if not text:
+        return []
+    m = re.search(r"\[.*\]", text, re.S)
+    if not m:
+        return []
+    try:
+        v = json.loads(m.group(0))
+        return v if isinstance(v, list) else []
+    except (ValueError, TypeError):
+        return []
+
+
+@app.post("/admin/api/pricing/advise")
+async def admin_pricing_advise(_: bool = Depends(admin_guard)) -> dict[str, Any]:
+    """AI 读【当前成本/毛利】+【可调定价参数】→ 产**结构化调价建议**存为 pending(不自动生效,待人工采纳)。"""
+    snap = _profit_snapshot()
+    knobs = [{"key": k, "current": get_config(k, dflt), "default": dflt, "说明": label}
+             for k, (dflt, label) in PRICING_KEYS.items()]
+    ctx = {
+        "成本": {"每积分真实成本": snap.get("costPerCreditFull"), "满负荷毛利率%": snap.get("grossMarginFull"),
+                "满负荷净补贴": snap.get("subsidyFull"), "活跃用户": snap.get("activeUsers"),
+                "会员数": snap.get("members"), "积分售价": snap.get("creditPrice")},
+        "可调参数": knobs,
+    }
+    sys_p = ("你是 Octopus 平台的定价策略师。给你【当前成本/毛利快照】和【可调定价参数(含当前值/默认值/说明)】。"
+             "基于成本与毛利给出**具体、克制**的调价建议——只针对『可调参数』里的 key,给建议新值+一句话理由。"
+             "规则:①只输出 JSON 数组,别的字一个都不要;②每项形如 "
+             '{"key":"voice_credits_per_min","suggested":6,"reason":"毛利偏薄,小幅上调"};'
+             "③新值必须数字、非负、与当前值同量级(别乱翻倍);④没有要调的返回 []。")
+    out = await _qwen_complete(
+        [{"role": "system", "content": sys_p},
+         {"role": "user", "content": json.dumps(ctx, ensure_ascii=False)}],
+        max_tokens=600)
+    stored = []
+    now = now_ms()
+    with closing(db()) as c:
+        for item in _extract_json_array(out):
+            if not isinstance(item, dict):
+                continue
+            key = str(item.get("key") or "").strip()
+            if key not in PRICING_KEYS:
+                continue
+            default = PRICING_KEYS[key][0]
+            if isinstance(default, bool):
+                continue
+            try:
+                sug = float(item.get("suggested"))
+            except (TypeError, ValueError):
+                continue
+            if sug < 0:
+                continue
+            # 护栏:建议值夹在 [0, max(10×默认, 100)] 内,防离谱建议被误采纳
+            sug = min(sug, float(max((default * 10) if default else 100, 100)))
+            sug_val: Any = int(sug) if isinstance(default, int) else round(sug, 4)
+            cur = get_config(key, default)
+            if sug_val == cur:
+                continue
+            ins = c.execute(
+                "INSERT INTO pricing_proposals(config_key, current_value, suggested_value, reason, "
+                "status, created_at) VALUES(?,?,?,?,'pending',?)",
+                (key, str(cur), str(sug_val), str(item.get("reason") or "")[:200], now),
+            )
+            stored.append({"id": ins.lastrowid, "key": key, "current": cur,
+                           "suggested": sug_val, "reason": str(item.get("reason") or "")[:200]})
+        c.commit()
+    return {"ok": True, "proposals": stored, "llmAvailable": out is not None,
+            "note": None if out is not None else "未配置 qwen(本地无 key);盒子上会真出建议。"}
+
+
+@app.get("/admin/api/pricing/proposals")
+def admin_pricing_proposals(_: bool = Depends(admin_guard), status: str = "pending",
+                            limit: int = 50) -> dict[str, Any]:
+    """列出调价建议(默认 pending)。"""
+    limit = max(1, min(limit, 200))
+    with closing(db()) as c:
+        if status:
+            rows = c.execute("SELECT * FROM pricing_proposals WHERE status=? ORDER BY id DESC LIMIT ?",
+                             (status, limit)).fetchall()
+        else:
+            rows = c.execute("SELECT * FROM pricing_proposals ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+    return {"proposals": [dict(r) for r in rows]}
+
+
+@app.post("/admin/api/pricing/proposals/{pid}/approve")
+def admin_pricing_approve(pid: int, _: bool = Depends(admin_guard)) -> dict[str, Any]:
+    """采纳一条调价建议:重新校验后写 config_kv 即时生效,标 approved。"""
+    with closing(db()) as c:
+        p = c.execute("SELECT * FROM pricing_proposals WHERE id=?", (pid,)).fetchone()
+        if not p:
+            raise HTTPException(404, "建议不存在")
+        if p["status"] != "pending":
+            raise HTTPException(400, "该建议已处理")
+        key = p["config_key"]
+        if key not in PRICING_KEYS:
+            raise HTTPException(400, "配置项已失效")
+        default = PRICING_KEYS[key][0]
+        try:
+            val: Any = int(float(p["suggested_value"])) if isinstance(default, int) else float(p["suggested_value"])
+        except (ValueError, TypeError):
+            raise HTTPException(400, "建议值非法")
+        if isinstance(val, (int, float)) and val < 0:
+            raise HTTPException(400, "不能为负")
+        c.execute("UPDATE pricing_proposals SET status='approved', decided_at=? WHERE id=?", (now_ms(), pid))
+        c.commit()
+    set_config(key, val)
+    return {"ok": True, "key": key, "value": get_config(key, default)}
+
+
+@app.post("/admin/api/pricing/proposals/{pid}/reject")
+def admin_pricing_reject(pid: int, _: bool = Depends(admin_guard)) -> dict[str, Any]:
+    """驳回一条调价建议(不改配置)。"""
+    with closing(db()) as c:
+        cur = c.execute("UPDATE pricing_proposals SET status='rejected', decided_at=? "
+                        "WHERE id=? AND status='pending'", (now_ms(), pid))
+        c.commit()
+    if cur.rowcount == 0:
+        raise HTTPException(400, "建议不存在或已处理")
+    return {"ok": True}
 
 
 @app.get("/admin/api/profit")
