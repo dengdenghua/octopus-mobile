@@ -71,7 +71,7 @@ def clean_state():
                   "credit_transactions", "device_reports", "remote_devices", "remote_pair_codes",
                   "registry_assets", "crash_reports",
                   "square_posts", "square_comments", "square_likes", "square_follows",
-                  "square_favorites", "square_unlocks"):
+                  "square_favorites", "square_unlocks", "plugin_subscriptions"):
             c.execute(f"DELETE FROM {t}")
         c.commit()
     app_module._rl.clear()
@@ -2338,3 +2338,140 @@ class TestSquareAppPosts:
                         json={"title": "挂个不存在的应用", "content": "x",
                               "appRef": "nonexistent_app", "appKind": "mini-app", "priceCredits": 20})
         assert r.status_code == 400                # 关联的应用不存在
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 插件按月积分订阅(手动续订:每次扣月费顺延 30 天;门控按 plugin_ref 查有效期)
+# ══════════════════════════════════════════════════════════════════════════════
+class TestSquareSubscription:
+    """覆盖:首订扣款+分成、status 门控、续订顺延、余额不足 402、幂等、非订阅帖 400、订阅/一次性互斥。"""
+
+    @pytest.fixture(autouse=True)
+    def _no_qwen(self, monkeypatch):
+        async def _clean(*_a, **_k):
+            return None
+        monkeypatch.setattr(app_module, "_qwen_moderate", _clean)
+
+    @staticmethod
+    def _auth(tok):
+        return {"Authorization": f"Bearer {tok}"}
+
+    @staticmethod
+    def _set_credits(uid, credits):
+        with closing(db()) as c:
+            c.execute("UPDATE users SET credits=? WHERE user_id=?", (credits, uid))
+            c.commit()
+
+    @staticmethod
+    def _insert_sub_post(author_id, monthly, app_ref="subapp"):
+        pid = f"post_{app_ref}"
+        now = _now_ms()
+        with closing(db()) as c:
+            c.execute(
+                "INSERT INTO square_posts(id, author_id, title, content, cover_url, images, tag, status, "
+                "reject_reason, moderation_status, moderation_reason, likes_count, comments_count, "
+                "favorites_count, created_at, updated_at, app_ref, app_kind, price_credits, topic, sub_price_credits) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?,0,0,0,?,?,?,?,?,?,?)",
+                (pid, author_id, "订阅应用", "", "", "[]", "", "approved", "", "", "",
+                 now, now, app_ref, "routine", 0, "efficiency", monthly),
+            )
+            c.commit()
+        return pid
+
+    @staticmethod
+    def _sub_expire(uid, app_ref):
+        with closing(db()) as c:
+            r = c.execute("SELECT expire_at FROM plugin_subscriptions WHERE user_id=? AND plugin_ref=?",
+                          (uid, app_ref)).fetchone()
+        return int(r["expire_at"]) if r else 0
+
+    def test_first_subscribe_deducts_and_shares(self, client):
+        _atok, author = _email_register(client, "subauthor@x.com")
+        self._set_credits(author, 0)
+        btok, buyer = _email_register(client, "subbuyer@x.com")
+        self._set_credits(buyer, 100)
+        pid = self._insert_sub_post(author, 50)
+        r = client.post(f"/square/posts/{pid}/subscribe", headers=self._auth(btok), json={})
+        assert r.status_code == 200, r.text
+        j = r.json()
+        assert j["balance"] == 50 and j["creatorEarned"] == 35    # 100-50;int(50*0.7)
+        assert (j["app"] or {}).get("ref") == "subapp"
+        assert j["expireAt"] > _now_ms()
+        with closing(db()) as c:
+            ac = c.execute("SELECT credits FROM users WHERE user_id=?", (author,)).fetchone()["credits"]
+        assert ac == 35
+
+    def test_status_active_after_subscribe(self, client):
+        _atok, author = _email_register(client, "s2a@x.com")
+        btok, buyer = _email_register(client, "s2b@x.com")
+        self._set_credits(buyer, 100)
+        pid = self._insert_sub_post(author, 30, app_ref="s2app")
+        client.post(f"/square/posts/{pid}/subscribe", headers=self._auth(btok), json={})
+        j = client.get("/square/plugin/s2app/subscription", headers=self._auth(btok)).json()
+        assert j["active"] is True and j["expireAt"] > _now_ms()
+
+    def test_status_inactive_when_never_subscribed(self, client):
+        btok, _b = _email_register(client, "s3@x.com")
+        assert client.get("/square/plugin/whatever/subscription", headers=self._auth(btok)).json()["active"] is False
+
+    def test_renew_extends_by_a_month(self, client):
+        _atok, author = _email_register(client, "s4a@x.com")
+        btok, buyer = _email_register(client, "s4b@x.com")
+        self._set_credits(buyer, 100)
+        pid = self._insert_sub_post(author, 30, app_ref="s4app")
+        client.post(f"/square/posts/{pid}/subscribe", headers=self._auth(btok), json={})
+        exp1 = self._sub_expire(buyer, "s4app")
+        r = client.post(f"/square/posts/{pid}/subscribe", headers=self._auth(btok), json={})
+        exp2 = self._sub_expire(buyer, "s4app")
+        assert r.json()["balance"] == 40                          # 100-30-30
+        assert exp2 - exp1 >= 29 * 24 * 3600 * 1000               # 顺延约一个月
+
+    def test_insufficient_credits_402(self, client):
+        _atok, author = _email_register(client, "s5a@x.com")
+        btok, buyer = _email_register(client, "s5b@x.com")
+        self._set_credits(buyer, 10)
+        pid = self._insert_sub_post(author, 50, app_ref="s5app")
+        r = client.post(f"/square/posts/{pid}/subscribe", headers=self._auth(btok), json={})
+        assert r.status_code == 402
+        assert self._sub_expire(buyer, "s5app") == 0              # 未产生订阅
+
+    def test_idempotency_key_no_double_charge(self, client):
+        _atok, author = _email_register(client, "s6a@x.com")
+        btok, buyer = _email_register(client, "s6b@x.com")
+        self._set_credits(buyer, 100)
+        pid = self._insert_sub_post(author, 30, app_ref="s6app")
+        client.post(f"/square/posts/{pid}/subscribe", headers=self._auth(btok), json={"idempotency_key": "k1"})
+        j = client.post(f"/square/posts/{pid}/subscribe", headers=self._auth(btok), json={"idempotency_key": "k1"}).json()
+        assert j.get("duplicate") is True
+        with closing(db()) as c:
+            bc = c.execute("SELECT credits FROM users WHERE user_id=?", (buyer,)).fetchone()["credits"]
+        assert bc == 70                                           # 只扣一次 30
+
+    def test_subscribe_non_subscription_post_400(self, client):
+        _atok, author = _email_register(client, "s7a@x.com")
+        btok, buyer = _email_register(client, "s7b@x.com")
+        self._set_credits(buyer, 100)
+        pid = self._insert_sub_post(author, 0, app_ref="s7app")   # sub_price=0 → 不是订阅帖
+        assert client.post(f"/square/posts/{pid}/subscribe", headers=self._auth(btok), json={}).status_code == 400
+
+    def test_publish_subscription_mutually_exclusive(self, client):
+        tok, uid = _email_register(client, "s8@x.com")
+        now = _now_ms()
+        with closing(db()) as c:
+            c.execute(
+                "INSERT INTO registry_assets(id, slug, type, kind, version, name, description, category, tags, "
+                "platforms, mode, author_id, status, reject_reason, moderation_status, moderation_reason, "
+                "checksum, body, body_size, created_at, updated_at, author_earnings, download_count) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                ("plugin/s8app", "s8app", "plugin", "mini-app", "1.0.0", "S8", "", "", "[]",
+                 '["mobile"]', "", uid, "approved", "", "", "", "sha256:x", "<html></html>", 13, now, now, 0, 0),
+            )
+            c.commit()
+        r = client.post("/square/posts/publish", headers=self._auth(tok),
+                        json={"title": "订阅应用帖", "content": "x", "appRef": "s8app", "appKind": "mini-app",
+                              "priceCredits": 99, "subPriceCredits": 40})
+        assert r.status_code == 200 and r.json()["status"] == "approved"
+        pid = r.json()["postId"]
+        with closing(db()) as c:
+            row = c.execute("SELECT price_credits, sub_price_credits FROM square_posts WHERE id=?", (pid,)).fetchone()
+        assert row["sub_price_credits"] == 40 and row["price_credits"] == 0    # 标了月价 → 一次性价清零

@@ -635,8 +635,9 @@ def init_db() -> None:
         for _col in (
             "app_ref TEXT DEFAULT ''",                      # 关联可运行物 id(mini-app slug / routine)
             "app_kind TEXT DEFAULT ''",                     # mini-app | routine | skill
-            "price_credits INTEGER NOT NULL DEFAULT 0",     # 0=免费复刻,>0=付费积分
+            "price_credits INTEGER NOT NULL DEFAULT 0",     # 0=免费复刻,>0=一次性付费积分
             "topic TEXT DEFAULT 'recommend'",               # 分类 key(见 SQUARE_TOPIC_KEYS)
+            "sub_price_credits INTEGER NOT NULL DEFAULT 0",  # >0=按月订阅价(月付);与一次性 price_credits 互斥
         ):
             try:
                 c.execute(f"ALTER TABLE square_posts ADD COLUMN {_col}")
@@ -650,6 +651,17 @@ def init_db() -> None:
             "PRIMARY KEY(user_id, post_id))"
         )
         c.execute("CREATE INDEX IF NOT EXISTS idx_square_unlocks_post ON square_unlocks(post_id)")
+        # 插件按月订阅台账(手动续订):PK(user_id, plugin_ref);plugin_ref = mini-app slug(= square_posts.app_ref)。
+        # expire_at 到期即失效(手动续订不自动扣),运行时门控按 plugin_ref 查是否 expire_at>now。
+        c.execute(
+            "CREATE TABLE IF NOT EXISTS plugin_subscriptions("
+            "user_id TEXT NOT NULL, plugin_ref TEXT NOT NULL, post_id TEXT DEFAULT '', "
+            "author_id TEXT DEFAULT '', monthly_price INTEGER NOT NULL DEFAULT 0, "
+            "expire_at INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL, "
+            "last_renew_at INTEGER NOT NULL DEFAULT 0, "
+            "PRIMARY KEY(user_id, plugin_ref))"
+        )
+        c.execute("CREATE INDEX IF NOT EXISTS idx_plugin_subs_expire ON plugin_subscriptions(expire_at)")
         # 迁移:给已存在的 remote_devices 表补新列(幂等)
         for _col in (
             "push_token TEXT DEFAULT ''", "os_version TEXT DEFAULT ''",
@@ -2018,10 +2030,17 @@ async def square_publish_post(body: dict[str, Any], u: sqlite3.Row = Depends(act
     except (TypeError, ValueError):
         price_credits = 0
     price_credits = max(0, min(price_credits, SQUARE_PRICE_MAX))
+    try:
+        sub_price_credits = int(body.get("subPriceCredits") or body.get("sub_price_credits") or 0)
+    except (TypeError, ValueError):
+        sub_price_credits = 0
+    sub_price_credits = max(0, min(sub_price_credits, SQUARE_PRICE_MAX))
     if not app_ref:            # 纯图文帖:无关联物 → 清空定价/类型
-        app_kind, price_credits = "", 0
+        app_kind, price_credits, sub_price_credits = "", 0, 0
     elif not app_kind:         # 有 ref 未标类型 → 默认 mini-app
         app_kind = "mini-app"
+    if sub_price_credits > 0:  # 订阅与一次性互斥:标了月价就走订阅,清掉一次性价
+        price_credits = 0
 
     # ── 自动审核:文本部分(图片审核待接入) ──
     mod_status, mod_reason = "", ""
@@ -2060,13 +2079,13 @@ async def square_publish_post(body: dict[str, Any], u: sqlite3.Row = Depends(act
             INSERT INTO square_posts(id, author_id, title, content, cover_url, images,
                 tag, status, reject_reason, moderation_status, moderation_reason,
                 likes_count, comments_count, favorites_count, created_at, updated_at,
-                app_ref, app_kind, price_credits, topic)
-            VALUES(?,?,?,?,?,?,?,?,?,?,?,0,0,0,?,?,?,?,?,?)
+                app_ref, app_kind, price_credits, topic, sub_price_credits)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,0,0,0,?,?,?,?,?,?,?)
         """, (
             post_id, u["user_id"], title, content, cover, json.dumps(images),
             tag, final_status, (mod_reason if final_status == "rejected" else ""),
             mod_status, mod_reason, now, now,
-            app_ref, app_kind, price_credits, topic,
+            app_ref, app_kind, price_credits, topic, sub_price_credits,
         ))
         c.commit()
 
@@ -2170,6 +2189,102 @@ def square_acquire(post_id: str, u: sqlite3.Row = Depends(actor)) -> dict[str, A
         "ok": True, "owned": True, "appKind": app_kind, "appRef": app_ref,
         "creatorEarned": creator_earned, "balance": balance, "app": payload,
     }
+
+
+@app.post("/square/posts/{post_id}/subscribe")
+def square_subscribe(post_id: str, body: dict[str, Any], u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    """订阅/续订帖子关联的『按月应用』(手动续订:每次调用扣一个月、顺延 30 天)。
+    - 非订阅帖(sub_price_credits<=0)→ 400
+    - 原子扣积分(不透支,余额不足 402)+ 按 CREATOR_REVENUE_SHARE 给作者分成 + upsert 订阅期
+    - expire_at = max(现有, now) + 30 天,封顶 now+MEMBER_MAX_DAYS 天;自订(作者订自己)不扣不分
+    - 交付 app 载荷(首订即装;续订重复交付无害)
+    幂等:带 idempotency_key 防双击重复扣款(复用 idempotency_keys)。"""
+    user_id = u["user_id"]
+    rate_limit(f"subscribe:{user_id}", 20, 60)
+    idem_key = str(body.get("idempotency_key") or "").strip()[:80]
+    month_ms = MEMBERSHIP_DAYS * 24 * 3600 * 1000
+    with closing(db()) as c:
+        post = c.execute("SELECT * FROM square_posts WHERE id=? AND status='approved'", (post_id,)).fetchone()
+        if not post:
+            raise HTTPException(404, "帖子不存在或未通过审核")
+        app_ref = (post["app_ref"] or "").strip()
+        app_kind = (post["app_kind"] or "").strip()
+        price = int(post["sub_price_credits"] or 0) if "sub_price_credits" in post.keys() else 0
+        if not app_ref or price <= 0:
+            raise HTTPException(400, "该帖子不是按月订阅应用")
+        payload = _load_acquirable(c, app_kind, app_ref)
+        if payload is None:
+            raise HTTPException(404, "关联的应用不存在")
+        author_id = post["author_id"]
+        creator_earned = 0
+
+        c.execute("BEGIN IMMEDIATE")
+        try:
+            # 幂等闸(可选 key):防双击重复扣款
+            if idem_key:
+                try:
+                    c.execute("INSERT INTO idempotency_keys(user_id, key, scope, ts) VALUES(?,?,?,?)",
+                              (user_id, idem_key, "square_subscribe", now_ms()))
+                except sqlite3.IntegrityError:
+                    c.execute("ROLLBACK")
+                    row = c.execute("SELECT expire_at FROM plugin_subscriptions WHERE user_id=? AND plugin_ref=?",
+                                    (user_id, app_ref)).fetchone()
+                    return {"ok": True, "duplicate": True, "appRef": app_ref, "appKind": app_kind,
+                            "expireAt": int(row["expire_at"]) if row else 0, "creatorEarned": 0, "app": payload}
+            # 自订(作者订自己)不扣不分;否则原子扣款 + 分成
+            if author_id != user_id:
+                cur = c.execute("UPDATE users SET credits = credits - ? WHERE user_id=? AND credits >= ?",
+                                (price, user_id, price))
+                if cur.rowcount == 0:
+                    bal_row = c.execute("SELECT credits FROM users WHERE user_id=?", (user_id,)).fetchone()
+                    bal_now = int(bal_row["credits"]) if bal_row else 0
+                    c.execute("ROLLBACK")
+                    raise HTTPException(402, f"积分不足: 需要 {price},当前余额 {bal_now}")
+                _record_credit_txn(c, user_id, -price, source="square_subscribe",
+                                   detail=f"订阅「{post['title'][:40]}」1个月", ref_id=f"subscribe/{post_id}")
+                if author_id:
+                    creator_earned = int(price * CREATOR_REVENUE_SHARE)
+                    if creator_earned > 0:
+                        c.execute("UPDATE users SET credits = credits + ? WHERE user_id=?", (creator_earned, author_id))
+                        _record_credit_txn(c, author_id, creator_earned, source="creator_revenue",
+                                           detail=f"帖子「{post['title'][:40]}」订阅分成", ref_id=f"subscribe/{post_id}")
+            # upsert 订阅期:max(现有, now) + 30 天,封顶
+            existing = c.execute("SELECT expire_at FROM plugin_subscriptions WHERE user_id=? AND plugin_ref=?",
+                                 (user_id, app_ref)).fetchone()
+            base = max(int(existing["expire_at"]) if existing else 0, now_ms())
+            new_exp = min(base + month_ms, now_ms() + MEMBER_MAX_DAYS * 24 * 3600 * 1000)
+            if existing:
+                c.execute("UPDATE plugin_subscriptions SET expire_at=?, last_renew_at=?, monthly_price=?, "
+                          "post_id=?, author_id=? WHERE user_id=? AND plugin_ref=?",
+                          (new_exp, now_ms(), price, post_id, author_id, user_id, app_ref))
+            else:
+                c.execute("INSERT INTO plugin_subscriptions(user_id, plugin_ref, post_id, author_id, "
+                          "monthly_price, expire_at, created_at, last_renew_at) VALUES(?,?,?,?,?,?,?,?)",
+                          (user_id, app_ref, post_id, author_id, price, new_exp, now_ms(), now_ms()))
+            c.commit()
+        except HTTPException:
+            raise
+        except Exception:
+            c.execute("ROLLBACK")
+            raise
+
+        bal_row = c.execute("SELECT credits FROM users WHERE user_id=?", (user_id,)).fetchone()
+        balance = int(bal_row["credits"]) if bal_row else 0
+    return {"ok": True, "expireAt": new_exp, "monthlyPrice": price, "creatorEarned": creator_earned,
+            "balance": balance, "appRef": app_ref, "appKind": app_kind, "app": payload}
+
+
+@app.get("/square/plugin/{plugin_ref}/subscription")
+def square_subscription_status(plugin_ref: str, u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    """运行时门控:查当前用户对某 mini-app(plugin_ref=slug)的订阅是否有效。
+    客户端在 mini-app 打开前调此端点,active=false 则拦截。"""
+    with closing(db()) as c:
+        row = c.execute("SELECT expire_at, monthly_price FROM plugin_subscriptions "
+                        "WHERE user_id=? AND plugin_ref=?", (u["user_id"], plugin_ref)).fetchone()
+    exp = int(row["expire_at"]) if row else 0
+    active = exp > now_ms()
+    return {"active": active, "pluginRef": plugin_ref, "expireAt": exp if active else 0,
+            "monthlyPrice": int(row["monthly_price"]) if row else 0}
 
 
 @app.get("/square/posts/{post_id}")
@@ -3364,6 +3479,12 @@ def _present_post(c: sqlite3.Connection, r: sqlite3.Row, viewer_id: str = "") ->
         "owned": bool(viewer_id) and c.execute(
             "SELECT 1 FROM square_unlocks WHERE user_id=? AND post_id=?",
             (viewer_id, r["id"]),
+        ).fetchone() is not None,
+        # 按月订阅:subPriceCredits>0 = 订阅帖;subActive = 当前用户订阅是否有效(门控用)。
+        "subPriceCredits": int(r["sub_price_credits"]) if ("sub_price_credits" in r.keys() and r["sub_price_credits"]) else 0,
+        "subActive": bool(viewer_id) and c.execute(
+            "SELECT 1 FROM plugin_subscriptions WHERE user_id=? AND plugin_ref=? AND expire_at>?",
+            (viewer_id, (r["app_ref"] if "app_ref" in r.keys() else "") or "", now_ms()),
         ).fetchone() is not None,
         "createdAt": r["created_at"],
     }
