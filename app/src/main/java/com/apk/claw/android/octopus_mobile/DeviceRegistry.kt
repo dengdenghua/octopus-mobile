@@ -111,6 +111,28 @@ class DeviceRegistry {
     }
 
     /**
+     * 用账号云端下发的 LAN 凭证(host → authToken)补全已发现设备的 token。
+     * beacon 出于明文安全不携带 token,真 token 通过账号 /remote/devices 通道下发,
+     * 这里按 IP 匹配写回,使预览 / 远程控制 / 点击输入都能带上正确的 Bearer。
+     */
+    fun applyAccountTokens(hostToToken: Map<String, String>) {
+        if (hostToToken.isEmpty()) return
+        var changed = false
+        for ((id, device) in devices) {
+            val token = hostToToken[device.ip] ?: continue
+            if (token.isNotBlank() && device.authToken != token) {
+                devices[id] = device.copy(authToken = token)
+                changed = true
+            }
+        }
+        if (changed) {
+            emitUpdate()
+            persist()
+            XLog.d(TAG, "applyAccountTokens: 补全 ${hostToToken.size} 台账号设备的 LAN token")
+        }
+    }
+
+    /**
      * 清空所有设备。
      */
     fun clear() {
@@ -174,7 +196,7 @@ data class DeviceInfo(
     val lastSeenTs: Long = System.currentTimeMillis(),
     /** 是否在线 */
     val online: Boolean = true,
-    /** 对端 ConfigServer 的鉴权 token（随 beacon 广播，用于远程控制鉴权） */
+    /** 对端 ConfigServer 的鉴权 token（beacon 不带，由账号 /remote/devices 同步后按 IP 补入） */
     val authToken: String = ""
 ) {
     /**

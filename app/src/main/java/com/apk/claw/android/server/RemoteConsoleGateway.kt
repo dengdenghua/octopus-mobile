@@ -104,6 +104,34 @@ object RemoteConsoleGateway {
         "已配对 ${deviceName}"
     }
 
+    /**
+     * 拉取当前账号下、在线且已上报 LAN 凭证的设备。
+     * 用于把对端 ConfigServer 的真实 token 下发到本机 —— beacon 出于明文安全不携带 token,
+     * 真 token 通过账号 /remote/devices 通道分发给同账号设备。未登录 / 失败时返回空列表。
+     */
+    suspend fun fetchAccountDevices(): List<AccountLanDevice> = withContext(Dispatchers.IO) {
+        val auth = AccountStore.token.takeIf { it.isNotBlank() } ?: return@withContext emptyList()
+        val req = Request.Builder()
+            .url(AccountConfig.baseUrl.trimEnd('/') + "/remote/devices")
+            .header("Authorization", "Bearer $auth")
+            .get()
+            .build()
+        runCatchingOrDefault(TAG, emptyList<AccountLanDevice>()) {
+            OctoHttp.shared.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) return@use emptyList<AccountLanDevice>()
+                val root = gson.fromJson(resp.body?.string().orEmpty(), JsonObject::class.java)
+                val items = root?.getAsJsonArray("items") ?: return@use emptyList<AccountLanDevice>()
+                items.mapNotNull { el ->
+                    val o = el.asJsonObject
+                    val base = o.get("lanBaseUrl")?.asString.orEmpty()
+                    val token = o.get("lanAuthToken")?.asString.orEmpty()
+                    if (base.isBlank() || token.isBlank()) null
+                    else AccountLanDevice(o.get("deviceId")?.asString.orEmpty(), base, token)
+                }
+            }
+        }
+    }
+
     fun connect() {
         if (!isPaired || socket != null) return
         manualStop = false
@@ -278,3 +306,10 @@ object RemoteConsoleGateway {
     private fun JsonObject.long(key: String, default: Long = 0L): Long =
         runCatchingOrDefault(TAG, default) { get(key)?.asLong ?: default }
 }
+
+/** 账号 /remote/devices 下发的一台在线设备的 LAN 直连凭证。 */
+data class AccountLanDevice(
+    val deviceId: String,
+    val lanBaseUrl: String,
+    val lanAuthToken: String,
+)

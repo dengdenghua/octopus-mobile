@@ -3,6 +3,7 @@ package com.apk.claw.android.octopus_mobile
 import android.content.Context
 import com.apk.claw.android.server.ConfigServer
 import com.apk.claw.android.server.ConfigServerManager
+import com.apk.claw.android.server.RemoteConsoleGateway
 import com.apk.claw.android.utils.KVUtils
 import com.apk.claw.android.utils.XLog
 import com.google.gson.Gson
@@ -35,6 +36,7 @@ import java.util.Collections
  *  }
  *  ```
  */
+@Suppress("TooManyFunctions")   // 发现循环本就多(收发 beacon / 超时 / 账号 token 同步各一条)
 class DeviceDiscoveryManager(
     private val context: Context,
     private val registry: DeviceRegistry
@@ -47,6 +49,9 @@ class DeviceDiscoveryManager(
         private const val STALE_CHECK_INTERVAL_MS = 10_000L
         private const val RECEIVE_BUFFER_SIZE = 2048
         private const val BEACON_TYPE = "octopus-beacon"
+        /** 账号 token 同步:首次延迟(让 beacon 先发现设备)+ 周期 */
+        private const val ACCOUNT_SYNC_INITIAL_DELAY_MS = 3_000L
+        private const val ACCOUNT_SYNC_INTERVAL_MS = 15_000L
     }
 
     private val gson = Gson()
@@ -63,6 +68,7 @@ class DeviceDiscoveryManager(
     private var senderJob: Job? = null
     private var receiverJob: Job? = null
     private var staleCheckerJob: Job? = null
+    private var tokenSyncJob: Job? = null
     private var socket: DatagramSocket? = null
 
     /**
@@ -87,6 +93,7 @@ class DeviceDiscoveryManager(
         senderJob = scope.launch { sendBeaconLoop() }
         receiverJob = scope.launch { receiveBeaconLoop() }
         staleCheckerJob = scope.launch { staleCheckerLoop() }
+        tokenSyncJob = scope.launch { accountTokenSyncLoop() }
 
         XLog.i(TAG, "Device discovery started (port=$BEACON_PORT)")
     }
@@ -99,6 +106,7 @@ class DeviceDiscoveryManager(
         senderJob?.cancel()
         receiverJob?.cancel()
         staleCheckerJob?.cancel()
+        tokenSyncJob?.cancel()
         try { socket?.close() } catch (_: Exception) {}
         socket = null
         XLog.i(TAG, "Device discovery stopped")
@@ -210,6 +218,33 @@ class DeviceDiscoveryManager(
         while (running && coroutineContext.isActive) {
             delay(STALE_CHECK_INTERVAL_MS)
             registry.markStaleOffline()
+        }
+    }
+
+    // ── 账号 token 同步 ──
+
+    /**
+     * 周期从账号 /remote/devices 拉取同账号设备的 LAN 凭证,按 IP 补进 [registry]。
+     * beacon 明文不带 token,靠这条把对端 ConfigServer 的真实 token 下发过来,
+     * 远程投屏 / 控制才能通过对端鉴权(否则 401 → 黑屏)。未登录时静默跳过。
+     */
+    private suspend fun accountTokenSyncLoop() {
+        delay(ACCOUNT_SYNC_INITIAL_DELAY_MS)
+        while (running && coroutineContext.isActive) {
+            try {
+                val accountDevices = RemoteConsoleGateway.fetchAccountDevices()
+                if (accountDevices.isNotEmpty()) {
+                    val hostToToken = accountDevices.mapNotNull { d ->
+                        val host = runCatching { java.net.URI(d.lanBaseUrl).host }
+                            .getOrNull()?.takeIf { it.isNotBlank() }
+                        host?.let { it to d.lanAuthToken }
+                    }.toMap()
+                    registry.applyAccountTokens(hostToToken)
+                }
+            } catch (e: Exception) {
+                XLog.w(TAG, "Account token sync failed: ${e.message}")
+            }
+            delay(ACCOUNT_SYNC_INTERVAL_MS)
         }
     }
 
