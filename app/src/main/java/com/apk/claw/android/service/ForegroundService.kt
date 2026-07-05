@@ -1,18 +1,14 @@
 ﻿package com.apk.claw.android.service
 
-import android.Manifest
 import android.app.*
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.os.Build
 import android.os.IBinder
-import androidx.core.content.ContextCompat
 import androidx.core.app.NotificationCompat
 import com.apk.claw.android.R
 import com.apk.claw.android.server.ConfigServerManager
 import com.apk.claw.android.ui.home.HomeActivity
-import com.apk.claw.android.utils.KVUtils
 
 /**
  * 前台服务 - 常驻通知
@@ -37,14 +33,10 @@ class ForegroundService : Service() {
          * @return 是否成功启动（无权限时返回 false）
          */
         fun start(context: Context): Boolean {
-            // Android 13+ 需要检查通知权限
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
-                        != PackageManager.PERMISSION_GRANTED) {
-                    return false
-                }
-            }
-
+            // 前台服务无需 POST_NOTIFICATIONS 即可启动保活 —— 该权限只决定「运行中」通知
+            // 是否可见,不影响服务能否拉起。此前缺通知权限就 return false,导致前台服务从不
+            // 启动、进程无保活,无障碍服务随后台被回收一起死(真机「滑返回无障碍就关」的真凶,
+            // 2026-07-05 定位)。改为无条件启动;通知可见性另由权限引导解决。
             val intent = Intent(context, ForegroundService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
@@ -70,14 +62,14 @@ class ForegroundService : Service() {
         super.onDestroy()
         _isRunning = false
         ConfigServerManager.stop()
-        if (KVUtils.hasLlmConfig()) {
+        if (ClawAccessibilityService.isRunning()) {
             scheduleRestart(0)
         }
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
-        if (KVUtils.hasLlmConfig()) {
+        if (ClawAccessibilityService.isRunning()) {
             scheduleRestart(1)
         }
     }
