@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -246,19 +247,35 @@ fun CreatePostScreen(
                 shape = OctopusShape.medium,
             )
 
-            // 图片选择
+            // 图片选择(第一张即封面;点其他图设为封面)
             Text(
                 stringResource(R.string.create_post_images_label),
                 color = OctopusColors.TextSecondary,
                 fontSize = OctopusType.label,
                 fontWeight = FontWeight.SemiBold,
             )
+            Text(
+                if (imageUris.isEmpty()) "加图后,第一张自动作为封面" else "第一张为封面 · 点其他图可设为封面",
+                color = OctopusColors.TextMuted,
+                fontSize = OctopusType.tag,
+            )
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.sm),
                 contentPadding = PaddingValues(end = OctopusSpacing.lg),
             ) {
-                items(imageUris) { uri ->
-                    ImageThumb(uri = uri, onRemove = { imageUris.remove(uri) })
+                itemsIndexed(imageUris) { index, uri ->
+                    ImageThumb(
+                        uri = uri,
+                        isCover = index == 0,
+                        onSetCover = {
+                            // 移到首位 = 设为封面(服务端取 images[0] 作 cover)
+                            if (index > 0) {
+                                imageUris.removeAt(index)
+                                imageUris.add(0, uri)
+                            }
+                        },
+                        onRemove = { imageUris.remove(uri) },
+                    )
                 }
                 if (imageUris.size < 9) {
                     item { AddImageButton(remaining = 9 - imageUris.size, onClick = { pickImages() }) }
@@ -327,12 +344,17 @@ fun CreatePostScreen(
 }
 
 @Composable
-private fun ImageThumb(uri: Uri, onRemove: () -> Unit) {
+private fun ImageThumb(uri: Uri, isCover: Boolean, onSetCover: () -> Unit, onRemove: () -> Unit) {
     Box(
         modifier = Modifier
             .size(96.dp)
             .clip(RoundedCornerShape(12.dp))
-            .background(OctopusColors.SurfaceVariant),
+            .background(OctopusColors.SurfaceVariant)
+            .then(
+                if (isCover) Modifier.border(2.dp, OctopusColors.Primary, RoundedCornerShape(12.dp))
+                else Modifier,
+            )
+            .clickable(enabled = !isCover, onClick = onSetCover),
     ) {
         AsyncImage(
             model = uri,
@@ -340,6 +362,19 @@ private fun ImageThumb(uri: Uri, onRemove: () -> Unit) {
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop,
         )
+        // 封面徽标(第一张)
+        if (isCover) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(4.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(OctopusColors.Primary)
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+            ) {
+                Text("封面", color = Color.White, fontSize = OctopusType.tag, fontWeight = FontWeight.Bold)
+            }
+        }
         IconButton(
             onClick = onRemove,
             modifier = Modifier.align(Alignment.TopEnd).size(24.dp),
