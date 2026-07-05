@@ -71,10 +71,11 @@ def clean_state():
                   "credit_transactions", "device_reports", "remote_devices", "remote_pair_codes",
                   "registry_assets", "crash_reports",
                   "square_posts", "square_comments", "square_likes", "square_follows",
-                  "square_favorites", "square_unlocks", "plugin_subscriptions"):
+                  "square_favorites", "square_unlocks", "plugin_subscriptions", "config_kv"):
             c.execute(f"DELETE FROM {t}")
         c.commit()
     app_module._rl.clear()
+    app_module._config_cache.clear()
     # 生产模型目录已移除 agnes chat 模型,但部分旧测试仍依赖它;在每个测试里临时注入,避免改生产默认配置。
     _inject_agnes_chat_model()
     yield
@@ -2475,3 +2476,71 @@ class TestSquareSubscription:
         with closing(db()) as c:
             row = c.execute("SELECT price_credits, sub_price_credits FROM square_posts WHERE id=?", (pid,)).fetchone()
         assert row["sub_price_credits"] == 40 and row["price_credits"] == 0    # 标了月价 → 一次性价清零
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 动态定价/运营配置(config_kv:运维面板可改、即时生效免重部署;计费/奖励处 get_config 读)
+# ══════════════════════════════════════════════════════════════════════════════
+class TestDynamicConfig:
+    """覆盖:表存在、get_config 回落默认、set/get 往返、admin 读/改、白名单拒绝、类型/负值校验、
+    以及接线生效(改 daily_bonus → 每日签到即变、改 signup_bonus → 注册礼即变)。"""
+
+    _ADMIN = {"X-Admin-Token": "test-token"}
+
+    def test_table_exists(self, client):
+        with closing(db()) as c:
+            tbls = [r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")]
+        assert "config_kv" in tbls
+
+    def test_get_config_falls_back_to_default(self, client):
+        # 无覆盖 → 回落代码默认
+        assert app_module.get_config("daily_bonus", 20) == 20
+        assert app_module.get_config("voice_credits_per_min", 5) == 5
+
+    def test_set_get_roundtrip_and_typing(self, client):
+        app_module.set_config("voice_credits_per_min", 8)
+        assert app_module.get_config("voice_credits_per_min", 5) == 8       # int 强转
+        app_module.set_config("nonexist_float", 3.5)
+        assert app_module.get_config("nonexist_float", 0.0) == 3.5          # float 强转
+
+    def test_admin_list_shows_keys(self, client):
+        r = client.get("/admin/api/config", headers=self._ADMIN)
+        assert r.status_code == 200
+        keys = {i["key"] for i in r.json()["items"]}
+        assert {"daily_bonus", "voice_credits_per_min", "voice_free_min_member"} <= keys
+
+    def test_admin_list_requires_auth(self, client):
+        assert client.get("/admin/api/config").status_code in (401, 403, 503)
+
+    def test_admin_set_reflects(self, client):
+        r = client.post("/admin/api/config", headers=self._ADMIN,
+                        json={"key": "voice_credits_per_min", "value": 7})
+        assert r.status_code == 200 and r.json()["value"] == 7
+        got = client.get("/admin/api/config", headers=self._ADMIN).json()["items"]
+        assert next(i for i in got if i["key"] == "voice_credits_per_min")["value"] == 7
+
+    def test_admin_set_rejects_non_allowlisted(self, client):
+        r = client.post("/admin/api/config", headers=self._ADMIN,
+                        json={"key": "jwt_secret", "value": "hack"})
+        assert r.status_code == 400
+
+    def test_admin_set_rejects_negative(self, client):
+        r = client.post("/admin/api/config", headers=self._ADMIN,
+                        json={"key": "voice_credits_per_min", "value": -5})
+        assert r.status_code == 400
+
+    def test_wired_daily_bonus_takes_effect(self, client):
+        # 改 daily_bonus=50 → 新用户签到到账 50(而非默认 20)
+        app_module.set_config("daily_bonus", 50)
+        tok, _uid = _email_register(client, "cfgdaily@x.com")
+        r = client.post("/account/daily-claim", headers={"Authorization": f"Bearer {tok}"})
+        assert r.status_code == 200 and r.json()["claimed"] is True
+        assert r.json()["credits"] == 50
+
+    def test_wired_signup_bonus_takes_effect(self, client):
+        # 改 signup_bonus=300 → 新注册用户初始积分含 300 注册礼
+        app_module.set_config("signup_bonus", 300)
+        _tok, uid = _email_register(client, "cfgsignup@x.com")
+        with closing(db()) as c:
+            credits = c.execute("SELECT credits FROM users WHERE user_id=?", (uid,)).fetchone()["credits"]
+        assert credits == 300

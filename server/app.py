@@ -148,6 +148,59 @@ FREE_DAILY_CREDITS = int(os.environ.get("FREE_DAILY_CREDITS", "2"))
 REFERRAL_REDEEMER_BONUS = int(os.environ.get("REFERRAL_REDEEMER_BONUS", "200"))
 REFERRAL_INVITER_BONUS = int(os.environ.get("REFERRAL_INVITER_BONUS", "200"))
 
+# ── 动态定价/运营配置(config_kv 表,运维面板可改、即时生效免重部署)──
+# 计费/奖励处用 get_config(key, 默认) 读:DB 有值→按默认类型强转;无值→回落代码默认。
+# 只有 PRICING_KEYS 白名单里的 key 允许被 admin 改,防乱写。value 全存字符串。
+PRICING_KEYS: dict[str, "tuple[Any, str]"] = {
+    "daily_bonus": (DAILY_BONUS, "每日签到赠送积分"),
+    "signup_bonus": (SIGNUP_BONUS, "新用户注册礼积分"),
+    # 语音实时对话(功能待上线,参数先就位,上线即可面板调):
+    "voice_credits_per_min": (5, "语音对话每分钟扣积分"),
+    "voice_free_min_member": (10, "会员每日免费语音分钟"),
+    "voice_free_min_guest": (1, "非会员每日免费语音分钟"),
+    "voice_max_session_min": (30, "单次语音通话上限(分钟)"),
+}
+_config_cache: "dict[str, tuple[float, str | None]]" = {}
+_CONFIG_TTL_S = 30.0
+
+
+def get_config(key: str, default: Any) -> Any:
+    """读运营配置:DB 有值→按 default 类型强转返回;无值/坏值→回落 default。带 30s 进程内缓存。"""
+    now = time.time()
+    hit = _config_cache.get(key)
+    if hit and now - hit[0] < _CONFIG_TTL_S:
+        raw = hit[1]
+    else:
+        with closing(db()) as c:
+            row = c.execute("SELECT value FROM config_kv WHERE key=?", (key,)).fetchone()
+        raw = row["value"] if row else None
+        _config_cache[key] = (now, raw)
+    if raw is None or raw == "":
+        return default
+    try:
+        if isinstance(default, bool):
+            return raw.strip().lower() in ("1", "true", "yes", "on")
+        if isinstance(default, int):
+            return int(float(raw))
+        if isinstance(default, float):
+            return float(raw)
+        return raw
+    except (ValueError, TypeError):
+        return default
+
+
+def set_config(key: str, value: Any) -> None:
+    """写运营配置 + 失效缓存(下次 get_config 重新读)。"""
+    with closing(db()) as c:
+        c.execute(
+            "INSERT INTO config_kv(key, value, updated_at) VALUES(?,?,?) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at",
+            (key, str(value), now_ms()),
+        )
+        c.commit()
+    _config_cache.pop(key, None)
+
+
 # 会话:JWT(HS256,无第三方依赖)。生产务必把 JWT_SECRET 换成随机长串。
 _jwt_secret_env = os.environ.get("JWT_SECRET", "")
 if not _jwt_secret_env:
@@ -662,6 +715,11 @@ def init_db() -> None:
             "PRIMARY KEY(user_id, plugin_ref))"
         )
         c.execute("CREATE INDEX IF NOT EXISTS idx_plugin_subs_expire ON plugin_subscriptions(expire_at)")
+        # 动态定价/运营配置:运维面板可改、即时生效免重部署。value 存字符串,读取按默认值类型强转。
+        c.execute(
+            "CREATE TABLE IF NOT EXISTS config_kv("
+            "key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at INTEGER NOT NULL)"
+        )
         # 迁移:给已存在的 remote_devices 表补新列(幂等)
         for _col in (
             "push_token TEXT DEFAULT ''", "os_version TEXT DEFAULT ''",
@@ -1126,7 +1184,7 @@ def sms_login(body: dict[str, Any]) -> dict[str, Any]:
                 "VALUES(?,?,?,?,?,?)",
                 (uid, mobile, f"用户{mobile[-4:]}", 0, now_ms(), _gen_invite_code(c)),
             )
-            _grant_free(c, uid, SIGNUP_BONUS, source="signup", detail="新用户注册礼")
+            _grant_free(c, uid, get_config("signup_bonus", SIGNUP_BONUS), source="signup", detail="新用户注册礼")
         else:
             uid = user["user_id"]
         c.execute("DELETE FROM sms_codes WHERE mobile = ?", (mobile,))
@@ -1208,7 +1266,7 @@ def email_login(body: dict[str, Any], request: Request) -> dict[str, Any]:
                 "VALUES(?,?,?,?,?,?)",
                 (uid, email, nick, 0, now_ms(), _gen_invite_code(c)),
             )
-            _grant_free(c, uid, SIGNUP_BONUS, source="signup", detail="新用户注册礼")
+            _grant_free(c, uid, get_config("signup_bonus", SIGNUP_BONUS), source="signup", detail="新用户注册礼")
         else:
             uid = user["user_id"]
             nick = user["nickname"] or nick
@@ -1261,7 +1319,7 @@ def daily_claim(u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
             "UPDATE users SET last_claim_day = ? WHERE user_id = ? AND last_claim_day <> ?",
             (today, u["user_id"], today),
         )
-        granted = _grant_free(c, u["user_id"], DAILY_BONUS, source="daily", detail=f"每日签到 {today}") if guard.rowcount > 0 else 0
+        granted = _grant_free(c, u["user_id"], get_config("daily_bonus", DAILY_BONUS), source="daily", detail=f"每日签到 {today}") if guard.rowcount > 0 else 0
         c.commit()
         bal = _user(c, u["user_id"])["credits"]
     return {"claimed": granted > 0, "credits": granted, "balance": bal}
@@ -4399,6 +4457,41 @@ def admin_page() -> HTMLResponse:
                                     "style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; "
                                     "connect-src 'self'; base-uri 'none'; form-action 'none'"),
     })
+
+
+@app.get("/admin/api/config")
+def admin_config_list(_: bool = Depends(admin_guard)) -> dict[str, Any]:
+    """列出可动态调整的运营/定价参数:当前生效值 + 代码默认 + 说明(供运维面板渲染)。"""
+    items = [
+        {"key": k, "value": get_config(k, dflt), "default": dflt, "label": label}
+        for k, (dflt, label) in PRICING_KEYS.items()
+    ]
+    return {"items": items}
+
+
+@app.post("/admin/api/config")
+def admin_config_set(body: dict[str, Any], _: bool = Depends(admin_guard)) -> dict[str, Any]:
+    """改一个运营/定价参数(仅 PRICING_KEYS 白名单),即时生效免重部署。"""
+    key = str(body.get("key") or "").strip()
+    if key not in PRICING_KEYS:
+        raise HTTPException(400, f"不可调整的配置项: {key}")
+    default = PRICING_KEYS[key][0]
+    raw = body.get("value")
+    try:
+        if isinstance(default, bool):
+            val: Any = str(raw).strip().lower() in ("1", "true", "yes", "on")
+        elif isinstance(default, int):
+            val = int(float(raw))
+        elif isinstance(default, float):
+            val = float(raw)
+        else:
+            val = str(raw)
+    except (ValueError, TypeError):
+        raise HTTPException(400, "值类型不对")
+    if isinstance(val, (int, float)) and not isinstance(val, bool) and val < 0:
+        raise HTTPException(400, "不能为负")
+    set_config(key, val)
+    return {"ok": True, "key": key, "value": get_config(key, default)}
 
 
 @app.get("/admin/api/stats")
