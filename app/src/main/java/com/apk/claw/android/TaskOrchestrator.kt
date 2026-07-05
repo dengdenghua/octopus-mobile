@@ -11,6 +11,8 @@ import com.apk.claw.android.channel.Channel
 import com.apk.claw.android.channel.ChannelManager
 import com.apk.claw.android.floating.FloatingCircleManager
 import com.apk.claw.android.octopus_mobile.BrainModeSelector
+import com.apk.claw.android.octopus_mobile.ExperienceLedger
+import com.apk.claw.android.octopus_mobile.ImmuneSystem
 import com.apk.claw.android.octopus_mobile.evolution.EvolutionEngine
 import com.apk.claw.android.octopus_mobile.evolution.LessonStore
 import com.apk.claw.android.octopus_mobile.memory.MemoryStore
@@ -39,6 +41,9 @@ class TaskOrchestrator(
 
     companion object {
         private const val TAG = "TaskOrchestrator"
+
+        /** 失败工具入经验账本时,上下文(参数)截断长度。 */
+        private const val ERR_CONTEXT_MAX = 200
 
         /** 当前活跃的 TaskOrchestrator 实例，供 DefaultAgentService 等下游访问 reflexRouter。 */
         @Volatile
@@ -71,6 +76,9 @@ class TaskOrchestrator(
 
     /** 对外暴露 reflexRouter，供下游（DefaultAgentService）自动学习新规则。 */
     internal fun getReflexRouter(): ReflexRouter = reflexRouter
+
+    /** 每个工具调用的开始时间(toolId → ms)，供 ImmuneSystem 计算延迟基线。 */
+    private val toolStartTimes = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
     /** 方案 F 决策层切换器（远程/本地模式） */
     var brainSelector: BrainModeSelector? = null
@@ -458,11 +466,19 @@ class TaskOrchestrator(
 
             override fun onToolCall(round: Int, toolId: String, toolName: String, parameters: String) {
                 if (!isCurrentCallbackTask()) return
+                toolStartTimes[toolId] = System.currentTimeMillis()
                 XLog.d(TAG, "onToolCall: $toolId($toolName), $parameters")
             }
 
             override fun onToolResult(round: Int, toolId: String, toolName: String, parameters: String, result: ToolResult) {
                 if (!isCurrentCallbackTask()) return
+                // 自进化观测:每次工具结果喂给免疫系统(延迟/错误率基线)+ 失败入经验账本(供后续 prompt 注入规避)。
+                val startTs = toolStartTimes.remove(toolId) ?: System.currentTimeMillis()
+                val latencyMs = System.currentTimeMillis() - startTs
+                ImmuneSystem.postResult(toolName, latencyMs, result.data?.length ?: 0, !result.isSuccess)
+                if (!result.isSuccess) {
+                    ExperienceLedger.recordError(result.error ?: "", parameters.take(ERR_CONTEXT_MAX))
+                }
                 val app = ClawApplication.instance
                 val status = if (result.isSuccess) app.getString(R.string.channel_msg_tool_success) else app.getString(R.string.channel_msg_tool_failure)
                 var data = if (result.isSuccess) result.data else result.error

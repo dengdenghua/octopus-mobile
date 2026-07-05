@@ -1,3 +1,8 @@
+@file:Suppress(
+    "PackageNaming", "ImplicitDefaultLocale", "MagicNumber", "MaxLineLength",
+    "UnusedParameter", "UnusedPrivateProperty",
+)   // 风险阈值/日志/算法内联常量 + 预留的 args/阈值常量,整文件豁免
+
 package com.apk.claw.android.octopus_mobile
 
 import android.util.Log
@@ -133,7 +138,7 @@ object ImmuneSystem {
             if (isError) {
                 val errorRate = baseline.errorCount.toDouble() / n
                 if (errorRate > 0.5 && n > 5) {
-                    Log.w(TAG, "High error rate on $toolName: ${String.format("%.0f", errorRate * 100)}% ($baseline.errorCount/$n)")
+                    Log.w(TAG, "High error rate on $toolName: ${String.format("%.0f", errorRate * 100)}% (${baseline.errorCount}/$n)")
                 }
             }
         }

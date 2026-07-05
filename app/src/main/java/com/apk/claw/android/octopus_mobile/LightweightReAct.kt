@@ -1,3 +1,5 @@
+@file:Suppress("PackageNaming", "ImplicitDefaultLocale", "MagicNumber", "MaxLineLength")   // ReAct 循环内联常量/长日志行,整文件豁免
+
 package com.apk.claw.android.octopus_mobile
 
 import android.util.Log
@@ -47,9 +49,15 @@ class LightweightReAct(
         extraSystemContext: String = "",
     ): TaskResult {
         val history = mutableListOf<ChatMessage>()
-        history += ChatMessage.System(
-            content = if (extraSystemContext.isBlank()) systemPrompt else systemPrompt + "\n\n" + extraSystemContext
-        )
+        // 系统提示 = 基础 + 额外上下文 + 经验教训(ExperienceLedger 把历史错误的规避策略注入进来,
+        // 让 LLM 不重复犯已知的错;为空则无影响)。
+        val systemContent = buildString {
+            append(systemPrompt)
+            if (extraSystemContext.isNotBlank()) append("\n\n").append(extraSystemContext)
+            val mitigations = ExperienceLedger.getMitigationsSection()
+            if (mitigations.isNotBlank()) append("\n\n").append(mitigations)
+        }
+        history += ChatMessage.System(content = systemContent)
         history += ChatMessage.User(content = task)
 
         // 语义检索:按当前任务把技能重排(相关的靠前);命中不了/离线/未配对则原顺序。
@@ -155,6 +163,10 @@ class LightweightReAct(
                     }
                     val latency = System.currentTimeMillis() - toolStart
                     ImmuneSystem.postResult(toolCall.name, latency, result.display.length, result is ToolExecutionResult.Failure)
+                    // 工具失败记入经验账本,下次生成/执行时注入规避策略(与 GenerateAppTool 共用同一账本)。
+                    if (result is ToolExecutionResult.Failure) {
+                        ExperienceLedger.recordError(result.display, toolCall.name)
+                    }
 
                     onStep?.invoke(ReActStep.ToolCallDone(step, toolCall, result))
                     history += ChatMessage.Tool(
