@@ -28,6 +28,9 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
 
+    <!-- VPN 代理能力（社区插件可调用的 start_vpn 工具） -->
+    <uses-permission android:name="android.permission.BIND_VPN_SERVICE" />
+
     <!-- Path A: 个人上下文能力（短信 / 日历 / 使用统计）-->
     <uses-permission android:name="android.permission.READ_SMS" />
     <uses-permission android:name="android.permission.SEND_SMS" />
@@ -288,6 +291,20 @@
             <intent-filter>
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
+        </service>
+
+        <!-- VPN 代理隧道服务（start_vpn 工具的后端引擎，SOCKS5 转发） -->
+        <service
+            android:name=".service.ClawVpnService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse"
+            android:permission="android.permission.BIND_VPN_SERVICE">
+            <intent-filter>
+                <action android:name="android.net.VpnService" />
+            </intent-filter>
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="SOCKS5 proxy tunnel for user-generated automation plugins" />
         </service>
 
     </application>

@@ -213,6 +213,11 @@ object ToolRegistry {
 
         // Echo Universe 工具：让 agent 感知并影响 Echo 虚拟世界
         EchoUniverseTools.registerAll()
+
+        // VPN 代理工具（SOCKS5 隧道引擎，社区插件可调用）
+        register(StartVpnTool())
+        register(StopVpnTool())
+        register(VpnStatusTool())
     }
 
     private fun registerBrowserTools() {

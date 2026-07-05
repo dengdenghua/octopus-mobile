@@ -172,7 +172,6 @@
     <ID>LongParameterList:AlertDialog.kt$AlertDialog.Companion$( context: Context, title: String, message: String = "", actionTitle: String = context.getString(R.string.common_confirm), cancelTitle: String = context.getString(R.string.common_cancel), isDismissible: Boolean = true, onAction: (() -&gt; Unit)? = null, onCancel: (() -&gt; Unit)? = null )</ID>
     <ID>LongParameterList:AlertDialog.kt$AlertDialog.Companion$( context: Context, title: String, message: String = "", actionTitle: String = context.getString(R.string.common_confirm), cancelTitle: String? = null, @ColorInt actionBgColor: Int? = null, @ColorInt actionTextColor: Int? = null, @ColorInt actionBorderColor: Int? = null, @ColorInt cancelBgColor: Int? = null, @ColorInt cancelTextColor: Int? = null, @ColorInt cancelBorderColor: Int? = null, isDismissible: Boolean = true, onAction: (() -&gt; Unit)? = null, onCancel: (() -&gt; Unit)? = null )</ID>
     <ID>LongParameterList:ChannelManager.kt$ChannelManager$( dingtalkAppKey: String? = null, dingtalkAppSecret: String? = null, feishuAppId: String? = null, feishuAppSecret: String? = null, qqAppId: String? = null, qqAppSecret: String? = null, discordBotToken: String? = null, telegramBotToken: String? = null, wechatBotToken: String? = null, wechatApiBaseUrl: String? = null )</ID>
-    <ID>LongParameterList:ChatAgentBridge.kt$ChatAgentBridge$( prompt: String, onTool: (icon: String, name: String, args: String, result: String?) -&gt; Unit, onText: (String) -&gt; Unit, onDone: (String) -&gt; Unit, onError: (String) -&gt; Unit, recordKey: String? = null, untrusted: Boolean = false, onImage: ((toolName: String, imageBase64: String) -&gt; Unit)? = null, onHtml: ((toolName: String, htmlContent: String) -&gt; Unit)? = null, )</ID>
     <ID>LongParameterList:ConfirmDialog.kt$ConfirmDialog.Companion$( context: Context, title: String, message: CharSequence = "", actionTitle: String = context.getString(R.string.common_confirm), cancelTitle: String = context.getString(R.string.common_cancel), checkboxLabel: String? = null, checkboxHint: String? = null, checkboxDefault: Boolean = false, isDismissible: Boolean = true, onAction: ((isChecked: Boolean) -&gt; Unit)? = null, onCancel: (() -&gt; Unit)? = null )</ID>
     <ID>LongParameterList:ConfirmDialog.kt$ConfirmDialog.Companion$( context: Context, title: String, message: CharSequence = "", actionTitle: String = context.getString(R.string.common_confirm), cancelTitle: String? = null, checkboxLabel: String? = null, checkboxHint: String? = null, checkboxDefault: Boolean = false, isDismissible: Boolean = true, onAction: ((isChecked: Boolean) -&gt; Unit)? = null, onCancel: (() -&gt; Unit)? = null )</ID>
     <ID>LongParameterList:DeviceRemoteControl.kt$DeviceRemoteControl$( device: DeviceInfo, x1: Int, y1: Int, x2: Int, y2: Int, durationMs: Long = 300 )</ID>
@@ -191,6 +190,7 @@
     <ID>LongParameterList:ShizukuShellService.kt$ShizukuShellService$( packageName: String, displayId: Int, x: Int = 100, y: Int = 100, width: Int = 800, height: Int = 600 )</ID>
     <ID>LongParameterList:ToolResult.kt$ToolResult$( val isSuccess: Boolean, val data: String?, val error: String?, /** 截图的 base64 编码数据（JPEG格式），用于 VLM 视觉理解 */ val imageBase64: String?, /** HTML 预览内容，直接推送到 Web 控制台用 &lt;iframe&gt; 渲染 */ val htmlContent: String? = null, /** * 机器可读的错误分类（见 [ToolErr]）。给 Agent 自动修复循环一个稳定的判据: * 是参数错了(改参数重试)、目标不存在(先探测)、超时(缩小任务/加时限)还是权限不足(放弃/提示授权)。 * null 表示未分类——旧的纯文本 error 依旧照常返回，向后兼容。 */ val errorCode: String? = null, /** 出错源码行号（run_code / 脚本类工具可用），无则 null。 */ val errorLine: Int? = null, )</ID>
     <ID>LongParameterList:WeChatApiClient.kt$WeChatApiClient$( filekey: String, mediaType: Int, toUserId: String, rawsize: Int, rawfilemd5: String, filesize: Int, aeskeyHex: String )</ID>
+    <ID>LoopWithTooManyJumpStatements:ClawVpnService.kt$ClawVpnService$while</ID>
     <ID>LoopWithTooManyJumpStatements:CloudDriveManager.kt$CloudDriveManager$for</ID>
     <ID>LoopWithTooManyJumpStatements:DeviceDiscoveryManager.kt$DeviceDiscoveryManager$while</ID>
     <ID>LoopWithTooManyJumpStatements:GenerateAppTool.kt$GenerateAppTool$while</ID>
@@ -311,6 +311,15 @@
     <ID>MagicNumber:ClawApplication.kt$ClawApplication$3_000</ID>
     <ID>MagicNumber:ClawApplication.kt$ClawApplication$499</ID>
     <ID>MagicNumber:ClawApplication.kt$ClawApplication.&lt;no name provided&gt;$2000</ID>
+    <ID>MagicNumber:ClawVpnService.kt$ClawVpnService$0x05</ID>
+    <ID>MagicNumber:ClawVpnService.kt$ClawVpnService$0xFF</ID>
+    <ID>MagicNumber:ClawVpnService.kt$ClawVpnService$10</ID>
+    <ID>MagicNumber:ClawVpnService.kt$ClawVpnService$3</ID>
+    <ID>MagicNumber:ClawVpnService.kt$ClawVpnService$32</ID>
+    <ID>MagicNumber:ClawVpnService.kt$ClawVpnService$4</ID>
+    <ID>MagicNumber:ClawVpnService.kt$ClawVpnService$512</ID>
+    <ID>MagicNumber:ClawVpnService.kt$ClawVpnService$515</ID>
+    <ID>MagicNumber:ClawVpnService.kt$ClawVpnService$8</ID>
     <ID>MagicNumber:CloudDriveManager.kt$CloudDriveManager$10</ID>
     <ID>MagicNumber:CloudDriveManager.kt$CloudDriveManager$500</ID>
     <ID>MagicNumber:CommonToolbar.kt$CommonToolbar$56f</ID>
@@ -466,7 +475,6 @@
     <ID>MagicNumber:FloatingCircleManager.kt$FloatingCircleManager$60</ID>
     <ID>MagicNumber:FloatingCircleManager.kt$FloatingCircleManager$600L</ID>
     <ID>MagicNumber:FloatingCircleManager.kt$FloatingCircleManager$8</ID>
-    <ID>MagicNumber:ForegroundService.kt$ForegroundService$3000</ID>
     <ID>MagicNumber:GenerateAppTool.kt$GenerateAppTool$0.3</ID>
     <ID>MagicNumber:GenerateAppTool.kt$GenerateAppTool$200</ID>
     <ID>MagicNumber:GenerateBrowserPluginTool.kt$GenerateBrowserPluginTool$0.3</ID>
@@ -570,7 +578,6 @@
     <ID>MagicNumber:MemoryStore.kt$MemoryStore$1000</ID>
     <ID>MagicNumber:MemoryStore.kt$MemoryStore$24</ID>
     <ID>MagicNumber:MemoryStore.kt$MemoryStore$3600</ID>
-    <ID>MagicNumber:MemoryStore.kt$MemoryStore$86400000</ID>
     <ID>MagicNumber:MenuItem.kt$MenuItem$8f</ID>
     <ID>MagicNumber:MiniAppActionTools.kt$AppActionTool$120</ID>
     <ID>MagicNumber:MiniAppActionTools.kt$AppActionTool$400</ID>
@@ -711,9 +718,6 @@
     <ID>MagicNumber:RuntimeConfigActivity.kt$RuntimeConfigActivity$8</ID>
     <ID>MagicNumber:SafetyGate.kt$LlmConstitutionJudge$160</ID>
     <ID>MagicNumber:SafetyGate.kt$LlmConstitutionJudge$4000</ID>
-    <ID>MagicNumber:ScreenCaptureManager.kt$ScreenCaptureManager$1024</ID>
-    <ID>MagicNumber:ScreenCaptureManager.kt$ScreenCaptureManager$256</ID>
-    <ID>MagicNumber:ScreenCaptureManager.kt$ScreenCaptureManager$3000</ID>
     <ID>MagicNumber:ScreenCastActivity.kt$ScreenCastActivity$12</ID>
     <ID>MagicNumber:ScreenCastActivity.kt$ScreenCastActivity$12f</ID>
     <ID>MagicNumber:ScreenCastActivity.kt$ScreenCastActivity$14f</ID>
@@ -951,10 +955,7 @@
     <ID>MaxLineLength:ChatScreen.kt$onEnter = { runCatching { com.apk.claw.android.ui.device.RemoteControlActivity.start(context, dev.deviceId) } }</ID>
     <ID>MaxLineLength:ChatScreen.kt$private</ID>
     <ID>MaxLineLength:ChatScreen.kt$runCatching { context.startActivity(android.content.Intent(context, com.apk.claw.android.ui.desktop.DesktopActivity::class.java)) }</ID>
-    <ID>MaxLineLength:ChatScreen.kt$runCatching { context.startActivity(android.content.Intent(context, com.apk.claw.android.ui.featurescreens.ActivityActivity::class.java)) }</ID>
     <ID>MaxLineLength:ChatScreen.kt$runCatching { context.startActivity(android.content.Intent(context, com.apk.claw.android.ui.featurescreens.PcRemoteWebrtcActivity::class.java)) }</ID>
-    <ID>MaxLineLength:ChatScreen.kt$runCatching { context.startActivity(android.content.Intent(context, com.apk.claw.android.ui.featurescreens.RoutinesActivity::class.java)) }</ID>
-    <ID>MaxLineLength:ChatScreen.kt$runCatching { context.startActivity(android.content.Intent(context, com.apk.claw.android.ui.featurescreens.TrustCenterActivity::class.java)) }</ID>
     <ID>MaxLineLength:ChatScreen.kt$val hasMic = { ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED }</ID>
     <ID>MaxLineLength:ChatScreen.kt$value = if (a11yOk) stringResource(R.string.status_online) else stringResource(R.string.chat_agent_setup_needed)</ID>
     <ID>MaxLineLength:ClawApplication.kt$ClawApplication$XLog.e(TAG, "ClawApplication initialized | device=${DeviceUtils.getDeviceDescription(this)} | tools=${ToolRegistry.getInstance().getAllTools().size}")</ID>
@@ -1037,12 +1038,10 @@
     <ID>MaxLineLength:DiscoverScreen.kt$Box(modifier = Modifier.padding(horizontal = OctopusSpacing.md).width(1.dp).height(24.dp).background(BorderColor))</ID>
     <ID>MaxLineLength:DiscoverScreen.kt$HomeTile</ID>
     <ID>MaxLineLength:DiscoverScreen.kt$Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = stringResource(R.string.browser_url_hint), tint = PrimaryColor)</ID>
-    <ID>MaxLineLength:DiscoverScreen.kt$Icon(Icons.Filled.Apps, contentDescription = null, tint = OctopusTints.CatDev, modifier = Modifier.size(OctopusIconSize.medium))</ID>
     <ID>MaxLineLength:DiscoverScreen.kt$Icon(Icons.Filled.Check, contentDescription = null, tint = PrimaryColor, modifier = Modifier.size(OctopusIconSize.medium))</ID>
     <ID>MaxLineLength:DiscoverScreen.kt$Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null, tint = TextMuted, modifier = Modifier.size(OctopusIconSize.small))</ID>
     <ID>MaxLineLength:DiscoverScreen.kt$Text(label, color = TextPrimary, fontSize = OctopusType.caption, fontWeight = FontWeight.SemiBold, maxLines = 1)</ID>
     <ID>MaxLineLength:DiscoverScreen.kt$Text(selectedOption.label, color = TextSecondary, fontSize = OctopusType.body, fontWeight = FontWeight.SemiBold, maxLines = 1)</ID>
-    <ID>MaxLineLength:DiscoverScreen.kt$Text(stringResource(R.string.ai_browser_omnibox_hint), color = TextMuted, fontSize = 15.sp, maxLines = 1)</ID>
     <ID>MaxLineLength:DiscoverScreen.kt$Toast.makeText(context, context.getString(R.string.browser_home_removed_toast), Toast.LENGTH_SHORT).show()</ID>
     <ID>MaxLineLength:DiscoverScreen.kt$error = { Icon(fallback, contentDescription = null, tint = tint, modifier = Modifier.size(OctopusIconSize.medium)) }</ID>
     <ID>MaxLineLength:DiscoverScreen.kt$loading = { Icon(fallback, contentDescription = null, tint = tint, modifier = Modifier.size(OctopusIconSize.medium)) }</ID>
@@ -1549,6 +1548,9 @@
     <ID>ReturnCount:CircuitBreaker.kt$CircuitBreaker$private fun evaluateThresholds(): String?</ID>
     <ID>ReturnCount:ClawAccessibilityService.kt$ClawAccessibilityService$fun clickNode(node: AccessibilityNodeInfo?): Boolean</ID>
     <ID>ReturnCount:ClawAccessibilityService.kt$ClawAccessibilityService$fun takeScreenshot(timeoutMs: Long): Bitmap?</ID>
+    <ID>ReturnCount:ClawVpnService.kt$ClawVpnService$override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int</ID>
+    <ID>ReturnCount:ClawVpnService.kt$ClawVpnService$private fun handleIpPacket( packet: ByteArray, proxyHost: String, proxyPort: Int, username: String?, password: String?, )</ID>
+    <ID>ReturnCount:ClawVpnService.kt$ClawVpnService$private fun socks5Handshake(channel: SocketChannel, username: String?, password: String?): Boolean</ID>
     <ID>ReturnCount:CloudDriveManager.kt$CloudDriveManager$fun start(): String</ID>
     <ID>ReturnCount:CloudDriveManager.kt$CloudDriveManager$fun stop(): String</ID>
     <ID>ReturnCount:ConfigServer.kt$ConfigServer$override fun serve(session: IHTTPSession): Response</ID>
@@ -1718,6 +1720,7 @@
     <ID>SwallowedException:ActionRecorder.kt$ActionRecorder$e: Exception</ID>
     <ID>SwallowedException:ActivityLog.kt$ActivityLog$e: Exception</ID>
     <ID>SwallowedException:AuditChain.kt$AuditChain$e: Exception</ID>
+    <ID>SwallowedException:ClawVpnService.kt$ClawVpnService$e: IOException</ID>
     <ID>SwallowedException:DebugRouteHandler.kt$DebugRouteHandler$e: Exception</ID>
     <ID>SwallowedException:FastReplay.kt$FastReplay$e: Exception</ID>
     <ID>SwallowedException:FeiShuChannelHandler.kt$FeiShuChannelHandler.&lt;no name provided&gt;$e: Exception</ID>
@@ -1772,6 +1775,8 @@
     <ID>TooGenericExceptionCaught:ChatScreen.kt$error: Throwable</ID>
     <ID>TooGenericExceptionCaught:ClawAccessibilityService.kt$ClawAccessibilityService$e: Exception</ID>
     <ID>TooGenericExceptionCaught:ClawApplication.kt$ClawApplication$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:ClawVpnService.kt$ClawVpnService$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:ClawVpnService.kt$ClawVpnService.Companion$e: Exception</ID>
     <ID>TooGenericExceptionCaught:CloudDriveManager.kt$CloudDriveManager$e: Exception</ID>
     <ID>TooGenericExceptionCaught:CommonSiteStore.kt$CommonSiteStore$e: Exception</ID>
     <ID>TooGenericExceptionCaught:ConfigServer.kt$ConfigServer$e: Exception</ID>
@@ -1973,6 +1978,7 @@
     <ID>UnusedPrivateMember:ShizukuShellService.kt$ShizukuShellService$private fun containsShellMetachar(s: String): Boolean</ID>
     <ID>UnusedPrivateProperty:AgentPresentation.kt$AgentPresentation$/** 当前在外接屏上运行的 App 列表 */ private val runningApps = mutableListOf&lt;RunningAppInfo&gt;()</ID>
     <ID>UnusedPrivateProperty:BitReader.kt$BitReader$i</ID>
+    <ID>UnusedPrivateProperty:ClawVpnService.kt$ClawVpnService$val output = FileOutputStream(pfd.fileDescriptor)</ID>
     <ID>UnusedPrivateProperty:DefaultAgentService.kt$DefaultAgentService$val msgCountBefore = messages.size</ID>
     <ID>UnusedPrivateProperty:DeviceListActivity.kt$DeviceListActivity.Companion$private const val TAG = "DeviceListActivity"</ID>
     <ID>UnusedPrivateProperty:ErrorClassifier.kt$ErrorClassifier$private const val TAG = "ErrorClassifier"</ID>
@@ -1984,7 +1990,6 @@
     <ID>UnusedPrivateProperty:LessonStore.kt$LessonStore$private val context: Context</ID>
     <ID>UnusedPrivateProperty:LightweightReActTest.kt$LightweightReActTest$val longJson = JSONObject().apply { put("tree", (0 until 100).map { JSONObject().put("text", "elem $it") }) }.toString()</ID>
     <ID>UnusedPrivateProperty:MediaScanner.kt$MediaScanner$val depth = if (recursive) "" else " -maxdepth 1"</ID>
-    <ID>UnusedPrivateProperty:MemoryStore.kt$MemoryStore$private val context: Context</ID>
     <ID>UnusedPrivateProperty:MjpegImageView.kt$MjpegImageView$val buffer = ByteArray(65536)</ID>
     <ID>UnusedPrivateProperty:MjpegImageView.kt$MjpegImageView$var frameBuffer = ByteArray(0)</ID>
     <ID>UnusedPrivateProperty:NavigationGraph.kt$NavigationGraph.Companion$private const val KEY_META = "nav.meta"</ID>
@@ -2061,7 +2066,6 @@
     <ID>WildcardImport:ExampleUnitTest.kt$import org.junit.Assert.*</ID>
     <ID>WildcardImport:FeatureHubScreen.kt$import androidx.compose.foundation.layout.*</ID>
     <ID>WildcardImport:FeatureUi.kt$import androidx.compose.foundation.layout.*</ID>
-    <ID>WildcardImport:ForegroundService.kt$import android.app.*</ID>
     <ID>WildcardImport:GlassSettingsActivity.kt$import androidx.compose.foundation.layout.*</ID>
     <ID>WildcardImport:GlassSettingsActivity.kt$import androidx.compose.material3.*</ID>
     <ID>WildcardImport:GlassSettingsActivity.kt$import androidx.compose.runtime.*</ID>
