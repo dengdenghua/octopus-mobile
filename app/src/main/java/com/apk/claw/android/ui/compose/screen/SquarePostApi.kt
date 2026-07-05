@@ -122,6 +122,27 @@ internal object SquarePostApi {
         val app: com.google.gson.JsonObject? = null,
     )
 
+    /** 订阅/续订响应。app = 首订安装载荷(同 acquire）;expireAt=到期毫秒;duplicate=幂等命中未扣款。 */
+    data class SubscribeResult(
+        val ok: Boolean = false,
+        @SerializedName("appKind") val appKind: String = "",
+        @SerializedName("appRef") val appRef: String = "",
+        @SerializedName("expireAt") val expireAt: Long = 0,
+        @SerializedName("monthlyPrice") val monthlyPrice: Int = 0,
+        @SerializedName("creatorEarned") val creatorEarned: Int = 0,
+        val balance: Int = 0,
+        val duplicate: Boolean = false,
+        val app: com.google.gson.JsonObject? = null,
+    )
+
+    /** 订阅状态(运行时门控用)。 */
+    data class SubStatus(
+        val active: Boolean = false,
+        @SerializedName("pluginRef") val pluginRef: String = "",
+        @SerializedName("expireAt") val expireAt: Long = 0,
+        @SerializedName("monthlyPrice") val monthlyPrice: Int = 0,
+    )
+
     // ── API 方法 ──────────────────────────────────────────────
 
     /** 上传单张图片(已压缩的 File)。返回服务端 URL。 */
@@ -194,6 +215,31 @@ internal object SquarePostApi {
             val text = resp.body?.string().orEmpty()
             if (!resp.isSuccessful) throw RuntimeException(serverDetail(text) ?: "HTTP ${resp.code}")
             gson.fromJson(text, AcquireResult::class.java)
+        }
+    }
+
+    /** 订阅/续订帖子关联的按月应用(手动续订:每次扣一个月、顺延 30 天)。首订返回 app 载荷用于安装。
+     *  余额不足服务端返回 402;idempotencyKey 防双击重复扣款。 */
+    suspend fun subscribe(postId: String, idempotencyKey: String = ""): SubscribeResult =
+        withContext(Dispatchers.IO) {
+            val payload: Map<String, String> =
+                if (idempotencyKey.isNotBlank()) mapOf("idempotency_key" to idempotencyKey) else emptyMap()
+            val req = authedBuilder("/square/posts/$postId/subscribe")
+                .post(gson.toJson(payload).toRequestBody(JSON)).build()
+            http.newCall(req).execute().use { resp ->
+                val text = resp.body?.string().orEmpty()
+                if (!resp.isSuccessful) throw RuntimeException(serverDetail(text) ?: "HTTP ${resp.code}")
+                gson.fromJson(text, SubscribeResult::class.java)
+            }
+        }
+
+    /** 运行时门控:查当前用户对某 mini-app(ref=slug)的订阅是否有效。 */
+    suspend fun subscriptionStatus(ref: String): SubStatus = withContext(Dispatchers.IO) {
+        val req = authedBuilder("/square/plugin/$ref/subscription").get().build()
+        http.newCall(req).execute().use { resp ->
+            val text = resp.body?.string().orEmpty()
+            if (!resp.isSuccessful) throw RuntimeException(serverDetail(text) ?: "HTTP ${resp.code}")
+            gson.fromJson(text, SubStatus::class.java)
         }
     }
 

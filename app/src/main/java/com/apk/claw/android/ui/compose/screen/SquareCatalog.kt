@@ -70,6 +70,10 @@ internal data class AgentPost(
     val topic: String = "recommend",
     /** 当前用户是否已复刻/解锁(已解锁再下载免费)。 */
     val owned: Boolean = false,
+    /** 按月订阅价(积分/月);0=非订阅帖。 */
+    val subPriceCredits: Int = 0,
+    /** 当前用户订阅是否有效。 */
+    val subActive: Boolean = false,
 )
 
 /** 服务端下发的广场卡片：颜色用 "#RRGGBB" 字符串，方便后台随意编辑。 */
@@ -100,6 +104,8 @@ internal data class SquarePostDto(
     @com.google.gson.annotations.SerializedName("priceCredits") val priceCredits: Int = 0,
     val topic: String = "recommend",
     val owned: Boolean = false,
+    @com.google.gson.annotations.SerializedName("subPriceCredits") val subPriceCredits: Int = 0,
+    val subActive: Boolean = false,
 )
 
 internal data class SquareFeedDto(
@@ -148,6 +154,8 @@ internal fun SquarePostDto.toAgentPost(): AgentPost {
         priceCredits = priceCredits,
         topic = topic.ifBlank { "recommend" },
         owned = owned,
+        subPriceCredits = subPriceCredits,
+        subActive = subActive,
     )
 }
 

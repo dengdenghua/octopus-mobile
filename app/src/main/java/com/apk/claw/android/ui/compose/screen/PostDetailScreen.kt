@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Comment
+import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
@@ -61,6 +62,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.apk.claw.android.R
 import com.apk.claw.android.account.AccountStore
+import com.apk.claw.android.plugin.SubscriptionGate
 import com.apk.claw.android.registry.CommunityMiniAppInstaller
 import com.apk.claw.android.registry.CommunitySquareApi
 import com.apk.claw.android.ui.compose.theme.OctopusBackground
@@ -97,6 +99,8 @@ fun PostDetailScreen(
     var newComment by remember { mutableStateOf("") }
     var acquiring by remember { mutableStateOf(false) }
     var showPayConfirm by remember { mutableStateOf(false) }
+    var subscribing by remember { mutableStateOf(false) }
+    var showSubConfirm by remember { mutableStateOf(false) }
 
     fun reload() {
         scope.launch {
@@ -139,6 +143,30 @@ fun PostDetailScreen(
                 onMessage(e.message ?: "复刻失败")
             }
             acquiring = false
+        }
+    }
+
+    fun doSubscribe() {
+        scope.launch {
+            subscribing = true
+            try {
+                val r = SquarePostApi.subscribe(postId)
+                if (r.appKind == "mini-app" && r.app != null) {
+                    val download = CommunitySquareApi.parseDownloadPayload(r.app)
+                    val err = CommunityMiniAppInstaller.install(ctx, download)
+                    if (err != null) {
+                        onMessage("安装失败:$err")
+                        subscribing = false
+                        return@launch
+                    }
+                }
+                if (r.appRef.isNotBlank()) SubscriptionGate.mark(r.appRef)  // 标记订阅制,打开时校验
+                onMessage(if (r.duplicate) "已是有效订阅" else "订阅成功,有效期已续 30 天")
+                post = post?.copy(subActive = true)
+            } catch (e: Exception) {
+                onMessage(e.message ?: "订阅失败")
+            }
+            subscribing = false
         }
     }
 
@@ -197,20 +225,31 @@ fun PostDetailScreen(
                     // ── 标题 + 正文 + 作者 ──
                     item { PostBody(p, onOpenAuthor = onOpenAuthor) }
 
-                    // ── 可复刻应用帖:复刻/付费按钮 ──
+                    // ── 可复刻应用帖:订阅制显示订阅卡,否则复刻/付费卡 ──
                     if (p.appRef.isNotBlank()) {
                         item {
-                            AppAcquireCard(
-                                post = p,
-                                acquiring = acquiring,
-                                onAcquire = {
-                                    when {
-                                        !AccountStore.isLoggedIn -> onMessage("请先登录")
-                                        p.priceCredits > 0 && !p.owned -> showPayConfirm = true
-                                        else -> doAcquire()
-                                    }
-                                },
-                            )
+                            if (p.subPriceCredits > 0) {
+                                SubscribeCard(
+                                    post = p,
+                                    subscribing = subscribing,
+                                    onSubscribe = {
+                                        if (!AccountStore.isLoggedIn) onMessage("请先登录")
+                                        else showSubConfirm = true
+                                    },
+                                )
+                            } else {
+                                AppAcquireCard(
+                                    post = p,
+                                    acquiring = acquiring,
+                                    onAcquire = {
+                                        when {
+                                            !AccountStore.isLoggedIn -> onMessage("请先登录")
+                                            p.priceCredits > 0 && !p.owned -> showPayConfirm = true
+                                            else -> doAcquire()
+                                        }
+                                    },
+                                )
+                            }
                         }
                     }
 
@@ -310,6 +349,33 @@ fun PostDetailScreen(
                 },
                 dismissButton = {
                     TextButton(onClick = { showPayConfirm = false }) {
+                        Text("取消", color = OctopusColors.TextSecondary)
+                    }
+                },
+                containerColor = OctopusBackground.cardSurface,
+            )
+        }
+    }
+
+    if (showSubConfirm) {
+        post?.let { p ->
+            AlertDialog(
+                onDismissRequest = { showSubConfirm = false },
+                title = { Text(if (p.subActive) "续订" else "确认订阅", color = OctopusColors.TextPrimary) },
+                text = {
+                    Text(
+                        "将花费 ${p.subPriceCredits} 积分订阅「${p.title}」1 个月,到期后手动续订。",
+                        color = OctopusColors.TextSecondary,
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showSubConfirm = false
+                        doSubscribe()
+                    }) { Text(if (p.subActive) "续订一个月" else "订阅一个月", color = OctopusColors.Primary) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showSubConfirm = false }) {
                         Text("取消", color = OctopusColors.TextSecondary)
                     }
                 },
@@ -548,6 +614,48 @@ private fun CommentInputBar(
                     )
                 }
             }
+        }
+    }
+}
+
+/** 订阅制应用帖的操作按钮:订阅 N 积分/月 / 已订阅·续订(订阅中禁用)。 */
+@Composable
+private fun SubscribeCard(post: AgentPost, subscribing: Boolean, onSubscribe: () -> Unit) {
+    val label = when {
+        subscribing -> "订阅中…"
+        post.subActive -> "已订阅 · 续订(${post.subPriceCredits} 积分/月)"
+        else -> "订阅 · ${post.subPriceCredits} 积分/月"
+    }
+    val filled = !post.subActive
+    Surface(
+        shape = OctopusShape.medium,
+        color = if (filled) OctopusColors.Primary else OctopusColors.SurfaceVariant,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = OctopusSpacing.lg, vertical = OctopusSpacing.sm)
+            .clip(OctopusShape.medium)
+            .clickable(enabled = !subscribing, onClick = onSubscribe),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = OctopusSpacing.md),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Filled.Autorenew,
+                contentDescription = null,
+                tint = if (filled) Color.White else OctopusColors.Primary,
+                modifier = Modifier.size(20.dp),
+            )
+            Spacer(Modifier.width(OctopusSpacing.xs))
+            Text(
+                label,
+                color = if (filled) Color.White else OctopusColors.TextPrimary,
+                fontSize = OctopusType.body,
+                fontWeight = FontWeight.Bold,
+            )
         }
     }
 }
