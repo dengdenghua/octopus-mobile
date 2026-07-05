@@ -115,8 +115,8 @@ fun OctopusApp() {
 // 底部 dock 专用颜色别名（跟随主题切换）
 private val NavPrimaryColor get() = OctopusColors.Primary
 private val NavTextMutedColor get() = OctopusColors.TextMuted
-private val NavGlassSurfaceColor get() = OctopusBackground.glassSurface
-private val NavGlassBorderColor get() = OctopusBackground.glassBorder
+private val NavGlassSurfaceColor get() = OctopusBackground.cardSurface
+private val NavGlassBorderColor get() = OctopusBackground.cardBorder
 
 @Composable
 private fun CompactBottomBar(

@@ -426,7 +426,7 @@ private fun CommentInputBar(
     onSend: () -> Unit,
 ) {
     Surface(
-        color = OctopusBackground.glassSurface,
+        color = OctopusBackground.cardSurface,
         shadowElevation = 4.dp,
     ) {
         Row(

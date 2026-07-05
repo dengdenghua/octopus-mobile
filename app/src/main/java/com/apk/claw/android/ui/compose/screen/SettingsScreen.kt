@@ -60,19 +60,14 @@ import com.apk.claw.android.shizuku.ShizukuManager
 import com.apk.claw.android.widget.AdvancedPermissionDialog
 import com.apk.claw.android.ui.compose.theme.OctopusBackground
 import com.apk.claw.android.ui.compose.theme.OctopusColors
-import com.apk.claw.android.ui.compose.theme.OctopusGlass
-import com.apk.claw.android.ui.compose.theme.OctopusGlassQuality
 import com.apk.claw.android.ui.compose.theme.OctopusIconSize
 import com.apk.claw.android.ui.compose.theme.OctopusLayout
 import com.apk.claw.android.ui.compose.theme.OctopusShape
 import com.apk.claw.android.ui.compose.theme.OctopusSpacing
 import com.apk.claw.android.ui.compose.theme.OctopusType
-import com.apk.claw.android.ui.compose.theme.OctopusThemeStyle
-import com.apk.claw.android.ui.compose.theme.UiStyle
 import com.apk.claw.android.ui.featurescreens.EvolutionActivity
 import com.apk.claw.android.ui.featurescreens.MemoryActivity
 import com.apk.claw.android.ui.featurescreens.TrustCenterActivity
-import com.apk.claw.android.ui.settings.GlassSettingsActivity
 import com.apk.claw.android.ui.settings.LlmConfigActivity
 import com.apk.claw.android.ui.settings.RuntimeConfigActivity
 import com.apk.claw.android.account.AccountStore
@@ -86,7 +81,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.apk.claw.android.R
 import kotlinx.coroutines.launch
-import kotlin.math.roundToInt
 
 // ── 真实权限/状态探测 ──────────────────────────────────
 
@@ -580,41 +574,6 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}, onNavigateToCreatorCenter: 
                     color = TextMuted,
                     modifier = Modifier.padding(start = 44.dp),
                 )
-
-                SettingsDivider()
-
-                var uiStyle by remember { mutableStateOf(OctopusThemeStyle.style) }
-                ClickableSettingsRow(
-                    icon = Icons.Filled.GraphicEq,
-                    title = stringResource(R.string.settings_ui_style),
-                    subtitle = when (uiStyle) {
-                        UiStyle.Glass -> stringResource(R.string.settings_ui_style_glass)
-                        UiStyle.Standard -> stringResource(R.string.settings_ui_style_standard)
-                    },
-                    onClick = {
-                        uiStyle = if (uiStyle == UiStyle.Glass) UiStyle.Standard else UiStyle.Glass
-                        KVUtils.setUiStyle(uiStyle.name.lowercase())
-                        OctopusThemeStyle.style = uiStyle
-                    }
-                )
-
-                if (uiStyle == UiStyle.Glass) {
-                    SettingsDivider()
-                    val glassHint = when (OctopusGlassQuality.fromStorage(KVUtils.getGlassQuality())) {
-                        OctopusGlassQuality.Low -> "Low · ${KVUtils.getGlassBlurRadius().roundToInt()}dp"
-                        OctopusGlassQuality.Medium -> "Medium · ${KVUtils.getGlassBlurRadius().roundToInt()}dp"
-                        OctopusGlassQuality.High -> "High · ${KVUtils.getGlassBlurRadius().roundToInt()}dp"
-                        OctopusGlassQuality.Ultra -> "Ultra · ${KVUtils.getGlassBlurRadius().roundToInt()}dp"
-                    }
-                    ClickableSettingsRow(
-                        icon = Icons.Filled.Tune,
-                        title = stringResource(R.string.settings_glass_blur),
-                        subtitle = glassHint,
-                        onClick = {
-                            context.startActivity(Intent(context, GlassSettingsActivity::class.java))
-                        }
-                    )
-                }
             }
         }
 
@@ -804,11 +763,11 @@ private fun PermissionSummaryRow(readyCount: Int, perms: List<PermissionUi>) {
 @Composable
 private fun HeroMetric(label: String, value: String, ok: Boolean, modifier: Modifier = Modifier) {
     val shape = OctopusShape.medium
-    val borderColor = OctopusBackground.glassBorder
+    val borderColor = OctopusBackground.cardBorder
     Box(
         modifier = modifier
             .clip(shape)
-            .background(OctopusBackground.glassSurface, shape)
+            .background(OctopusBackground.cardSurface, shape)
             .border(1.dp, borderColor, shape),
     ) {
         Column(modifier = Modifier.padding(horizontal = OctopusSpacing.md, vertical = OctopusSpacing.sm)) {
@@ -893,8 +852,8 @@ private fun SettingsCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(OctopusBackground.glassSurface, shape)
-            .border(1.dp, OctopusBackground.glassBorder, shape)
+            .background(OctopusBackground.cardSurface, shape)
+            .border(1.dp, OctopusBackground.cardBorder, shape)
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
     ) {
         Column(modifier = Modifier.padding(horizontal = OctopusSpacing.md, vertical = OctopusSpacing.sm)) {

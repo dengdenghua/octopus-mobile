@@ -7,7 +7,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 
 /**
@@ -34,21 +33,6 @@ fun OctopusTheme(
         OctopusColors.isLight = com.apk.claw.android.utils.KVUtils.getThemeMode() ?: !systemDark
     }
     val light = OctopusColors.isLight
-
-    // 风格/玻璃参数:设置页写 KV,这里读 KV 同步到反应式对象(单一真源;读的是最新值,不会回退)。
-    SideEffect {
-        val prefs = com.apk.claw.android.utils.KVUtils
-        OctopusThemeStyle.style = UiStyle.fromStorage(prefs.getUiStyle())
-        val blurRadius = prefs.getGlassBlurRadius().dp
-        if (OctopusGlass.blurRadius != blurRadius) {
-            OctopusGlass.blurRadius = blurRadius
-        }
-        OctopusGlass.quality = OctopusGlassQuality.fromStorage(prefs.getGlassQuality())
-        OctopusGlass.refraction = prefs.getGlassRefraction()
-        OctopusGlass.highlight = prefs.getGlassHighlight()
-        OctopusGlass.noise = prefs.getGlassNoise()
-        OctopusGlass.animationEnabled = prefs.isGlassAnimationEnabled()
-    }
 
     val colorScheme = if (light) lightColorScheme(
         primary = OctopusColors.Primary,

@@ -280,8 +280,8 @@ private fun HeroMetricCell(
     Box(
         modifier = modifier
             .clip(shape)
-            .background(OctopusBackground.glassSurface, shape)
-            .border(1.dp, OctopusBackground.glassBorder, shape)
+            .background(OctopusBackground.cardSurface, shape)
+            .border(1.dp, OctopusBackground.cardBorder, shape)
             .padding(horizontal = OctopusSpacing.md, vertical = OctopusSpacing.md),
     ) {
         Column {
@@ -323,8 +323,8 @@ private fun AssetRow(asset: CreatorAsset) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(OctopusBackground.glassSurface, shape)
-            .border(1.dp, OctopusBackground.glassBorder, shape)
+            .background(OctopusBackground.cardSurface, shape)
+            .border(1.dp, OctopusBackground.cardBorder, shape)
             .padding(horizontal = OctopusSpacing.md, vertical = OctopusSpacing.sm),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -389,8 +389,8 @@ private fun RevenueRow(txn: CreatorRevenueTxn) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(OctopusBackground.glassSurface, shape)
-            .border(1.dp, OctopusBackground.glassBorder, shape)
+            .background(OctopusBackground.cardSurface, shape)
+            .border(1.dp, OctopusBackground.cardBorder, shape)
             .padding(horizontal = OctopusSpacing.md, vertical = OctopusSpacing.sm),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -512,8 +512,8 @@ private fun InlineEmpty(message: String) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(OctopusBackground.glassSurface, shape)
-            .border(1.dp, OctopusBackground.glassBorder, shape)
+            .background(OctopusBackground.cardSurface, shape)
+            .border(1.dp, OctopusBackground.cardBorder, shape)
             .padding(OctopusSpacing.md),
         contentAlignment = Alignment.Center,
     ) {

@@ -77,10 +77,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.apk.claw.android.R
 import com.apk.claw.android.octopus_mobile.RoutineStore
-import com.apk.claw.android.ui.compose.component.GlassBottomSheet
-import com.apk.claw.android.ui.compose.component.GlassCard
-import com.apk.claw.android.ui.compose.component.GlassPill
-import com.apk.claw.android.ui.compose.component.GlassTextPill
+import com.apk.claw.android.ui.compose.component.OctopusBottomSheet
+import com.apk.claw.android.ui.compose.component.OctopusCard
+import com.apk.claw.android.ui.compose.component.OctopusPill
+import com.apk.claw.android.ui.compose.component.OctopusTextPill
 import com.apk.claw.android.ui.compose.theme.OctopusBackground
 import com.apk.claw.android.ui.compose.theme.OctopusColors
 import com.apk.claw.android.ui.compose.theme.OctopusIconSize
@@ -354,7 +354,7 @@ private fun AgentDiscoveryHeader(
         com.apk.claw.android.FeatureFlags.UNIVERSE_ENABLED ||
             !it.action.trim().equals("universe", ignoreCase = true)
     }
-    GlassCard(modifier = Modifier.fillMaxWidth()) {
+    OctopusCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(OctopusSpacing.md)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
@@ -423,7 +423,7 @@ private fun AgentActionPill(
     modifier: Modifier,
     onClick: () -> Unit,
 ) {
-    GlassPill(icon = icon, text = text, tint = tint, modifier = modifier, onClick = onClick)
+    OctopusPill(icon = icon, text = text, tint = tint, modifier = modifier, onClick = onClick)
 }
 
 @Composable
@@ -449,7 +449,7 @@ private fun AgentTopicChips(
     ) {
         list.forEach { topic ->
             val label = topic.label.takeIf { it.isNotBlank() } ?: topicLabel(topic.key)
-            GlassTextPill(
+            OctopusTextPill(
                 text = label,
                 tint = topic.tint,
                 selected = selectedTopic == topic.key,
@@ -493,7 +493,7 @@ private fun discoveryIconFor(topicKey: String): ImageVector = when (topicKey.tri
 
 @Composable
 private fun AgentDiscoveryCard(post: AgentDiscoveryPost, onClick: () -> Unit) {
-    GlassCard(modifier = Modifier.fillMaxWidth(), onClick = onClick) {
+    OctopusCard(modifier = Modifier.fillMaxWidth(), onClick = onClick) {
         Column {
             Box(
                 modifier = Modifier
@@ -591,7 +591,7 @@ private fun AgentDiscoveryDetail(
             .padding(bottom = 96.dp),
         contentAlignment = Alignment.BottomCenter,
     ) {
-        GlassBottomSheet(
+        OctopusBottomSheet(
             modifier = Modifier
                 .fillMaxWidth(),
             maxHeight = maxSheetHeight,
@@ -758,7 +758,7 @@ private fun PermissionChips(title: String, permissions: List<String>, tint: Colo
         Spacer(Modifier.height(OctopusSpacing.sm))
         Row(horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.sm), modifier = Modifier.fillMaxWidth()) {
             permissions.take(3).forEach { permission ->
-                GlassTextPill(
+                OctopusTextPill(
                     text = permission,
                     tint = tint,
                     onClick = {},
@@ -816,7 +816,7 @@ private fun CircleCard(
         label = "circle_offset",
     )
 
-    GlassCard(
+    OctopusCard(
         modifier = Modifier
             .fillMaxWidth()
             .alpha(alpha)

@@ -53,8 +53,8 @@ import com.apk.claw.android.registry.RegistryAsset
 import com.apk.claw.android.registry.RegistryClient
 import com.apk.claw.android.registry.RegistrySkillStore
 import com.apk.claw.android.registry.mobileFit
-import com.apk.claw.android.ui.compose.component.GlassCard
-import com.apk.claw.android.ui.compose.component.GlassTextPill
+import com.apk.claw.android.ui.compose.component.OctopusCard
+import com.apk.claw.android.ui.compose.component.OctopusTextPill
 import com.apk.claw.android.ui.compose.theme.OctopusBackground
 import com.apk.claw.android.ui.compose.theme.OctopusColors
 import com.apk.claw.android.ui.compose.theme.OctopusIconSize
@@ -150,10 +150,18 @@ fun SkillMarketplaceScreen(onBack: () -> Unit) {
                 .padding(horizontal = OctopusSpacing.lg, vertical = OctopusSpacing.xs),
             horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.sm),
         ) {
-            GlassTextPill(text = stringResource(R.string.skill_filter_mobile), tint = tint, selected = mobileOnly) { mobileOnly = !mobileOnly }
-            GlassTextPill(text = stringResource(R.string.skill_filter_all), tint = tint, selected = category == null) { category = null }
+            OctopusTextPill(
+                text = stringResource(R.string.skill_filter_mobile),
+                tint = tint,
+                selected = mobileOnly,
+            ) { mobileOnly = !mobileOnly }
+            OctopusTextPill(
+                text = stringResource(R.string.skill_filter_all),
+                tint = tint,
+                selected = category == null,
+            ) { category = null }
             categories.forEach { c ->
-                GlassTextPill(text = c, tint = tint, selected = category == c) { category = c }
+                OctopusTextPill(text = c, tint = tint, selected = category == c) { category = c }
             }
         }
 
@@ -211,7 +219,7 @@ fun SkillMarketplaceScreen(onBack: () -> Unit) {
 
 @Composable
 private fun SearchField(query: String, onQuery: (String) -> Unit, modifier: Modifier = Modifier) {
-    GlassCard(modifier = modifier.fillMaxWidth()) {
+    OctopusCard(modifier = modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.padding(horizontal = OctopusSpacing.md, vertical = OctopusSpacing.sm),
             verticalAlignment = Alignment.CenterVertically,
@@ -244,7 +252,7 @@ private fun SkillStoreCard(
     onInstall: () -> Unit,
     onUninstall: () -> Unit,
 ) {
-    GlassCard(modifier = Modifier.fillMaxWidth()) {
+    OctopusCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(OctopusSpacing.md)) {
             Text(asset.name, color = OctopusColors.TextPrimary, fontSize = OctopusType.bodyStrong, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.height(OctopusSpacing.xs))

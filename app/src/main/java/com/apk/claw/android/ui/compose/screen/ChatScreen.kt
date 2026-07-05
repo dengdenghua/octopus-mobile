@@ -832,8 +832,8 @@ fun ChatScreen() {
                 .imePadding()
                 .padding(horizontal = OctopusSpacing.lg, vertical = OctopusSpacing.sm),
             shape = OctopusShape.xl,
-            color = OctopusBackground.glassSurface,
-            border = BorderStroke(1.dp, OctopusBackground.glassBorder),
+            color = OctopusBackground.cardSurface,
+            border = BorderStroke(1.dp, OctopusBackground.cardBorder),
             shadowElevation = OctopusThemeStyle.cardShadow(6.dp),
         ) {
             Column(modifier = Modifier.padding(horizontal = OctopusSpacing.lg, vertical = OctopusSpacing.sm)) {
@@ -1104,8 +1104,8 @@ private fun AgentHomeStatusCard(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = OctopusShape.xl,
-        color = OctopusBackground.glassSurface,
-        border = BorderStroke(1.dp, OctopusBackground.glassBorder),
+        color = OctopusBackground.cardSurface,
+        border = BorderStroke(1.dp, OctopusBackground.cardBorder),
         shadowElevation = OctopusThemeStyle.cardShadow(8.dp),
     ) {
         Column(modifier = Modifier.padding(OctopusSpacing.lg), verticalArrangement = Arrangement.spacedBy(OctopusSpacing.md)) {
@@ -1194,8 +1194,8 @@ private fun ColumnScope.ChatHomeWorkbench(
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = OctopusShape.xl,
-                color = OctopusBackground.glassSurface,
-                border = BorderStroke(1.dp, OctopusBackground.glassBorder),
+                color = OctopusBackground.cardSurface,
+                border = BorderStroke(1.dp, OctopusBackground.cardBorder),
                 shadowElevation = OctopusThemeStyle.cardShadow(10.dp),
             ) {
                 Column(modifier = Modifier.padding(OctopusSpacing.xl)) {
@@ -1333,8 +1333,8 @@ private fun PromptSuggestion(prompt: HomePrompt, onClick: () -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth().padding(vertical = OctopusSpacing.xs).clickable(onClick = onClick),
         shape = OctopusShape.large,
-        color = OctopusBackground.glassSurface,
-        border = BorderStroke(1.dp, OctopusBackground.glassBorder),
+        color = OctopusBackground.cardSurface,
+        border = BorderStroke(1.dp, OctopusBackground.cardBorder),
         shadowElevation = OctopusThemeStyle.cardShadow(1.dp),
     ) {
         Row(modifier = Modifier.padding(horizontal = OctopusSpacing.md, vertical = OctopusSpacing.md), verticalAlignment = Alignment.CenterVertically) {
@@ -1356,8 +1356,8 @@ private fun DrawerStatusPanel(llmOk: Boolean, a11yOk: Boolean, deviceCount: Int)
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = OctopusShape.large,
-        color = OctopusBackground.glassSurface,
-        border = BorderStroke(1.dp, OctopusBackground.glassBorder),
+        color = OctopusBackground.cardSurface,
+        border = BorderStroke(1.dp, OctopusBackground.cardBorder),
         shadowElevation = OctopusThemeStyle.cardShadow(1.dp),
     ) {
         Column(modifier = Modifier.padding(OctopusSpacing.md), verticalArrangement = Arrangement.spacedBy(OctopusSpacing.sm)) {
@@ -2277,8 +2277,8 @@ private fun ScrollToBottomButton(visible: Boolean, onClick: () -> Unit) {
                 .clip(OctopusShape.capsule)
                 .clickable(onClick = onClick),
             shape = OctopusShape.capsule,
-            color = OctopusBackground.glassSurface,
-            border = BorderStroke(1.dp, OctopusBackground.glassBorder),
+            color = OctopusBackground.cardSurface,
+            border = BorderStroke(1.dp, OctopusBackground.cardBorder),
             shadowElevation = OctopusThemeStyle.cardShadow(8.dp),
         ) {
             Row(

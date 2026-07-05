@@ -356,44 +356,7 @@ object KVUtils {
         }
     }
 
-    private const val KEY_GLASS_BLUR_RADIUS = "KEY_GLASS_BLUR_RADIUS"
-    private const val KEY_GLASS_QUALITY = "KEY_GLASS_QUALITY"
-    private const val KEY_GLASS_REFRACTION = "KEY_GLASS_REFRACTION"
-    private const val KEY_GLASS_HIGHLIGHT = "KEY_GLASS_HIGHLIGHT"
-    private const val KEY_GLASS_NOISE = "KEY_GLASS_NOISE"
-    private const val KEY_GLASS_ANIMATION = "KEY_GLASS_ANIMATION"
-    private const val KEY_UI_STYLE = "KEY_UI_STYLE"
-
-    const val UI_STYLE_GLASS = "glass"
-    const val UI_STYLE_STANDARD = "standard"
-
-    fun getUiStyle(): String = getString(KEY_UI_STYLE, UI_STYLE_GLASS)
-
-    fun setUiStyle(style: String) = putString(KEY_UI_STYLE, style)
-
-    fun getGlassBlurRadius(): Float = getFloat(KEY_GLASS_BLUR_RADIUS, 18f)
-
-    fun setGlassBlurRadius(radius: Float) = putFloat(KEY_GLASS_BLUR_RADIUS, radius.coerceIn(0f, 48f))
-
-    fun getGlassQuality(): String = getString(KEY_GLASS_QUALITY, "high")
-
-    fun setGlassQuality(quality: String) = putString(KEY_GLASS_QUALITY, quality)
-
-    fun getGlassRefraction(): Float = getFloat(KEY_GLASS_REFRACTION, 1f)
-
-    fun setGlassRefraction(value: Float) = putFloat(KEY_GLASS_REFRACTION, value.coerceIn(0f, 2f))
-
-    fun getGlassHighlight(): Float = getFloat(KEY_GLASS_HIGHLIGHT, 1f)
-
-    fun setGlassHighlight(value: Float) = putFloat(KEY_GLASS_HIGHLIGHT, value.coerceIn(0f, 2f))
-
-    fun getGlassNoise(): Float = getFloat(KEY_GLASS_NOISE, 1f)
-
-    fun setGlassNoise(value: Float) = putFloat(KEY_GLASS_NOISE, value.coerceIn(0f, 2f))
-
-    fun isGlassAnimationEnabled(): Boolean = getBoolean(KEY_GLASS_ANIMATION, true)
-
-    fun setGlassAnimationEnabled(enabled: Boolean) = putBoolean(KEY_GLASS_ANIMATION, enabled)
+    // 玻璃主题相关偏好(UI 风格 / 模糊 / 高光 / 质量 / 噪声 / 动画)已随玻璃主题整体移除。
 
     // ==================== 钉钉配置 ====================
     fun getDingtalkAppKey(): String = getString(KEY_DINGTALK_APP_KEY, "")
