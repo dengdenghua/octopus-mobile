@@ -1169,6 +1169,9 @@
     <string name="settings_workspace_desc">Agent 脚本通过 WORKSPACE 常量访问的默认目录。readFile/writeFile 限制在此目录和 Download/Documents 内，目录不存在时自动创建。</string>
     <string name="settings_workspace_hint">/sdcard/Download/Octopus/</string>
     <string name="settings_workspace_title">脚本工作空间</string>
+    <string name="chat_workspace_pick_title">选定本会话工作空间</string>
+    <string name="chat_workspace_pick_desc">类似 Codex 启动时 --cd 选定项目目录。Agent 可读取该目录下的代码与文件,run_code/run_python 的 WORKSPACE 也会切到此处。留空则使用全局默认。</string>
+    <string name="chat_workspace_change">更改工作空间</string>
     <string name="skill_empty">没有匹配的技能</string>
     <string name="skill_filter_all">全部</string>
     <string name="skill_filter_mobile">仅手机适配</string>

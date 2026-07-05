@@ -10,6 +10,7 @@ import java.util.concurrent.atomic.AtomicLong
  *
  * 索引与当前 id 存 MMKV;首次使用自动建一个默认空会话。
  */
+@Suppress("TooManyFunctions")
 object SessionStore {
 
     private const val KEY_INDEX = "chat_sessions_index"
@@ -23,15 +24,28 @@ object SessionStore {
     /**
      * @param character 会话归属的角色 id(TV 模式同一批角色)。会话/历史按角色隔离,
      *   互不可见。旧数据经 Gson 反序列化可能为 null —— 一律经 [charKey] 读。
+     * @param workspace 该会话的工作空间路径(可选)。非空时覆盖全局脚本工作空间
+     *   (KVUtils.getScriptWorkspace),run_code/run_python 的 WORKSPACE 全局变量、
+     *   Agent prompt 的「工作空间」区均用此值。为 null/空则回退全局默认 —— 行为
+     *   与改造前完全一致。类似 Codex 启动时 --cd 选定项目目录,让 Agent 能读该目录代码。
      */
     data class SessionMeta(
         val id: String,
         var title: String,
         var updatedAt: Long,
         val character: String? = null,
+        var workspace: String? = null,
     ) {
         /** 归一化角色 key:null/空(历史数据)→ 默认 Octopus。 */
         fun charKey(): String = character?.takeIf { it.isNotBlank() } ?: CHARACTER_DEFAULT
+
+        /**
+         * 该会话的有效工作空间:自身 workspace 非空则用之,否则回退全局默认
+         * (KVUtils.getScriptWorkspace,默认 /sdcard/Download/Octopus/)。
+         */
+        fun effectiveWorkspace(): String =
+            workspace?.takeIf { it.isNotBlank() }
+                ?: KVUtils.getScriptWorkspace()
     }
 
     /** 「当前会话」指针按角色分键;octopus 沿用旧键,老用户当前会话不丢。 */
@@ -103,6 +117,31 @@ object SessionStore {
         setCurrent(meta.id, character)
         return meta
     }
+
+    /**
+     * 新建该角色的空会话并设定工作空间,设为其当前会话。
+     * [workspace] 为 null/空时退化为全局默认 —— 与 [create] 行为一致。
+     */
+    fun create(now: Long, character: String, workspace: String?): SessionMeta {
+        val list = index()
+        val meta = SessionMeta(newId(), "新对话", now, character, workspace?.takeIf { it.isNotBlank() })
+        list.add(0, meta)
+        saveIndex(list)
+        setCurrent(meta.id, character)
+        return meta
+    }
+
+    /** 设定指定会话的工作空间(传 null/空清除,回退全局默认)。 */
+    fun setWorkspace(id: String, workspace: String?) {
+        val list = index()
+        list.find { it.id == id }?.let {
+            it.workspace = workspace?.takeIf { w -> w.isNotBlank() }
+            saveIndex(list)
+        }
+    }
+
+    /** 取指定会话的 meta(不存在返回 null)。 */
+    fun metaOf(id: String): SessionMeta? = index().find { it.id == id }
 
     fun updateMeta(id: String, title: String, now: Long) {
         val list = index()
