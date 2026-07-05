@@ -3,6 +3,8 @@ package com.apk.claw.android.ui.featurescreens
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -26,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.apk.claw.android.R
+import com.apk.claw.android.octopus_mobile.browser.BrowserWallpaperStore
 import com.apk.claw.android.octopus_mobile.browser.SearchEngines
 import com.apk.claw.android.octopus_mobile.browser.SystemWebViewEngine
 import com.apk.claw.android.utils.KVUtils
@@ -48,11 +51,16 @@ private const val ZOOM_LARGE = 120
 private const val ZOOM_XLARGE = 150
 
 @Composable
+@Suppress("LongMethod")
 private fun BrowserSettingsScreen(onBack: () -> Unit) {
     val ctx = LocalContext.current
     var engineId by remember { mutableStateOf(KVUtils.getSearchEngine()) }
     var desktopMode by remember { mutableStateOf(KVUtils.getBrowserDesktopMode()) }
     var textZoom by remember { mutableIntStateOf(KVUtils.getBrowserTextZoom()) }
+    var hasWallpaper by remember { mutableStateOf(BrowserWallpaperStore.has(ctx)) }
+    val wallpaperPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null && BrowserWallpaperStore.set(ctx, uri)) hasWallpaper = true
+    }
 
     FeatureScaffold(title = stringResource(R.string.browser_settings_title), onBack = onBack) {
         Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
@@ -84,6 +92,27 @@ private fun BrowserSettingsScreen(onBack: () -> Unit) {
                     current = textZoom,
                     onSelect = { textZoom = it; KVUtils.setBrowserTextZoom(it) },
                 )
+            }
+
+            // 背景壁纸:自定义上传,首页背景显示。
+            FSectionTitle(stringResource(R.string.browser_settings_wallpaper))
+            GroupCard {
+                ClickableRow(
+                    title = stringResource(
+                        if (hasWallpaper) R.string.browser_settings_wallpaper_change
+                        else R.string.browser_settings_wallpaper_upload,
+                    ),
+                    subtitle = stringResource(R.string.browser_settings_wallpaper_hint),
+                    onClick = { wallpaperPicker.launch("image/*") },
+                )
+                if (hasWallpaper) {
+                    RowDivider()
+                    ClickableRow(
+                        title = stringResource(R.string.browser_settings_wallpaper_clear),
+                        subtitle = "",
+                        onClick = { BrowserWallpaperStore.clear(ctx); hasWallpaper = false },
+                    )
+                }
             }
 
             // 清除浏览数据:缓存 / Cookie / 网站存储。
@@ -169,7 +198,7 @@ private fun ClickableRow(title: String, subtitle: String, onClick: () -> Unit) {
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(title, color = FText, fontSize = 16.sp)
-            Text(subtitle, color = FMuted, fontSize = 13.sp)
+            if (subtitle.isNotBlank()) Text(subtitle, color = FMuted, fontSize = 13.sp)
         }
     }
 }

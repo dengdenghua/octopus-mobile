@@ -8,6 +8,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -35,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -51,6 +53,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.apk.claw.android.R
+import com.apk.claw.android.octopus_mobile.browser.BrowserWallpaperStore
 import com.apk.claw.android.octopus_mobile.browser.SearchEngines
 import com.apk.claw.android.plugin.MiniAppRegistry
 import com.apk.claw.android.plugin.PluginManifest
@@ -153,10 +156,22 @@ fun DiscoverScreen(onOpenUrl: ((String?) -> Unit)? = null) {
     var siteToDelete by remember { mutableStateOf<CommonSiteItem?>(null) }
     var appToDelete by remember { mutableStateOf<PluginManifest?>(null) }
 
+    val wallpaper = remember(refreshTick) { BrowserWallpaperStore.loadBitmap(context)?.asImageBitmap() }
+    Box(modifier = Modifier.fillMaxSize()) {
+        if (wallpaper != null) {
+            Image(
+                bitmap = wallpaper,
+                contentDescription = null,
+                modifier = Modifier.matchParentSize(),
+                contentScale = ContentScale.Crop,
+            )
+            // 压暗一层,保证图标/文字在任意壁纸上可读。
+            Box(modifier = Modifier.matchParentSize().background(Color.Black.copy(alpha = WALLPAPER_SCRIM_ALPHA)))
+        }
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .background(browserWallpaperBrush())
+            .then(if (wallpaper == null) Modifier.background(browserWallpaperBrush()) else Modifier)
             .statusBarsPadding(),
         contentPadding = PaddingValues(
             start = OctopusSpacing.lg,
@@ -223,6 +238,7 @@ fun DiscoverScreen(onOpenUrl: ((String?) -> Unit)? = null) {
         // ── 浏览器工具:从「广场 → 更多」分流来的浏览器相关工具(浏览器设置/多窗口/云盘/例程/视频库) ──
         item { LauncherSectionHeader(stringResource(R.string.browser_home_tools)) }
         item { BrowserToolsSection { context.startActivity(Intent(context, it)) } }
+    }
     }
 
     siteToDelete?.let { site ->
@@ -341,7 +357,9 @@ private fun <T> LauncherGrid(items: List<T>, cell: @Composable (T, Modifier) -> 
     }
 }
 
-/** 浏览器桌面的「壁纸」:扁平纯色页面背景。 */
+private const val WALLPAPER_SCRIM_ALPHA = 0.32f
+
+/** 浏览器桌面的「壁纸」:扁平纯色页面背景(自定义壁纸时改由 Image 层显示)。 */
 @Composable
 private fun browserWallpaperBrush(): Brush = SolidColor(OctopusColors.Background)
 

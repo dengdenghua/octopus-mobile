@@ -739,6 +739,11 @@
     <string name="browser_settings_clear_data">閲覧データを削除</string>
     <string name="browser_settings_clear_data_hint">キャッシュ · Cookie · サイトデータ</string>
     <string name="browser_settings_cleared">削除しました</string>
+    <string name="browser_settings_wallpaper">背景の壁紙</string>
+    <string name="browser_settings_wallpaper_hint">ブラウザのホーム背景にあなたの画像を表示</string>
+    <string name="browser_settings_wallpaper_upload">壁紙をアップロード</string>
+    <string name="browser_settings_wallpaper_change">壁紙を変更</string>
+    <string name="browser_settings_wallpaper_clear">壁紙を削除</string>
     <string name="browser_settings_kernel_value">自動選択</string>
     <string name="feat_browser_settings">ブラウザ設定</string>
     <string name="settings_remote_pc_title">PCをリモート操作</string>
