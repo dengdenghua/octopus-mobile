@@ -23,7 +23,11 @@ import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Psychology
+import androidx.compose.material.icons.filled.CloudQueue
+import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -53,6 +57,11 @@ import com.apk.claw.android.ui.browser.BookmarkManager
 import com.apk.claw.android.ui.browser.BrowserActivity
 import com.apk.claw.android.ui.browser.CommonSiteItem
 import com.apk.claw.android.ui.browser.CommonSiteStore
+import com.apk.claw.android.ui.featurescreens.BrowserSettingsActivity
+import com.apk.claw.android.ui.featurescreens.CloudDriveActivity
+import com.apk.claw.android.ui.featurescreens.MultiWindowActivity
+import com.apk.claw.android.ui.featurescreens.RoutinesActivity
+import com.apk.claw.android.ui.featurescreens.VideoLibraryActivity
 import com.apk.claw.android.ui.compose.theme.OctopusBackground
 import com.apk.claw.android.ui.compose.theme.OctopusColors
 import com.apk.claw.android.ui.compose.theme.OctopusIconSize
@@ -204,6 +213,9 @@ fun DiscoverScreen(onOpenUrl: ((String?) -> Unit)? = null) {
                 }
             }
         }
+
+        // ── 常用入口:从「广场 → 更多」分流来的浏览器相关工具(浏览器设置/多窗口/云盘/例程/视频库) ──
+        item { BrowserToolsSection { context.startActivity(Intent(context, it)) } }
     }
 
     siteToDelete?.let { site ->
@@ -598,6 +610,59 @@ private fun GlassPanel(
     ) {
         Box(modifier = Modifier.padding(contentPadding)) {
             content()
+        }
+    }
+}
+
+/** 从「广场 → 更多」分流来的浏览器相关工具入口(市场重构第二阶段)。 */
+private data class BrowserToolEntry(
+    val labelRes: Int,
+    val descRes: Int,
+    val icon: ImageVector,
+    val tint: Color,
+    val activity: Class<*>,
+)
+
+private val BROWSER_TOOLS = listOf(
+    BrowserToolEntry(
+        R.string.feat_browser_settings, R.string.feat_browser_desc,
+        Icons.Filled.Public, OctopusTints.Browser, BrowserSettingsActivity::class.java,
+    ),
+    BrowserToolEntry(
+        R.string.feat_multiwindow, R.string.feat_multiwindow_desc,
+        Icons.Filled.GridView, OctopusTints.Window, MultiWindowActivity::class.java,
+    ),
+    BrowserToolEntry(
+        R.string.feat_clouddrive, R.string.feat_clouddrive_desc,
+        Icons.Filled.CloudQueue, OctopusTints.Cloud, CloudDriveActivity::class.java,
+    ),
+    BrowserToolEntry(
+        R.string.feat_routines, R.string.feat_routines_desc,
+        Icons.Filled.Schedule, OctopusTints.Routine, RoutinesActivity::class.java,
+    ),
+    BrowserToolEntry(
+        R.string.feat_video, R.string.feat_video_desc,
+        Icons.Filled.Movie, OctopusTints.Video, VideoLibraryActivity::class.java,
+    ),
+)
+
+@Composable
+private fun BrowserToolsSection(onOpen: (Class<*>) -> Unit) {
+    HomeSectionCard(title = stringResource(R.string.browser_home_tools), isEmpty = false) {
+        TwoColumnTiles(BROWSER_TOOLS) { tool, mod ->
+            HomeTile(
+                label = stringResource(tool.labelRes),
+                subtitle = stringResource(tool.descRes),
+                modifier = mod,
+                onClick = { onOpen(tool.activity) },
+            ) {
+                Icon(
+                    tool.icon,
+                    contentDescription = null,
+                    tint = tool.tint,
+                    modifier = Modifier.size(OctopusIconSize.medium),
+                )
+            }
         }
     }
 }
