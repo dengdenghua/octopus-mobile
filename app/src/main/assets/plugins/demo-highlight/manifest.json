@@ -3,10 +3,11 @@
   "type": "browser-script",
   "name": "示例·链接高亮",
   "version": "1.0.0",
-  "description": "browser-script 示例:在 example.com 给所有链接加黄色高亮,演示内容脚本注入。",
+  "description": "browser-script 示例:在 example.com 给所有链接加黄色高亮,演示标准油猴脚本格式与GM_addStyle API。",
   "author": "Octopus Team",
-  "host_pattern": "example\\.com",
-  "js": "(function(){try{document.querySelectorAll('a').forEach(function(a){a.style.backgroundColor='#fff3a0';a.style.borderRadius='3px';});console.log('[octopus demo-highlight] applied');}catch(e){}})();",
-  "block_rules": [],
-  "allow_hosts": ["example.com"]
+  "script": "highlight.user.js",
+  "match": ["*://example.com/*", "*://*.example.com/*"],
+  "run_at": "document-end",
+  "grants": ["GM_addStyle"],
+  "block_rules": []
 }

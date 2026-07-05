@@ -3,6 +3,7 @@ package com.apk.claw.android.plugin
 import android.content.Context
 import android.util.Log
 import com.apk.claw.android.octopus_mobile.browser.BrowserPluginHost
+import com.apk.claw.android.octopus_mobile.browser.UserscriptParser
 import com.apk.claw.android.octopus_mobile.safety.SafetyGate
 import com.apk.claw.android.registry.PluginRegistryStore
 import com.apk.claw.android.tool.ToolRegistry
@@ -266,20 +267,33 @@ class PluginManager(private val context: Context) {
             generatedManifests.filter { it.id !in assetIds && it.id !in filesIds }
 
         if (allManifests.isEmpty()) {
-            BrowserPluginHost.setPlugins(emptyList())
+            BrowserPluginHost.setScripts(emptyList())
             BrowserPluginHost.setBlockRules(emptyList())
             MiniAppRegistry.set(emptyList())
             return
         }
 
-        // browser-script → BrowserPluginHost(只信任 assets 源,注入脚本安全边界更严格)
-        val scripts = assetsManifests.filter { it.type == "browser-script" }
-        BrowserPluginHost.setPlugins(scripts.map { m ->
-            BrowserPluginHost.InjectPlugin(
-                id = m.id, name = m.name, hostPattern = m.hostPattern, js = m.js, enabled = true
-            )
-        })
-        BrowserPluginHost.setBlockRules(scripts.flatMap { it.blockRules })
+        // browser-script → BrowserPluginHost
+        val scriptEntries = allManifests
+            .filter { it.type == "browser-script" }
+            .mapNotNull { m ->
+                val dir = when {
+                    assetIds.contains(m.id) -> findAssetsDir(m.id)
+                    filesIds.contains(m.id) -> File(File(context.filesDir, FILES_PLUGIN_DIR), m.id)
+                    else -> findGeneratedDir(m.id)
+                }
+                BrowserPluginHost.buildEntryFromManifest(m, dir, context, idPrefix = "plugin_")
+            }
+
+        // 扫描独立 .user.js 文件（在 plugins/ 和 generated_apps/ 目录下）
+        val userJsEntries = scanStandaloneUserScripts(assetsManifests + filesManifests + generatedManifests)
+
+        val allScripts = scriptEntries + userJsEntries
+        BrowserPluginHost.setScripts(allScripts)
+        BrowserPluginHost.setBlockRules(allManifests.filter { it.type == "browser-script" }.flatMap { it.blockRules })
+
+        // 同时从 browser_plugins.json 加载旧格式脚本（addLocalScripts 合并进来）
+        BrowserPluginHost.loadFromFile(context)
 
         // tool → 声明式工具注册进 ToolRegistry(files 源 registry 插件也可贡献工具)
         allManifests.filter { it.type == "tool" }.forEach { m ->
@@ -290,10 +304,55 @@ class PluginManager(private val context: Context) {
         // mini-app → 注册表(assets + registry-verified files 均可启动)
         MiniAppRegistry.set(allManifests.filter { it.type == "mini-app" })
 
-        Log.i(TAG, "Non-dex plugins: ${scripts.size} browser-script, " +
+        Log.i(TAG, "Non-dex plugins: ${allScripts.size} userscripts, " +
             "${allManifests.count { it.type == "tool" }} tool, " +
             "${allManifests.count { it.type == "mini-app" }} mini-app " +
             "(assets=${assetsManifests.size} files=${filesManifests.size} generated=${generatedManifests.size})")
+    }
+
+    private fun findAssetsDir(pluginId: String): File? {
+        val dir = File(context.cacheDir, "assets_plugins/$pluginId")
+        if (dir.isDirectory && dir.listFiles()?.isNotEmpty() == true) return dir
+        runCatching {
+            dir.mkdirs()
+            val assetDir = "$ASSETS_PLUGIN_DIR/$pluginId"
+            val names = context.assets.list(assetDir) ?: return@runCatching
+            for (name in names) {
+                val out = File(dir, name)
+                context.assets.open("$assetDir/$name").use { input ->
+                    out.outputStream().use { output -> input.copyTo(output) }
+                }
+            }
+        }.onFailure { Log.w(TAG, "copy assets plugin $pluginId failed: ${it.message}") }
+        return dir.takeIf { it.isDirectory && it.listFiles()?.isNotEmpty() == true }
+    }
+
+    private fun findGeneratedDir(pluginId: String): File? {
+        return File(context.filesDir, "$GENERATED_APPS_DIR/$pluginId").takeIf { it.isDirectory }
+    }
+
+    private fun scanStandaloneUserScripts(manifests: List<PluginManifest>): List<BrowserPluginHost.UserScriptEntry> {
+        val entries = mutableListOf<BrowserPluginHost.UserScriptEntry>()
+        val dirsToScan = mutableListOf<File>()
+        dirsToScan.add(File(context.filesDir, FILES_PLUGIN_DIR))
+        dirsToScan.add(File(context.filesDir, GENERATED_APPS_DIR))
+        for (baseDir in dirsToScan) {
+            if (!baseDir.isDirectory) continue
+            baseDir.listFiles()?.forEach { dir ->
+                if (!dir.isDirectory) return@forEach
+                dir.listFiles()?.filter { it.isFile && it.name.endsWith(".user.js") }?.forEach { jsFile ->
+                    runCatching {
+                        val source = jsFile.readText()
+                        val parsed = UserscriptParser.parse(source, fallbackId = jsFile.nameWithoutExtension)
+                        if (parsed != null) {
+                            val entry = BrowserPluginHost.buildEntryFromUserscript(parsed, context, idPrefix = "us_")
+                            if (entry != null) entries.add(entry)
+                        }
+                    }.onFailure { Log.w(TAG, "failed to parse userscript ${jsFile.absolutePath}: ${it.message}") }
+                }
+            }
+        }
+        return entries
     }
 
     /**

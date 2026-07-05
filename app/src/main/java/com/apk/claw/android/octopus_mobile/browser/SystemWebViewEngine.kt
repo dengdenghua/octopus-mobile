@@ -49,6 +49,8 @@ class SystemWebViewEngine : BrowserEngine {
 
     private var activeWebView: WebView? = null
     private var currentUrlValue: String = ""
+    private lateinit var gmBridge: GmApiBridge
+    private var idleRunnable: Runnable? = null
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun createView(context: Context): View {
@@ -96,29 +98,56 @@ class SystemWebViewEngine : BrowserEngine {
         // 仅 DEBUG 构建开启 WebView 远程调试，避免 release 版被 adb chrome://inspect 注入已登录会话。
         WebView.setWebContentsDebuggingEnabled(com.apk.claw.android.BuildConfig.DEBUG)
 
+        gmBridge = GmApiBridge(context)
+
         // 反检测 stealth 脚本:在「文档开始前」注入(早于页面脚本读取 navigator.webdriver 等)。
         // 设备 WebView 支持 DOCUMENT_START_SCRIPT 时走 addDocumentStartJavaScript(可靠);
         // 不支持则退回 onPageStarted 用 evaluateJavascript 注入(稍晚,兜底)。
         val docStartSupported = WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)
+        val stealthJs = BrowserPluginHost.documentStartScript()
         if (docStartSupported) {
-            BrowserPluginHost.documentStartScript()?.let { js ->
-                runCatching { WebViewCompat.addDocumentStartJavaScript(webView, js, setOf("*")) }
+            if (stealthJs != null) {
+                runCatching { WebViewCompat.addDocumentStartJavaScript(webView, stealthJs, setOf("*")) }
                     .onFailure { Log.w("SystemWebViewEngine", "addDocumentStartJavaScript failed: ${it.message}") }
             }
         }
 
+        gmBridge.attach(webView, "")
+
         webView.webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
                 currentUrlValue = url
+                gmBridge.updateUrl(url)
+                // 取消上一页的 idle 定时任务
+                idleRunnable?.let { Handler(Looper.getMainLooper()).removeCallbacks(it) }
                 // doc-start 不支持时的 stealth 兜底注入(尽早,但可能晚于部分 head 脚本)
                 if (!docStartSupported) {
                     BrowserPluginHost.documentStartScript()?.let { js -> view.evaluateJavascript(js, null) }
                 }
+                // @run-at document-start userscripts:onPageStarted 注入(早于 onPageFinished,
+                // 但不如 addDocumentStartJavaScript 早;在支持 DOCUMENT_START_SCRIPT 时也做一次以
+                // 覆盖URL匹配逻辑——addDocumentStartJavaScript 是全局注册的,这里按URL过滤)
+                BrowserPluginHost.scriptsForUrl(url, Userscript.RunAt.DOCUMENT_START).forEach { js ->
+                    view.evaluateJavascript(js, null)
+                }
                 _events.tryEmit(EngineEvent.PageStarted)
             }
             override fun onPageFinished(view: WebView, url: String) {
-                // 注入匹配该域名的插件内容脚本(DOM 就绪后);自建插件生态的运行入口。
-                BrowserPluginHost.contentScriptsFor(url).forEach { js -> view.evaluateJavascript(js, null) }
+                currentUrlValue = url
+                gmBridge.updateUrl(url)
+                // @run-at document-end:DOM 就绪后立即注入
+                BrowserPluginHost.scriptsForUrl(url, Userscript.RunAt.DOCUMENT_END).forEach { js ->
+                    view.evaluateJavascript(js, null)
+                }
+                // @run-at document-idle:onPageFinished 后延迟 200ms 注入,模拟 DOMContentLoaded+idle 时机
+                val idleScripts = BrowserPluginHost.scriptsForUrl(url, Userscript.RunAt.DOCUMENT_IDLE)
+                if (idleScripts.isNotEmpty()) {
+                    val r = Runnable {
+                        idleScripts.forEach { js -> view.evaluateJavascript(js, null) }
+                    }
+                    idleRunnable = r
+                    Handler(Looper.getMainLooper()).postDelayed(r, 200)
+                }
                 _events.tryEmit(EngineEvent.PageFinished(url, view.title ?: ""))
             }
             override fun shouldOverrideUrlLoading(
@@ -129,7 +158,6 @@ class SystemWebViewEngine : BrowserEngine {
                 view: WebView,
                 request: android.webkit.WebResourceRequest
             ): android.webkit.WebResourceResponse? {
-                // 拦截规则(广告/跟踪):命中则返回空响应丢弃该请求。运行在 WebView 工作线程,需快。
                 return if (BrowserPluginHost.shouldBlock(request.url?.toString())) {
                     android.webkit.WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))
                 } else null
@@ -214,6 +242,9 @@ class SystemWebViewEngine : BrowserEngine {
     override fun destroy() {
         val wv = activeWebView
         activeWebView = null
+        idleRunnable?.let { Handler(Looper.getMainLooper()).removeCallbacks(it) }
+        idleRunnable = null
+        gmBridge.detach()
         if (wv != null) {
             val mainHandler = Handler(Looper.getMainLooper())
             mainHandler.post {
