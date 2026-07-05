@@ -368,11 +368,17 @@ private fun AgentDiscoveryHeader(
     val title = header?.title?.takeIf { it.isNotBlank() } ?: stringResource(R.string.agent_inspiration_plaza)
     val icon = iconKeyToVector(header?.icon ?: "AutoAwesome")
     val tint = header?.tint ?: BrowserTint
-    val actions = header?.actions?.takeIf { it.isNotEmpty() } ?: listOf(
-        DiscoveryAction("Search", "", "search", BrowserTint),
-        DiscoveryAction("Psychology", "", "universe", MemoryTint),
-        DiscoveryAction("Add", "", "publish", SkillTint),
-    )
+    val actions = (
+        header?.actions?.takeIf { it.isNotEmpty() } ?: listOf(
+            DiscoveryAction("Search", "", "search", BrowserTint),
+            DiscoveryAction("Psychology", "", "universe", MemoryTint),
+            DiscoveryAction("Add", "", "publish", SkillTint),
+        )
+        ).filter {
+        // Universe(My Ghost)未完成先隐藏 —— 服务端下发的同名 action 一并过滤,见 FeatureFlags
+        com.apk.claw.android.FeatureFlags.UNIVERSE_ENABLED ||
+            !it.action.trim().equals("universe", ignoreCase = true)
+    }
     GlassCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(OctopusSpacing.md)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -428,7 +434,8 @@ private fun handleAction(
 ) {
     when (action.trim().lowercase()) {
         "search" -> onSearch()
-        "universe" -> onUniverse()
+        // 双保险:入口已在渲染层过滤,这里再拦一道,开关关着就不导航
+        "universe" -> if (com.apk.claw.android.FeatureFlags.UNIVERSE_ENABLED) onUniverse()
         "publish" -> onCreate()
     }
 }

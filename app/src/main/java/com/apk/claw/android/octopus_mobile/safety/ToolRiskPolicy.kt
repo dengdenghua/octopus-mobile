@@ -15,6 +15,12 @@ object ToolRiskPolicy {
     const val RISK_HIGH = "high"
 
     val HIGH_RISK_TOOLS: Set<String> = setOf(
+        // VPN 隧道:劫持全局网络流量,把所有流量导向用户/插件提供的 SOCKS5 代理。
+        // 高危 → 不可信来源走来源闸门,防远端静默把流量引到攻击者代理做中间人。
+        // (stop_vpn/vpn_status 无副作用本可低危,但同族一起 HIGH 更简单一致,不留缺口。)
+        "start_vpn",
+        "stop_vpn",
+        "vpn_status",
         "send_sms",
         "send_intent",
         "file_ops",
