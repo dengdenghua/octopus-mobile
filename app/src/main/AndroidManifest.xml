@@ -227,7 +227,8 @@
             android:name=".service.ForegroundService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="specialUse" />
+            android:foregroundServiceType="specialUse"
+            android:stopWithTask="false" />
 
         <!-- 高清屏幕采集:MediaProjection 前台服务 + 透明授权中转 Activity -->
         <service

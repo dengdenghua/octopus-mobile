@@ -43,6 +43,9 @@ class ClawAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
+        // 记录「用户确实开过本 App 的无障碍」—— 日后被系统杀掉时,A11ySelfHeal 才会用 Shizuku 写回启用。
+        // 只在成功连接过之后才自愈,绝不主动开启用户从没开过的服务。
+        runCatching { A11ySelfHeal.markWanted() }
         // 请求过滤按键事件（导航录制器需要）
         serviceInfo?.let { info ->
             info.flags = info.flags or AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS
