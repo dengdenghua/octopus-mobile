@@ -5,13 +5,13 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/colorBgPrimary"
-    android:paddingHorizontal="16pt">
+    android:paddingHorizontal="16dp">
 
     <!-- Toolbar -->
     <com.apk.claw.android.widget.CommonToolbar
         android:id="@+id/toolbar"
         android:layout_width="match_parent"
-        android:layout_height="56pt"
+        android:layout_height="56dp"
         app:layout_constraintTop_toTopOf="parent" />
 
     <!-- 无障碍服务 -->
@@ -19,7 +19,7 @@
         android:id="@+id/cardAccessibility"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="16pt"
+        android:layout_marginTop="16dp"
         app:cardIcon="@drawable/ic_accessibility"
         app:cardTitle="@string/home_card_accessibility_title"
         app:cardSubtitle="@string/home_card_accessibility_subtitle"
@@ -30,7 +30,7 @@
         android:id="@+id/cardNotification"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="12pt"
+        android:layout_marginTop="12dp"
         app:cardIcon="@drawable/ic_notification"
         app:cardTitle="@string/home_card_notification_title"
         app:cardSubtitle="@string/home_card_notification_subtitle"
@@ -41,7 +41,7 @@
         android:id="@+id/cardSystemWindow"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="12pt"
+        android:layout_marginTop="12dp"
         app:cardIcon="@drawable/ic_window"
         app:cardTitle="@string/home_card_system_window_title"
         app:cardSubtitle="@string/home_card_system_window_subtitle"
@@ -52,7 +52,7 @@
         android:id="@+id/cardBattery"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="12pt"
+        android:layout_marginTop="12dp"
         app:cardIcon="@drawable/ic_battery"
         app:cardTitle="@string/home_card_battery_title"
         app:cardSubtitle="@string/home_card_battery_subtitle"
@@ -63,7 +63,7 @@
         android:id="@+id/cardStorage"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="12pt"
+        android:layout_marginTop="12dp"
         app:cardIcon="@drawable/ic_storage"
         app:cardTitle="@string/home_card_storage_title"
         app:cardSubtitle="@string/home_card_storage_subtitle"
@@ -74,7 +74,7 @@
         android:id="@+id/cardAdvanced"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="12pt"
+        android:layout_marginTop="12dp"
         app:cardIcon="@drawable/ic_shizuku"
         app:cardTitle="@string/home_card_advanced_title"
         app:cardSubtitle="@string/home_card_advanced_subtitle"
@@ -84,8 +84,8 @@
     <com.apk.claw.android.widget.KButton
         android:id="@+id/btnCancelTask"
         android:layout_width="match_parent"
-        android:layout_height="48pt"
-        android:layout_marginTop="24pt"
+        android:layout_height="48dp"
+        android:layout_marginTop="24dp"
         android:text="@string/home_cancel_task"
         android:textSize="16sp"
         android:visibility="gone"

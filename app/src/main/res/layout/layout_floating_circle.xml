@@ -2,16 +2,16 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/floatRoot"
-    android:layout_width="56pt"
-    android:layout_height="56pt">
+    android:layout_width="56dp"
+    android:layout_height="56dp">
 
     <!-- 任务通知状态（胶囊展开，短暂显示后自动收回） -->
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/cardTaskNotify"
         android:layout_width="wrap_content"
         android:layout_height="match_parent"
-        app:cardCornerRadius="28pt"
-        app:cardElevation="4pt"
+        app:cardCornerRadius="28dp"
+        app:cardElevation="4dp"
         app:cardBackgroundColor="@color/colorBrandPrimary"
         android:visibility="gone">
 
@@ -20,13 +20,13 @@
             android:layout_height="match_parent"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:paddingStart="16pt"
-            android:paddingEnd="18pt">
+            android:paddingStart="16dp"
+            android:paddingEnd="18dp">
 
             <ImageView
                 android:id="@+id/ivNotifyChannelLogo"
-                android:layout_width="20pt"
-                android:layout_height="20pt"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
                 android:contentDescription="@string/cd_channel_logo"
                 android:src="@drawable/ic_launcher"
                 android:scaleType="centerCrop" />
@@ -35,11 +35,11 @@
                 android:id="@+id/tvTaskNotify"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="8pt"
+                android:layout_marginStart="8dp"
                 android:text=""
                 android:textColor="@color/colorBrandOnPrimary"
-                android:textSize="12pt"
-                android:maxWidth="200pt"
+                android:textSize="12sp"
+                android:maxWidth="200dp"
                 android:maxLines="2"
                 android:ellipsize="end" />
 
@@ -52,8 +52,8 @@
         android:id="@+id/cardIdle"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        app:cardCornerRadius="28pt"
-        app:cardElevation="4pt"
+        app:cardCornerRadius="28dp"
+        app:cardElevation="4dp"
         app:cardBackgroundColor="@color/colorBrandPrimary">
 
         <TextView
@@ -63,7 +63,7 @@
             android:layout_gravity="center"
             android:text="@string/floating_ai_label"
             android:textColor="@color/colorBrandOnPrimary"
-            android:textSize="16pt"
+            android:textSize="16sp"
             android:textStyle="bold" />
 
     </com.google.android.material.card.MaterialCardView>
@@ -73,8 +73,8 @@
         android:id="@+id/cardRunning"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        app:cardCornerRadius="28pt"
-        app:cardElevation="4pt"
+        app:cardCornerRadius="28dp"
+        app:cardElevation="4dp"
         app:cardBackgroundColor="@color/colorBrandPrimary"
         android:visibility="gone">
 
@@ -85,8 +85,8 @@
             <!-- 旋转的进度环 -->
             <ProgressBar
                 android:id="@+id/progressRunning"
-                android:layout_width="56pt"
-                android:layout_height="56pt"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
                 android:layout_gravity="center"
                 android:indeterminate="true"
                 android:indeterminateTint="@color/colorBrandOnPrimary"
@@ -95,10 +95,10 @@
             <!-- 渠道 Logo -->
             <com.google.android.material.imageview.ShapeableImageView
                 android:id="@+id/ivChannelLogo"
-                android:layout_width="20pt"
-                android:layout_height="20pt"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
                 android:layout_gravity="top|center_horizontal"
-                android:layout_marginTop="12pt"
+                android:layout_marginTop="12dp"
                 android:contentDescription="@string/cd_channel_logo"
                 android:src="@drawable/ic_launcher"
                 android:scaleType="centerCrop"
@@ -110,10 +110,10 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center|bottom"
-                android:layout_marginBottom="8pt"
+                android:layout_marginBottom="8dp"
                 android:text="1"
                 android:textColor="@color/colorBrandOnPrimary"
-                android:textSize="10pt"
+                android:textSize="10sp"
                 android:textStyle="bold" />
 
         </FrameLayout>
@@ -125,14 +125,14 @@
         android:id="@+id/cardSuccess"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        app:cardCornerRadius="28pt"
-        app:cardElevation="4pt"
+        app:cardCornerRadius="28dp"
+        app:cardElevation="4dp"
         app:cardBackgroundColor="@color/colorSuccessPrimary"
         android:visibility="gone">
 
         <ImageView
-            android:layout_width="32pt"
-            android:layout_height="32pt"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
             android:layout_gravity="center"
             android:contentDescription="@string/cd_task_success"
             android:src="@drawable/ic_check"
@@ -145,14 +145,14 @@
         android:id="@+id/cardError"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        app:cardCornerRadius="28pt"
-        app:cardElevation="4pt"
+        app:cardCornerRadius="28dp"
+        app:cardElevation="4dp"
         app:cardBackgroundColor="@color/colorErrorPrimary"
         android:visibility="gone">
 
         <ImageView
-            android:layout_width="32pt"
-            android:layout_height="32pt"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
             android:layout_gravity="center"
             android:contentDescription="@string/cd_task_error"
             android:src="@drawable/ic_close"

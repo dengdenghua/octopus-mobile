@@ -78,11 +78,21 @@ fun CapsuleButton(
 ) {
     val bg = if (accent) OctopusColors.Primary else OctopusColors.SurfaceVariant
     val fg = if (accent) OctopusColors.OnPrimary else OctopusColors.TextPrimary
+    val press = rememberOctopusPressState()
     Row(
         modifier = modifier
+            .graphicsLayer {
+                scaleX = press.scale
+                scaleY = press.scale
+            }
+            .then(press.touchModifier)
             .clip(OctopusShape.capsule)
             .background(bg)
-            .clickable(onClick = onClick)
+            .clickable(
+                interactionSource = press.interactionSource,
+                indication = null,
+                onClick = onClick,
+            )
             .padding(horizontal = OctopusSpacing.lg, vertical = OctopusSpacing.sm),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
@@ -106,8 +116,8 @@ fun rememberOctopusPressState(
     var focalX by remember { mutableStateOf(0.5f) }
     var focalY by remember { mutableStateOf(0.28f) }
     val pressed by interactionSource.collectIsPressedAsState()
-    val targetScale = if (enabled && pressed) 0.982f else 1f
-    val targetBoost = if (enabled && pressed) 1.22f else 1f
+    val targetScale = if (enabled && pressed) 0.96f else 1f
+    val targetBoost = if (enabled && pressed) 1.15f else 1f
     val animatedFocalX by animateFloatAsState(
         targetValue = if (enabled && pressed) focalX else 0.5f,
         animationSpec = spring(dampingRatio = 0.78f, stiffness = 360f),
@@ -183,14 +193,20 @@ fun OctopusCard(
     content: @Composable BoxScope.() -> Unit,
 ) {
     val shape = OctopusShape.large
+    val press = rememberOctopusPressState(enabled = onClick != null)
     Box(
         modifier = modifier
+            .graphicsLayer {
+                scaleX = press.scale
+                scaleY = press.scale
+            }
+            .then(press.touchModifier)
             .clip(shape)
             .background(OctopusBackground.cardSurface)
             .border(0.5.dp, OctopusBackground.cardBorder, shape)
             .then(
                 if (onClick != null) Modifier.clickable(
-                    interactionSource = null,
+                    interactionSource = press.interactionSource,
                     indication = null,
                     onClick = onClick,
                 ) else Modifier
@@ -209,8 +225,14 @@ fun OctopusPill(
     selected: Boolean = false,
     onClick: () -> Unit,
 ) {
+    val press = rememberOctopusPressState()
     Row(
         modifier = modifier
+            .graphicsLayer {
+                scaleX = press.scale
+                scaleY = press.scale
+            }
+            .then(press.touchModifier)
             .clip(OctopusShape.capsule)
             .background(
                 if (selected) tint.copy(alpha = 0.20f) else tint.copy(alpha = 0.12f),
@@ -220,7 +242,11 @@ fun OctopusPill(
                 if (selected) tint.copy(alpha = 0.55f) else tint.copy(alpha = 0.45f),
                 OctopusShape.capsule,
             )
-            .clickable(onClick = onClick)
+            .clickable(
+                interactionSource = press.interactionSource,
+                indication = null,
+                onClick = onClick,
+            )
             .padding(horizontal = OctopusSpacing.md, vertical = OctopusSpacing.sm),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,

@@ -175,16 +175,14 @@ private fun BottomTabItem(
             tint = contentColor,
             modifier = Modifier.size(OctopusIconSize.medium),
         )
-        if (selected) {
-            Text(
-                label,
-                color = contentColor,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                modifier = Modifier.padding(start = OctopusSpacing.xs),
-            )
-        }
+        Text(
+            label,
+            color = contentColor,
+            fontSize = if (selected) OctopusType.tag else 9.sp,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            maxLines = 1,
+            modifier = Modifier.padding(start = OctopusSpacing.xs),
+        )
     }
 }
 
