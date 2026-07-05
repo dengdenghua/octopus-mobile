@@ -1,4 +1,4 @@
-﻿package com.apk.claw.android.octopus_mobile
+package com.apk.claw.android.octopus_mobile
 
 import android.util.Log
 import java.security.MessageDigest
@@ -139,7 +139,23 @@ class LightweightReAct(
                         return TaskResult.Cancelled(step, totalUsage.snapshot())
                     }
                     onStep?.invoke(ReActStep.ToolCallStart(step, toolCall))
-                    val result = toolExecutor(toolCall)
+
+                    val preCheck = ImmuneSystem.preCheck(toolCall.name, toolCall.args)
+                    if (preCheck.verdict == ImmuneSystem.Verdict.WARN) {
+                        Log.w(tag, "Immune warning on ${toolCall.name}: risk=${String.format("%.2f", preCheck.riskScore)} reason=${preCheck.reason}")
+                    }
+
+                    val toolStart = System.currentTimeMillis()
+                    val result = try {
+                        toolExecutor(toolCall)
+                    } catch (e: Exception) {
+                        val latency = System.currentTimeMillis() - toolStart
+                        ImmuneSystem.postResult(toolCall.name, latency, 0, true)
+                        throw e
+                    }
+                    val latency = System.currentTimeMillis() - toolStart
+                    ImmuneSystem.postResult(toolCall.name, latency, result.display.length, result is ToolExecutionResult.Failure)
+
                     onStep?.invoke(ReActStep.ToolCallDone(step, toolCall, result))
                     history += ChatMessage.Tool(
                         toolCallId = toolCall.id,

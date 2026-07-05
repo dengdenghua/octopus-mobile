@@ -3,6 +3,7 @@ import com.apk.claw.android.utils.OctoHttp
 
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -11,6 +12,8 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
+import kotlin.math.pow
+import kotlin.random.Random
 
 /**
  * 方案 F 轻量 LLM 客户端.
@@ -42,34 +45,79 @@ class LightweightLlmClient(
     /**
      * 调 LLM，返回 [LlmResponse].
      *
-     * @param messages  对话历史（含 system / user / assistant / tool 消息）
-     * @param skills    SKILL.md 解析后的工具描述（喂给 LLM）
+     * @param messages       对话历史（含 system / user / assistant / tool 消息）
+     * @param skills         SKILL.md 解析后的工具描述（喂给 LLM）
+     * @param temperature    覆盖配置温度（null 则使用 config.temperature）
+     * @param retryAttempts  最大重试次数（瞬态错误时）
+     * @param retryBaseDelayMs 重试基础延迟（指数退避，带 jitter）
      */
     suspend fun chat(
         messages: List<ChatMessage>,
-        skills: List<SkillSpec>
+        skills: List<SkillSpec>,
+        temperature: Double? = null,
+        retryAttempts: Int = 3,
+        retryBaseDelayMs: Long = 500,
     ): LlmResponse = withContext(Dispatchers.IO) {
-        val requestBody = buildRequestBody(messages, skills)
-        val request = Request.Builder()
-            .url(config.apiUrl)
-            .addHeader("Authorization", "Bearer ${config.apiKey}")
-            .addHeader("Content-Type", "application/json")
-            .post(requestBody.toRequestBody("application/json".toMediaType()))
-            .build()
+        val effectiveTemp = temperature ?: config.temperature
+        var lastError: Exception? = null
 
-        httpClient.newCall(request).execute().use { response ->
-            val body = response.body?.string() ?: throw LlmException("Empty response body")
-            if (!response.isSuccessful) {
-                throw LlmException("LLM HTTP ${response.code}: $body")
+        for (attempt in 0..retryAttempts) {
+            try {
+                val requestBody = buildRequestBody(messages, skills, effectiveTemp)
+                val request = Request.Builder()
+                    .url(config.apiUrl)
+                    .addHeader("Authorization", "Bearer ${config.apiKey}")
+                    .addHeader("Content-Type", "application/json")
+                    .post(requestBody.toRequestBody("application/json".toMediaType()))
+                    .build()
+
+                httpClient.newCall(request).execute().use { response ->
+                    val body = response.body?.string() ?: throw LlmException("Empty response body")
+                    if (!response.isSuccessful) {
+                        val isTransient = response.code == 429 || response.code >= 500
+                        if (isTransient && attempt < retryAttempts) {
+                            val delayMs = computeBackoff(attempt, retryBaseDelayMs)
+                            Log.w(tag, "LLM HTTP ${response.code} (attempt ${attempt + 1}/${retryAttempts + 1}), retrying in ${delayMs}ms")
+                            delay(delayMs)
+                            return@use null
+                        }
+                        throw LlmException("LLM HTTP ${response.code}: $body")
+                    }
+                    return@withContext parseResponse(body)
+                }
+            } catch (e: Exception) {
+                lastError = e
+                if (e is LlmException && !isTransientError(e) && attempt >= retryAttempts) {
+                    throw e
+                }
+                if (attempt < retryAttempts) {
+                    val delayMs = computeBackoff(attempt, retryBaseDelayMs)
+                    Log.w(tag, "LLM call failed (attempt ${attempt + 1}/${retryAttempts + 1}): ${e.message}, retrying in ${delayMs}ms")
+                    delay(delayMs)
+                }
             }
-            parseResponse(body)
         }
+        throw lastError ?: LlmException("LLM call failed after $retryAttempts retries")
     }
 
-    private fun buildRequestBody(messages: List<ChatMessage>, skills: List<SkillSpec>): String {
+    private fun isTransientError(e: LlmException): Boolean {
+        val msg = e.message ?: return false
+        return msg.contains("HTTP 429") || msg.contains("HTTP 5") ||
+                msg.contains("timeout", ignoreCase = true) ||
+                msg.contains("connection", ignoreCase = true) ||
+                msg.contains("reset", ignoreCase = true)
+    }
+
+    private fun computeBackoff(attempt: Int, baseDelayMs: Long): Long {
+        val raw = (baseDelayMs * 2.0.pow(attempt)).toLong().coerceAtMost(30_000L)
+        val jitterFactor = 0.75 + Random.nextDouble() * 0.25
+        return (raw * jitterFactor).toLong().coerceAtLeast(0)
+    }
+
+    private fun buildRequestBody(messages: List<ChatMessage>, skills: List<SkillSpec>, temperature: Double): String {
         val json = JSONObject()
         json.put("model", config.model)
-        json.put("temperature", config.temperature)
+        json.put("temperature", temperature)
         json.put("max_tokens", config.maxTokens)
 
         // 消息列表

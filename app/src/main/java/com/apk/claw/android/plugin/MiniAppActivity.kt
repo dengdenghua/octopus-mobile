@@ -2,13 +2,15 @@ package com.apk.claw.android.plugin
 
 import android.os.Bundle
 import android.util.Log
+import android.view.View
 import android.webkit.WebView
+import android.widget.FrameLayout
+import android.widget.ProgressBar
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 
-/**
- * 小程序宿主 Activity(全屏)—— WebView 沙箱由 [MiniAppHost] 统一提供(与桌面浮动窗口共用)。
- * 挂 [OctopusBridge](`octopusNative` + `window.octopus` shim),锁本地 file:// 源、拦截非 file 子资源。
- */
 class MiniAppActivity : AppCompatActivity() {
 
     companion object {
@@ -18,6 +20,7 @@ class MiniAppActivity : AppCompatActivity() {
 
     private var webView: WebView? = null
     private var appId: String? = null
+    private var progressBar: ProgressBar? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -27,9 +30,41 @@ class MiniAppActivity : AppCompatActivity() {
             if (manifest == null || manifest.page.isBlank()) { finish(); return }
             appId = manifest.id
 
+            WindowCompat.setDecorFitsSystemWindows(window, false)
+
+            val root = FrameLayout(this)
             val wv = MiniAppHost.createWebView(this, manifest) ?: run { finish(); return }
-            setContentView(wv)
             webView = wv
+
+            val pbHeight = (2 * resources.displayMetrics.density).toInt().coerceAtLeast(2)
+            val pb = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+                layoutParams = FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT, pbHeight
+                )
+                max = 100
+                progress = 0
+                visibility = View.VISIBLE
+                elevation = 8f
+                alpha = 0.85f
+            }
+            progressBar = pb
+
+            ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
+                val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+                (pb.layoutParams as FrameLayout.LayoutParams).topMargin = bars.top
+                pb.layoutParams = pb.layoutParams
+                val js = "(function(){var s=document.getElementById('__octopus_safe_area');" +
+                    "if(s){s.textContent=':root{--sat:${bars.top}px;--sar:${bars.right}px;--sab:${bars.bottom}px;--sal:${bars.left}px;';} })();"
+                wv.evaluateJavascript(js, null)
+                insets
+            }
+
+            root.addView(wv, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+            root.addView(pb)
+            setContentView(root)
+
+            MiniAppHost.bindProgress(wv, pb)
         } catch (e: Exception) {
             Log.e(TAG, "MiniApp launch failed: ${e.message}", e)
             finish()
@@ -38,14 +73,35 @@ class MiniAppActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        // 前台运行 → 注册到动作总线,Agent 的 app_action 可派发到本 mini-app
         val id = appId; val wv = webView
         if (id != null && wv != null) MiniAppActionBus.registerLive(id, this, wv)
+        wv?.onResume()
+        wv?.evaluateJavascript("window.octopus && window.octopus._lifecycle && window.octopus._lifecycle('show')", null)
     }
 
     override fun onPause() {
         super.onPause()
+        webView?.evaluateJavascript("window.octopus && window.octopus._lifecycle && window.octopus._lifecycle('hide')", null)
+        webView?.onPause()
         appId?.let { MiniAppActionBus.unregister(it) }
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
+        @Suppress("DEPRECATION")
+        super.onActivityResult(requestCode, resultCode, data)
+        MiniAppHost.handleActivityResult(requestCode, resultCode, data)
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() {
+        val wv = webView
+        if (wv != null && wv.canGoBack()) {
+            wv.goBack()
+            return
+        }
+        @Suppress("DEPRECATION")
+        super.onBackPressed()
     }
 
     override fun onDestroy() {
@@ -53,5 +109,6 @@ class MiniAppActivity : AppCompatActivity() {
         appId?.let { MiniAppActionBus.unregister(it) }
         MiniAppHost.destroyWebView(webView)
         webView = null
+        progressBar = null
     }
 }

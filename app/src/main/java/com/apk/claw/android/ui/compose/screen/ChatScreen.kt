@@ -98,6 +98,7 @@ import com.apk.claw.android.R
 import com.apk.claw.android.account.AccountConfig
 import com.apk.claw.android.octopus_mobile.ControlTarget
 import com.apk.claw.android.octopus_mobile.DeviceInfo
+import com.apk.claw.android.octopus_mobile.RemoteStreamPrefs
 import com.apk.claw.android.octopus_mobile.RoutineStore
 import com.apk.claw.android.octopus_mobile.VoiceInput
 import com.apk.claw.android.server.ConfigServerManager
@@ -187,6 +188,23 @@ sealed class ChatMessage {
     enum class ArtifactKind { HTML, IMAGE, FILE, DIFF }
 }
 
+/**
+ * 待用户选择的澄清问卷（选择题卡片）。
+ * 由 generate_app 等工具在需求不明确时通过 onForm 回调下发，UI 在输入框上方渲染可点选选项卡片。
+ * 用户选完点"开始生成"后，答案被构造成自然语言消息自动发送回 Agent。
+ */
+data class ClarifyQuestion(
+    val q: String,
+    val options: List<String>,
+)
+
+data class PendingClarifyForm(
+    val toolName: String,
+    val questions: List<ClarifyQuestion>,
+    /** 用户当前已选中的选项索引（与questions同序），-1表示未选 */
+    val selections: MutableList<Int> = mutableListOf(),
+)
+
 /** 自增 ID 计数器（线程安全）。仅用于 UI 层稳定 key，不参与业务逻辑。 */
 private val chatIdCounter = java.util.concurrent.atomic.AtomicLong(0L)
 private fun nextId(): Long = chatIdCounter.incrementAndGet()
@@ -215,6 +233,8 @@ fun ChatScreen() {
     var isRunning by remember { mutableStateOf(false) }
     var moreMenuOpen by remember { mutableStateOf(false) }
     var previewDevice by remember { mutableStateOf<DeviceInfo?>(null) }
+    // 待填写的问卷表单（选择题）：工具返回时在输入框上方渲染可点选的选项卡片
+    var pendingForm by remember { mutableStateOf<PendingClarifyForm?>(null) }
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     // 新建对话工作空间选择对话框(类似 Codex 启动时选项目目录)
     var showNewChatWorkspaceDialog by remember { mutableStateOf(false) }
@@ -374,6 +394,7 @@ fun ChatScreen() {
     val send = {
         val t = inputText.trim()
         if (t.isNotEmpty() && !isRunning) {
+            pendingForm = null // 发消息时清除待填表单
             messages.add(ChatMessage.UserMessage(t))
             inputText = ""
             scrollEnd(); persist()
@@ -550,6 +571,26 @@ fun ChatScreen() {
                             ChatMessage.ArtifactKind.DIFF, title, refId,
                         ))
                         scrollEnd(); persist()
+                    },
+                    // 结构化问卷表单：工具需要用户点选选项时下发，显示在输入框上方
+                    onForm = { toolName, formJson ->
+                        val questions = runCatching {
+                            val arr = org.json.JSONArray(formJson)
+                            (0 until arr.length()).map { i ->
+                                val obj = arr.getJSONObject(i)
+                                val optsArr = obj.getJSONArray("options")
+                                val opts = (0 until optsArr.length()).map { j -> optsArr.getString(j) }
+                                ClarifyQuestion(obj.getString("q"), opts)
+                            }
+                        }.getOrDefault(emptyList())
+                        if (questions.isNotEmpty()) {
+                            pendingForm = PendingClarifyForm(
+                                toolName = toolName,
+                                questions = questions,
+                                selections = MutableList(questions.size) { -1 },
+                            )
+                            scrollEnd()
+                        }
                     },
                 )
             } else {
@@ -837,6 +878,28 @@ fun ChatScreen() {
                     ScrollToBottomButton(visible = showScrollToBottom, onClick = { scrollEnd() })
                 }
             }
+        }
+
+        // ── 澄清问卷（选择题卡片）：待填写时显示在输入框上方，用户点选选项后填入输入框 ──
+        pendingForm?.let { form ->
+            ClarifyFormCard(
+                form = form,
+                onSelect = { qIdx, optIdx ->
+                    pendingForm = form.copy(
+                        selections = form.selections.toMutableList().apply { this[qIdx] = optIdx }
+                    )
+                },
+                onConfirm = {
+                    val answers = form.questions.mapIndexed { i, q ->
+                        val sel = form.selections[i]
+                        if (sel >= 0) "${q.q}${q.options[sel]}" else null
+                    }.filterNotNull()
+                    val filled = if (answers.isNotEmpty()) answers.joinToString("\n") + "\n" else ""
+                    inputText = filled
+                    pendingForm = null
+                },
+                onCancel = { pendingForm = null },
+            )
         }
 
         // 输入框（imePadding 让键盘弹起时输入框自动上移，不被键盘遮挡）
@@ -1617,7 +1680,8 @@ private fun DevicePreviewPanel(device: DeviceInfo, onEnter: () -> Unit, onClose:
                         scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
                         setBackgroundColor(android.graphics.Color.BLACK)
                         val token = URLEncoder.encode(device.authToken, "UTF-8")
-                        start("${device.getBaseUrl()}/api/screen/stream?quality=60&maxWidth=720&fps=20&token=$token")
+                        val q = RemoteStreamPrefs.streamParams()
+                        start("${device.getBaseUrl()}/api/screen/stream?$q&token=$token")
                     }
                 },
                 onRelease = { it.stop() },
@@ -2321,6 +2385,137 @@ private fun ScrollToBottomButton(visible: Boolean, onClick: () -> Unit) {
                     stringResource(R.string.chat_scroll_bottom),
                     color = PrimaryColor,
                     fontSize = OctopusType.label,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 澄清问卷卡片——显示在输入框上方，用户点选选项后点"确认"填入输入框。
+ * 每个问题展示为标题 + 一组选项 Chip（单选），选完所有题后"确认"按钮亮起。
+ * 确认后答案填入输入框，用户可补充文字或直接点发送键提交。
+ * 右上角有关闭按钮，点关闭直接取消问卷（用户可继续打字自由输入）。
+ */
+@Composable
+private fun ClarifyFormCard(
+    form: PendingClarifyForm,
+    onSelect: (qIdx: Int, optIdx: Int) -> Unit,
+    onConfirm: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    val allSelected = form.selections.all { it >= 0 }
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = OctopusSpacing.lg)
+            .padding(bottom = OctopusSpacing.xs),
+        shape = OctopusShape.xl,
+        color = PrimaryColor.copy(alpha = 0.06f),
+        border = BorderStroke(1.dp, PrimaryColor.copy(alpha = 0.25f)),
+        shadowElevation = 2.dp,
+    ) {
+        Column(modifier = Modifier.padding(OctopusSpacing.md)) {
+            // 标题行：图标 + 标题 + 关闭按钮
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(
+                    Icons.Filled.TouchApp,
+                    contentDescription = null,
+                    tint = PrimaryColor,
+                    modifier = Modifier.size(OctopusIconSize.small),
+                )
+                Spacer(Modifier.width(OctopusSpacing.sm))
+                Text(
+                    "帮我确认几个小问题",
+                    fontSize = OctopusType.bodyStrong,
+                    fontWeight = FontWeight.SemiBold,
+                    color = PrimaryColor,
+                    modifier = Modifier.weight(1f),
+                )
+                IconButton(
+                    onClick = onCancel,
+                    modifier = Modifier.size(28.dp),
+                ) {
+                    Icon(
+                        Icons.Filled.Close,
+                        contentDescription = "取消",
+                        tint = TextMuted,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+            }
+            Spacer(Modifier.height(OctopusSpacing.sm))
+            // 每个问题：问题标题 + 选项 Chips
+            form.questions.forEachIndexed { qIdx, question ->
+                if (qIdx > 0) Spacer(Modifier.height(OctopusSpacing.md))
+                Text(
+                    question.q,
+                    fontSize = OctopusType.body,
+                    fontWeight = FontWeight.Medium,
+                    color = TextPrimary,
+                )
+                Spacer(Modifier.height(OctopusSpacing.sm))
+                val chunked = question.options.chunked(2)
+                chunked.forEach { rowOpts ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = OctopusSpacing.xs),
+                        horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.sm),
+                    ) {
+                        rowOpts.forEach { opt ->
+                            val optIdx = question.options.indexOf(opt)
+                            val selected = form.selections.getOrNull(qIdx) == optIdx
+                            Surface(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { onSelect(qIdx, optIdx) },
+                                shape = OctopusShape.large,
+                                color = if (selected) PrimaryColor else SurfaceDeepColor,
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (selected) PrimaryColor else BorderColor.copy(alpha = 0.5f),
+                                ),
+                            ) {
+                                Text(
+                                    opt,
+                                    modifier = Modifier.padding(horizontal = OctopusSpacing.md, vertical = OctopusSpacing.sm),
+                                    fontSize = OctopusType.bodyStrong,
+                                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                                    color = if (selected) OnPrimaryColor else TextPrimary,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                        if (rowOpts.size == 1) {
+                            Spacer(Modifier.weight(1f))
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(OctopusSpacing.md))
+            // 确认按钮：点了把答案填入输入框，用户可补充后手动发送
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(44.dp)
+                    .background(
+                        color = if (allSelected) PrimaryColor else TextMuted.copy(alpha = 0.25f),
+                        shape = OctopusShape.large,
+                    )
+                    .clickable(enabled = allSelected, onClick = onConfirm),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    if (allSelected) "确认" else "请先选择所有选项",
+                    color = if (allSelected) OnPrimaryColor else TextMuted,
+                    fontSize = OctopusType.bodyStrong,
                     fontWeight = FontWeight.SemiBold,
                 )
             }

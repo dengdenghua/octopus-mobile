@@ -8,7 +8,9 @@ import com.apk.claw.android.octopus_mobile.BrainModeSelector
 import com.apk.claw.android.octopus_mobile.ConnectionState
 import com.apk.claw.android.octopus_mobile.DeviceDiscoveryManager
 import com.apk.claw.android.octopus_mobile.DeviceRegistry
+import com.apk.claw.android.octopus_mobile.ExperienceLedger
 import com.apk.claw.android.octopus_mobile.SkillManifest
+import com.apk.claw.android.octopus_mobile.TurnScorer
 import com.apk.claw.android.octopus_mobile.nerves.EventBus
 import com.apk.claw.android.plugin.PluginManager
 import com.apk.claw.android.server.RemoteConsoleGateway
@@ -108,6 +110,9 @@ open class ClawApplication : BaseApp() {
         // assets-only fail-closed,无插件时为廉价 no-op。详见 PLUGIN_ECOSYSTEM.md。
         runCatching { pluginManager.loadAll() }.onFailure { XLog.e(TAG, "pluginManager.loadAll failed", it) }
         XLog.e(TAG, "ClawApplication initialized | device=${DeviceUtils.getDeviceDescription(this)} | tools=${ToolRegistry.getInstance().getAllTools().size}")
+
+        runCatching { ExperienceLedger.init(filesDir) }.onFailure { XLog.e(TAG, "ExperienceLedger init failed", it) }
+        runCatching { TurnScorer.init(filesDir) }.onFailure { XLog.e(TAG, "TurnScorer init failed", it) }
 
         // Shizuku 增强层初始化（监听 Binder 到达/死亡）
         ShizukuManager.init()

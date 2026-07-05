@@ -12,6 +12,7 @@ import com.apk.claw.android.floating.LiveControlOverlay
 import com.apk.claw.android.octopus_mobile.ActionRecorder
 import com.apk.claw.android.octopus_mobile.ActivityLog
 import com.apk.claw.android.octopus_mobile.ControlTarget
+import com.apk.claw.android.octopus_mobile.ReflexArc
 import com.apk.claw.android.tool.ToolRegistry
 import com.apk.claw.android.tool.ToolResult
 import com.apk.claw.android.utils.KVUtils
@@ -242,6 +243,7 @@ object ChatAgentBridge {
         onHtml: ((toolName: String, htmlContent: String) -> Unit)? = null,
         onFile: ((toolName: String, filePath: String) -> Unit)? = null,
         onDiff: ((toolName: String, diff: String) -> Unit)? = null,
+        onForm: ((toolName: String, formJson: String) -> Unit)? = null,
         conversationContext: String? = null,
         persona: String? = null,
         workspace: String? = null,
@@ -251,6 +253,21 @@ object ChatAgentBridge {
             onError(ClawApplication.instance.getString(R.string.chat_agent_bridge_busy_error))
             return
         }
+
+        ReflexArc.tryMatch(prompt)?.let { match ->
+            main.post {
+                if (match.cachedHtml != null && match.cachedAppId != null) {
+                    onText(match.response)
+                    onHtml?.invoke("open_mini_app", "700\n${match.cachedHtml}")
+                } else {
+                    onText(match.response)
+                }
+                onDone(match.response)
+            }
+            busy.set(false)
+            return
+        }
+
         val recorder = recordKey?.let { ActionRecorder() }
         service.updateConfig(buildConfig(prompt))   // prompt 传入以按相关性注入提示词技能(按当前指令算相关性)
         // 带上人设/对话背景组任务 prompt;审计(curTask)仍记原始指令,别把背景刷进审计日志
@@ -319,6 +336,10 @@ object ChatAgentBridge {
                 val df = result.diff
                 if (df != null && onDiff != null) {
                     main.post { onDiff(toolName, df) }
+                }
+                val form = result.formData
+                if (form != null && onForm != null) {
+                    main.post { onForm(toolName, form) }
                 }
             }
 

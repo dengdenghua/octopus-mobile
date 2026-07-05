@@ -3,12 +3,16 @@ package com.apk.claw.android.tool.impl
 import com.apk.claw.android.ClawApplication
 import com.apk.claw.android.account.EffectiveLlm
 import com.apk.claw.android.account.LlmRouting
+import com.apk.claw.android.octopus_mobile.ExperienceLedger
+import com.apk.claw.android.octopus_mobile.ReflexArc
+import com.apk.claw.android.octopus_mobile.TurnScorer
 import com.apk.claw.android.plugin.PluginManifest
 import com.apk.claw.android.tool.BaseTool
 import com.apk.claw.android.tool.ToolParameter
 import com.apk.claw.android.tool.ToolResult
 import com.apk.claw.android.utils.OctoHttp
 import com.google.gson.Gson
+import android.util.Log
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -16,25 +20,9 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.util.concurrent.TimeUnit
+import kotlin.math.pow
+import kotlin.random.Random
 
-/**
- * 生成一个独立可运行的单文件 H5 应用 —— 秒哒式"一句话建应用"的本地版（Phase 2：本地持久化为小程序）。
- *
- * 内部串两次 LLM 调用（规划 → 编码），而不是走 DefaultAgentService 的单轮 ReAct 循环：
- * 那套循环目前没有"分阶段暂停/换 system prompt"的机制，与其改核心循环，不如让这个工具
- * 自己在 execute() 里做一个迷你两段流水线。
- *
- * 复用 [LlmRouting.effective] 拿到跟主 Agent 完全相同的中转/BYO 路由结果，不需要用户
- * 额外配置模型。生成结果一份两用：① 走 preview_html 一样的通道推给网页控制台即时预览；
- * ② 落盘成 `filesDir/generated_apps/{id}/` 下的 mini-app（manifest+index.html），
- * 通过 [com.apk.claw.android.plugin.PluginManager] 挂进 [com.apk.claw.android.plugin.MiniAppRegistry]，
- * 用户可在「小程序」列表里随时重新打开——不需要再造一个新的"生成应用"列表 UI。
- *
- * 生成物默认纯前端沙箱 + localStorage;但可**自声明**要调的低危设备能力(OCTOPUS_TOOLS),
- * 宿主只授予 [AGENTIC_TOOL_WHITELIST] 内的(生成媒体/预览/联动其它小程序),让"生成物会干活"
- * 而不越权——这是这版新增的能力。allow_device/allow_pay 仍恒空(不给设备自动化/支付)。
- * 仍然没有云端后端/多设备同步——只适合个人单机使用的小工具/小游戏/可视化。
- */
 class GenerateAppTool : BaseTool() {
 
     companion object {
@@ -42,31 +30,180 @@ class GenerateAppTool : BaseTool() {
         private const val MAX_ASSETS_LEN = 2000
         private const val PREVIEW_HEIGHT = 700
         private const val MANIFEST_VERSION = "1.0.0"
-        /** 生成后自动修复的最大轮数(每轮:离屏渲染抓错 → LLM 修 → 再渲染)。 */
         private const val MAX_REPAIR = 2
-
-        /** 需求澄清:最多反问几个问题、每问最长多少字(防跑题/刷屏)。 */
+        private const val MAX_VISUAL_REPAIR = 2
         private const val MAX_CLARIFY_Q = 3
         private const val CLARIFY_Q_MAX_LEN = 80
 
-        /**
-         * 生成物可自动获授的「设备能力」白名单——只放**低危、无隐私读取**的工具:生成媒体、预览、
-         * 联动其它小程序。刻意不含:截图/剪贴板读取/文件/短信/自动化点击等(会读隐私或改设备状态)。
-         *
-         * VPN 工具(start_vpn/stop_vpn/vpn_status)为例外放行:
-         * - 用户在自己生成的 VPN 面板 UI 里主动点击才触发,代理地址由用户自填,非远端注入;
-         * - 系统级 VPN 授权弹窗本身就是最强保护(无法绕过,必须用户点"允许");
-         * - withUntrustedSource 标记会再走一次高危审批闸门,每次启动都需用户确认;
-         * - VPN 运行时有系统常驻通知,用户随时可感知/关闭。
-         * 即便在白名单内,运行时调用仍过 [com.apk.claw.android.tool.ToolRegistry] 的不可信来源闸门,
-         * 高危工具(如 run_code)仍会被拦/审批;这里是「第一道:允许声明」。
-         */
         private val AGENTIC_TOOL_WHITELIST = setOf(
             "generate_image", "generate_video", "preview_html",
             "list_apps", "app_action", "read_app_events",
             "start_vpn", "stop_vpn", "vpn_status",
         )
     }
+
+    /**
+     * 设计系统预设：每个预设是一套 CSS 自定义属性 + 设计哲学说明。
+     * 参考 awesome-design-md (VoltAgent)、Design Systems (open-design)、PromptSkillStore 中的风格描述，
+     * 把"大厂同款"的 token 固化成 CSS 变量，LLM 只需 `var(--primary)` 就能用对，不需要自己猜十六进制值。
+     *
+     * tokens 字段是一段 :root { --xxx: #yyy; } CSS，会注入到 <style> 最前面。
+     * guidance 字段是给 LLM 的风格指引（简短关键词），帮助它选择组件风格（圆角大小、阴影有无、按钮样式等）。
+     */
+    data class DesignPreset(
+        val id: String,
+        val name: String,
+        val mood: String,
+        val tokens: String,
+        val guidance: String,
+    )
+
+    val DESIGN_PRESETS = listOf(
+        DesignPreset(
+            id = "apple",
+            name = "Apple",
+            mood = "磨砂玻璃、大留白、精致、消费级",
+            tokens = """
+                --bg:#f5f5f7;--card:#ffffff;--fg:#1d1d1f;--fg2:#6e6e73;
+                --primary:#0071e3;--primary-on:#ffffff;--primary-soft:rgba(0,113,227,.1);
+                --border:rgba(0,0,0,.08);--divider:rgba(0,0,0,.06);
+                --shadow:0 2px 8px rgba(0,0,0,.06);--radius-sm:10px;--radius-md:16px;--radius-lg:22px;
+                --font-display:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",sans-serif;
+                --font-body:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",sans-serif;
+            """.trimIndent().replace("\n", ""),
+            guidance = "大圆角(卡片16-22px)、柔和阴影、backdrop-blur磨砂导航、蓝色药丸主按钮、大标题字距紧、整体留白充足",
+        ),
+        DesignPreset(
+            id = "vercel",
+            name = "Vercel",
+            mood = "极简黑白、高对比、精密、开发者工具",
+            tokens = """
+                --bg:#000000;--card:#111111;--fg:#ffffff;--fg2:#888888;
+                --primary:#ffffff;--primary-on:#000000;--primary-soft:rgba(255,255,255,.08);
+                --border:rgba(255,255,255,.1);--divider:rgba(255,255,255,.06);
+                --shadow:none;--radius-sm:6px;--radius-md:8px;--radius-lg:12px;
+                --font-display:"Geist",Inter,-apple-system,sans-serif;
+                --font-body:"Geist",Inter,-apple-system,sans-serif;
+            """.trimIndent().replace("\n", ""),
+            guidance = "深色底(#000)、小方角(6-8px)、无阴影、白底黑字主按钮、标题字距-0.02em、Geist/Inter字体、标签大写宽字距",
+        ),
+        DesignPreset(
+            id = "linear",
+            name = "Linear",
+            mood = "超极简、精准、紫色强调、开发者工具",
+            tokens = """
+                --bg:#0d0e10;--card:#16171a;--fg:#f7f8f8;--fg2:#8a8f98;
+                --primary:#5e6ad2;--primary-on:#ffffff;--primary-soft:rgba(94,106,210,.15);
+                --border:rgba(255,255,255,.08);--divider:rgba(255,255,255,.05);
+                --shadow:0 1px 3px rgba(0,0,0,.3);--radius-sm:6px;--radius-md:8px;--radius-lg:12px;
+                --font-display:Inter,-apple-system,sans-serif;
+                --font-body:Inter,-apple-system,sans-serif;
+            """.trimIndent().replace("\n", ""),
+            guidance = "近黑底、紫色(#5e6ad2)强调、极细分割线、小圆角(8px)、Inter字体、克制动效、紧凑高效",
+        ),
+        DesignPreset(
+            id = "stripe",
+            name = "Stripe",
+            mood = "优雅紫渐变、轻量300字重、金融/支付",
+            tokens = """
+                --bg:#ffffff;--card:#ffffff;--fg:#0a2540;--fg2:#425466;
+                --primary:#635bff;--primary-on:#ffffff;--primary-soft:rgba(99,91,255,.1);
+                --border:rgba(10,37,64,.1);--divider:rgba(10,37,64,.06);
+                --shadow:0 13px 27px -5px rgba(50,50,93,.1),0 8px 16px -8px rgba(0,0,0,.1);
+                --radius-sm:6px;--radius-md:8px;--radius-lg:12px;
+                --font-display:Inter,-apple-system,sans-serif;
+                --font-body:Inter,-apple-system,sans-serif;
+            """.trimIndent().replace("\n", ""),
+            guidance = "白底深海军蓝(#0a2540)文字、紫色(#635bff)主按钮、轻大字重(300)、柔和大阴影、小圆角(8px)、可加入紫→青渐变装饰带",
+        ),
+        DesignPreset(
+            id = "notion",
+            name = "Notion",
+            mood = "呼吸感、克制、近黑白、生产力",
+            tokens = """
+                --bg:#ffffff;--card:#ffffff;--fg:#37352f;--fg2:#9b9a97;
+                --primary:#2383e2;--primary-on:#ffffff;--primary-soft:rgba(35,131,226,.1);
+                --border:rgba(55,53,47,.09);--divider:rgba(55,53,47,.06);
+                --shadow:none;--radius-sm:4px;--radius-md:6px;--radius-lg:8px;
+                --font-display:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+                --font-body:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+            """.trimIndent().replace("\n", ""),
+            guidance = "白底暖黑(#37352f)文字、蓝色(#2383e2)链接、极小圆角(4-6px)、无阴影、细线分隔、大量留白、hover淡灰背景",
+        ),
+        DesignPreset(
+            id = "claude",
+            name = "Claude",
+            mood = "温暖陶土、编辑感、衬线标题、AI产品",
+            tokens = """
+                --bg:#f5f4ee;--card:#ffffff;--fg:#1f1e1d;--fg2:#6b6a67;
+                --primary:#d97757;--primary-on:#ffffff;--primary-soft:rgba(217,119,87,.12);
+                --border:rgba(31,30,29,.08);--divider:rgba(31,30,29,.05);
+                --shadow:0 1px 3px rgba(0,0,0,.04);--radius-sm:8px;--radius-md:12px;--radius-lg:16px;
+                --font-display:Georgia,"Times New Roman",serif;
+                --font-body:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+            """.trimIndent().replace("\n", ""),
+            guidance = "米底(#f5f4ee)、陶土橙(#d97757)强调、衬线大标题+无衬线正文、中圆角(12px)、极淡边框、阅读留白充足",
+        ),
+        DesignPreset(
+            id = "wechat",
+            name = "微信",
+            mood = "绿色、中性灰白、国民应用、友好",
+            tokens = """
+                --bg:#ededed;--card:#ffffff;--fg:#191919;--fg2:#888888;
+                --primary:#07c160;--primary-on:#ffffff;--primary-soft:rgba(7,193,96,.1);
+                --border:rgba(0,0,0,.06);--divider:rgba(0,0,0,.04);
+                --shadow:none;--radius-sm:6px;--radius-md:8px;--radius-lg:12px;
+                --font-display:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
+                --font-body:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
+            """.trimIndent().replace("\n", ""),
+            guidance = "浅灰底(#ededed)白卡片、微信绿(#07c160)、小圆角(8px)、无阴影、PingFang字体、列表行分割线、绿白主按钮",
+        ),
+        DesignPreset(
+            id = "cute",
+            name = "可爱活泼",
+            mood = "明亮、圆润、多彩、趣味",
+            tokens = """
+                --bg:#fff8f0;--card:#ffffff;--fg:#2d2d2d;--fg2:#888;
+                --primary:#ff6b6b;--primary-on:#ffffff;--primary-soft:rgba(255,107,107,.12);
+                --accent:#ffd93d;--accent2:#6bcf7f;--accent3:#4d96ff;
+                --border:rgba(0,0,0,.05);--divider:rgba(0,0,0,.04);
+                --shadow:0 4px 12px rgba(255,107,107,.15);--radius-sm:12px;--radius-md:20px;--radius-lg:28px;
+                --font-display:"PingFang SC","Hiragino Maru Gothic ProN","Comic Sans MS",rounded,sans-serif;
+                --font-body:-apple-system,BlinkMacSystemFont,"PingFang SC",rounded,sans-serif;
+            """.trimIndent().replace("\n", ""),
+            guidance = "暖米底色(#fff8f0)、大圆角(卡片20px+)、珊瑚粉主色+黄/绿/蓝点缀、柔和彩色阴影、圆润字体、emoji可用作装饰、按钮可爱饱满",
+        ),
+        DesignPreset(
+            id = "warm",
+            name = "温暖极简",
+            mood = "温暖、柔和、舒适、疗愈",
+            tokens = """
+                --bg:#faf8f5;--card:#ffffff;--fg:#3d3929;--fg2:#8a8275;
+                --primary:#b8860b;--primary-on:#ffffff;--primary-soft:rgba(184,134,11,.1);
+                --border:rgba(61,57,41,.08);--divider:rgba(61,57,41,.05);
+                --shadow:0 2px 12px rgba(184,134,11,.06);--radius-sm:8px;--radius-md:12px;--radius-lg:18px;
+                --font-display:Georgia,"Songti SC",serif;
+                --font-body:-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;
+            """.trimIndent().replace("\n", ""),
+            guidance = "暖米(#faf8f5)底色、暗金(#b8860b)强调、衬线标题、中圆角(12-18px)、柔和阴影、低饱和度、适合阅读/记录类应用",
+        ),
+        DesignPreset(
+            id = "dark",
+            name = "深色科技",
+            mood = "深色霓虹、赛博、未来感、暗色模式",
+            tokens = """
+                --bg:#0a0a0f;--card:#151520;--fg:#e8e8f0;--fg2:#8888aa;
+                --primary:#00d4ff;--primary-on:#000;--primary-soft:rgba(0,212,255,.12);
+                --accent:#ff2d92;--border:rgba(255,255,255,.08);--divider:rgba(255,255,255,.04);
+                --shadow:0 4px 20px rgba(0,212,255,.15);--radius-sm:8px;--radius-md:12px;--radius-lg:16px;
+                --font-display:"SF Pro Display",Inter,-apple-system,sans-serif;
+                --font-body:"SF Pro Text",Inter,-apple-system,sans-serif;
+            """.trimIndent().replace("\n", ""),
+            guidance = "深蓝黑底(#0a0a0f)、霓虹青(#00d4ff)主色+粉色点缀、发光阴影、中圆角(12px)、霓虹边框/渐变、赛博/科技感、暗色模式友好",
+        ),
+    )
+
+    private val presetIndex = DESIGN_PRESETS.associateBy { it.id }
 
     private val http = OctoHttp.shared.newBuilder()
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -83,6 +220,12 @@ class GenerateAppTool : BaseTool() {
             true,
         ),
         ToolParameter("app_name", "string", "Short app name/title shown as the preview title.", false),
+        ToolParameter(
+            "style", "string",
+            "Optional design style preset. Available: " + DESIGN_PRESETS.joinToString("/") { it.id } +
+                " (e.g. 'apple', 'vercel', 'cute'). If omitted, the planner picks the best match.",
+            false,
+        ),
         ToolParameter(
             "assets", "string",
             "Optional REAL image assets to bake into the app so it looks polished (not flat CSS). " +
@@ -102,89 +245,125 @@ class GenerateAppTool : BaseTool() {
     )
 
     override fun execute(params: Map<String, Any>): ToolResult {
+        val startTime = System.currentTimeMillis()
         val description = requireString(params, "description").take(MAX_DESC_LEN)
         val appName = optionalString(params, "app_name", "").ifBlank { "我的应用" }
         val assets = optionalString(params, "assets", "").take(MAX_ASSETS_LEN)
+        val forcedStyle = optionalString(params, "style", "").trim().lowercase()
 
         val eff = LlmRouting.effective()
         if (eff.apiKey.isBlank()) return ToolResult.error("未配置模型，无法生成应用")
 
-        // ── 先问清需求(不确定才反问)──
-        // 首次调用先廉价判一下需求清不清晰:模糊就返回 2-3 个关键问题让 Agent 去问用户,别闷头开干;
-        // 清晰(或 Agent 已问过并带 clarified=true)就直接进流水线。见反馈:不确定要先反问。
         val clarified = params["clarified"]?.toString()?.equals("true", ignoreCase = true) == true
         if (!clarified) {
-            val questions = runCatching { assessClarity(eff, description) }.getOrDefault(emptyList())
-            if (questions.isNotEmpty()) {
-                return ToolResult.success(
-                    "这个需求还有关键点不明确。请先把下面的问题问用户、拿到回答后,把答案补进 description、" +
-                        "并带 clarified=true 再调用一次 generate_app(先别急着生成):\n" +
-                        questions.joinToString("\n") { "• $it" },
+            val form = runCatching { assessClarityWithOptions(eff, description) }.getOrDefault(emptyList())
+            if (form.isNotEmpty()) {
+                val formJson = org.json.JSONArray().apply {
+                    form.forEach { (q, opts) ->
+                        put(org.json.JSONObject().put("q", q).put("options", org.json.JSONArray(opts)))
+                    }
+                }.toString()
+                return ToolResult.successWithForm(
+                    "需要您选择几个关键选项后再生成，请在下方选择：",
+                    formJson,
                 )
             }
         }
 
         com.apk.claw.android.agent.AgentProgressBus.set("规划功能中…")
-        val plan = runCatching { callLlm(eff, planPrompt(description)) }
-            .getOrElse { return ToolResult.error("规划阶段失败: ${it.message}") }
+        val plan = runCatching { callLlm(eff, planPrompt(description), temperature = 0.3) }
+            .getOrElse {
+                TurnScorer.recordFailure(System.currentTimeMillis() - startTime, "plan_failed: ${it.message?.take(60)}")
+                return ToolResult.error("规划阶段失败: ${it.message}")
+            }
+
+        val presetId = forcedStyle.ifBlank { detectPresetFromPlan(plan) }
+        val preset = presetIndex[presetId] ?: DESIGN_PRESETS[0]
 
         com.apk.claw.android.agent.AgentProgressBus.set("生成代码中…")
-        val raw = runCatching { callLlm(eff, codePrompt(appName, description, plan, assets)) }
-            .getOrElse { return ToolResult.error("生成代码阶段失败: ${it.message}") }
+        val raw = runCatching { callLlm(eff, codePrompt(appName, description, plan, preset, assets), temperature = 0.2) }
+            .getOrElse {
+                TurnScorer.recordFailure(System.currentTimeMillis() - startTime, "code_failed: ${it.message?.take(60)}")
+                return ToolResult.error("生成代码阶段失败: ${it.message}")
+            }
 
         var html = extractHtml(raw)
-        if (html.isBlank()) return ToolResult.error("生成结果为空或不是有效 HTML")
+        if (html.isBlank()) {
+            TurnScorer.recordFailure(System.currentTimeMillis() - startTime, "empty_html")
+            return ToolResult.error("生成结果为空或不是有效 HTML")
+        }
 
-        // ── 闭环:离屏渲染抓 console error → 有错让 LLM 修复(最多 MAX_REPAIR 轮,只采纳更优版本)──
-        // 这是"写-跑-看-改"的最小闭环:agent 不再 one-shot 碰运气,生成后先自检再存。
+        html = ensureMetaViewport(html)
+
         var repairRounds = 0
-        var errors = runCatching { HtmlLinter.lint(ClawApplication.instance, html).errors }.getOrDefault(emptyList())
+        var errors = runCatching {
+            val staticIssues = qualityCheck(html)
+            val jsErrors = HtmlLinter.lint(ClawApplication.instance, html).errors
+            staticIssues + jsErrors
+        }.getOrDefault(emptyList())
+        errors.forEach { err -> ExperienceLedger.recordError(err, html.take(500)) }
         while (errors.isNotEmpty() && repairRounds < MAX_REPAIR) {
             repairRounds++
             com.apk.claw.android.agent.AgentProgressBus.set("自检修复中(第 $repairRounds 轮)…")
-            val fixedRaw = runCatching { callLlm(eff, repairPrompt(html, errors)) }.getOrNull() ?: break
-            val fixedHtml = extractHtml(fixedRaw).takeIf { it.isNotBlank() } ?: break
-            val fixedErrors = runCatching { HtmlLinter.lint(ClawApplication.instance, fixedHtml).errors }.getOrDefault(emptyList())
-            if (fixedErrors.size > errors.size) break  // 修得更糟就别采纳,保留上一版
+            val fixedRaw = runCatching { callLlm(eff, repairPrompt(html, errors), temperature = 0.1) }.getOrNull() ?: break
+            val fixedHtml = fixedRaw?.let { extractHtml(it) }?.takeIf { it.isNotBlank() }?.let { ensureMetaViewport(it) } ?: break
+            val fixedErrors = runCatching {
+                val staticIssues = qualityCheck(fixedHtml)
+                val jsErrors = HtmlLinter.lint(ClawApplication.instance, fixedHtml).errors
+                staticIssues + jsErrors
+            }.getOrDefault(emptyList())
+            if (fixedErrors.size > errors.size) break
+            val resolvedErrors = errors.filter { em -> em !in fixedErrors }
+            resolvedErrors.forEach { ExperienceLedger.recordRepair(it) }
+            fixedErrors.forEach { err -> ExperienceLedger.recordError(err, fixedHtml.take(500)) }
             html = fixedHtml; errors = fixedErrors
             if (errors.isEmpty()) break
         }
 
-        // ── 视觉验证(VLM):渲染截图 → 判「界面是否实现了用户需求」→ 未达标则按视觉反馈修 1 轮 ──
-        // 补齐 console-error 抓不到的"无报错但功能没实现"。全程 fail-open(GoalVerifier 未配置 VLM
-        // 时判达成,不触发误修)。
         var visualNote = ""
         if (com.apk.claw.android.octopus_mobile.VisionAnalyzer.isConfigured()) {
-            com.apk.claw.android.agent.AgentProgressBus.set("视觉验收中…")
-            val shot = runCatching { HtmlLinter.lint(ClawApplication.instance, html, capture = true).screenshot }.getOrNull()
-            if (shot != null) {
+            var visualRounds = 0
+            while (visualRounds < MAX_VISUAL_REPAIR) {
+                com.apk.claw.android.agent.AgentProgressBus.set("视觉验收中(第${visualRounds + 1}轮)…")
+                val shot = runCatching { HtmlLinter.lint(ClawApplication.instance, html, capture = true).screenshot }.getOrNull()
+                if (shot == null) break
                 val verdict = runCatching {
                     kotlinx.coroutines.runBlocking {
                         com.apk.claw.android.octopus_mobile.GoalVerifier.verify(description, shot)
                     }
                 }.getOrNull()
-                if (verdict != null && !verdict.achieved) {
-                    val fixedRaw = runCatching { callLlm(eff, repairPromptVisual(html, description, verdict.reason)) }.getOrNull()
-                    val fixedHtml = fixedRaw?.let { extractHtml(it) }?.takeIf { it.isNotBlank() }
-                    if (fixedHtml != null) {
-                        val fe = runCatching { HtmlLinter.lint(ClawApplication.instance, fixedHtml).errors }.getOrDefault(emptyList())
-                        if (fe.size <= errors.size) { html = fixedHtml; errors = fe; visualNote = "，并按视觉检查修正了功能实现" }
-                    }
-                }
                 runCatching { shot.recycle() }
+                if (verdict == null || verdict.achieved) break
+                visualRounds++
+                if (visualRounds > MAX_VISUAL_REPAIR) break
+                ExperienceLedger.recordError("VISUAL_VERIFY_FAIL: ${verdict.reason.take(80)}", html.take(500))
+                com.apk.claw.android.agent.AgentProgressBus.set("视觉修复中(第${visualRounds}轮)…")
+                val fixedRaw = runCatching {
+                    callLlm(eff, repairPromptVisual(html, description, verdict.reason), temperature = 0.1)
+                }.getOrNull() ?: break
+                val fixedHtml = fixedRaw.let { extractHtml(it) }.takeIf { it.isNotBlank() } ?: break
+                val fe = runCatching { HtmlLinter.lint(ClawApplication.instance, fixedHtml).errors }.getOrDefault(emptyList())
+                if (fe.size <= errors.size) {
+                    ExperienceLedger.recordRepair("VISUAL_VERIFY_FAIL")
+                    html = fixedHtml; errors = fe; visualNote = "，并按视觉检查修正了功能实现"
+                } else {
+                    break
+                }
             }
         }
 
-        // actions 从最终 html 解析(extractHtml 保留了 </html> 之后的 OCTOPUS_ACTIONS 注释)
         val actions = parseActions(html)
-        // 生成物自声明要调的设备工具(OCTOPUS_TOOLS),只授予白名单内的(安全/低危);其余丢弃。
         val grantedTools = parseTools(html).filter { it in AGENTIC_TOOL_WHITELIST }
 
         com.apk.claw.android.agent.AgentProgressBus.set("保存小程序中…")
         val appId = "gen_" + System.currentTimeMillis()
         val saved = runCatching { persistAsMiniApp(appId, appName, html, actions, grantedTools) }.getOrDefault(false)
+        if (saved) {
+            ReflexArc.remember(description, appName, html, appId)
+        }
         val toolNote = if (grantedTools.isNotEmpty()) "，可调用设备能力：${grantedTools.joinToString("、")}" else ""
         val savedNote = if (saved) "，已存为小程序「$appName」$toolNote，可在「小程序」里随时重新打开" else ""
+        val styleNote = "，风格：${preset.name}"
         val lintNote = when {
             repairRounds == 0 && errors.isEmpty() -> "，自检无控制台错误"
             errors.isEmpty() -> "，自动修复 $repairRounds 轮后无控制台错误"
@@ -192,17 +371,20 @@ class GenerateAppTool : BaseTool() {
         }
 
         val payload = "$PREVIEW_HEIGHT\n$html"
+        val durationMs = System.currentTimeMillis() - startTime
+        val visualPassed = visualNote.isBlank() || "修正" in visualNote
+        if (errors.isEmpty()) {
+            TurnScorer.recordSuccess(durationMs, repairRounds, visualPassed)
+        } else {
+            TurnScorer.recordCompleted(durationMs, repairRounds, errors.size, visualPassed)
+        }
         return ToolResult.successWithHtml(
-            "已生成应用「$appName」（${html.length} 字符）$lintNote$visualNote$savedNote。" +
+            "已生成应用「$appName」（${html.length} 字符）$styleNote$lintNote$visualNote$savedNote。" +
                 "预览已自动推送到控制台，不需要再调用 preview_html 展示同一个应用。",
             payload,
         )
     }
 
-    /**
-     * 落盘成 mini-app 插件目录，交给 [PluginManager] 认领。目录/manifest 只由这个工具写入，
-     * 见 [com.apk.claw.android.plugin.PluginManager] 里对 generated 来源的信任规则注释。
-     */
     private fun persistAsMiniApp(
         appId: String,
         appName: String,
@@ -221,11 +403,7 @@ class GenerateAppTool : BaseTool() {
             type = "mini-app",
             description = "由 Agent 生成",
             page = "index.html",
-            // allow_tools:只授予白名单内、生成物自声明要用的低危工具(见 AGENTIC_TOOL_WHITELIST);
-            //   即便授予,调用仍过来源闸门(OctopusBridge.callTool → withUntrustedSource),高危照样拦。
-            // allow_device/allow_pay 仍留空默认:不给设备自动化/支付。
             allowTools = allowTools,
-            // actions:生成的 app 自声明可被 Agent 调用的动作(list_apps 发现 / app_action 派发)。
             actions = actions,
         )
         File(dir, "manifest.json").writeText(Gson().toJson(manifest))
@@ -233,7 +411,6 @@ class GenerateAppTool : BaseTool() {
         return true
     }
 
-    /** 从 LLM 原始输出解析 `<!--OCTOPUS_ACTIONS:[...]-->` 声明;失败/缺失则空。 */
     private fun parseActions(raw: String): List<com.apk.claw.android.plugin.PluginActionDef> {
         val m = Regex("""<!--\s*OCTOPUS_ACTIONS:\s*(\[.*?])\s*-->""", RegexOption.DOT_MATCHES_ALL).find(raw)
             ?: return emptyList()
@@ -243,7 +420,6 @@ class GenerateAppTool : BaseTool() {
         }.getOrDefault(emptyList())
     }
 
-    /** 解析 `<!--OCTOPUS_TOOLS:["a","b"]-->` 声明的工具名列表;失败/缺失则空。 */
     private fun parseTools(raw: String): List<String> {
         val m = Regex("""<!--\s*OCTOPUS_TOOLS:\s*(\[.*?])\s*-->""", RegexOption.DOT_MATCHES_ALL).find(raw)
             ?: return emptyList()
@@ -253,54 +429,252 @@ class GenerateAppTool : BaseTool() {
         }.getOrDefault(emptyList())
     }
 
-    private fun planPrompt(description: String) = """
-        你是资深产品经理。用户想要一个应用：“$description”
-        用简短条目列出：核心功能点（3-6条）、需要哪些界面元素、需要哪些内存状态数据。
-        直接输出条目列表，不要输出代码，不要输出多余解释。
-    """.trimIndent()
-
-    private fun codePrompt(appName: String, description: String, plan: String, assets: String = ""): String {
-        val base = """
-        你是资深前端工程师。根据以下产品方案，实现一个单文件 HTML 应用（内联 CSS/JS，默认不依赖
-        外部资源；确有需要用图表库等时才用 CDN）。
-
-        应用名称：$appName
-        用户需求：$description
-        产品方案：
-        $plan
-
-        要求：
-        - 输出必须是完整可运行的单个 HTML 文档（从 <!DOCTYPE html> 到 </html>），移动端友好、界面美观
-        - **让应用可被 AI 助手操作**:实现 `window.octopus.onAgentAction = function(actionType, params){ ... }`,
-          为应用的每个关键操作提供一个 action 分支(处理后 return 一句简短字符串表示结果);在关键的用户
-          操作处调用 `octopus.reportAction(actionType, params)` 上报(先判断 `window.octopus` 是否存在)。
-        - **让应用能真正「干活」(可选,按需)**:除了纯前端逻辑,你还可以调用宿主设备能力:
-          `var r = octopus.callTool("工具名", { 参数 });`(同步返回 `{ok:true,data:"..."}` 或 `{ok:false,error:"..."}`;
-          调用前先判断 `window.octopus`)。**只有以下工具可用**(用不到就别声明):
-            · generate_image {prompt, size?}    → 文生图,data 内含图片链接(如做「AI 头像/海报」应用)
-            · generate_video {prompt}           → 文生视频
-            · preview_html {html, height?}      → 把一段 HTML 推到控制台预览
-            · list_apps {}                      → 列出已装小程序(做启动器/仪表盘)
-            · app_action {app_id, action, params?} → 调用另一个小程序的动作(跨应用联动)
-            · read_app_events {app_id?}         → 读其它小程序上报的事件
-            · start_vpn {host, port, username?, password?} → 启动 SOCKS5 代理 VPN(需用户授权系统弹窗+确认)
-            · stop_vpn {}                       → 停止 VPN,恢复正常网络
-            · vpn_status {}                     → 查询 VPN 状态,返回 {running, host, port}
-          用了哪些,就在 </html> **之后**追加一行声明(没用到就省略这行):
-          <!--OCTOPUS_TOOLS:["generate_image","list_apps"]-->
-        - 在 </html> **之后**追加一行 HTML 注释,声明你实现了哪些 action(供宿主发现,数组可为空):
-          <!--OCTOPUS_ACTIONS:[{"name":"动作名","description":"一句话说明","params":[{"name":"参数名","type":"string","description":"说明","required":true}]}]-->
-        - 只输出 HTML 代码本身(可含上面两行注释)，不要用 markdown 代码块包裹，不要输出任何解释文字
-        """.trimIndent()
-        val design = designAssetsBlock(assets)
-        return if (design.isBlank()) base else base + "\n\n" + design
+    /**
+     * 从plan文本中尝试匹配一个设计预设ID。
+     * 策略：在plan里找预设id或name（大小写不敏感），命中就用；都不命中就返回空串→用默认apple。
+     */
+    private fun detectPresetFromPlan(plan: String): String {
+        val lower = plan.lowercase()
+        // 先按id精确匹配（id通常是英文短词）
+        for (p in DESIGN_PRESETS) {
+            if (lower.contains(p.id)) return p.id
+        }
+        // 中文名/特征词模糊匹配
+        val fuzzy = mapOf(
+            "apple" to listOf("apple", "苹果", "磨砂玻璃", "sf pro", "0071e3"),
+            "vercel" to listOf("vercel", "黑白", "geist", "深色极简"),
+            "linear" to listOf("linear", "紫色强调", "5e6ad2", "超极简"),
+            "stripe" to listOf("stripe", "635bff", "紫渐变", "支付"),
+            "notion" to listOf("notion", "呼吸感", "2383e2"),
+            "claude" to listOf("claude", "陶土", "d97757", "衬线标题"),
+            "wechat" to listOf("微信", "wechat", "07c160", "国民"),
+            "cute" to listOf("可爱", "活泼", "圆润", "卡通", "趣味"),
+            "warm" to listOf("温暖", "疗愈", "舒适", "米黄"),
+            "dark" to listOf("深色", "暗色", "赛博", "霓虹", "科技感"),
+        )
+        for ((id, keywords) in fuzzy) {
+            if (keywords.any { lower.contains(it) }) return id
+        }
+        return "apple"
     }
 
-    /**
-     * 「产品设计工作流」传来真实素材时,生成一段"设计系统 + 必须用上这些图"的提示块拼到 codePrompt 末尾;
-     * 没传素材(assets 空)则返回空串 —— 普通 generate_app 行为完全不变。
-     * assets 形如 "hero=URL; icon1=URL"(分号或换行分隔),见 SearchImageTool / 设计 skill。
-     */
+    private fun planPrompt(description: String) = """
+你是资深产品经理+UI设计师。用户想要一个应用："$description"
+
+请输出一个结构化的产品&设计方案，严格按以下 Markdown 分段输出，不要输出代码：
+
+## 核心功能（3-6条，每条不超过20字）
+- ...
+
+## 界面结构
+列出需要的页面/区块（如：首页列表、详情页、设置弹层），每个区块的核心元素。
+
+## 设计风格（从下面选一个最适合的，写它的id即可，并简要说明为什么选它）
+可用风格：
+${DESIGN_PRESETS.joinToString("\n") { "- ${it.id}（${it.name}）：${it.mood}" }}
+选好后给出：
+- **风格id**：xxx
+- **配色说明**：基于该风格，是否需要调整主色/辅助色（不需要就写"使用风格默认"）
+- **调性关键词**：2-3个词
+
+## 状态数据
+列出需要持久化的key（用octopus.storage），不需要写代码。
+""".trimIndent()
+
+    /** 生成增强的CSS基线：语义化classless样式 + 移动端组件类 + 预设变量注入 */
+    private fun buildCssBaseline(preset: DesignPreset): String {
+        return """
+<style>
+/* ═══ 1. 预设设计 Token（来自 ${preset.name} 风格） ═══ */
+:root{
+${preset.tokens}
+--sat:env(safe-area-inset-top,0px);--sar:env(safe-area-inset-right,0px);
+--sab:env(safe-area-inset-bottom,0px);--sal:env(safe-area-inset-left,0px);
+--gap-xs:4px;--gap-sm:8px;--gap-md:16px;--gap-lg:24px;--gap-xl:32px;
+--transition:200ms cubic-bezier(.4,0,.2,1);
+}
+
+/* ═══ 2. Reset & 全局基础 ═══ */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%;-webkit-tap-highlight-color:transparent;scroll-behavior:smooth}
+body{font-family:var(--font-body,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif);font-size:15px;line-height:1.6;color:var(--fg);background:var(--bg);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;overflow-x:hidden;padding:var(--sat,0px) var(--sar,0px) var(--sab,0px) var(--sal,0px);min-height:100dvh}
+button{font:inherit;border:none;background:none;cursor:pointer;color:inherit;-webkit-user-select:none;user-select:none;touch-action:manipulation}
+button:active{opacity:.7;transform:scale(.97);transition:opacity var(--transition),transform var(--transition)}
+input,textarea,select{font:inherit;color:inherit;border:none;outline:none;background:none;-webkit-appearance:none;appearance:none}
+a{color:var(--primary);text-decoration:none}
+a:active{opacity:.7}
+img{max-width:100%;height:auto;display:block}
+ul,ol{list-style:none}
+hr{border:none;border-top:1px solid var(--divider);margin:var(--gap-md) 0}
+
+/* ═══ 3. 语义化排版（classless - LLM写原生标签就有好样式） ═══ */
+h1,.h1{font-family:var(--font-display);font-size:32px;font-weight:700;letter-spacing:-.02em;line-height:1.2;margin:0 0 var(--gap-sm)}
+h2,.h2{font-family:var(--font-display);font-size:24px;font-weight:700;letter-spacing:-.01em;line-height:1.25;margin:var(--gap-lg) 0 var(--gap-sm)}
+h3,.h3{font-family:var(--font-display);font-size:19px;font-weight:600;line-height:1.3;margin:var(--gap-md) 0 var(--gap-xs)}
+h4,.h4{font-size:16px;font-weight:600;line-height:1.4;margin:var(--gap-sm) 0 var(--gap-xs)}
+p{margin:0 0 var(--gap-sm);line-height:1.6}
+small,.small{font-size:13px;color:var(--fg2)}
+strong{font-weight:600}
+
+/* ═══ 4. 移动端布局组件 ═══ */
+.app{min-height:100dvh;display:flex;flex-direction:column}
+.container{width:100%;max-width:640px;margin:0 auto;padding:0 var(--gap-md)}
+.content{flex:1;padding:var(--gap-md);padding-bottom:calc(var(--gap-xl) + var(--sab,0px))}
+.section{margin-bottom:var(--gap-lg)}
+.section-title{font-size:12px;font-weight:600;color:var(--fg2);text-transform:uppercase;letter-spacing:.08em;margin:var(--gap-lg) 0 var(--gap-sm);padding:0 var(--gap-md)}
+
+/* ═══ 5. 卡片 ═══ */
+.card{background:var(--card);border-radius:var(--radius-md);padding:var(--gap-md);box-shadow:var(--shadow)}
+.card+.card{margin-top:var(--gap-sm)}
+.card-title{font-size:17px;font-weight:600;margin-bottom:var(--gap-xs)}
+.card-desc{font-size:14px;color:var(--fg2)}
+
+/* ═══ 6. 按钮系统 ═══ */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:var(--gap-sm);padding:12px 20px;border-radius:var(--radius-sm);font-weight:600;font-size:15px;min-height:44px;transition:all var(--transition);white-space:nowrap}
+.btn:active{opacity:.7;transform:scale(.97)}
+.btn-primary{background:var(--primary);color:var(--primary-on)}
+.btn-secondary{background:var(--card);color:var(--fg);border:1px solid var(--border)}
+.btn-ghost{background:transparent;color:var(--primary);padding:8px 12px;min-height:36px}
+.btn-block{display:flex;width:100%}
+.btn-sm{padding:8px 14px;font-size:14px;min-height:36px;border-radius:var(--radius-sm)}
+.btn-lg{padding:14px 24px;font-size:16px;min-height:50px}
+.btn-group{display:flex;gap:var(--gap-sm)}
+.btn-group .btn{flex:1}
+
+/* ═══ 7. 表单 ═══ */
+.field{margin-bottom:var(--gap-md)}
+.label{display:block;font-size:13px;font-weight:600;color:var(--fg2);margin-bottom:var(--gap-xs)}
+.input,.textarea,.select{width:100%;padding:12px 16px;background:var(--card);border-radius:var(--radius-sm);border:1px solid var(--border);font-size:16px;min-height:44px;transition:border-color var(--transition),box-shadow var(--transition);color:var(--fg)}
+.input:focus,.textarea:focus,.select:focus{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-soft)}
+.textarea{min-height:96px;resize:vertical;line-height:1.5}
+::placeholder{color:var(--fg2);opacity:.6}
+
+/* ═══ 8. 列表 ═══ */
+.list{background:var(--card);border-radius:var(--radius-md);overflow:hidden;box-shadow:var(--shadow)}
+.list-item{display:flex;align-items:center;gap:var(--gap-md);padding:var(--gap-md);min-height:52px}
+.list-item+.list-item{border-top:1px solid var(--divider)}
+.list-item:active{background:var(--primary-soft)}
+.list-item .item-main{flex:1;min-width:0}
+.list-item .item-title{font-size:16px;font-weight:500}
+.list-item .item-desc{font-size:13px;color:var(--fg2);margin-top:2px}
+.list-item .item-arrow{color:var(--fg2);flex-shrink:0}
+
+/* ═══ 9. 辅助组件 ═══ */
+.row{display:flex;align-items:center;gap:var(--gap-md)}
+.stack{display:flex;flex-direction:column;gap:var(--gap-sm)}
+.hstack{display:flex;align-items:center;gap:var(--gap-sm)}
+.spacer{flex:1}
+.badge{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600;background:var(--primary-soft);color:var(--primary)}
+.tag{display:inline-flex;align-items:center;padding:4px 10px;border-radius:var(--radius-sm);font-size:12px;background:var(--primary-soft);color:var(--primary)}
+.avatar{width:40px;height:40px;border-radius:50%;background:var(--primary-soft);display:flex;align-items:center;justify-content:center;font-weight:600;color:var(--primary);flex-shrink:0}
+.divider{height:1px;background:var(--divider);margin:var(--gap-sm) 0}
+.empty{text-align:center;padding:var(--gap-xl) var(--gap-md);color:var(--fg2)}
+.empty .empty-icon{font-size:48px;margin-bottom:var(--gap-sm);opacity:.5}
+.text-center{text-align:center}
+.text-muted{color:var(--fg2)}
+.text-primary{color:var(--primary)}
+.mt-sm{margin-top:var(--gap-sm)}.mt-md{margin-top:var(--gap-md)}.mt-lg{margin-top:var(--gap-lg)}
+.mb-sm{margin-bottom:var(--gap-sm)}.mb-md{margin-bottom:var(--gap-md)}.mb-lg{margin-bottom:var(--gap-lg)}
+.p-md{padding:var(--gap-md)}
+.flex-1{flex:1}
+
+/* ═══ 10. FAB & Tab Bar & Header（移动导航） ═══ */
+.fab{position:fixed;right:calc(var(--gap-md) + var(--sar,0px));bottom:calc(var(--gap-md) + var(--sab,0px) + 56px);width:56px;height:56px;border-radius:50%;background:var(--primary);color:var(--primary-on);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(0,0,0,.2);z-index:100}
+.fab:active{transform:scale(.92)}
+.tab-bar{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--card);border-top:1px solid var(--border);padding-bottom:var(--sab,0px);z-index:100}
+.tab-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:8px 0;min-height:50px;color:var(--fg2);font-size:10px;font-weight:500;transition:color var(--transition)}
+.tab-item.active{color:var(--primary)}
+.tab-item:active{opacity:.7}
+.header{position:sticky;top:0;z-index:50;background:var(--bg);padding:var(--gap-sm) var(--gap-md);display:flex;align-items:center;gap:var(--gap-md);min-height:48px}
+.header-blur{backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);background:color-mix(in srgb,var(--bg) 85%,transparent)}
+.header .title{font-size:18px;font-weight:600;margin:0}
+.header .back-btn{width:36px;height:36px;display:flex;align-items:center;justify-content:center;border-radius:50%;margin-left:-8px}
+.header .back-btn:active{background:var(--primary-soft)}
+.toast-container{position:fixed;top:calc(var(--sat,0px) + 60px);left:50%;transform:translateX(-50%);z-index:1000;pointer-events:none}
+.toast{background:var(--fg);color:var(--bg);padding:10px 20px;border-radius:var(--radius-sm);font-size:14px;box-shadow:0 4px 12px rgba(0,0,0,.15);animation:toastIn .2s ease}
+@keyframes toastIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
+
+/* ═══ 11. 骨架屏/加载态 ═══ */
+.skeleton{background:linear-gradient(90deg,var(--card) 25%,color-mix(in srgb,var(--fg2) 15%,var(--card)) 50%,var(--card) 75%);background-size:200% 100%;animation:skeleton 1.5s infinite;border-radius:var(--radius-sm)}
+@keyframes skeleton{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+/* ═══ 12. 暗色模式自适应（若系统暗色且预设是浅色，简单反转） ═══ */
+/* 你可以在后面追加自定义样式，不要删除或修改上面的基线 */
+</style>
+""".trimIndent()
+    }
+
+    private fun codePrompt(
+        appName: String,
+        description: String,
+        plan: String,
+        preset: DesignPreset,
+        assets: String = "",
+    ): String {
+        val base = """
+你是资深移动端前端工程师。严格按照下面的产品方案和设计系统，实现一个单文件HTML应用（所有CSS/JS内联，不用外部框架，确有需要才用CDN图表库）。
+
+应用名称：$appName
+用户需求：$description
+产品&设计方案：
+$plan
+
+【已选定的设计系统】${preset.name}（${preset.mood}）
+风格要点：${preset.guidance}
+CSS 变量已经在基线里定义好，你直接用 var(--primary)、var(--card)、var(--fg) 等即可，不要自己重新定义颜色值。
+
+【强制技术要求】
+1. 必须以 <!DOCTYPE html> 开头，<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"> 必须有。
+2. 必须把下面的【内置CSS基线】完整复制进 <style> 标签（它已经包含了${preset.name}风格的颜色/字体/圆角变量和所有组件样式），然后你可以在其基础上追加少量自定义样式，但不要删或覆盖基线中的变量定义。
+3. 语义化HTML优先：标题用 h1/h2/h3，段落用 p，列表用 ul/li，按钮用 <button>（不要用div+onclick），输入用 <input>/<textarea>/<select>。基线已经给这些原生标签配好了样式，不用你写。
+4. 布局用flexbox/grid，触摸目标≥44px，正文≥14px，间距用var(--gap-sm/md/lg)。
+5. 使用CSS变量 --sat/--sab/--sal/--sar 处理安全区，底部固定栏已有padding-bottom处理，.content区域也已处理。
+6. JS必须防御式编程：DOM元素先判空再用、异步操作try/catch、IIFE包起来不污染全局。
+7. 不要用alert/confirm/prompt；交互反馈用octopus.toast()。
+8. 不要用emoji当功能性图标/按钮（可以装饰文本里用）；功能性箭头用SVG inline。
+9. 数据持久化用octopus.storage（比localStorage可靠），调用前判断window.octopus是否存在（降级localStorage）。
+10. 首屏必须立刻有内容（骨架/真实数据都行，不能白屏等JS执行完）。
+11. 所有按钮要有active态反馈（基线.btn已有，你加了自定义按钮也要加）。
+12. 底部如果有Tab Bar，页面主体内容加 class="content" 类（已自动留底部间距）。
+
+【内置CSS基线 — 必须完整复制进<head>的<style>标签】
+${buildCssBaseline(preset)}
+""".trimIndent()
+
+        val api = """
+
+【宿主桥接API】（window.octopus，调用前先 `if(window.octopus)` 判断；不存在时优雅降级）：
+· 交互反馈：octopus.toast(msg) / octopus.vibrate([ms]) / octopus.copy(text) / octopus.paste()→str
+· 导航：octopus.close() / octopus.back()→bool / octopus.setTitle(t) / octopus.setStatusBar(color,light) / octopus.setNavBar(color,light) / octopus.openUrl(url) / octopus.fetch(url,opts)
+· 持久化：octopus.storage.get(k,def) / set(k,v) / remove(k) / clear() / keys()  （v支持JSON对象）
+· 分享/打开：octopus.share({title,text,url}) / octopus.openApp(appId) / octopus.installShortcut()
+· 系统工具：var r=octopus.callTool(name,params) 同步返回{ok,data/error}；或 await octopus.callToolAsync(name,params)
+· 被AI操作：window.octopus.onAgentAction=function(actionType,params){...} 返回结果字符串
+· 上报事件：octopus.reportAction(actionType, params)
+· 可用的callTool工具名（用不到不要声明）：
+  generate_image{prompt,size?}/generate_video{prompt}/preview_html{html,height?}
+  list_apps{}/app_action{app_id,action,params?}/read_app_events{app_id?}
+  start_vpn{host,port,username?,password?}/stop_vpn{}/vpn_status{}
+· 标准Web API（已polyfill）：navigator.vibrate()/navigator.share()/navigator.clipboard.writeText() 可直接用。
+
+""".trimIndent()
+
+        val declarations = """
+
+【输出格式】
+- 输出完整HTML，从<!DOCTYPE html>到</html>，不要markdown代码块包裹，不要解释文字。
+- HTML结构参考：<body><div class="app"><header class="header">...</header><main class="content">...</main><nav class="tab-bar">...</nav></div></body>
+- 用了哪些callTool工具，在</html>后追加：<!--OCTOPUS_TOOLS:["a","b"]-->
+- 在</html>后追加onAgentAction声明（即使空数组也要写）：
+  <!--OCTOPUS_ACTIONS:[{"name":"actionName","description":"一句话","params":[{"name":"p","type":"string","description":"desc","required":false}]}]-->
+""".trimIndent()
+
+        val design = designAssetsBlock(assets)
+        val mitigations = com.apk.claw.android.octopus_mobile.ExperienceLedger.getMitigationsSection()
+        val mitigationsBlock = if (mitigations.isBlank()) "" else "\n$mitigations\n"
+        return base + api + mitigationsBlock + (if (design.isBlank()) "" else "\n$design") + declarations
+    }
+
     private fun designAssetsBlock(assets: String): String {
         val lines = assets.split(';', '\n')
             .mapNotNull { it.trim().takeIf(String::isNotEmpty) }
@@ -314,36 +688,35 @@ class GenerateAppTool : BaseTool() {
         return """
 
         设计要求(重要，直接决定成品质感)：
-        - 按一套明确的设计系统落地:统一主色 + 中性色阶、清晰的字体层级、8pt 间距节奏、圆角/阴影一致;
-          有留白、有层次,不要白底黑字的"半成品感"。
-        - 下列是已备好的**真实素材**,必须把它们用进界面(<img src="URL"> 或 CSS background),
-          不要再用纯色方块 / emoji / 占位图替代;首屏大图用 hero,图标位用图标,背景用背景:
+        - 严格使用已选定设计系统的 CSS 变量，不要自己发明颜色。
+        - 下列是已备好的**真实素材**，必须把它们用进界面(<img src="URL"> 或 CSS background)，
+          不要用纯色方块 / emoji / 占位图替代；首屏大图用 hero，图标位用图标，背景用背景：
 $lines
-        - 图片统一加 loading="lazy" 和合理的 object-fit;首屏图要撑满视觉焦点。
+        - 图片统一加 loading="lazy" 和合理的 object-fit（cover/contain）；首屏图撑满视觉焦点。
         """.trimIndent()
     }
 
-    /** 视觉修复 prompt:渲染截图经 VLM 判定"没实现需求"时,把用户需求 + 判定原因喂回让 LLM 修功能。 */
     private fun repairPromptVisual(html: String, description: String, reason: String) = """
-        你是资深前端工程师。下面这个单文件 HTML 应用渲染出来后,经视觉检查发现没有完整实现用户需求。
+        你是资深前端工程师。下面这个单文件 HTML 应用渲染出来后，经视觉检查发现没有完整实现用户需求。
         用户想要：$description
         视觉检查发现的问题：$reason
-        请修改代码,让界面真正实现用户需求(布局 / 交互 / 内容)。
-        - 只输出完整 HTML(从 <!DOCTYPE html> 到 </html>),保留原有 <!--OCTOPUS_ACTIONS:...--> 与 <!--OCTOPUS_TOOLS:...--> 注释(若有)。
-        - 不要用 markdown 代码块包裹,不要输出任何解释文字。
+        请修改代码，让界面真正实现用户需求(布局 / 交互 / 内容)。
+        - 保留 <style> 里已有的 CSS 变量和组件基线，不要删除或重置。
+        - 只输出完整 HTML(从 <!DOCTYPE html> 到 </html>)，保留原有 <!--OCTOPUS_ACTIONS:...--> 与 <!--OCTOPUS_TOOLS:...--> 注释(若有)。
+        - 不要用 markdown 代码块包裹，不要输出任何解释文字。
 
         当前代码：
         $html
     """.trimIndent()
 
-    /** 修复 prompt:把当前 HTML + 无头渲染抓到的 console error 一起喂回,让 LLM 只改错不改功能。 */
     private fun repairPrompt(html: String, errors: List<String>) = """
-        你是资深前端工程师。下面这个单文件 HTML 应用在无头浏览器渲染时报了下列 JS 控制台错误,请修复。
+        你是资深前端工程师。下面这个单文件 HTML 应用在无头浏览器渲染时报了下列 JS 控制台错误，请修复。
         要求：
-        - 只修这些错误,保持原有功能与界面不变。
-        - 只输出修复后的完整 HTML(从 <!DOCTYPE html> 到 </html>),并保留原有的
+        - 只修这些错误，保持原有功能、界面、设计系统不变。
+        - 保留 <style> 里已有的 CSS 变量和组件基线，不要删除。
+        - 只输出修复后的完整 HTML(从 <!DOCTYPE html> 到 </html>)，并保留原有的
           <!--OCTOPUS_ACTIONS:...--> 与 <!--OCTOPUS_TOOLS:...--> 注释(若有)。
-        - 不要用 markdown 代码块包裹,不要输出任何解释文字。
+        - 不要用 markdown 代码块包裹，不要输出任何解释文字。
 
         控制台错误：
         ${errors.joinToString("\n") { "- $it" }}
@@ -352,65 +725,179 @@ $lines
         $html
     """.trimIndent()
 
-    private fun callLlm(eff: EffectiveLlm, userPrompt: String): String {
+    /**
+     * LLM调用：支持按阶段设置温度、指数退避重试（瞬态错误）。
+     *
+     * 温度策略（参考 octopus-os ReactProfile）：
+     * - PLAN    = 0.3  规划/创意阶段需要一定发散
+     * - CODE    = 0.2  代码生成保持稳定
+     * - CLARIFY = 0.1  选择题分类必须高度确定
+     * - REPAIR  = 0.1  修复阶段严格遵循约束
+     */
+    private fun callLlm(
+        eff: EffectiveLlm,
+        userPrompt: String,
+        temperature: Double = 0.2,
+        maxRetries: Int = 2,
+        baseRetryMs: Long = 800,
+    ): String {
         val url = eff.baseUrl.trimEnd('/') + "/chat/completions"
-        val body = JSONObject().apply {
-            put("model", eff.model)
-            put("temperature", 0.3)
-            put(
-                "messages",
-                JSONArray().put(JSONObject().put("role", "user").put("content", userPrompt)),
-            )
+        var lastError: Exception? = null
+
+        for (attempt in 0..maxRetries) {
+            try {
+                val body = JSONObject().apply {
+                    put("model", eff.model)
+                    put("temperature", temperature)
+                    put("messages", JSONArray().put(JSONObject().put("role", "user").put("content", userPrompt)))
+                }
+                val request = Request.Builder()
+                    .url(url)
+                    .addHeader("Authorization", "Bearer ${eff.apiKey}")
+                    .addHeader("Content-Type", "application/json")
+                    .post(body.toString().toRequestBody("application/json".toMediaType()))
+                    .build()
+                http.newCall(request).execute().use { resp ->
+                    val respBody = resp.body?.string().orEmpty()
+                    if (!resp.isSuccessful) {
+                        val isTransient = resp.code == 429 || resp.code >= 500
+                        if (isTransient && attempt < maxRetries) {
+                            val delayMs = computeBackoff(attempt, baseRetryMs)
+                            Log.w("GenerateApp", "LLM HTTP ${resp.code} (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${delayMs}ms")
+                            Thread.sleep(delayMs)
+                            return@use
+                        }
+                        error("HTTP ${resp.code}: ${respBody.take(200)}")
+                    }
+                    val message = JSONObject(respBody)
+                        .getJSONArray("choices").getJSONObject(0).getJSONObject("message")
+                    return message.optString("content", "").takeIf { it.isNotBlank() }
+                        ?: message.optString("reasoning_content", "")
+                }
+            } catch (e: Exception) {
+                lastError = e
+                if (attempt < maxRetries && isTransientException(e)) {
+                    val delayMs = computeBackoff(attempt, baseRetryMs)
+                    Log.w("GenerateApp", "LLM call failed (attempt ${attempt + 1}/${maxRetries + 1}): ${e.message}, retrying in ${delayMs}ms")
+                    Thread.sleep(delayMs)
+                } else {
+                    throw e
+                }
+            }
         }
-        val request = Request.Builder()
-            .url(url)
-            .addHeader("Authorization", "Bearer ${eff.apiKey}")
-            .addHeader("Content-Type", "application/json")
-            .post(body.toString().toRequestBody("application/json".toMediaType()))
-            .build()
-        http.newCall(request).execute().use { resp ->
-            val respBody = resp.body?.string().orEmpty()
-            if (!resp.isSuccessful) error("HTTP ${resp.code}: ${respBody.take(200)}")
-            val message = JSONObject(respBody)
-                .getJSONArray("choices").getJSONObject(0).getJSONObject("message")
-            return message.optString("content", "").takeIf { it.isNotBlank() }
-                ?: message.optString("reasoning_content", "")
-        }
+        throw lastError ?: RuntimeException("LLM call failed after $maxRetries retries")
+    }
+
+    private fun isTransientException(e: Exception): Boolean {
+        val msg = e.message ?: return false
+        return msg.contains("HTTP 429") || msg.contains("HTTP 5") ||
+                msg.contains("timeout", ignoreCase = true) ||
+                msg.contains("connection", ignoreCase = true) ||
+                msg.contains("reset", ignoreCase = true)
+    }
+
+    private fun computeBackoff(attempt: Int, baseDelayMs: Long): Long {
+        val raw = (baseDelayMs * 2.0.pow(attempt)).toLong().coerceAtMost(15_000L)
+        val jitter = 0.75 + Random.nextDouble() * 0.25
+        return (raw * jitter).toLong().coerceAtLeast(0)
+    }
+
+    private fun assessClarityWithOptions(eff: EffectiveLlm, description: String): List<Pair<String, List<String>>> {
+        val raw = callLlm(eff, clarifyPromptWithOptions(description), temperature = 0.1).trim()
+        if (raw.startsWith("CLEAR", ignoreCase = true)) return emptyList()
+        return parseClarifyForm(raw)
     }
 
     /**
-     * 廉价判断需求是否清晰:清晰 → 空列表(直接生成);有影响成品的关键模糊点 → 2-3 个澄清问题。
-     * fail-open:调用出错/解析不出问题都当「清晰」,不阻断生成,只在真模糊时才反问。
+     * 解析LLM返回的问卷JSON。容错性强：
+     * - 优先尝试直接按JSON数组解析
+     * - 失败则尝试从文本中提取JSON数组（LLM可能加了解释文字）
+     * - 再失败则降级为纯问题模式（从问题行生成默认选项）
      */
-    private fun assessClarity(eff: EffectiveLlm, description: String): List<String> {
-        val raw = callLlm(eff, clarifyPrompt(description)).trim()
-        if (raw.startsWith("CLEAR", ignoreCase = true)) return emptyList()
-        return raw.lineSequence()
-            .map { it.trim().trimStart('-', '*', '·', '•', ' ', '1', '2', '3', '.', '、', ')').trim() }
-            .filter { it.endsWith("?") || it.endsWith("？") }
-            .map { it.take(CLARIFY_Q_MAX_LEN) }
-            .take(MAX_CLARIFY_Q)
-            .toList()
+    private fun parseClarifyForm(raw: String): List<Pair<String, List<String>>> {
+        val jsonMatch = Regex("""\[\s*\{[\s\S]*\}\s*\]""").find(raw)?.value
+        val jsonStr = jsonMatch ?: raw
+        return runCatching {
+            val arr = org.json.JSONArray(jsonStr)
+            val result = mutableListOf<Pair<String, List<String>>>()
+            for (i in 0 until arr.length()) {
+                val obj = arr.getJSONObject(i)
+                val q = obj.optString("q", "").trim()
+                val optsArr = obj.optJSONArray("options")
+                val opts = mutableListOf<String>()
+                if (optsArr != null) {
+                    for (j in 0 until optsArr.length()) {
+                        opts.add(optsArr.getString(j).trim())
+                    }
+                }
+                if (q.isNotBlank() && opts.size >= 2) {
+                    result.add(q to opts.take(4))
+                }
+            }
+            result.take(MAX_CLARIFY_Q)
+        }.getOrElse {
+            // JSON解析失败，降级：从文本中提取问题行，用通用选项
+            raw.lineSequence()
+                .map { it.trim().trimStart('-', '*', '·', '•', ' ', '1', '2', '3', '.', '、', ')').trim() }
+                .filter { it.endsWith("?") || it.endsWith("？") }
+                .take(MAX_CLARIFY_Q)
+                .map { q -> q to listOf("简洁轻量", "功能丰富", "专业高效", "好看有趣") }
+                .toList()
+        }
     }
 
-    private fun clarifyPrompt(description: String) = """
-        用户想用一句话生成一个单文件 H5 小程序。判断这个需求是否清晰到能做出他真正想要的东西。
-        需求：$description
+    private fun clarifyPromptWithOptions(description: String) = """
+用户想用一句话生成一个单文件 H5 小程序：「$description」
 
-        规则:
-        - 若已足够清晰、可以直接开做,第一行只输出:CLEAR
-        - 若有会影响成品的关键模糊点(用途场景 / 核心功能 / 风格外观 / 数据从哪来 等),
-          输出 2-3 个最关键的澄清问题,每行一个、以问号结尾,不要任何解释或编号。
-        宁可少问也不要问无关紧要的细节。
-    """.trimIndent()
+判断这个需求是否清晰到能做出他真正想要的东西。
 
-    /** LLM 偶尔仍会用 ```html 代码块包一层，或前后加几句寒暄——这里剥掉，只留 HTML 本体。 */
+规则：
+- 若已足够清晰、可以直接开做，第一行只输出：CLEAR
+- 若有会影响成品的关键模糊点，输出 2-3 个最关键的澄清问题，每个问题提供 3-4 个选项供用户点选。
+
+输出严格使用 JSON 数组格式（不要 markdown 代码块包裹，不要输出其他文字）：
+[{"q":"问题1？","options":["选项A","选项B","选项C"]},{"q":"问题2？","options":["选项A","选项B","选项C","选项D"]}]
+
+选项设计要求：
+- 每个选项是一个具体、明确的方向（不要"是/否"，要具体描述）
+- 选项之间应该互斥且覆盖主流可能性
+- 选项文字简洁（每个不超过8个字）
+- 第一个选项通常是最常见/最推荐的方向
+- 最后一个选项可以是"自定义/其他"，让用户知道可以在输入框补充
+
+只问真正影响成品的关键问题（用途场景/核心功能倾向/风格外观/数据来源等），宁可少问不要问无关细节。
+问题文字要简短（不超过20字）。
+""".trimIndent()
+
     private fun extractHtml(raw: String): String {
         val fenced = Regex("```(?:html)?\\s*([\\s\\S]*?)```").find(raw)?.groupValues?.get(1)
         val candidate = (fenced ?: raw).trim()
         val start = candidate.indexOf("<!DOCTYPE", ignoreCase = true).takeIf { it >= 0 }
             ?: candidate.indexOf("<html", ignoreCase = true)
         return if (start >= 0) candidate.substring(start) else candidate
+    }
+
+    private fun ensureMetaViewport(html: String): String {
+        if (html.contains("viewport", ignoreCase = true)) return html
+        val headEnd = html.indexOf("</head>", ignoreCase = true)
+        if (headEnd < 0) return html
+        val meta = "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1,viewport-fit=cover\">"
+        return html.substring(0, headEnd) + meta + html.substring(headEnd)
+    }
+
+    private fun qualityCheck(html: String): List<String> {
+        val issues = mutableListOf<String>()
+        if (!html.trimStart().startsWith("<!DOCTYPE", ignoreCase = true))
+            issues.add("missing <!DOCTYPE html> declaration")
+        if (Regex("""\balert\s*\(""").containsMatchIn(html))
+            issues.add("uses alert() — replace with octopus.toast()")
+        if (Regex("""\bconfirm\s*\(""").containsMatchIn(html))
+            issues.add("uses confirm() — replace with custom dialog")
+        if (Regex("""\bprompt\s*\(""").containsMatchIn(html))
+            issues.add("uses prompt() — replace with custom input UI")
+        if (!html.contains("<meta name=\"viewport\"", ignoreCase = true) && !html.contains("viewport", ignoreCase = true))
+            issues.add("missing viewport meta tag")
+        return issues
     }
 
     override fun getDescriptionEN() = """
@@ -421,6 +908,7 @@ $lines
         "小程序" (mini-apps) list — no separate publish step needed. The preview is already shown
         after this call returns — do NOT call preview_html afterward for the same app, that would
         just render a redundant second (and worse, since it bypasses the planning stage) version.
+        Supports design style presets (apple/vercel/linear/stripe/notion/claude/wechat/cute/warm/dark).
         Still no cloud backend/multi-device sync — client-only apps only (games, calculators,
         tools, visualizations), local storage at most. Prefer this over preview_html when the user
         asks you to "build/generate an app" rather than just preview a snippet of code.
@@ -431,12 +919,12 @@ $lines
 
     override fun getDescriptionCN() = """
         根据自然语言描述生成一个完整可运行的单文件 HTML 应用。
-        在这一次工具调用内部跑一个两段流水线（先规划功能，再写代码），结果直接在网页控制台
-        预览渲染（与 preview_html 同一通道），同时自动存成一个小程序，用户之后可以在
-        「小程序」列表里随时重新打开，不需要额外发布步骤。工具返回时预览已经展示完毕——
-        **不要**在这之后再调用 preview_html 展示同一个应用，那只会生成一个多余且更差的版本
-        （跳过了规划步骤）。仍然没有云端后端/多设备同步——只适合纯前端应用（小游戏、计算器、
-        工具、可视化），最多能用本地存储。当用户要求"做一个应用/生成一个应用"而不只是预览
-        一段代码时，优先用这个而不是 preview_html。
+        在这一次工具调用内部跑一个两段流水线（先规划功能+选设计风格，再写代码），内置了
+        apple/vercel/linear/stripe/notion/claude/微信/可爱/温暖/深色科技 共10种设计风格预设，
+        生成时自动匹配最合适的，你也可以通过 style 参数显式指定（如 style=vercel）。
+        结果直接在网页控制台预览渲染，同时自动存成小程序，用户之后可在「小程序」列表里随时
+        重新打开。工具返回时预览已展示完毕——**不要**在这之后再调用 preview_html 展示同一个应用。
+        仍然没有云端后端——只适合纯前端应用（小游戏、计算器、工具、可视化），最多用本地存储。
+        当用户要求"做一个应用/生成一个应用"而不只是预览一段代码时，优先用这个而不是 preview_html。
     """.trimIndent()
 }

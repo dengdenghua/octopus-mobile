@@ -3,100 +3,238 @@ package com.apk.claw.android.plugin
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
+import android.net.Uri
 import android.util.Log
+import android.view.View
+import android.webkit.ConsoleMessage
+import android.webkit.PermissionRequest
+import android.webkit.ValueCallback
+import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.ProgressBar
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.lang.ref.WeakReference
 
-/**
- * mini-app WebView 沙箱的**单一实现** —— [MiniAppActivity](全屏)与桌面模式的浮动窗口共用,
- * 避免各写一套导致安全设置发散。安全收口(与原 MiniAppActivity 一致):
- *  - 锁定本地 file:// 源,禁止导航去远端(`shouldOverrideUrlLoading`);
- *  - 拦截非 file:// 且非图片的子资源(`shouldInterceptRequest`)—— 远程图片素材(<img>/CSS 背景)放行
- *    (生成的 mini-app 用真实图片 URL),其余对外 I/O 只能走受网关的 `octopus.*` 桥;
- *  - 禁 file 跨源越权读;页面 URL 经 canonicalPath 防 path traversal。
- */
 object MiniAppHost {
 
     private const val TAG = "MiniAppHost"
     private val REMOTE_IMAGE_SCHEMES = setOf("http", "https", "data")
     private val IMAGE_EXTS = listOf(".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg", ".bmp", ".ico", ".avif")
+    private val FONT_EXTS = listOf(".woff2", ".woff", ".ttf", ".otf", ".eot")
+    private val STYLE_EXTS = listOf(".css")
+    private val SCRIPT_EXTS = listOf(".js", ".mjs")
 
-    /**
-     * 为 [manifest] 创建一个装好 [OctopusBridge]、锁定本地源、已开始加载页面的 WebView。
-     * @param activity 宿主 Activity(OctopusBridge 的 pay 弹窗需要;桌面窗口传 DesktopActivity)
-     * @return 页面无法解析时返回 null
-     */
+    private var fileChooserCallback: ValueCallback<Array<Uri>>? = null
+    private const val REQUEST_FILE_CHOOSER = 0x5f01
+
     @SuppressLint("SetJavaScriptEnabled", "JavascriptInterface")
     fun createWebView(activity: Activity, manifest: PluginManifest): WebView? {
         val pageUrl = resolvePageUrl(activity, manifest) ?: return null
         val wv = WebView(activity)
+
         wv.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
+            databaseEnabled = true
             allowFileAccess = true
-            // 禁 file:// 页面跨源读其它本地文件
             allowFileAccessFromFileURLs = false
             allowUniversalAccessFromFileURLs = false
-            // 允许 file:// 页面加载远程图片素材(<img>/CSS 背景);兼容模式兜底 http 图。
             mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+            mediaPlaybackRequiresUserGesture = false
+            setSupportZoom(false)
+            builtInZoomControls = false
+            displayZoomControls = false
+            useWideViewPort = true
+            loadWithOverviewMode = true
+            cacheMode = WebSettings.LOAD_DEFAULT
+            textZoom = 100
+            allowContentAccess = true
+            setGeolocationEnabled(false)
         }
-        wv.addJavascriptInterface(OctopusBridge(manifest, WeakReference(activity)), "octopusNative")
+
+        if ((activity.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
+            WebView.setWebContentsDebuggingEnabled(true)
+        }
+
+        wv.isVerticalScrollBarEnabled = true
+        wv.isHorizontalScrollBarEnabled = false
+        wv.isScrollbarFadingEnabled = true
+        wv.setLayerType(WebView.LAYER_TYPE_HARDWARE, null)
+        wv.overScrollMode = View.OVER_SCROLL_NEVER
+        wv.isHorizontalScrollBarEnabled = false
+
+        val bridge = OctopusBridge(manifest, WeakReference(activity))
+        bridge.attachWebView(wv)
+        wv.addJavascriptInterface(bridge, "octopusNative")
+
         wv.webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
                 view.evaluateJavascript(OctopusBridge.SHIM_JS, null)
             }
+            override fun onPageFinished(view: WebView, url: String?) {
+                bridge.onPageFinished()
+                injectSafeAreaCss(view)
+            }
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 val u = request.url?.toString() ?: return true
-                return !u.startsWith("file://")
+                if (u.startsWith("file://")) return false
+                if (u.startsWith("octopus://")) {
+                    bridge.handleScheme(u)
+                    return true
+                }
+                if (u.startsWith("http://") || u.startsWith("https://")) {
+                    val host = request.url?.host ?: return true
+                    if (PermissionGate.allowHost(manifest, u)) return false
+                    bridge.openExternalUrlDirect(u)
+                    return true
+                }
+                return true
             }
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
                 val u = request.url?.toString().orEmpty()
                 return when {
                     u.startsWith("file://") -> null
-                    // 远程/内联图片素材放行(生成的 mini-app 用真实图片 URL);其余非本地子资源仍拦死。
-                    isRemoteImageRequest(request) -> null
+                    isAllowedRemoteResource(request, manifest) -> null
                     else -> WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))
                 }
             }
         }
+
+        wv.webChromeClient = object : WebChromeClient() {
+            override fun onConsoleMessage(consoleMessage: ConsoleMessage): Boolean {
+                val level = when (consoleMessage.messageLevel()) {
+                    ConsoleMessage.MessageLevel.ERROR -> Log.ERROR
+                    ConsoleMessage.MessageLevel.WARNING -> Log.WARN
+                    else -> Log.DEBUG
+                }
+                Log.println(level, "MiniApp[${manifest.id}]",
+                    "${consoleMessage.message()} -- From line ${consoleMessage.lineNumber()} of ${consoleMessage.sourceId()}")
+                return true
+            }
+            override fun onPermissionRequest(request: PermissionRequest?) {
+                request?.deny()
+            }
+            override fun onProgressChanged(view: WebView?, newProgress: Int) {
+                val pb = progressBarRef?.get()
+                if (pb != null) {
+                    pb.progress = newProgress
+                    pb.visibility = if (newProgress >= 100) View.GONE else View.VISIBLE
+                }
+            }
+            override fun onShowFileChooser(
+                view: WebView?,
+                filePathCallback: ValueCallback<Array<Uri>>?,
+                fileChooserParams: FileChooserParams?
+            ): Boolean {
+                fileChooserCallback?.onReceiveValue(null)
+                fileChooserCallback = filePathCallback
+                val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
+                    type = "*/*"
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    putExtra(Intent.EXTRA_ALLOW_MULTIPLE, fileChooserParams?.mode == FileChooserParams.MODE_OPEN_MULTIPLE)
+                    val acceptTypes = fileChooserParams?.acceptTypes
+                    if (!acceptTypes.isNullOrEmpty()) {
+                        putExtra(Intent.EXTRA_MIME_TYPES, acceptTypes)
+                    }
+                }
+                val chooserIntent = Intent.createChooser(intent, manifest.name)
+                try {
+                    activity.startActivityForResult(chooserIntent, REQUEST_FILE_CHOOSER)
+                } catch (e: Exception) {
+                    fileChooserCallback = null
+                    return false
+                }
+                return true
+            }
+        }
+
         wv.loadUrl(pageUrl)
         return wv
     }
 
-    /** 销毁 WebView 并解绑桥(窗口/Activity 关闭时调用)。 */
-    fun destroyWebView(webView: WebView?) {
-        runCatching {
-            webView?.removeJavascriptInterface("octopusNative")
-            webView?.destroy()
-        }
+    private var progressBarRef: WeakReference<ProgressBar>? = null
+
+    fun bindProgress(wv: WebView?, progressBar: ProgressBar) {
+        progressBarRef = WeakReference(progressBar)
     }
 
-    /**
-     * 是否为远程/内联「图片」子请求 —— 生成的 mini-app 用真实素材 URL(<img src>/CSS 背景)时放行。
-     * 只放行图片:图片子请求只泄露请求本身(URL/时序),读不到响应体;脚本/XHR/fetch 等能读回数据的
-     * 强外泄通道仍走默认拦截。主框架导航不算图片(仍锁本地,由 shouldOverrideUrlLoading 兜)。
-     */
-    private fun isRemoteImageRequest(request: WebResourceRequest): Boolean {
+    fun handleActivityResult(requestCode: Int, resultCode: Int, data: Intent?): Boolean {
+        if (requestCode != REQUEST_FILE_CHOOSER) return false
+        val cb = fileChooserCallback ?: return false
+        fileChooserCallback = null
+        val results: Array<Uri>? = when {
+            resultCode != Activity.RESULT_OK -> null
+            data?.data != null -> arrayOf(data.data!!)
+            data?.clipData != null -> {
+                val count = data.clipData!!.itemCount
+                Array(count) { i -> data.clipData!!.getItemAt(i).uri }
+            }
+            else -> null
+        }
+        cb.onReceiveValue(results)
+        return true
+    }
+
+    fun destroyWebView(webView: WebView?) {
+        runCatching {
+            webView?.stopLoading()
+            webView?.removeJavascriptInterface("octopusNative")
+            webView?.webChromeClient = null
+            webView?.webViewClient = WebViewClient()
+            webView?.destroy()
+        }
+        progressBarRef?.clear()
+        progressBarRef = null
+        fileChooserCallback?.onReceiveValue(null)
+        fileChooserCallback = null
+    }
+
+    private fun isAllowedRemoteResource(request: WebResourceRequest, manifest: PluginManifest): Boolean {
         val scheme = request.url?.scheme?.lowercase()
-        if (request.isForMainFrame || scheme !in REMOTE_IMAGE_SCHEMES) return false
+        if (scheme !in REMOTE_IMAGE_SCHEMES) return false
         val url = request.url?.toString()?.lowercase().orEmpty()
         val accept = request.requestHeaders?.entries
             ?.firstOrNull { it.key.equals("Accept", ignoreCase = true) }?.value?.lowercase().orEmpty()
         val path = request.url?.path?.lowercase().orEmpty()
-        return url.startsWith("data:image/") || accept.contains("image/") || IMAGE_EXTS.any { path.endsWith(it) }
+
+        if (url.startsWith("data:")) {
+            if (url.startsWith("data:image/")) return true
+            return false
+        }
+
+        val isImage = accept.contains("image/") || IMAGE_EXTS.any { path.endsWith(it) }
+        val isFont = accept.contains("font/") || FONT_EXTS.any { path.endsWith(it) }
+        val isStyle = accept.contains("text/css") || STYLE_EXTS.any { path.endsWith(it) }
+        val isScript = accept.contains("javascript") || accept.contains("text/javascript") || SCRIPT_EXTS.any { path.endsWith(it) }
+
+        if (!isImage && !isFont && !isStyle && !isScript) return false
+
+        val u = request.url?.toString().orEmpty()
+        if (PermissionGate.allowHost(manifest, u)) return true
+
+        return false
     }
 
-    /**
-     * 解析页面 URL:filesDir/plugins → filesDir/generated_apps → assets/plugins,都找不到返回 null。
-     * filesDir 查找做 canonicalPath 防 path traversal;assets 由 APK 签名保护。
-     */
+    private fun injectSafeAreaCss(view: WebView) {
+        val js = """
+        (function(){
+          if (document.getElementById('__octopus_safe_area')) return;
+          var style = document.createElement('style');
+          style.id = '__octopus_safe_area';
+          style.textContent = ':root{--sat:env(safe-area-inset-top,0px);--sar:env(safe-area-inset-right,0px);--sab:env(safe-area-inset-bottom,0px);--sal:env(safe-area-inset-left,0px);}';
+          document.head.appendChild(style);
+        })();
+        """.trimIndent()
+        view.evaluateJavascript(js, null)
+    }
+
     fun resolvePageUrl(context: Context, manifest: PluginManifest): String? {
         val candidates = linkedSetOf(manifest.id, manifest.id.substringAfterLast('/'))
         for (baseDir in listOf("plugins", "generated_apps")) {

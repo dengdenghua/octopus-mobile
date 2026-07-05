@@ -30,6 +30,20 @@ class ToolResult private constructor(
      * 为 null 表示该工具调用未产生 diff。
      */
     val diff: String? = null,
+    /**
+     * 结构化问卷表单（选择题）。
+     * 当工具需要向用户追问信息时（如 generate_app 的澄清问题），不再返回纯文本问题让用户打字回答，
+     * 而是返回带选项的选择题表单，UI 在输入框上方渲染成可点击的选项卡片，用户点选后一键提交。
+     *
+     * JSON 格式：
+     * [
+     *   {"q": "问题1文本", "options": ["选项A","选项B","选项C"]},
+     *   {"q": "问题2文本", "options": ["选项A","选项B","选项C","选项D"]}
+     * ]
+     *
+     * 为 null 表示该工具调用不需要问卷。
+     */
+    val formData: String? = null,
 ) {
     companion object {
         @JvmStatic
@@ -66,9 +80,15 @@ class ToolResult private constructor(
         @JvmStatic
         fun successWithDiff(data: String, diff: String): ToolResult =
             ToolResult(true, data, null, null, null, null, null, null, diff)
+
+        /** 返回成功结果，同时携带结构化问卷表单（选择题），让UI在输入框上方渲染可点选卡片。 */
+        @JvmStatic
+        fun successWithForm(data: String, formData: String): ToolResult =
+            ToolResult(true, data, null, null, null, null, null, null, null, formData)
     }
 
     override fun toString(): String = when {
+        formData != null -> "ToolResult{success=$isSuccess, data='$data', formData=${formData.length}chars}"
         imageBase64 != null -> "ToolResult{success=$isSuccess, data='$data', imageBase64='${imageBase64.take(30)}...'}"
         htmlContent != null -> "ToolResult{success=$isSuccess, data='$data', htmlContent=${htmlContent.length}chars}"
         diff != null -> "ToolResult{success=$isSuccess, data='$data', diff=${diff.length}chars}"
