@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.SettingsAccessibility
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.*
@@ -139,7 +140,7 @@ private val BorderColor get() = OctopusColors.Border
 private data class PermissionUi(val icon: ImageVector, val name: String, val ok: Boolean)
 
 @Composable
-fun SettingsScreen(onMessage: (String) -> Unit = {}) {
+fun SettingsScreen(onMessage: (String) -> Unit = {}, onNavigateToCreatorCenter: () -> Unit = {}) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
@@ -282,6 +283,21 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}) {
                         Icons.Filled.AccountCircle,
                         stringResource(R.string.account_login_title),
                         stringResource(R.string.account_login_tip),
+                    )
+                }
+            }
+        }
+
+        // ── 创作者中心入口(仅登录可见) ──
+        if (loggedIn) {
+            item {
+                SettingsCard(stringResource(R.string.creator_center_title), Icons.Filled.Star, compact = true, onClick = {
+                    onNavigateToCreatorCenter()
+                }) {
+                    SettingsRow(
+                        Icons.Filled.Star,
+                        stringResource(R.string.creator_center_title),
+                        stringResource(R.string.creator_center_entry_desc),
                     )
                 }
             }

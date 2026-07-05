@@ -213,9 +213,63 @@ data class PluginPayData(
     @SerializedName("balance_after") val balanceAfter: Long = 0,
     @SerializedName("plugin_id") val pluginId: String = "",
     val item: String = "",
+    @SerializedName("creator_earned") val creatorEarned: Int = 0,
+    @SerializedName("author_id") val authorId: String = "",
 )
 
 data class PluginPayResult(
     val success: Boolean = false,
     val data: PluginPayData? = null,
+)
+
+// ── 创作者中心 ──────────────────────────────────────────────────────────────
+
+data class CreatorAsset(
+    val id: String = "",
+    val slug: String = "",
+    val name: String = "",
+    val kind: String = "",
+    val status: String = "",
+    val earnings: Int = 0,
+    val downloads: Int = 0,
+    @SerializedName("created_at") val createdAt: Long = 0,
+    @SerializedName("updated_at") val updatedAt: Long = 0,
+)
+
+data class CreatorRevenueTxn(
+    val delta: Int = 0,
+    val detail: String = "",
+    @SerializedName("ref_id") val refId: String = "",
+    val ts: Long = 0,
+)
+
+data class CreatorDashboardData(
+    @SerializedName("total_earnings") val totalEarnings: Int = 0,
+    @SerializedName("total_downloads") val totalDownloads: Int = 0,
+    @SerializedName("published_count") val publishedCount: Int = 0,
+    val assets: List<CreatorAsset> = emptyList(),
+    @SerializedName("recent_revenue") val recentRevenue: List<CreatorRevenueTxn> = emptyList(),
+)
+
+data class CreatorDashboardResult(
+    val success: Boolean = false,
+    val data: CreatorDashboardData? = null,
+)
+
+data class CreatorLeader(
+    @SerializedName("user_id") val userId: String = "",
+    val earnings: Int = 0,
+    val downloads: Int = 0,
+    val works: Int = 0,
+)
+
+data class CreatorRankingData(
+    @SerializedName("my_rank") val myRank: Int = 0,
+    @SerializedName("my_earnings") val myEarnings: Int = 0,
+    val leaders: List<CreatorLeader> = emptyList(),
+)
+
+data class CreatorRankingResult(
+    val success: Boolean = false,
+    val data: CreatorRankingData? = null,
 )

@@ -60,7 +60,7 @@
     <ID>CyclomaticComplexMethod:ScriptSandbox.kt$ScriptSandbox$fun execute( code: String, timeoutMs: Long, cancellationToken: CancellationToken? = null, ): ToolResult</ID>
     <ID>CyclomaticComplexMethod:SemanticSkillRanker.kt$SemanticSkillRanker$suspend fun rank( query: String, candidates: List&lt;String&gt;, topK: Int = 8, ): List&lt;Int&gt;?</ID>
     <ID>CyclomaticComplexMethod:SettingsActivity.kt$SettingsActivity$private fun observeViewModel()</ID>
-    <ID>CyclomaticComplexMethod:SettingsScreen.kt$@Composable fun SettingsScreen(onMessage: (String) -&gt; Unit = {})</ID>
+    <ID>CyclomaticComplexMethod:SettingsScreen.kt$@Composable fun SettingsScreen(onMessage: (String) -&gt; Unit = {}, onNavigateToCreatorCenter: () -&gt; Unit = {})</ID>
     <ID>CyclomaticComplexMethod:SkillManifest.kt$SkillManifest$fun parseFrontmatter(content: String): SkillSpec?</ID>
     <ID>CyclomaticComplexMethod:SkillManifest.kt$SkillManifest$private fun buildJsonSchemaFromList( name: String, description: String, params: List&lt;Map&lt;String, Any?&gt;&gt; ): JSONObject</ID>
     <ID>CyclomaticComplexMethod:SkillMarketplaceScreen.kt$@Composable fun SkillMarketplaceScreen(onBack: () -&gt; Unit)</ID>
@@ -144,6 +144,7 @@
     <ID>LongMethod:MobileQualityGate.kt$MobileQualityGate$fun evaluate( registeredTools: Set&lt;String&gt; = registeredToolNames(), rpcUrl: String = KVUtils.getOctopusRpcUrl(), allowInsecureRuntime: Boolean = KVUtils.isInsecureOctopusRuntimeAllowed(), ): Report</ID>
     <ID>LongMethod:NavigateTool.kt$NavigateTool$override fun execute(params: Map&lt;String, Any&gt;): ToolResult</ID>
     <ID>LongMethod:OctopusMobileClient.kt$OctopusMobileClient$internal fun handleIncomingMessage(text: String)</ID>
+    <ID>LongMethod:NavigationGraph.kt$@Composable fun OctopusNavHost( navController: androidx.navigation.NavHostController, showMessage: (String) -&gt; Unit = {}, modifier: Modifier = Modifier )</ID>
     <ID>LongMethod:PcRemoteActivity.kt$@Composable private fun PcRemoteScreen(onBack: () -&gt; Unit)</ID>
     <ID>LongMethod:PluginMarketplaceScreen.kt$@Composable fun PluginMarketplaceScreen(onBack: () -&gt; Unit)</ID>
     <ID>LongMethod:ProactiveRuleEngine.kt$ProactiveRuleEngine$private fun executeRule(rule: ProactiveRule, paramOverrides: Map&lt;String, Any&gt;? = null): TriggerResult</ID>
@@ -153,7 +154,7 @@
     <ID>LongMethod:ScriptSandbox.kt$ScriptSandbox$fun execute( code: String, timeoutMs: Long, cancellationToken: CancellationToken? = null, ): ToolResult</ID>
     <ID>LongMethod:SettingsActivity.kt$SettingsActivity$private fun initMenuGroups()</ID>
     <ID>LongMethod:SettingsActivity.kt$SettingsActivity$private fun observeViewModel()</ID>
-    <ID>LongMethod:SettingsScreen.kt$@Composable fun SettingsScreen(onMessage: (String) -&gt; Unit = {})</ID>
+    <ID>LongMethod:SettingsScreen.kt$@Composable fun SettingsScreen(onMessage: (String) -&gt; Unit = {}, onNavigateToCreatorCenter: () -&gt; Unit = {})</ID>
     <ID>LongMethod:SkillManifest.kt$SkillManifest$fun parseFrontmatter(content: String): SkillSpec?</ID>
     <ID>LongMethod:SkillMarketplaceScreen.kt$@Composable fun SkillMarketplaceScreen(onBack: () -&gt; Unit)</ID>
     <ID>LongMethod:SkillsActivity.kt$@Composable private fun SkillsScreen(onBack: () -&gt; Unit)</ID>
@@ -1894,6 +1895,7 @@
     <ID>TooManyFunctions:CloudDriveManager.kt$CloudDriveManager</ID>
     <ID>TooManyFunctions:CommonToolbar.kt$CommonToolbar : FrameLayout</ID>
     <ID>TooManyFunctions:ConfigServerManager.kt$ConfigServerManager</ID>
+    <ID>TooManyFunctions:CreatorCenterScreen.kt$com.apk.claw.android.ui.compose.screen.CreatorCenterScreen.kt</ID>
     <ID>TooManyFunctions:DefaultAgentService.kt$DefaultAgentService : AgentService</ID>
     <ID>TooManyFunctions:DesktopActivity.kt$com.apk.claw.android.ui.desktop.DesktopActivity.kt</ID>
     <ID>TooManyFunctions:DesktopHolo.kt$com.apk.claw.android.ui.desktop.DesktopHolo.kt</ID>

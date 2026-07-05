@@ -106,6 +106,9 @@ QWEN_OUT_PRICE = float(os.environ.get("QWEN_OUT_PRICE", "2.0"))     # ¥/百万 
 AGNES_IMAGE_COST = float(os.environ.get("AGNES_IMAGE_COST", "0"))   # ¥/张(Agnes 现对平台免费)
 AGNES_VIDEO_COST = float(os.environ.get("AGNES_VIDEO_COST", "0"))   # ¥/个
 CREDIT_PRICE = float(os.environ.get("CREDIT_PRICE", "0.05"))        # ¥/积分(充值档反推的估算均价)
+# 创作者分成比例(用户支付 100 积分 → 创作者得 70,平台得 30)。
+# 创作者收益以积分形式发放(不可提现),用于驱动 LLM 再创作,形成数据飞轮。
+CREATOR_REVENUE_SHARE = float(os.environ.get("CREATOR_REVENUE_SHARE", "0.7"))
 # 是否仍吃 qwen 免费额度:决定「当前」成本口径(True→当前上游≈0;满负荷口径恒按真实价)
 QWEN_FREE_QUOTA = os.environ.get("QWEN_FREE_QUOTA", "1") not in ("0", "false", "False", "")
 # 无限额度白名单(管理员/内部账号邮箱):走中转不预扣、不扣费、不被余额拦,仍记 usage_log(credits=0)。
@@ -497,6 +500,15 @@ def init_db() -> None:
         # moderation_status: '' | 'auto_rejected'(命中硬规则/qwen 判定明显违规,已自动 status='rejected')
         #                       | 'flagged'(代码扫描发现可疑模式,仍是 pending,供人工审核参考)
         for _col in ("moderation_status TEXT DEFAULT ''", "moderation_reason TEXT DEFAULT ''"):
+            try:
+                c.execute(f"ALTER TABLE registry_assets ADD COLUMN {_col}")
+            except sqlite3.OperationalError:
+                pass
+        # 迁移:创作者分成相关列(幂等)。
+        # author_earnings: 创作者累计收益积分(分成所得,仅消费不可提现,用于驱动 LLM 再创作)
+        # download_count:  累计下载量(用于推荐权重排序)
+        for _col in ("author_earnings INTEGER NOT NULL DEFAULT 0",
+                     "download_count INTEGER NOT NULL DEFAULT 0"):
             try:
                 c.execute(f"ALTER TABLE registry_assets ADD COLUMN {_col}")
             except sqlite3.OperationalError:
@@ -2340,7 +2352,8 @@ def _reconcile_usage(user_id: str, model: str, tin: int, tout: int, mult: float,
 @app.post("/plugin/pay")
 def plugin_pay(body: dict[str, Any], u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
     """Mini-app 积分支付:从用户余额原子扣除 credits 给插件内购消费。
-    余额不足立即以 402 拒绝(不透支);成功后返回扣后余额。"""
+    余额不足立即以 402 拒绝(不透支);成功后按 [CREATOR_REVENUE_SHARE] 给插件作者分成。
+    分成以积分形式发放到作者账户(不可提现,用于驱动 LLM 再创作)。"""
     plugin_id = str(body.get("plugin_id") or "").strip()
     item      = str(body.get("item") or "").strip()
     credits   = int(body.get("credits") or 0)
@@ -2356,6 +2369,7 @@ def plugin_pay(body: dict[str, Any], u: sqlite3.Row = Depends(actor)) -> dict[st
     txn_detail = (description or item)[:200]
 
     with closing(db()) as c:
+        # 1. 扣款(原子:余额不足直接 402)
         cur = c.execute(
             "UPDATE users SET credits = credits - ? WHERE user_id = ? AND credits >= ?",
             (credits, user_id, credits),
@@ -2367,11 +2381,152 @@ def plugin_pay(body: dict[str, Any], u: sqlite3.Row = Depends(actor)) -> dict[st
                                 detail=f"积分不足: 需要 {credits},当前余额 {bal}")
         _record_credit_txn(c, user_id, -credits, source="plugin_pay",
                            detail=txn_detail, ref_id=ref)
+
+        # 2. 创作者分成:查插件 author_id,按比例给作者加积分
+        creator_earned = 0
+        author_id = ""
+        aid = f"plugin/{plugin_id}" if not plugin_id.startswith("plugin/") else plugin_id
+        asset = c.execute(
+            "SELECT author_id, author_earnings FROM registry_assets WHERE id=?", (aid,)
+        ).fetchone()
+        if asset and asset["author_id"] and asset["author_id"] != user_id:
+            author_id = asset["author_id"]
+            creator_earned = int(credits * CREATOR_REVENUE_SHARE)
+            if creator_earned > 0:
+                c.execute(
+                    "UPDATE users SET credits = credits + ? WHERE user_id = ?",
+                    (creator_earned, author_id),
+                )
+                _record_credit_txn(c, author_id, creator_earned,
+                                   source="creator_revenue",
+                                   detail=f"插件「{plugin_id}」内购分成",
+                                   ref_id=ref)
+                c.execute(
+                    "UPDATE registry_assets SET author_earnings = author_earnings + ? WHERE id = ?",
+                    (creator_earned, aid),
+                )
+
         c.commit()
         row = c.execute("SELECT credits FROM users WHERE user_id=?", (user_id,)).fetchone()
         bal_after = int(row["credits"]) if row else 0
 
-    return {"success": True, "data": {"balance_after": bal_after, "plugin_id": plugin_id, "item": item}}
+    return {
+        "success": True,
+        "data": {
+            "balance_after": bal_after,
+            "plugin_id": plugin_id,
+            "item": item,
+            "creator_earned": creator_earned,
+            "author_id": author_id,
+        },
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Creator Portal  (创作者中心:收益看板 + 作品管理 + 数据飞轮)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.get("/creator/dashboard")
+def creator_dashboard(u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    """创作者收益看板:总收益、各作品下载量/收益、近期流水。"""
+    user_id = u["user_id"]
+    with closing(db()) as c:
+        # 我发布的所有作品(含 pending/rejected,让作者看到审核状态)
+        assets = c.execute("""
+            SELECT id, slug, name, kind, status, author_earnings, download_count,
+                   created_at, updated_at
+            FROM registry_assets
+            WHERE author_id = ?
+            ORDER BY updated_at DESC
+        """, (user_id,)).fetchall()
+
+        # 收益汇总
+        total_earnings = sum(int(a["author_earnings"] or 0) for a in assets)
+        total_downloads = sum(int(a["download_count"] or 0) for a in assets)
+
+        # 近30天收益流水
+        cutoff = now_ms() - 30 * 24 * 3600 * 1000
+        txns = c.execute("""
+            SELECT delta, detail, ref_id, ts
+            FROM credit_transactions
+            WHERE user_id = ? AND source = 'creator_revenue' AND ts >= ?
+            ORDER BY ts DESC LIMIT 50
+        """, (user_id, cutoff)).fetchall()
+
+        return {
+            "success": True,
+            "data": {
+                "total_earnings": total_earnings,
+                "total_downloads": total_downloads,
+                "published_count": len(assets),
+                "assets": [
+                    {
+                        "id": a["id"],
+                        "slug": a["slug"],
+                        "name": a["name"],
+                        "kind": a["kind"],
+                        "status": a["status"],
+                        "earnings": int(a["author_earnings"] or 0),
+                        "downloads": int(a["download_count"] or 0),
+                        "created_at": int(a["created_at"]),
+                        "updated_at": int(a["updated_at"]),
+                    }
+                    for a in assets
+                ],
+                "recent_revenue": [
+                    {
+                        "delta": int(t["delta"]),
+                        "detail": t["detail"],
+                        "ref_id": t["ref_id"],
+                        "ts": int(t["ts"]),
+                    }
+                    for t in txns
+                ],
+            },
+        }
+
+
+@app.get("/creator/ranking")
+def creator_ranking(u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    """创作者排行榜(TOP 50,按 author_earnings 降序)。驱动社区竞争氛围。"""
+    with closing(db()) as c:
+        rows = c.execute("""
+            SELECT author_id,
+                   SUM(author_earnings) as total_earnings,
+                   SUM(download_count) as total_downloads,
+                   COUNT(*) as work_count
+            FROM registry_assets
+            WHERE author_id != '' AND status = 'approved'
+            GROUP BY author_id
+            ORDER BY total_earnings DESC
+            LIMIT 50
+        """).fetchall()
+
+        # 当前用户排名
+        user_rank = 0
+        user_earnings = 0
+        for i, r in enumerate(rows):
+            if r["author_id"] == u["user_id"]:
+                user_rank = i + 1
+                user_earnings = int(r["total_earnings"] or 0)
+                break
+
+        return {
+            "success": True,
+            "data": {
+                "my_rank": user_rank,
+                "my_earnings": user_earnings,
+                "leaders": [
+                    {
+                        "user_id": r["author_id"],
+                        "earnings": int(r["total_earnings"] or 0),
+                        "downloads": int(r["total_downloads"] or 0),
+                        "works": int(r["work_count"] or 0),
+                    }
+                    for r in rows
+                ],
+            },
+        }
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -2420,10 +2575,17 @@ def registry_download(asset_type: str, slug: str) -> dict[str, Any]:
     aid = f"{asset_type}/{slug}"
     with closing(db()) as c:
         r = c.execute("SELECT * FROM registry_assets WHERE id=? AND status='approved'", (aid,)).fetchone()
-    if not r:
-        raise HTTPException(status_code=404, detail="资产不存在或未审核通过")
-    d = _registry_row_to_asset(r)
+        if not r:
+            raise HTTPException(status_code=404, detail="资产不存在或未审核通过")
+        # 下载量计数(幂等自增,用于推荐权重)
+        c.execute(
+            "UPDATE registry_assets SET download_count = download_count + 1 WHERE id = ?",
+            (aid,),
+        )
+        c.commit()
+        d = _registry_row_to_asset(r)
     d["body"] = r["body"] or ""
+    d["download_count"] = int(r["download_count"] or 0) + 1
     return {"success": True, "data": d}
 
 

@@ -276,4 +276,17 @@ class MockAccountGateway : AccountGateway {
         // Mock: 只报成功,不真正扣(测试用)
         return PluginPayResult(success = true, data = PluginPayData(balanceAfter = u.credits - credits, pluginId = pluginId, item = item))
     }
+
+    override suspend fun creatorDashboard(token: String): CreatorDashboardResult {
+        return CreatorDashboardResult(success = true, data = CreatorDashboardData(
+            totalEarnings = 0, totalDownloads = 0, publishedCount = 0,
+            assets = emptyList(), recentRevenue = emptyList(),
+        ))
+    }
+
+    override suspend fun creatorRanking(token: String): CreatorRankingResult {
+        return CreatorRankingResult(success = true, data = CreatorRankingData(
+            myRank = 0, myEarnings = 0, leaders = emptyList(),
+        ))
+    }
 }

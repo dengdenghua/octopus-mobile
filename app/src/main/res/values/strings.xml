@@ -1188,4 +1188,28 @@ Shizuku 是安全、开源的本地辅助工具。</string>
     <string name="plugin_marketplace_installed_toast">已安装 %1$s</string>
     <string name="plugin_marketplace_uninstalled_toast">已卸载 %1$s</string>
 
+    <!-- 创作者中心(分成闭环) -->
+    <string name="creator_center_title">创作者中心</string>
+    <string name="creator_center_entry_desc">发布作品,获得 70% 收益分成</string>
+    <string name="creator_center_login_required">请先登录以查看创作者数据</string>
+    <string name="creator_center_load_failed">加载失败,请下拉重试</string>
+    <string name="creator_center_empty">还没有创作者数据</string>
+    <string name="creator_center_metric_earnings">总收益(积分)</string>
+    <string name="creator_center_metric_downloads">总下载</string>
+    <string name="creator_center_metric_published">已发布</string>
+    <string name="creator_center_section_assets">我的作品</string>
+    <string name="creator_center_section_revenue">近 30 天收益流水</string>
+    <string name="creator_center_section_ranking">创作者排行榜</string>
+    <string name="creator_center_my_rank">我的排名</string>
+    <string name="creator_center_no_rank">未上榜</string>
+    <string name="creator_center_revenue_empty">暂无收益记录</string>
+    <string name="creator_center_assets_empty">还没有发布作品</string>
+    <string name="creator_center_status_published">已上架</string>
+    <string name="creator_center_status_pending">审核中</string>
+    <string name="creator_center_status_rejected">已驳回</string>
+    <string name="creator_center_earnings_suffix">收益 %1$d</string>
+    <string name="creator_center_downloads_suffix">下载 %1$d</string>
+    <string name="creator_center_rank_format">第 %1$d 名</string>
+    <string name="creator_center_retry">重试</string>
+
 </resources>

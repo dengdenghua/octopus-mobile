@@ -133,6 +133,18 @@ object AccountRepository {
         return runCatching { gateway().pluginPay(tok, pluginId, item, credits, description) }
     }
 
+    /** 创作者收益看板。 */
+    suspend fun creatorDashboard(): Result<CreatorDashboardResult> {
+        val tok = AccountStore.token.ifBlank { return Result.failure(IllegalStateException("未登录")) }
+        return runCatching { gateway().creatorDashboard(tok) }
+    }
+
+    /** 创作者排行榜。 */
+    suspend fun creatorRanking(): Result<CreatorRankingResult> {
+        val tok = AccountStore.token.ifBlank { return Result.failure(IllegalStateException("未登录")) }
+        return runCatching { gateway().creatorRanking(tok) }
+    }
+
     fun logout() {
         AccountStore.clear()
         publish()

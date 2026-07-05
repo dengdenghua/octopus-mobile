@@ -229,6 +229,12 @@ fun OctopusNavHost(
         composable(Screen.PluginMarketplace.route) {
             PluginMarketplaceScreen(onBack = { navController.popBackStack() })
         }
+        composable(Screen.CreatorCenter.route) {
+            com.apk.claw.android.ui.compose.screen.CreatorCenterScreen(
+                onBack = { navController.popBackStack() },
+                onMessage = showMessage,
+            )
+        }
         composable(Screen.AgentSquare.route) {
             AgentSquareScreen(
                 onBack = { navController.popBackStack() },
@@ -250,6 +256,11 @@ fun OctopusNavHost(
                 },
             )
         }
-        composable(Screen.Settings.route) { SettingsScreen(onMessage = showMessage) }
+        composable(Screen.Settings.route) {
+            SettingsScreen(
+                onMessage = showMessage,
+                onNavigateToCreatorCenter = { navController.navigate(Screen.CreatorCenter.route) },
+            )
+        }
     }
 }

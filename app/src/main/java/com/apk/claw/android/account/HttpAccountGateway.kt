@@ -192,6 +192,12 @@ class HttpAccountGateway(baseUrl: String) : AccountGateway {
         token, PluginPayResult::class.java
     )
 
+    override suspend fun creatorDashboard(token: String): CreatorDashboardResult =
+        get("/creator/dashboard", token, CreatorDashboardResult::class.java)
+
+    override suspend fun creatorRanking(token: String): CreatorRankingResult =
+        get("/creator/ranking", token, CreatorRankingResult::class.java)
+
     companion object {
         private val JSON = "application/json; charset=utf-8".toMediaTypeOrNull()
     }

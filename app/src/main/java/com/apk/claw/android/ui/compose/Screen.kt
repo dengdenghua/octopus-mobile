@@ -8,6 +8,7 @@ import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.apk.claw.android.R
@@ -29,6 +30,8 @@ sealed class Screen(val route: String, @StringRes val labelRes: Int, val icon: I
     data object SkillMarketplace : Screen("skill_marketplace", R.string.skill_marketplace_title, Icons.Filled.GridView)
     // 插件商城:广场 → 插件(非底部 Tab)
     data object PluginMarketplace : Screen("plugin_marketplace", R.string.plugin_marketplace_title, Icons.Filled.GridView)
+    // 创作者中心:设置 → 创作者中心(非底部 Tab)
+    data object CreatorCenter : Screen("creator_center", R.string.creator_center_title, Icons.Filled.Star)
 
     companion object {
         /** 底部 Tab：对话优先。设备不再独立成页——设备发现/选择已并入对话目标选择器，

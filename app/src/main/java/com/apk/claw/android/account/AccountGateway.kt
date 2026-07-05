@@ -70,4 +70,8 @@ interface AccountGateway {
         credits: Int,
         description: String = "",
     ): PluginPayResult
+
+    // 创作者中心(分成收益看板 + 排行榜)
+    suspend fun creatorDashboard(token: String): CreatorDashboardResult
+    suspend fun creatorRanking(token: String): CreatorRankingResult
 }
