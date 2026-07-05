@@ -159,6 +159,8 @@ PRICING_KEYS: dict[str, "tuple[Any, str]"] = {
     "voice_free_min_member": (10, "会员每日免费语音分钟"),
     "voice_free_min_guest": (1, "非会员每日免费语音分钟"),
     "voice_max_session_min": (30, "单次语音通话上限(分钟)"),
+    # 成本核算:
+    "cost_snapshot_interval_hours": (6, "成本快照采样间隔(小时)"),
 }
 _config_cache: "dict[str, tuple[float, str | None]]" = {}
 _CONFIG_TTL_S = 30.0
@@ -720,6 +722,15 @@ def init_db() -> None:
             "CREATE TABLE IF NOT EXISTS config_kv("
             "key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at INTEGER NOT NULL)"
         )
+        # 成本/毛利时序快照(后台定时任务写入):给面板画趋势 + 喂 AI 经营顾问自动调价。
+        c.execute(
+            "CREATE TABLE IF NOT EXISTS cost_snapshots("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, "
+            "revenue REAL, cost_full REAL, cost_now REAL, credits_spent INTEGER, "
+            "gross_margin_full REAL, cost_per_credit_full REAL, active_users INTEGER, "
+            "members INTEGER, subsidy_full REAL, payload TEXT)"
+        )
+        c.execute("CREATE INDEX IF NOT EXISTS idx_cost_snapshots_ts ON cost_snapshots(ts)")
         # 迁移:给已存在的 remote_devices 表补新列(幂等)
         for _col in (
             "push_token TEXT DEFAULT ''", "os_version TEXT DEFAULT ''",
@@ -809,6 +820,53 @@ def _startup() -> None:
 
 
 _start_time = time.time()
+
+
+def _take_cost_snapshot() -> dict[str, Any]:
+    """算一次成本/毛利快照(复用 _profit_snapshot 的确定性核算)并存入 cost_snapshots。返回该快照。"""
+    snap = _profit_snapshot()
+    with closing(db()) as c:
+        c.execute(
+            "INSERT INTO cost_snapshots(ts, revenue, cost_full, cost_now, credits_spent, "
+            "gross_margin_full, cost_per_credit_full, active_users, members, subsidy_full, payload) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+            (now_ms(), snap.get("revenue", 0), snap.get("costFull", 0), snap.get("costNow", 0),
+             snap.get("creditsSpent", 0), snap.get("grossMarginFull") or 0,
+             snap.get("costPerCreditFull", 0), snap.get("activeUsers", 0), snap.get("members", 0),
+             snap.get("subsidyFull", 0), json.dumps(snap, ensure_ascii=False)),
+        )
+        c.commit()
+    return snap
+
+
+_cost_snapshot_task: "asyncio.Task[None] | None" = None
+
+
+async def _cost_snapshot_loop() -> None:
+    """后台定时:启动先拍一张,之后按 config_kv 的 cost_snapshot_interval_hours(默认6h)周期拍。
+    间隔从动态配置读,运维面板改了下一轮即生效。快照失败不拖垮进程。"""
+    while True:
+        try:
+            _take_cost_snapshot()
+        except Exception:  # noqa: BLE001 — 快照失败静默,不能拖垮服务
+            pass
+        hours = get_config("cost_snapshot_interval_hours", 6)
+        await asyncio.sleep(max(1, int(hours)) * 3600)
+
+
+@app.on_event("startup")
+async def _start_cost_snapshots() -> None:
+    """启动后台成本快照任务(ENABLE_COST_SNAPSHOTS=0 可关,测试环境关闭)。"""
+    global _cost_snapshot_task
+    if os.environ.get("ENABLE_COST_SNAPSHOTS", "1") != "1":
+        return
+    _cost_snapshot_task = asyncio.create_task(_cost_snapshot_loop())
+
+
+@app.on_event("shutdown")
+async def _stop_cost_snapshots() -> None:
+    if _cost_snapshot_task is not None:
+        _cost_snapshot_task.cancel()
 
 
 def _fts_search_post_ids(c: sqlite3.Connection, q: str) -> list[str] | None:
@@ -4944,6 +5002,29 @@ def _profit_snapshot() -> dict[str, Any]:
             "pendingReview": registry["pending"] or 0,
         },
     }
+
+
+@app.get("/admin/api/cost-trend")
+def admin_cost_trend(_: bool = Depends(admin_guard), limit: int = 90) -> dict[str, Any]:
+    """成本/毛利时序快照(后台定时任务写入),供面板画趋势 + 喂 AI 经营顾问。最新在前。"""
+    limit = max(1, min(limit, 500))
+    with closing(db()) as c:
+        rows = c.execute(
+            "SELECT ts, revenue, cost_full, cost_now, credits_spent, gross_margin_full, "
+            "cost_per_credit_full, active_users, members, subsidy_full "
+            "FROM cost_snapshots ORDER BY ts DESC LIMIT ?", (limit,),
+        ).fetchall()
+    return {"snapshots": [dict(r) for r in rows], "count": len(rows)}
+
+
+@app.post("/admin/api/cost-trend/snapshot")
+def admin_cost_snapshot_now(_: bool = Depends(admin_guard)) -> dict[str, Any]:
+    """手动立即拍一张成本快照(不等定时)。"""
+    snap = _take_cost_snapshot()
+    return {"ok": True, "snapshot": {
+        "revenue": snap.get("revenue", 0), "costFull": snap.get("costFull", 0),
+        "grossMarginFull": snap.get("grossMarginFull"), "costPerCreditFull": snap.get("costPerCreditFull", 0),
+    }}
 
 
 @app.get("/admin/api/profit")

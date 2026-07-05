@@ -26,6 +26,7 @@ from contextlib import closing
 _TMPDIR = tempfile.mkdtemp(prefix="octo_test_")
 os.environ["OCTO_DB"] = os.path.join(_TMPDIR, "test.db")
 os.environ["ALLOW_MOCK_AUTH"] = "1"          # 测试中放开 mock 邮箱登录
+os.environ["ENABLE_COST_SNAPSHOTS"] = "0"     # 关后台成本快照定时任务(测试直接调 _take_cost_snapshot)
 os.environ["ADMIN_TOKEN"] = "test-token"      # 启用管理后台
 os.environ["JWT_SECRET"] = "test-secret-key"
 os.environ["EMAIL_PROVIDER"] = "mock"
@@ -71,7 +72,8 @@ def clean_state():
                   "credit_transactions", "device_reports", "remote_devices", "remote_pair_codes",
                   "registry_assets", "crash_reports",
                   "square_posts", "square_comments", "square_likes", "square_follows",
-                  "square_favorites", "square_unlocks", "plugin_subscriptions", "config_kv"):
+                  "square_favorites", "square_unlocks", "plugin_subscriptions", "config_kv",
+                  "cost_snapshots"):
             c.execute(f"DELETE FROM {t}")
         c.commit()
     app_module._rl.clear()
@@ -2544,3 +2546,49 @@ class TestDynamicConfig:
         with closing(db()) as c:
             credits = c.execute("SELECT credits FROM users WHERE user_id=?", (uid,)).fetchone()["credits"]
         assert credits == 300
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 定时真实成本核算(cost_snapshots:后台定时把成本/毛利快照存成时序,喂面板 + AI 顾问)
+# ══════════════════════════════════════════════════════════════════════════════
+class TestCostSnapshots:
+    """覆盖:表存在、_take_cost_snapshot 落库+返回、admin 时序查询、手动触发、间隔可配、鉴权。"""
+
+    _ADMIN = {"X-Admin-Token": "test-token"}
+
+    def test_table_exists(self, client):
+        with closing(db()) as c:
+            tbls = [r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")]
+        assert "cost_snapshots" in tbls
+
+    def test_take_snapshot_inserts_and_returns(self, client):
+        snap = app_module._take_cost_snapshot()
+        assert "costFull" in snap and "costPerCreditFull" in snap and "revenue" in snap
+        with closing(db()) as c:
+            n = c.execute("SELECT COUNT(*) FROM cost_snapshots").fetchone()[0]
+        assert n == 1
+
+    def test_cost_trend_endpoint(self, client):
+        app_module._take_cost_snapshot()
+        app_module._take_cost_snapshot()
+        r = client.get("/admin/api/cost-trend", headers=self._ADMIN)
+        assert r.status_code == 200
+        j = r.json()
+        assert j["count"] == 2
+        assert "cost_per_credit_full" in j["snapshots"][0]
+
+    def test_cost_trend_requires_auth(self, client):
+        assert client.get("/admin/api/cost-trend").status_code in (401, 403, 503)
+
+    def test_manual_snapshot_endpoint(self, client):
+        r = client.post("/admin/api/cost-trend/snapshot", headers=self._ADMIN)
+        assert r.status_code == 200 and r.json()["ok"] is True
+        assert "costFull" in r.json()["snapshot"]
+        with closing(db()) as c:
+            assert c.execute("SELECT COUNT(*) FROM cost_snapshots").fetchone()[0] == 1
+
+    def test_interval_is_configurable(self, client):
+        # 间隔在白名单里,可被动态配置改
+        assert "cost_snapshot_interval_hours" in app_module.PRICING_KEYS
+        app_module.set_config("cost_snapshot_interval_hours", 12)
+        assert app_module.get_config("cost_snapshot_interval_hours", 6) == 12
