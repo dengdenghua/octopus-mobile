@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
@@ -251,6 +252,31 @@ internal fun AgentPostCard(post: AgentPost, onClick: () -> Unit = {}) {
                         fontSize = OctopusType.tag,
                         fontWeight = FontWeight.SemiBold,
                     )
+                }
+                // 应用帖徽标:可复刻 / N积分(TopEnd,与分类标签对角)
+                if (post.appRef.isNotBlank()) {
+                    Row(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(OctopusSpacing.sm)
+                            .background(OctopusColors.Primary.copy(alpha = 0.92f), OctopusShape.capsule)
+                            .padding(horizontal = OctopusSpacing.sm, vertical = OctopusSpacing.xs),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            Icons.Filled.Bolt,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(12.dp),
+                        )
+                        Spacer(Modifier.width(2.dp))
+                        Text(
+                            if (post.priceCredits > 0) "${post.priceCredits}积分" else "可复刻",
+                            color = Color.White,
+                            fontSize = OctopusType.tag,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
                 }
             }
             Column(modifier = Modifier.padding(OctopusSpacing.md)) {

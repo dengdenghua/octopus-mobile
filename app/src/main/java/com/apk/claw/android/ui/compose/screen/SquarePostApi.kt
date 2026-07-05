@@ -141,19 +141,31 @@ internal object SquarePostApi {
             }
         }
 
-    /** 发布图文帖。images 是上传后拿到的 URL 列表。 */
+    /** 发布图文帖。images 是上传后拿到的 URL 列表。topic=分类;
+     *  appRef 非空=关联可复刻应用(priceCredits 定价,服务端校验只能挂自己发布的应用)。 */
+    @Suppress("LongParameterList")
     suspend fun publishPost(
         title: String,
         content: String,
         images: List<String>,
         tag: String,
+        topic: String = "recommend",
+        appRef: String = "",
+        appKind: String = "",
+        priceCredits: Int = 0,
     ): PublishPostResult = withContext(Dispatchers.IO) {
-        val payload = mapOf(
+        val payload = mutableMapOf<String, Any>(
             "title" to title,
             "content" to content,
             "images" to images,
             "tag" to tag,
+            "topic" to topic,
         )
+        if (appRef.isNotBlank()) {
+            payload["appRef"] = appRef
+            payload["appKind"] = appKind.ifBlank { "mini-app" }
+            payload["priceCredits"] = priceCredits
+        }
         val req = authedBuilder("/square/posts/publish")
             .post(gson.toJson(payload).toRequestBody(JSON))
             .build()

@@ -7,6 +7,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -57,6 +58,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.apk.claw.android.R
 import com.apk.claw.android.account.AccountStore
+import com.apk.claw.android.ui.compose.component.OctopusTextPill
 import com.apk.claw.android.ui.compose.theme.OctopusBackground
 import com.apk.claw.android.ui.compose.theme.OctopusColors
 import com.apk.claw.android.ui.compose.theme.OctopusShape
@@ -75,6 +77,18 @@ import java.io.File
  * - 图片先调 SquarePostApi.uploadImage 上传到服务端拿 URL,再随帖一起 publish
  * - 未登录直接拦截提示;发布中禁用按钮 + 转圈;成功后 onPublished 回调让上层关闭页面
  */
+private const val MAX_POST_PRICE_CREDITS = 1000
+private const val MAX_PRICE_DIGITS = 4
+
+private val CREATE_POST_TOPICS = listOf(
+    "recommend" to R.string.agent_square_tab_recommend,
+    "automation" to R.string.agent_topic_automation,
+    "efficiency" to R.string.agent_topic_efficiency,
+    "life" to R.string.agent_topic_life,
+    "learning" to R.string.agent_topic_learning,
+    "device" to R.string.agent_topic_device,
+)
+
 @Composable
 fun CreatePostScreen(
     onBack: () -> Unit,
@@ -89,6 +103,9 @@ fun CreatePostScreen(
     val imageUris = remember { mutableStateListOf<Uri>() }
     val uploadedUrls = remember { mutableStateListOf<String>() }
     var publishing by remember { mutableStateOf(false) }
+    var topic by remember { mutableStateOf("recommend") }
+    var appRef by remember { mutableStateOf("") }
+    var priceText by remember { mutableStateOf("") }
 
     // Photo Picker:多选,上限 9 张
     val pickMedia = rememberLauncherForActivityResult(
@@ -129,8 +146,13 @@ fun CreatePostScreen(
                     val r = SquarePostApi.uploadImage(file)
                     if (r.url.isNotBlank()) urls.add(r.url)
                 }
-                // 2) 发帖
-                val r = SquarePostApi.publishPost(t, content.trim(), urls, tag.trim())
+                // 2) 发帖(带分类;appRef 非空则为可复刻应用帖 + 定价)
+                val r = SquarePostApi.publishPost(
+                    t, content.trim(), urls, tag.trim(),
+                    topic = topic,
+                    appRef = appRef.trim(),
+                    priceCredits = priceText.toIntOrNull()?.coerceIn(0, MAX_POST_PRICE_CREDITS) ?: 0,
+                )
                 if (r.ok) {
                     onMessage(r.message.ifBlank { "已提交,审核通过后就会出现在广场" })
                     onPublished()
@@ -253,6 +275,51 @@ fun CreatePostScreen(
                 colors = fieldColors(),
                 shape = OctopusShape.medium,
             )
+
+            // 分类(小红书式;每帖必有一个 topic,驱动灵感 feed 的分类筛选)
+            Text(
+                "分类",
+                color = OctopusColors.TextSecondary,
+                fontSize = OctopusType.label,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.sm),
+            ) {
+                CREATE_POST_TOPICS.forEach { (key, res) ->
+                    OctopusTextPill(
+                        text = stringResource(res),
+                        tint = OctopusColors.Primary,
+                        selected = topic == key,
+                        onClick = { topic = key },
+                    )
+                }
+            }
+
+            // 关联可复刻应用(选填):填你已发布到广场的小程序 slug,别人可付费/免费复刻
+            OutlinedTextField(
+                value = appRef,
+                onValueChange = { appRef = it.trim() },
+                label = { Text("关联应用 slug(选填,你已发布的小程序)") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                colors = fieldColors(),
+                shape = OctopusShape.medium,
+            )
+            if (appRef.isNotBlank()) {
+                OutlinedTextField(
+                    value = priceText,
+                    onValueChange = { v -> priceText = v.filter { it.isDigit() }.take(MAX_PRICE_DIGITS) },
+                    label = { Text("复刻价格(积分,0=免费,上限 1000)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    colors = fieldColors(),
+                    shape = OctopusShape.medium,
+                )
+            }
 
             Spacer(Modifier.height(OctopusSpacing.lg))
         }
