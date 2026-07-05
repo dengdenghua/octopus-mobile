@@ -35,7 +35,7 @@ object PromptSkillStore {
     private const val MAX_SECTION_CHARS = 6000
     private val GSON = Gson()
 
-    private const val SEED_FLAG = "prompt_skills_seeded_v3"
+    private const val SEED_FLAG = "prompt_skills_seeded_v5"
 
     private const val DESIGN_SKILL_NAME = "产品设计工作流"
     private const val DESIGN_SKILL_DESC = "做/生成好看的 App、页面、小程序、海报页,或对成品有视觉质感要求时"
@@ -47,9 +47,13 @@ object PromptSkillStore {
     private const val STYLE_SKILL_DESC =
         "想要 vercel / apple / linear / stripe / notion / claude / supabase / airbnb 等大厂同款风格 / style 质感时"
 
+    private const val SCRAPE_SKILL_NAME = "网页抓取"
+    private const val SCRAPE_SKILL_DESC = "抓取/爬取网页数据、采集列表或详情、批量抠内容(scrape / crawl)时"
+
     /**
      * 内置「产品设计工作流」技能 —— 把生图/搜图/生视频/generate_app 编排成设计流水线,
-     * 并提炼了母本 product-design / frontend-app-builder 的设计守则 + 生成后验收清单。
+     * 并提炼了母本 product-design / frontend-app-builder 的设计守则 + 验收清单,
+     * 及 frontend-design 的可直接套用数值(字号/间距/动效/可访问性基线)。
      */
     private val DESIGN_SKILL_BODY = """
         用户要「做/生成好看的 App / 页面 / 小程序 / 海报页」,或对成品有视觉质感要求时,走这条流水线,
@@ -75,6 +79,13 @@ object PromptSkillStore {
         - 保留容器模型:该留白/通栏的地方别硬塞卡片和边框面板。
         - 真交互+真数据:筛选/标签页/表单/选中态/成功态要真能用,填真实感示例数据;别上死控件,别拿静态图当界面。
         - 图标忠实:箭头/折叠/翻页用 SVG 图标别用文字符号;描边/填充/粗细/隐喻与整体一致。
+
+        【设计基线(拿不准就用这套数值)】
+        - 字号阶梯:Display 48 / H1 36 / H2 24 / H3 20 / 正文 16 / 小字 14 / 注释 12(px),标题 600-700、正文 400。
+        - 间距阶梯(8pt 节奏):4 / 8 / 16 / 24 / 32 / 48 / 64,别在节奏外乱跳。
+        - 移动优先,触摸目标 ≥ 44px;断点 手机<640 / 平板 640-1024 / 桌面>1024。
+        - 动效:微交互 150ms、常规 300ms;进场 ease-out、退场 ease-in;只动 transform/opacity,尊重 prefers-reduced-motion。
+        - 可访问性:正文对比度 ≥ 4.5:1;可点元素要有 hover/active/disabled/loading 态与清晰焦点。
 
         【生成后验收清单(逐条过,别只看"能跑")】对着预览至少核 5 点:
         文案逐字对齐 · 字号字重行高一致 · 配色渐变忠实不软化 · 间距圆角贴合(该通栏不塞卡片) ·
@@ -164,6 +175,27 @@ object PromptSkillStore {
         法式极简、暖橙。浅底 / 主字 #1a1a1a / 橙 #ff7000 / 紫点缀。极简排版,大留白,圆角 8px,克制强调。
     """.trimIndent()
 
+    /**
+     * 内置「网页抓取」技能 —— 提炼 GitHub 主流爬虫 skill(web-scraper / BrowserAct / mobile-browser)
+     * 的"先轻后重、每步验证"策略,用 octopus-mobile 自己的工具(run_code fetch + browser_*)落地。
+     * 外部 Firecrawl/Crawl4AI 那类需 Node/Python/付费 API,端上跑不了,故只搬方法论。
+     */
+    private val SCRAPE_SKILL_BODY = """
+        用户要抓取/爬取网页数据(采集列表、抠详情、批量取内容)时,按"先轻后重、每步验证"来,
+        别一上来就开浏览器硬刚:
+
+        1) 先轻后重:先用 run_code 里的 fetch 拉静态 HTML;能直接拿到目标数据就别开浏览器——快、省、稳。
+        2) 拿不到再升级:内容靠 JS 渲染(fetch 回来是空壳/骨架)→ browser_navigate 打开、
+           browser_get_dom 取渲染后的结构化数据,必要时 browser_evaluate 跑一小段 JS 抠数据。
+        3) 稳选择器:定位优先用 id/class/语义标签等结构选择器,别靠"第几个/某段文本位置"这种一改版就废的方式。
+        4) 反爬别硬刚:遇 Cloudflare/验证码/登录墙 → 先 browser_screenshot 看清拦的是什么;
+           能等就 wait 后重试一次,过不去就停下告诉用户(可能要人工过验证/登录),别机械重试。
+        5) 分页/批量:一页抓完先验数据对不对再翻下一页;盯住"到底了/重复了"及时停;单条失败/超时即跳过,别卡死。
+        6) 悠着点:合理间隔别高频轰炸站点;只取用户要的字段,拿到就 finish。
+
+        产出:把抓到的数据整理成结构化结果(列表/表格/JSON 文本)回给用户,别丢一堆原始 HTML。
+    """.trimIndent()
+
     fun all(): List<PromptSkill> {
         val json = KVUtils.getString(KEY, "")
         if (json.isEmpty()) return emptyList()
@@ -199,6 +231,7 @@ object PromptSkillStore {
         seedBuiltin("builtin_design_workflow", DESIGN_SKILL_NAME, DESIGN_SKILL_DESC, DESIGN_SKILL_BODY)
         seedBuiltin("builtin_mobile_automation", MOBILE_SKILL_NAME, MOBILE_SKILL_DESC, MOBILE_SKILL_BODY)
         seedBuiltin("builtin_design_styles", STYLE_SKILL_NAME, STYLE_SKILL_DESC, STYLE_SKILL_BODY)
+        seedBuiltin("builtin_web_scrape", SCRAPE_SKILL_NAME, SCRAPE_SKILL_DESC, SCRAPE_SKILL_BODY)
     }
 
     /** 不存在→种;仍是内置→更新到最新(保留用户的启用/停用);用户改过(source≠builtin)→不动。 */

@@ -92,4 +92,13 @@ class PromptSkillStoreTest {
         assertTrue("提到品牌名应命中风格库", section.contains("设计风格库"))
         assertTrue("命中后应带出该风格 token", section.contains("Geist"))
     }
+
+    @Test
+    fun `web scrape skill triggers on crawl intent`() {
+        PromptSkillStore.ensureSeeded()
+        assertTrue("应种下网页抓取", PromptSkillStore.all().any { it.name == "网页抓取" })
+        val section = PromptSkillStore.buildPromptSection("帮我抓取这个网站的商品列表")
+        assertTrue("抓取意图应命中网页抓取技能", section.contains("网页抓取"))
+        assertTrue("命中后应带出先轻后重策略", section.contains("先轻后重"))
+    }
 }
