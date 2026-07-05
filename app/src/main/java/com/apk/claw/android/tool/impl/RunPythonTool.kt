@@ -45,7 +45,9 @@ class RunPythonTool : BaseTool() {
             "Python 3 code to execute in the embedded CPython sandbox. Standard library available " +
                 "(json, re, math, datetime, os, time, collections). Host APIs: print, read_file, " +
                 "write_file, list_files, exists, mkdir, delete_file, fetch, call_tool, md5, sha256, " +
-                "hmac_sha256, base64_encode, base64_decode, uuid, now_ms.",
+                "hmac_sha256, base64_encode, base64_decode, uuid, now_ms. WORKSPACE global points to " +
+                "the script workspace (default /sdcard/Download/Octopus/); os.getcwd() is set to it, " +
+                "so open('file.txt') writes to the workspace by default.",
             true
         ),
         ToolParameter(
@@ -82,9 +84,12 @@ class RunPythonTool : BaseTool() {
           - call_tool(name, params?) — invoke a registered tool
           - md5(str) / sha256(str) / hmac_sha256(key, msg)
           - base64_encode(str) / base64_decode(str) / uuid() / now_ms()
+          - WORKSPACE — global string pointing to the script workspace (/sdcard/Download/Octopus/ by
+            default; configurable in settings). os.getcwd() is set to it, so open('file.txt')
+            writes to the workspace by default.
 
-        File access limited to Download/Documents. Same security model as run_code (HIGH risk,
-        untrusted source gate applies to call_tool). Output ≤ 64KB per call.
+        File access limited to Download/Documents/workspace. Same security model as run_code (HIGH
+        risk, untrusted source gate applies to call_tool). Output ≤ 64KB per call.
 
         Limitation: CPython cannot be forcibly interrupted. On timeout, the error returns but
         the interpreter may continue running in background (serialized by single-thread executor).
@@ -102,8 +107,10 @@ class RunPythonTool : BaseTool() {
           - call_tool(name, params?) — 调用已注册工具
           - md5(str) / sha256(str) / hmac_sha256(key, msg)
           - base64_encode(str) / base64_decode(str) / uuid() / now_ms()
+          - WORKSPACE — 全局字符串,指向脚本工作空间(默认 /sdcard/Download/Octopus/,设置页可改)。
+            os.getcwd() 已切到该目录,open('file.txt') 等相对路径默认写到工作空间。
 
-        文件访问限 Download/Documents。安全模型与 run_code 一致(HIGH 风险,call_tool 走不可信来源闸门)。
+        文件访问限 Download/Documents/工作空间。安全模型与 run_code 一致(HIGH 风险,call_tool 走不可信来源闸门)。
         单次输出 ≤ 64KB。
 
         限制:CPython 无法被强制中断,超时后返回错误但解释器可能继续在后台跑(单线程 executor 串行化)。
