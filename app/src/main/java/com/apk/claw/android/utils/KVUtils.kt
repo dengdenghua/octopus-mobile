@@ -455,6 +455,42 @@ object KVUtils {
     /** 清空某通道白名单 —— 让下一个发送者重新成为 owner（重新配对）。 */
     fun clearChannelAllowedSenders(channel: String) = remove(channelAclKey(channel))
 
+    // ==================== 通道配对码 ====================
+    // 安全:替代 TOFU,防止攻击者抢首条消息绑定 owner。
+    // 用户在 App 内查看 6 位配对码,通过 IM 发送 /pair <code> 完成绑定。
+    // 配对码 10 分钟过期,配对成功后立即失效(防重放)。
+    private const val PAIRING_CODE_TTL_MS = 10L * 60 * 1000  // 10 分钟
+    private const val PAIRING_CODE_MIN = 100000
+    private const val PAIRING_CODE_RANGE = 900000
+
+    private fun pairingCodeKey(channel: String) = "KEY_PAIRING_CODE_$channel"
+    private fun pairingCodeTsKey(channel: String) = "KEY_PAIRING_CODE_TS_$channel"
+
+    /** 获取某通道当前配对码(过期或不存在返回 null)。 */
+    fun getChannelPairingCode(channel: String): String? {
+        val code = getString(pairingCodeKey(channel), "").takeIf { it.isNotBlank() } ?: return null
+        val ts = getString(pairingCodeTsKey(channel), "0").toLongOrNull() ?: 0L
+        return code.takeIf { System.currentTimeMillis() - ts <= PAIRING_CODE_TTL_MS }
+    }
+
+    /** 生成并保存新的 6 位数字配对码,返回码本身。 */
+    fun refreshChannelPairingCode(channel: String): String {
+        val code = (PAIRING_CODE_MIN + java.util.Random().nextInt(PAIRING_CODE_RANGE)).toString()
+        putString(pairingCodeKey(channel), code)
+        putString(pairingCodeTsKey(channel), System.currentTimeMillis().toString())
+        return code
+    }
+
+    /** 校验并消费配对码(正确则加入白名单 + 立即失效 code,防重放)。返回 true=配对成功。 */
+    fun consumeChannelPairingCode(channel: String, senderId: String, code: String): Boolean {
+        if (senderId.isBlank() || code.isBlank()) return false
+        val current = getChannelPairingCode(channel)?.takeIf { it.trim() == code.trim() } ?: return false
+        addChannelAllowedSender(channel, senderId)
+        remove(pairingCodeKey(channel))
+        remove(pairingCodeTsKey(channel))
+        return true
+    }
+
     // 是否允许"远程/自动来源"(母体 WS、LAN HTTP、主动规则)调用高危工具。默认 false=拦截(安全)。
     private const val KEY_REMOTE_HIGH_RISK = "KEY_REMOTE_HIGH_RISK_ALLOWED"
     fun isRemoteHighRiskAllowed(): Boolean = getBoolean(KEY_REMOTE_HIGH_RISK, false)

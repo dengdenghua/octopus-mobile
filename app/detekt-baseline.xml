@@ -440,7 +440,6 @@
     <ID>MagicNumber:DiscordGatewayClient.kt$DiscordGatewayClient$5000</ID>
     <ID>MagicNumber:DiscordGatewayClient.kt$DiscordGatewayClient.&lt;no name provided&gt;$1000</ID>
     <ID>MagicNumber:DiscordGatewayClient.kt$DiscordGatewayClient.&lt;no name provided&gt;$5000</ID>
-    <ID>MagicNumber:DiscoverScreen.kt$6</ID>
     <ID>MagicNumber:EchoUniverseTools.kt$EchoUniverseTools.ObserveTool$10</ID>
     <ID>MagicNumber:EchoUniverseTools.kt$EchoUniverseTools.ObserveTool$120</ID>
     <ID>MagicNumber:EchoUniverseTools.kt$EchoUniverseTools.ObserveTool$200</ID>
@@ -1067,11 +1066,9 @@
     <ID>MaxLineLength:DingTalkChannelHandler.kt$DingTalkChannelHandler.&lt;no name provided&gt;$XLog.i(TAG, "[${channel.displayName}] 收到消息: $text, sender: ${message.senderNick}, type: ${message.conversationType}")</ID>
     <ID>MaxLineLength:DiscordApiClient.kt$DiscordApiClient$fun</ID>
     <ID>MaxLineLength:DiscoverScreen.kt$Box(modifier = Modifier.padding(horizontal = OctopusSpacing.md).width(1.dp).height(24.dp).background(BorderColor))</ID>
-    <ID>MaxLineLength:DiscoverScreen.kt$HomeTile</ID>
     <ID>MaxLineLength:DiscoverScreen.kt$Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = stringResource(R.string.browser_url_hint), tint = PrimaryColor)</ID>
     <ID>MaxLineLength:DiscoverScreen.kt$Icon(Icons.Filled.Check, contentDescription = null, tint = PrimaryColor, modifier = Modifier.size(OctopusIconSize.medium))</ID>
     <ID>MaxLineLength:DiscoverScreen.kt$Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null, tint = TextMuted, modifier = Modifier.size(OctopusIconSize.small))</ID>
-    <ID>MaxLineLength:DiscoverScreen.kt$Text(label, color = TextPrimary, fontSize = OctopusType.caption, fontWeight = FontWeight.SemiBold, maxLines = 1)</ID>
     <ID>MaxLineLength:DiscoverScreen.kt$Text(selectedOption.label, color = TextSecondary, fontSize = OctopusType.body, fontWeight = FontWeight.SemiBold, maxLines = 1)</ID>
     <ID>MaxLineLength:DiscoverScreen.kt$Toast.makeText(context, context.getString(R.string.browser_home_removed_toast), Toast.LENGTH_SHORT).show()</ID>
     <ID>MaxLineLength:DiscoverScreen.kt$error = { Icon(fallback, contentDescription = null, tint = tint, modifier = Modifier.size(OctopusIconSize.medium)) }</ID>
@@ -1087,16 +1084,6 @@
     <ID>MaxLineLength:FeatureHubScreen.kt$DetailMetric(stringResource(R.string.agent_metric_usage), post.usage, post.tagColor, Modifier.weight(1f))</ID>
     <ID>MaxLineLength:FeatureHubScreen.kt$DetailSection(stringResource(R.string.agent_detail_how_to_use), listOf(stringResource(R.string.agent_detail_use_1), stringResource(R.string.agent_detail_use_2), stringResource(R.string.agent_detail_use_3)))</ID>
     <ID>MaxLineLength:FeatureHubScreen.kt$DetailSection(stringResource(R.string.agent_detail_prerequisites), listOf(stringResource(R.string.agent_detail_prereq_1), stringResource(R.string.agent_detail_prereq_2), stringResource(R.string.agent_detail_prereq_3)))</ID>
-    <ID>MaxLineLength:FeatureHubScreen.kt$FeatureItem(R.string.feat_browser_settings, R.string.feat_browser_desc, Icons.Filled.Public, BrowserTint, BrowserSettingsActivity::class.java)</ID>
-    <ID>MaxLineLength:FeatureHubScreen.kt$FeatureItem(R.string.feat_clouddrive, R.string.feat_clouddrive_desc, Icons.Filled.CloudQueue, CloudTint, CloudDriveActivity::class.java)</ID>
-    <ID>MaxLineLength:FeatureHubScreen.kt$FeatureItem(R.string.feat_evolution, R.string.feat_evolution_desc, Icons.Filled.TrendingUp, EvolveTint, EvolutionActivity::class.java)</ID>
-    <ID>MaxLineLength:FeatureHubScreen.kt$FeatureItem(R.string.feat_memory, R.string.feat_memory_desc, Icons.Filled.Psychology, MemoryTint, MemoryActivity::class.java)</ID>
-    <ID>MaxLineLength:FeatureHubScreen.kt$FeatureItem(R.string.feat_miniapps, R.string.feat_miniapps_desc, Icons.Filled.Apps, PluginTint, MiniAppListActivity::class.java)</ID>
-    <ID>MaxLineLength:FeatureHubScreen.kt$FeatureItem(R.string.feat_multiwindow, R.string.feat_multiwindow_desc, Icons.Filled.GridView, WindowTint, MultiWindowActivity::class.java)</ID>
-    <ID>MaxLineLength:FeatureHubScreen.kt$FeatureItem(R.string.feat_routines, R.string.feat_routines_desc, Icons.Filled.Schedule, RoutineTint, RoutinesActivity::class.java)</ID>
-    <ID>MaxLineLength:FeatureHubScreen.kt$FeatureItem(R.string.feat_skills, R.string.feat_skills_desc, Icons.Filled.Bolt, SkillTint, SkillsActivity::class.java)</ID>
-    <ID>MaxLineLength:FeatureHubScreen.kt$FeatureItem(R.string.feat_trust, R.string.feat_trust_desc, Icons.Filled.Shield, TrustTint, TrustCenterActivity::class.java)</ID>
-    <ID>MaxLineLength:FeatureHubScreen.kt$FeatureItem(R.string.feat_video, R.string.feat_video_desc, Icons.Filled.Movie, VideoTint, VideoLibraryActivity::class.java)</ID>
     <ID>MaxLineLength:FeatureHubScreen.kt$Icon(Icons.Filled.Close, contentDescription = null, tint = Color.White, modifier = Modifier.size(OctopusIconSize.medium))</ID>
     <ID>MaxLineLength:FeatureHubScreen.kt$Icon(Icons.Filled.Favorite, contentDescription = null, tint = OctopusColors.TextMuted.copy(alpha = 0.65f), modifier = Modifier.size(OctopusIconSize.small))</ID>
     <ID>MaxLineLength:FeatureHubScreen.kt$Icon(Icons.Filled.Favorite, contentDescription = null, tint = post.tagColor, modifier = Modifier.size(OctopusIconSize.small))</ID>
@@ -1104,7 +1091,6 @@
     <ID>MaxLineLength:FeatureHubScreen.kt$R.string.circle_tag_hot -&gt; com.apk.claw.android.ui.compose.theme.OctopusTints.Hot.copy(alpha = 0.12f)</ID>
     <ID>MaxLineLength:FeatureHubScreen.kt$Row</ID>
     <ID>MaxLineLength:FeatureHubScreen.kt$SectionHeaderWithAction(title, Icons.Filled.Whatshot, com.apk.claw.android.ui.compose.theme.OctopusTints.Hot)</ID>
-    <ID>MaxLineLength:FeatureHubScreen.kt$Text(desc, color = OctopusColors.TextMuted, fontSize = OctopusType.caption, lineHeight = 14.sp, maxLines = 2)</ID>
     <ID>MaxLineLength:FeatureHubScreen.kt$Text(post.author, color = OctopusColors.TextSecondary, fontSize = OctopusType.body, fontWeight = FontWeight.SemiBold)</ID>
     <ID>MaxLineLength:FeatureHubScreen.kt$Text(post.authorInitial, color = post.tagColor, fontSize = OctopusType.label, fontWeight = FontWeight.Bold)</ID>
     <ID>MaxLineLength:FeatureHubScreen.kt$Text(post.authorInitial, color = post.tagColor, fontSize = OctopusType.tag, fontWeight = FontWeight.Bold)</ID>
@@ -1112,9 +1098,7 @@
     <ID>MaxLineLength:FeatureHubScreen.kt$Text(stringResource(R.string.agent_action_favorite), color = OctopusColors.TextPrimary, fontSize = OctopusType.label, fontWeight = FontWeight.SemiBold)</ID>
     <ID>MaxLineLength:FeatureHubScreen.kt$Text(stringResource(R.string.agent_action_reproduce), color = OctopusColors.OnPrimary, fontSize = OctopusType.label, fontWeight = FontWeight.SemiBold)</ID>
     <ID>MaxLineLength:FeatureHubScreen.kt$Text(text, color = OctopusColors.TextSecondary, fontSize = OctopusType.body, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))</ID>
-    <ID>MaxLineLength:FeatureHubScreen.kt$Text(title, color = OctopusColors.TextPrimary, fontSize = OctopusType.bodyStrong, fontWeight = FontWeight.Medium, maxLines = 1)</ID>
     <ID>MaxLineLength:FeatureHubScreen.kt$Toast.makeText(ctx, ctx.getString(R.string.agent_reproduce_toast, routineName), Toast.LENGTH_SHORT).show()</ID>
-    <ID>MaxLineLength:FeatureHubScreen.kt$else -&gt; ToolboxTab(sections, onNavigateToSkillMarketplace, onNavigateToPluginMarketplace) { ctx.open(it.target) }</ID>
     <ID>MaxLineLength:FeatureHubScreen.kt$modifier = Modifier.fillMaxWidth().padding(start = OctopusSpacing.xl, end = OctopusSpacing.xl, top = OctopusSpacing.md, bottom = OctopusSpacing.xs)</ID>
     <ID>MaxLineLength:FeatureHubScreen.kt$modifier = Modifier.padding(start = OctopusSpacing.xs, end = OctopusSpacing.xs, top = OctopusSpacing.md, bottom = OctopusSpacing.xs)</ID>
     <ID>MaxLineLength:FeatureHubScreen.kt$private</ID>
@@ -1638,6 +1622,7 @@
     <ID>ReturnCount:GhostChatSessionStore.kt$GhostChatSessionStore$fun load(sessionId: String): UniverseFeedDto?</ID>
     <ID>ReturnCount:ImportSkillTool.kt$ImportSkillTool$override fun execute(params: Map&lt;String, Any&gt;): ToolResult</ID>
     <ID>ReturnCount:InputDialog.kt$InputDialog$private fun performConfirm(etInput: EditText)</ID>
+    <ID>ReturnCount:KVUtils.kt$KVUtils$fun consumeChannelPairingCode(channel: String, senderId: String, code: String): Boolean</ID>
     <ID>ReturnCount:KVUtils.kt$KVUtils$fun getString(key: String, defaultValue: String = ""): String</ID>
     <ID>ReturnCount:KVUtils.kt$KVUtils$fun getThemeMode(): Boolean?</ID>
     <ID>ReturnCount:KVUtils.kt$KVUtils$fun putString(key: String, value: String?): Boolean</ID>
@@ -2039,6 +2024,7 @@
     <ID>UnusedPrivateProperty:GlassSettingsActivity.kt$private val OnPrimaryColor get() = OctopusColors.OnPrimary</ID>
     <ID>UnusedPrivateProperty:H264Decoder.kt$H264Decoder$j</ID>
     <ID>UnusedPrivateProperty:HomeActivity.kt$HomeActivity.Companion$private const val TAG = "HomeActivity"</ID>
+    <ID>UnusedPrivateProperty:KVUtils.kt$KVUtils$val current = getChannelPairingCode(channel)?.takeIf { it.trim() == code.trim() } ?: return false</ID>
     <ID>UnusedPrivateProperty:LessonStore.kt$LessonStore$private val context: Context</ID>
     <ID>UnusedPrivateProperty:LightweightReActTest.kt$LightweightReActTest$val longJson = JSONObject().apply { put("tree", (0 until 100).map { JSONObject().put("text", "elem $it") }) }.toString()</ID>
     <ID>UnusedPrivateProperty:MediaScanner.kt$MediaScanner$val depth = if (recursive) "" else " -maxdepth 1"</ID>
