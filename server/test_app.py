@@ -969,7 +969,7 @@ class TestOrders:
         assert r.status_code == 200
         d = r.json()
         assert d["currency"] == "USD"
-        assert d["amountMinor"] == 6900
+        assert d["amountMinor"] == 6990
         assert d["credits"] == 8500
 
     def test_create_order_invalid_goods(self, client):
@@ -1035,7 +1035,7 @@ class TestOrders:
         items = r.json()["items"]
         assert len(items) == len(GOODS_BY_ID)
         assert any(g["id"] == "sub_19" for g in items)
-        assert next(g for g in items if g["id"] == "sub_99")["priceUsdCents"] == 6900
+        assert next(g for g in items if g["id"] == "sub_99")["priceUsdCents"] == 6990
         assert next(g for g in items if g["id"] == "sub_99")["usdCredits"] == 3500
         assert next(g for g in items if g["id"] == "sub_99")["usdBonusCredits"] == 5000
 

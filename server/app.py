@@ -202,7 +202,7 @@ GOODS = [
     {"id": "sub_29", "title": "划算月卡", "credits": 1500, "bonusCredits": 1500,
      "priceFen": 14900, "priceUsdCents": 2990, "tag": "划算 · 含BYO", "memberDays": 30, "kind": "subscription"},
     {"id": "sub_99", "title": "旗舰月卡", "credits": 5000, "bonusCredits": 7500,
-     "priceFen": 49900, "priceUsdCents": 6900, "usdCredits": 3500, "usdBonusCredits": 5000,
+     "priceFen": 49900, "priceUsdCents": 6990, "usdCredits": 3500, "usdBonusCredits": 5000,
      "tag": "超值 · 含BYO", "memberDays": 30, "kind": "subscription"},
 ]
 GOODS_BY_ID = {g["id"]: g for g in GOODS}
