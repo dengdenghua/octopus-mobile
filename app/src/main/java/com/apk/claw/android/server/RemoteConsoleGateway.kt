@@ -4,6 +4,7 @@ import com.apk.claw.android.utils.OctoHttp
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.util.Base64
 import com.apk.claw.android.ClawApplication
 import com.apk.claw.android.account.AccountConfig
 import com.apk.claw.android.account.AccountStore
@@ -165,6 +166,18 @@ object RemoteConsoleGateway {
                     false
                 }
                 sendResult(ws, id, ok, if (ok) "操作已执行" else "操作失败: $action")
+            }
+            // 个人网页公网隧道:访客请求经服务端进来,只交给 PersonalSiteServer 读 filesDir/site 里的
+            // 静态字节回去 —— 刻意不走 performControl/ToolRegistry,匿名访客永远碰不到任何带权能力。
+            "http" -> {
+                val r = PersonalSiteServer.serve(ClawApplication.instance, msg.get("path")?.asString.orEmpty())
+                ws.send(gson.toJson(mapOf(
+                    "type" to "http_response",
+                    "id" to id,
+                    "status" to r.status,
+                    "contentType" to r.contentType,
+                    "bodyB64" to Base64.encodeToString(r.body, Base64.NO_WRAP),
+                )))
             }
             else -> sendResult(ws, id, false, "暂不支持的指令类型")
         }
