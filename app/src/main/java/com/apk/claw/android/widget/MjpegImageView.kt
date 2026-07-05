@@ -9,6 +9,7 @@ import androidx.appcompat.widget.AppCompatImageView
 import kotlinx.coroutines.*
 import okhttp3.Request
 import java.io.BufferedInputStream
+import java.net.URLDecoder
 import java.util.concurrent.TimeUnit
 
 /**
@@ -35,6 +36,22 @@ class MjpegImageView @JvmOverloads constructor(
 
     private var streamJob: Job? = null
 
+    /** 从 `...?a=1&token=xxx` 中剥出 token,返回(去掉 token 的 URL, token 明文)。 */
+    private fun splitBearerToken(url: String): Pair<String, String> {
+        val q = url.indexOf('?')
+        if (q < 0) return url to ""
+        val base = url.substring(0, q)
+        var token = ""
+        val kept = url.substring(q + 1).split('&').filter { it.isNotEmpty() }.filter { pair ->
+            if (pair.substringBefore('=') == "token") {
+                token = runCatching { URLDecoder.decode(pair.substringAfter('=', ""), "UTF-8") }.getOrDefault("")
+                false
+            } else true
+        }
+        val newUrl = if (kept.isEmpty()) base else base + "?" + kept.joinToString("&")
+        return newUrl to token
+    }
+
     /**
      * 开始播放 MJPEG 流
      *
@@ -44,7 +61,12 @@ class MjpegImageView @JvmOverloads constructor(
         stop()
         streamJob = CoroutineScope(Dispatchers.IO).launch {
             try {
-                val request = Request.Builder().url(url).build()
+                // 服务端已禁用 ?token= 查询参数,只认 Authorization: Bearer 头。
+                // 把 URL 里的 token 剥出来改用请求头传,否则 /api/screen/stream 必 401 → 黑屏。
+                val (cleanUrl, bearer) = splitBearerToken(url)
+                val request = Request.Builder().url(cleanUrl).apply {
+                    if (bearer.isNotEmpty()) header("Authorization", "Bearer $bearer")
+                }.build()
                 // 用 .use {} 确保 Response(及其 body/底层 socket)在流结束/取消/异常时
                 // 都被关闭,避免连接池耗尽。原代码裸持有 response,取消时连接泄漏。
                 httpClient.newCall(request).execute().use { response ->

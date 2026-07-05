@@ -301,6 +301,20 @@ fun ChatScreen() {
         currentId = cid
         messages.clear(); messages.addAll(ChatStore.load(cid) ?: emptyList())
     }
+    val stop = {
+        ghostChatJob?.cancel()
+        ghostChatJob = null
+        ChatAgentBridge.cancel()
+    }
+    // 切上下文(切角色/切会话/新建/删除)前先停掉运行中的任务 + 清掉 Thinking 占位气泡,
+    // 防止正在流式返回的 onText/onDone 回调往新会话/新角色的 messages 里写内容造成串台。
+    val cancelForSwitch = {
+        if (isRunning) {
+            stop()
+            isRunning = false
+            messages.removeAll { it is ChatMessage.Thinking }
+        }
+    }
     // 初始化:确保至少一个会话,加载当前角色的当前会话
     LaunchedEffect(Unit) {
         if (currentId.isEmpty()) {
@@ -311,6 +325,7 @@ fun ChatScreen() {
     // 切角色:存好当前角色的会话,整体切换到目标角色的会话空间(选择持久化)。
     val switchCharacter = { charId: String ->
         if (charId != currentCharacter) {
+            cancelForSwitch()
             if (currentId.isNotEmpty()) ChatStore.save(currentId, messages)
             currentCharacter = charId
             KVUtils.putString(CHAT_CHARACTER_KEY, charId)
@@ -320,6 +335,7 @@ fun ChatScreen() {
     }
     val switchTo = { id: String ->
         if (id != currentId && id.isNotEmpty()) {
+            cancelForSwitch()
             ChatStore.save(currentId, messages)
             SessionStore.setCurrent(id, currentCharacter); currentId = id
             messages.clear(); messages.addAll(ChatStore.load(id) ?: emptyList())
@@ -328,10 +344,12 @@ fun ChatScreen() {
     }
     val newChat = {
         // 不直接建会话 —— 先弹工作空间选择对话框(可跳过用全局默认),类似 Codex 启动时选项目目录。
+        cancelForSwitch()
         showNewChatWorkspaceDialog = true
     }
     // 真正新建会话:workspace 为 null/空时退化为全局默认(行为与改造前一致)
     val createNewChatWithWorkspace = { workspace: String? ->
+        cancelForSwitch()
         if (currentId.isNotEmpty()) ChatStore.save(currentId, messages)
         val meta = SessionStore.create(System.currentTimeMillis(), currentCharacter, workspace)
             .copy(title = newChatTitle)
@@ -339,6 +357,7 @@ fun ChatScreen() {
         sessions.add(0, meta); currentId = meta.id; messages.clear()
     }
     val deleteSession = { id: String ->
+        cancelForSwitch()
         SessionStore.delete(id)
         GhostChatSessionStore.clear(id)
         sessions.removeAll { it.id == id }
@@ -538,11 +557,6 @@ fun ChatScreen() {
                 scrollEnd(); persist()
             }
         }
-    }
-    val stop = {
-        ghostChatJob?.cancel()
-        ghostChatJob = null
-        ChatAgentBridge.cancel()
     }
     val closeDrawer = { scope.launch { drawerState.close() }; Unit }
 
@@ -1005,6 +1019,7 @@ private fun WorkspacePickerDialog(
     onConfirm: (String?) -> Unit,
 ) {
     var draft by remember { mutableStateOf(initial) }
+    var showBrowser by remember { mutableStateOf(false) }
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
@@ -1016,6 +1031,9 @@ private fun WorkspacePickerDialog(
                     onValueChange = { draft = it },
                     singleLine = true,
                     label = { Text(hint) },
+                    trailingIcon = {
+                        TextButton(onClick = { showBrowser = true }) { Text("浏览") }
+                    },
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
@@ -1029,6 +1047,13 @@ private fun WorkspacePickerDialog(
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
         },
     )
+    if (showBrowser) {
+        FolderBrowserDialog(
+            start = draft,
+            onDismiss = { showBrowser = false },
+            onPick = { picked -> draft = picked.trimEnd('/') + "/"; showBrowser = false },
+        )
+    }
 }
 
 @Composable

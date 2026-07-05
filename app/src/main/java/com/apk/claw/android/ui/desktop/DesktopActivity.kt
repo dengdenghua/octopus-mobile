@@ -64,6 +64,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -236,14 +237,11 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
         ConnectionState.HELLO_SENT, ConnectionState.RECONNECTING -> Color(0xFFFFC24D)
         else -> Holo.AccentDim
     }
-    // 对话:主 Agent 会话([ChatAgentBridge])。convo 按角色分桶隔离 —— 每个角色一份
-    // 独立会话,切角色即切上下文(convo 在下方 character 就绪后按 id 取桶)。
-    val convoByChar = remember {
-        androidx.compose.runtime.mutableStateMapOf<
-            String,
-            androidx.compose.runtime.snapshots.SnapshotStateList<DeskMsg>,
-        >()
-    }
+    // 对话:主 Agent 会话([ChatAgentBridge])。convo 与对话模式(ChatScreen)共享 SessionStore/ChatStore
+    // 持久化 —— 同一角色在 TV 模式和对话模式下共享同一份对话历史,不再各存各的。
+    val convo = remember { androidx.compose.runtime.snapshots.SnapshotStateList<DeskMsg>() }
+    // 当前角色的当前会话 ID(从 SessionStore 取/建),消息通过 ChatStore 持久化。
+    var currentSessionId by remember { mutableStateOf("") }
     var running by remember { mutableStateOf(false) }
     var toolNote by remember { mutableStateOf("") }
     var seq by remember { mutableLongStateOf(0L) }
@@ -256,14 +254,69 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
     // 当前角色:统一读取一次,下传给 windowSpec / 子组件,避免散读 CharacterRegistry.current。
     // 不用 remember{} —— current 的 getter 订阅 idx 状态,切角色时自动重组(此时才读)。
     val character = CharacterRegistry.current
-    // 当前角色的会话(独立桶):切角色自动换到该角色自己的对话,历史互不可见。
-    val convo = convoByChar.getOrPut(character.id) { androidx.compose.runtime.mutableStateListOf() }
+
+    // 将 ChatMessage(ChatStore 持久化格式)转为 DeskMsg(TV 桌面气泡格式)。
+    fun chatMessagesToDesk(msgs: List<com.apk.claw.android.ui.compose.screen.ChatMessage>): List<DeskMsg> {
+        val result = mutableListOf<DeskMsg>()
+        for (m in msgs) {
+            when (m) {
+                is com.apk.claw.android.ui.compose.screen.ChatMessage.UserMessage ->
+                    result.add(DeskMsg(seq++, fromUser = true, text = m.text))
+                is com.apk.claw.android.ui.compose.screen.ChatMessage.AgentMessage ->
+                    result.add(DeskMsg(seq++, fromUser = false, text = m.text))
+                else -> {}
+            }
+        }
+        return result
+    }
+    // 将 DeskMsg 转回 ChatMessage 用于持久化。
+    fun deskToChatMessages(desk: List<DeskMsg>): List<com.apk.claw.android.ui.compose.screen.ChatMessage> =
+        desk.map { m ->
+            if (m.fromUser) com.apk.claw.android.ui.compose.screen.ChatMessage.UserMessage(m.text)
+            else com.apk.claw.android.ui.compose.screen.ChatMessage.AgentMessage(m.text)
+        }
+    // 持久化当前 convo 到 ChatStore。
+    fun persistConvo() {
+        if (currentSessionId.isNotEmpty()) {
+            com.apk.claw.android.ui.compose.screen.ChatStore.save(
+                currentSessionId, deskToChatMessages(convo)
+            )
+        }
+    }
+    // 加载指定角色的会话历史到 convo(先持久化上一个角色的,并cancel运行中任务防串台)。
+    fun loadCharacterSpace(charId: String) {
+        if (running) {
+            com.apk.claw.android.ui.compose.screen.ChatAgentBridge.cancel()
+            running = false; toolNote = ""
+        }
+        persistConvo()
+        val now = System.currentTimeMillis()
+        val sessions = com.apk.claw.android.ui.compose.screen.SessionStore.ensureAtLeastOne(now, emptyList(), charId)
+        val cid = com.apk.claw.android.ui.compose.screen.SessionStore.currentId(charId)
+            ?.takeIf { id -> sessions.any { it.id == id } }
+            ?: sessions.first().id
+        com.apk.claw.android.ui.compose.screen.SessionStore.setCurrent(cid, charId)
+        currentSessionId = cid
+        convo.clear()
+        val stored = com.apk.claw.android.ui.compose.screen.ChatStore.load(cid) ?: emptyList()
+        convo.addAll(chatMessagesToDesk(stored))
+    }
+    // 角色变化时切换会话空间(LaunchedEffect 确保副作用安全,初始进入也触发一次加载)。
+    LaunchedEffect(character.id) {
+        loadCharacterSpace(character.id)
+    }
+    // 离开 TV 桌面(返回/切走 Activity)时兜底持久化,防丢失最近一条回复。
+    DisposableEffect(Unit) {
+        onDispose { persistConvo() }
+    }
+
     val send: (String) -> Unit = fn@{ raw ->
         val t = raw.trim()
         if (t.isEmpty() || running) return@fn
         convo.add(DeskMsg(seq++, fromUser = true, text = t))
         if (!com.apk.claw.android.ui.compose.screen.ChatAgentBridge.isConfigured()) {
             convo.add(DeskMsg(seq++, fromUser = false, text = "请先配置模型(顶部「技能」旁或设置 → 模型),再和我对话。"))
+            persistConvo()
             return@fn
         }
         // 连环画式壁纸:每 TV_SCENE_EVERY 轮才出新一「格」(省算力/额度),延续同一故事线;
@@ -298,8 +351,11 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
             persona = character.personaPrompt(),
             onTool = { _, name, _, _ -> toolNote = "· 使用 $name" },
             onText = { tok -> buf.append(tok); put(buf.toString()) },
-            onDone = { ans -> put(ans.ifBlank { buf.toString() }); running = false; toolNote = "" },
-            onError = { e -> put("⚠️ $e"); running = false; toolNote = "" },
+            onDone = { ans ->
+                put(ans.ifBlank { buf.toString() }); running = false; toolNote = ""
+                persistConvo()
+            },
+            onError = { e -> put("⚠️ $e"); running = false; toolNote = ""; persistConvo() },
         )
     }
     val stop = { com.apk.claw.android.ui.compose.screen.ChatAgentBridge.cancel(); running = false; toolNote = "" }
