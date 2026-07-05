@@ -199,7 +199,7 @@
 ## 5. 优先修复清单 (Prioritized Remediation)
 
 ### P0 — 立即（远程接管 / 全账号伪造级）
-- [x] **聊天渠道发送者白名单**（R1）：已修复（ACL 默认启用 + 空 senderId fail-closed；TOFU 首个发送者绑定 owner，待后续配对码方案）。
+- [x] **聊天渠道发送者白名单**（R1）：已修复（ACL 默认启用 + 空 senderId fail-closed + **配对码方案替代 TOFU**：用户在 App 内查看 6 位配对码,通过 IM 发送 `/pair <code>` 绑定,10 分钟过期 + 一次性消费防重放）。
 - [x] **高危工具强制闸门**（R2）：已修复（`ToolRegistry.executeTool` 对不可信来源 + HIGH 风险走 BLOCK/CONFIRM/ALLOW；MEDIUM 在 ProactiveRuleEngine 中走 CONFIRM；`PathGuard` 已修分隔符边界）。
 - [x] **Relay JWT_SECRET 启动断言**（R10）：已修复。生产环境未设 JWT_SECRET 时拒绝启动，非生产环境生成随机密钥。
 - [ ] **Shizuku 命令注入**（R7）：`searchByContent`/`findDuplicateFiles`/`putSetting` 改 argv 或 `sanitizeShellArg`，`basePath` 强制 `/sdcard` 校验。
@@ -207,8 +207,8 @@
 - [x] **主动规则引擎闸门**（R12）：已修复。`executeRule` 按风险分层（HIGH 拒绝 / MEDIUM 确认 / LOW 放行）；`sms_code_copy` 改为 `NOTIFY_USER` 消除验证码外泄面。
 
 ### P1 — 高优先（同网段 / 内嵌浏览器接管）
-- [ ] **停止广播控制 token**（R5）：改配对握手；拒绝 ip 与 UDP 源不符的 beacon。
-- [ ] **控制服务器绑定收敛**（R6）：默认 127.0.0.1；LAN 访问需逐会话显式开启 + IP 白名单 + TLS。
+- [x] **停止广播控制 token**（R5）：已修复(beacon 中 authToken 强制为空字符串,接收侧拒绝使用入站 token;UDP 源地址校验防 ip 投毒)。
+- [x] **控制服务器绑定收敛**（R6）：已修复(改 `NanoHTTPD(hostname, port)` 绑定 WiFi 接口 IP;token 鉴权用 `MessageDigest.isEqual` 恒定时间比较;`?token=` 查询串禁用)。
 - [x] **`browser_evaluate` 提级**（R8）：已修复（`browser_evaluate` 已移入 `DANGEROUS_TOOLS`；`GetDom/Click/Type` 通过 `JSONObject.quote()` 传参；skill .md risk 已改 high）。逐次人工确认闸待 UI 层落地。
 - [ ] **扩展安装加固**（R9）：UrlGuard + https + AMO/CWS 白名单 + 验证 CRX3 签名；安装 PromptDelegate 改真实用户确认而非自动批准。
 - [ ] **屏幕流同意闸**（R11）：截图/流端点要求用户授权 + 持久"被查看"指示。
@@ -265,7 +265,7 @@
 |------|-----|------|------|
 | R10 | Relay JWT_SECRET 硬编码 | ✅ 已修复 | [app.py:103-112](file:///Users/dangbei/Public/octopus/octopus-mobile/server/app.py#L103) 生产未设则 `raise RuntimeError`；非生产 `secrets.token_urlsafe(48)`；`.env.example` JWT_SECRET 为空 |
 | R4 | config/sync 投毒 | ✅ 已修复 | [DualConfigWriter.kt:53-90](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/java/com/apk/claw/android/octopus_mobile/DualConfigWriter.kt#L53) 新增 `SYNC_BLOCKED_EXACT` + `SYNC_BLOCKED_SUBSTRINGS` 双重黑名单，三处应用点全覆盖（本地写/推送/入站） |
-| R1 | 聊天渠道发送者白名单 | ⚠️ 部分修复 | [ChannelAccessControl.kt:35-58](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/java/com/apk/claw/android/channel/ChannelAccessControl.kt#L35) 已加入 ACL，但：① 空白名单采用 TOFU（首个发送者自动绑定 owner）非默认拒绝；② senderId 为空时放行（见 A3-N1）；③ ACL 可在设置中关闭 |
+| R1 | 聊天渠道发送者白名单 | ✅ 已修复 | [ChannelAccessControl.kt:40-57](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/java/com/apk/claw/android/channel/ChannelAccessControl.kt#L40) ACL 默认启用 + null-sender fail-closed + **配对码方案替代 TOFU**;[ChannelSetup.kt:42-71](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/java/com/apk/claw/android/channel/ChannelSetup.kt#L42) 未授权消息检查 `/pair <code>`;[ChannelAclActivity.kt](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/java/com/apk/claw/android/ui/featurescreens/ChannelAclActivity.kt) UI 显示配对码;剩余:ACL 可在设置中关闭(产品决策,有警告 UI) |
 | R6 | 控制服务器绑定 0.0.0.0 | ✅ 已修复 | [ConfigServer.kt:16-20](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/java/com/apk/claw/android/server/ConfigServer.kt#L16) 改 `NanoHTTPD(hostname, port)`；[ConfigServerManager.kt:54-65](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/java/com/apk/claw/android/server/ConfigServerManager.kt#L54) 绑定 WiFi 接口 IP；`validateAuth` 用 `MessageDigest.isEqual` 恒定时间比较 |
 | BootReceiver exported | (低危项) | ✅ 已修复 | [AndroidManifest.xml:209-217](file:///Users/dangbei/Public/octopus/octopus-mobile/app/src/main/AndroidManifest.xml#L209) 改 `exported="false"` |
 | 订单创建无限速 | (server 项) | ✅ 已修复 | [app.py:1369-1387](file:///Users/dangbei/Public/octopus/octopus-mobile/server/app.py#L1369) 用户限速 + IP 限速 + PENDING 上限 |
@@ -479,7 +479,7 @@
 > 原报告 P0/P1/P2 项状态已更新，新增项以 ➕ 标注。
 
 #### P0 — 立即（远程接管 / 全账号伪造级）
-- [ ] **聊天渠道发送者白名单**（R1）：⚠️ 部分修复,null-sender 已改为默认拒绝(A3-N7 已修复),TOFU 仍保留(待改配对码)
+- [x] **聊天渠道发送者白名单**（R1）：已修复,null-sender fail-closed + **配对码方案替代 TOFU**(6 位码,10 分钟过期,一次性消费防重放,/pair 命令绑定)
 - [x] **高危工具强制闸门**（R2）：已在工作树实现(PermissionModeManager + ApprovalFlow + ToolRegistry 接入,默认 APPROVAL 模式)
 - [x] **Relay JWT_SECRET 启动断言**（R10）：已修复
 - [x] **Shizuku 命令注入**（R7）：已修复(searchByContent/putSetting 已用 sanitizeShellArg;findDuplicateFiles 已改用 sanitizeShellArg;hasInjectionPattern 补充 `${` 检测)

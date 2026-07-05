@@ -120,5 +120,20 @@
 - **KVUtils 明文兜底 —— 优先级低**:敏感 key 默认走 `EncryptedSharedPreferences`(AES-256-GCM),仅 Android Keystore 设备级损坏才退化为 MMKV 明文(非攻击者可触发),且有迁移路径。能触发者(root+Keystore 损坏)早有更直接攻击面。真做只加"降级告警"即可,不该做成失败即崩(否则 Keystore 损坏的设备直接不可用)。
 - **群聊 ACL 按人非按会话 —— 产品决策非漏洞**:现状"踢出群的人若 sender ID 仍在白名单理论上还能下命令",但要修需接 Telegram/Discord/钉钉各自的群成员 API,工程量不小,且取决于设备单人用还是团队共享 —— 单人用基本无所谓。不建议现在动。
 
+### 7.5 R1 配对码方案(2026-07-05)
+
+**背景**:R1(Critical)原状态为 TOFU——空白名单时首个发送者自动绑定 owner,存在"攻击者抢先发首条消息即劫持控制权"的竞态窗口。
+
+**修复**:
+- `KVUtils`:新增配对码存取(`getChannelPairingCode`/`refreshChannelPairingCode`/`consumeChannelPairingCode`),6 位数字码,10 分钟过期,配对成功后立即失效(防重放)。
+- `ChannelAccessControl`:`authorize` 不再自动绑定 TOFU,空白名单返回 DENY;新增 `tryPair`/`extractPairCode`/`getPairingCode`/`refreshPairingCode`;`Decision` 枚举移除 `ALLOW_PAIRED`(不再有自动绑定路径)。
+- `ChannelSetup`:未授权消息检查是否为 `/pair <code>`,正确则绑定并回复成功,错误/未配对给出引导文案。
+- `ChannelAclActivity`:未配对通道显示 6 位配对码 + 刷新按钮 + "在 X 给机器人发送:/pair <码>"提示。
+- 测试:11 个用例覆盖空白名单不自动绑定、正确/错误码、防重放、清空后需刷新码重新配对、通道隔离、命令解析、过期。
+
+**安全收益**:攻击者无法通过抢首条消息劫持 owner,必须知道 App 内显示的 6 位配对码才能绑定。commit `2b739ed`。
+
+**文档状态校对**(同日):确认 R2/R4/R5/R6 在工作树中均已修复,与 §A.7 一致;R5(beacon token 已强制空)、R6(绑定 WiFi IP)此前文档未同步,已更新 AUDIT_REPORT.md。
+
 ## 8. 验证方式(§6–§7 批次)
 `JAVA_HOME=<Android Studio JBR> ./gradlew :app:compileDebugKotlin` 编译绿 + `:app:testDebugUnitTest` 全量通过;关键修复补回归测试(`UrlGuardTest` / `PrivacyScannerTest` / `OctopusMobileClientHandshakeTest` / `RemoteAccessLogTest`)。服务端 `server/.venv/bin/python -m pytest server/test_app.py` 112/116(4 失败为本地未配 agnes provider 的既有环境依赖,非回归)。
