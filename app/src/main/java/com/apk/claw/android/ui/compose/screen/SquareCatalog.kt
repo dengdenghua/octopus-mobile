@@ -60,6 +60,16 @@ internal data class AgentPost(
     val favorited: Boolean = false,
     /** 创建时间(epoch millis)。 */
     val createdAt: Long = 0,
+    /** 关联可运行物 id(mini-app slug / routine);空=纯图文帖,只显示点赞评论。 */
+    val appRef: String = "",
+    /** 关联物类型:mini-app | routine | skill。 */
+    val appKind: String = "",
+    /** 复刻定价(付费积分);0=免费复刻。 */
+    val priceCredits: Int = 0,
+    /** 分类 key(recommend/automation/efficiency/life/learning/device)。 */
+    val topic: String = "recommend",
+    /** 当前用户是否已复刻/解锁(已解锁再下载免费)。 */
+    val owned: Boolean = false,
 )
 
 /** 服务端下发的广场卡片：颜色用 "#RRGGBB" 字符串，方便后台随意编辑。 */
@@ -85,6 +95,11 @@ internal data class SquarePostDto(
     val coverHeightDp: Int = 160,
     val coverGradient: List<String> = emptyList(),
     @com.google.gson.annotations.SerializedName("createdAt") val createdAt: Long = 0,
+    @com.google.gson.annotations.SerializedName("appRef") val appRef: String = "",
+    @com.google.gson.annotations.SerializedName("appKind") val appKind: String = "",
+    @com.google.gson.annotations.SerializedName("priceCredits") val priceCredits: Int = 0,
+    val topic: String = "recommend",
+    val owned: Boolean = false,
 )
 
 internal data class SquareFeedDto(
@@ -128,6 +143,11 @@ internal fun SquarePostDto.toAgentPost(): AgentPost {
         liked = liked,
         favorited = favorited,
         createdAt = createdAt,
+        appRef = appRef,
+        appKind = appKind,
+        priceCredits = priceCredits,
+        topic = topic.ifBlank { "recommend" },
+        owned = owned,
     )
 }
 
@@ -172,14 +192,18 @@ internal object SquareRepository {
         .readTimeout(15, TimeUnit.SECONDS)
         .build()
 
-    /** 服务端目录（后台可随意改）。失败回退缓存，再回退内置种子。 */
-    suspend fun remoteFeed(): List<AgentPost> = withContext(Dispatchers.IO) {
+    /** 服务端目录（后台可随意改）。失败回退缓存，再回退内置种子。
+     *  [topic] 为分类 key(recommend=全部,不过滤);按 topic 分桶缓存,避免切分类污染主 feed 缓存。 */
+    suspend fun remoteFeed(topic: String = ""): List<AgentPost> = withContext(Dispatchers.IO) {
         RemoteConfig.refresh()  // 先取服务端下发的技能中心域名（拿不到则用缓存/默认）
+        val filter = topic.trim().takeIf { it.isNotBlank() && it != "recommend" }.orEmpty()
+        val cacheKey = if (filter.isBlank()) CACHE_KEY else "${CACHE_KEY}_$filter"
         val base = AccountConfig.squareBaseUrl.trim().trimEnd('/')
         if (base.isNotBlank()) {
             runCatching {
-                val builder = Request.Builder().url("$base/square/feed").get()
-                // 携带登录态:让服务端能返回 liked/favorited 当前用户态(未登录时服务端忽略)
+                val url = if (filter.isBlank()) "$base/square/feed" else "$base/square/feed?topic=$filter"
+                val builder = Request.Builder().url(url).get()
+                // 携带登录态:让服务端能返回 liked/favorited/owned 当前用户态(未登录时服务端忽略)
                 val tok = AccountStore.token
                 if (tok.isNotBlank()) builder.header("Authorization", "Bearer $tok")
                 http.newCall(builder.build()).execute().use { resp ->
@@ -187,18 +211,18 @@ internal object SquareRepository {
                     if (resp.isSuccessful && body.isNotBlank()) {
                         val feed = gson.fromJson(body, SquareFeedDto::class.java)
                         if (feed?.posts?.isNotEmpty() == true) {
-                            KVUtils.putString(CACHE_KEY, body)            // 缓存成功结果
+                            KVUtils.putString(cacheKey, body)            // 缓存成功结果(按 topic 分桶)
                             return@withContext feed.posts.map { it.toAgentPost() }
                         }
                     }
                 }
             }
         }
-        cachedOrSeed()
+        cachedOrSeed(cacheKey)
     }
 
-    private fun cachedOrSeed(): List<AgentPost> {
-        val cached = KVUtils.getString(CACHE_KEY, "")
+    private fun cachedOrSeed(cacheKey: String = CACHE_KEY): List<AgentPost> {
+        val cached = KVUtils.getString(cacheKey, "")
         if (cached.isNotBlank()) {
             runCatching {
                 val feed = gson.fromJson(cached, SquareFeedDto::class.java)
