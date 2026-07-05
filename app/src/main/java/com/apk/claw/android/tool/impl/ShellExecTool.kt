@@ -39,10 +39,14 @@ class ShellExecTool : BaseTool() {
          * - logcat -d: dump 模式日志(不 follow,有上限)
          * - wm size/density: 屏幕信息(只读)
          * - am get-current-user/stack list: 用户/任务栈(只读)
-         * - df/du/ls/stat/find/cat/head/grep: 文件查看(find/cat/head 限安全路径)
+         * - df/du/ls/stat/find/cat/head/grep: 文件查看(只读)
          *
          * 显式排除:rm/mv/cp/mkdir/input/settings put/am start/am force-stop/
          * pm install/pm uninstall/screencap/uiautomator/monkey/cmd(太宽泛)。
+         *
+         * 注意:find 是白名单里唯一带「动作谓词」的命令,-delete/-exec 等谓词会改状态/执行外部
+         * 命令,能穿过前缀白名单与元字符注入检测(-delete 不含 shell 元字符)。这些谓词由
+         * [containsDangerousFindPredicate] 单独拦截,保持「shell_exec 只读」契约。
          */
         private val SHELL_QUERY_PREFIXES = listOf(
             "pm list",
@@ -65,6 +69,27 @@ class ShellExecTool : BaseTool() {
             "head ",
             "grep ",
         )
+
+        /**
+         * find 的危险动作谓词:会删除/执行外部命令/写文件,击穿「shell_exec 只读」契约。
+         * 这些谓词多不含 shell 元字符(如 -delete),能骗过注入检测,必须单独按词拦。
+         */
+        private val FORBIDDEN_FIND_PREDICATES = setOf(
+            "-delete",
+            "-exec", "-execdir",
+            "-ok", "-okdir",
+            "-fprintf", "-fprint", "-fprint0", "-fls",
+        )
+
+        /**
+         * 命令若是 find 且含任一危险动作谓词(按空白分词精确匹配),返回 true。
+         * 只对 find 生效,避免误伤把这些串当普通参数的命令(如 grep 搜索字面量 "-delete")。
+         */
+        fun containsDangerousFindPredicate(command: String): Boolean {
+            val normalized = command.trimStart()
+            if (normalized != "find" && !normalized.startsWith("find ")) return false
+            return normalized.split(Regex("\\s+")).any { it in FORBIDDEN_FIND_PREDICATES }
+        }
     }
 
     override fun getName() = "shell_exec"
@@ -105,6 +130,14 @@ class ShellExecTool : BaseTool() {
             return ToolResult.error(
                 "命令不在查询白名单内。只允许只读命令(pm list/dumpsys/getprop/settings get/" +
                     "logcat -d/wm size/df/ls 等)。状态变更命令请用专门工具(file_ops/tap/input_text)。",
+                ToolErr.PERMISSION,
+            )
+        }
+        // 第一层补丁:find 的动作谓词(-delete/-exec 等)能改状态/执行命令,单独拦
+        if (containsDangerousFindPredicate(command)) {
+            return ToolResult.error(
+                "find 的动作谓词(-delete/-exec/-execdir/-ok/-fprintf 等)会改变设备状态或执行" +
+                    "外部命令,已拒绝。只允许只读谓词(-name/-type/-newer/-maxdepth 等)。",
                 ToolErr.PERMISSION,
             )
         }
