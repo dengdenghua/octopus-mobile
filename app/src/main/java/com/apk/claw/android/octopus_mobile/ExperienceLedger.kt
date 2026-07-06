@@ -1,3 +1,8 @@
+@file:Suppress(
+    "PackageNaming", "CyclomaticComplexMethod", "TooGenericExceptionCaught",
+    "ReturnCount", "MagicNumber", "MaxLineLength", "UnusedParameter",
+)   // 并行作者原文件的存量样式(下划线包/内联阈值/多分支缓解规则),整文件豁免
+
 package com.apk.claw.android.octopus_mobile
 
 import android.util.Log
@@ -100,6 +105,7 @@ object ExperienceLedger {
                     evict()
                 }
             }
+            EvolutionMetrics.ledgerError()
             save()
         }
     }
@@ -114,6 +120,7 @@ object ExperienceLedger {
             val existing = entries.find { it.pattern == pattern } ?: return
             val idx = entries.indexOf(existing)
             entries[idx] = existing.copy(count = (existing.count - 1).coerceAtLeast(1))
+            EvolutionMetrics.ledgerRepair()
             save()
         }
     }
@@ -142,6 +149,7 @@ object ExperienceLedger {
                 sb.appendLine("${i + 1}. **${e.pattern}**")
                 sb.appendLine("   - 规避：${e.mitigation}")
             }
+            EvolutionMetrics.mitigationInjected()
             return sb.toString()
         }
     }

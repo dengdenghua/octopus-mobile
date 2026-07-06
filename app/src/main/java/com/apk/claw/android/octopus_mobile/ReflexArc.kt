@@ -1,3 +1,5 @@
+@file:Suppress("PackageNaming", "ReturnCount", "MagicNumber")   // 沿用既有 octopus_mobile 包;快路径多出口/内联阈值
+
 package com.apk.claw.android.octopus_mobile
 
 import android.util.Log
@@ -100,6 +102,7 @@ object ReflexArc {
             if (pattern.matches(trimmed)) {
                 if (confidence >= SIMILARITY_THRESHOLD) {
                     Log.i(TAG, "Reflex rule hit: ${pattern.pattern} -> conf=$confidence")
+                    EvolutionMetrics.reflexHit()
                     return ReflexMatch(response, confidence, "rule")
                 }
             }
@@ -108,6 +111,7 @@ object ReflexArc {
         val cached = findCache(trimmed)
         if (cached != null) {
             Log.i(TAG, "Reflex cache hit: ${cached.normalizedQuery.take(30)}")
+            EvolutionMetrics.reflexHit()
             return ReflexMatch(
                 response = "找到了你之前做过的「${cached.appName}」，直接给你打开～",
                 confidence = 0.88,
@@ -117,6 +121,7 @@ object ReflexArc {
             )
         }
 
+        EvolutionMetrics.reflexMiss()
         return null
     }
 

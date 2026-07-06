@@ -8,6 +8,7 @@ import com.apk.claw.android.octopus_mobile.BrainModeSelector
 import com.apk.claw.android.octopus_mobile.ConnectionState
 import com.apk.claw.android.octopus_mobile.DeviceDiscoveryManager
 import com.apk.claw.android.octopus_mobile.DeviceRegistry
+import com.apk.claw.android.octopus_mobile.EvolutionMetrics
 import com.apk.claw.android.octopus_mobile.ExperienceLedger
 import com.apk.claw.android.octopus_mobile.SkillManifest
 import com.apk.claw.android.octopus_mobile.TurnScorer
@@ -113,6 +114,7 @@ open class ClawApplication : BaseApp() {
 
         runCatching { ExperienceLedger.init(filesDir) }.onFailure { XLog.e(TAG, "ExperienceLedger init failed", it) }
         runCatching { TurnScorer.init(filesDir) }.onFailure { XLog.e(TAG, "TurnScorer init failed", it) }
+        runCatching { EvolutionMetrics.load() }.onFailure { XLog.e(TAG, "EvolutionMetrics load failed", it) }
 
         // Shizuku 增强层初始化（监听 Binder 到达/死亡）
         ShizukuManager.init()

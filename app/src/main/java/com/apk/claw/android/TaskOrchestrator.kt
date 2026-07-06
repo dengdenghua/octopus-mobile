@@ -11,6 +11,7 @@ import com.apk.claw.android.channel.Channel
 import com.apk.claw.android.channel.ChannelManager
 import com.apk.claw.android.floating.FloatingCircleManager
 import com.apk.claw.android.octopus_mobile.BrainModeSelector
+import com.apk.claw.android.octopus_mobile.EvolutionMetrics
 import com.apk.claw.android.octopus_mobile.ExperienceLedger
 import com.apk.claw.android.octopus_mobile.ImmuneSystem
 import com.apk.claw.android.octopus_mobile.evolution.EvolutionEngine
@@ -532,6 +533,9 @@ class TaskOrchestrator(
                     }
                 }
                 onTaskFinished()
+                // 自进化度量:任务完成为检查点,持久化计数并打印一行效果报告(命中率/告警率/注入次数)。
+                EvolutionMetrics.persist()
+                XLog.i(TAG, "EvolutionMetrics: ${EvolutionMetrics.report()}")
                 triggerPostTaskReflect(success = true)
                 // 任务完成后，如果有下一个任务，通过 Handler 延迟调度，避免回调递归
                 scheduleHandler.post { executeCurrentTask() }

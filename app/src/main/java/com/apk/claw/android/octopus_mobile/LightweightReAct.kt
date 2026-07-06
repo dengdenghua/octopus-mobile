@@ -149,6 +149,7 @@ class LightweightReAct(
                     onStep?.invoke(ReActStep.ToolCallStart(step, toolCall))
 
                     val preCheck = ImmuneSystem.preCheck(toolCall.name, toolCall.args)
+                    EvolutionMetrics.immuneCall(preCheck.verdict == ImmuneSystem.Verdict.WARN)
                     if (preCheck.verdict == ImmuneSystem.Verdict.WARN) {
                         Log.w(tag, "Immune warning on ${toolCall.name}: risk=${String.format("%.2f", preCheck.riskScore)} reason=${preCheck.reason}")
                     }
