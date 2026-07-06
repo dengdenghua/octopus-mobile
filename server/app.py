@@ -2274,6 +2274,49 @@ def voice_prefs_set(body: dict[str, Any], u: sqlite3.Row = Depends(actor)) -> di
     return {"ok": True, "voice": voice or VOICE_REALTIME_VOICE, "persona": persona}
 
 
+def _enroll_voice_id(user_id: str, data_uri: str) -> str:
+    """调 DashScope 声音复刻(qwen-voice-enrollment,target=实时模型)→ 返回 voice_id 或空。
+    实测:enrollment 走 workspace 域,voice_id 可直接用于标准 host 的实时 WS。"""
+    if not QWEN_API_KEY or not QWEN_BASE_URL:
+        return ""
+    import httpx  # 惰性
+    host = QWEN_BASE_URL.replace("https://", "").replace("http://", "").split("/")[0]
+    url = f"https://{host}/api/v1/services/audio/tts/customization"
+    name = "oct" + re.sub(r"[^a-zA-Z0-9]", "", user_id)[-10:]
+    body = {"model": "qwen-voice-enrollment", "input": {
+        "action": "create", "target_model": VOICE_ENROLL_TARGET,
+        "preferred_name": name or "octuser", "audio": {"data": data_uri}}}
+    try:
+        r = httpx.post(url, json=body, timeout=60.0, headers={
+            "Authorization": "Bearer " + QWEN_API_KEY, "Content-Type": "application/json"})
+        return str(((r.json().get("output") or {}).get("voice")) or "")
+    except Exception:
+        return ""
+
+
+@app.post("/voice/clone")
+def voice_clone(body: dict[str, Any], u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    """声音复刻:传本人 10~20s 清晰语音(base64 WAV/MP3)→ enroll → 存 voice_id 并自动选用。"""
+    audio = str(body.get("audio", "")).strip()
+    if not audio:
+        raise HTTPException(status_code=400, detail="缺少音频样本")
+    if len(audio) > 14_000_000:  # base64 上限对应原始 ~10MB
+        raise HTTPException(status_code=413, detail="音频过大(≤10MB)")
+    data_uri = audio if audio.startswith("data:") else "data:audio/wav;base64," + audio
+    voice_id = _enroll_voice_id(u["user_id"], data_uri)
+    if not voice_id:
+        raise HTTPException(status_code=502, detail="声音复刻失败,请换一段更清晰的录音重试")
+    with closing(db()) as c:
+        c.execute(
+            "INSERT INTO voice_prefs(user_id, voice, cloned_voice, updated_at) VALUES(?, 'cloned', ?, ?) "
+            "ON CONFLICT(user_id) DO UPDATE SET cloned_voice=excluded.cloned_voice, "
+            "voice='cloned', updated_at=excluded.updated_at",
+            (u["user_id"], voice_id, now_ms()),
+        )
+        c.commit()
+    return {"ok": True, "voiceId": voice_id}
+
+
 @app.get("/voice/quota")
 def voice_quota(u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
     """通话前查语音额度:剩余免费分钟 + 每分钟单价 + 余额可撑分钟数,供 App 拨号页展示。"""

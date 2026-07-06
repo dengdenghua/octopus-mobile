@@ -3047,3 +3047,36 @@ class TestVoicePrefsInSession:
         sess = json.loads(injected[0])["session"]
         assert sess["voice"] == "Ethan"
         assert "健身教练" in sess["instructions"]  # 人设注入(解码后中文)
+
+
+class TestVoiceClone:
+    def test_clone_success(self, client, monkeypatch):
+        monkeypatch.setattr(app_module, "_enroll_voice_id", lambda uid, data: "qwen-omni-vc-test-123")
+        tok, _uid = _email_register(client)
+        h = {"Authorization": f"Bearer {tok}"}
+        r = client.post("/voice/clone", json={"audio": "AAAA"}, headers=h)
+        assert r.status_code == 200 and r.json()["voiceId"] == "qwen-omni-vc-test-123"
+        d = client.get("/voice/prefs", headers=h).json()
+        assert d["voice"] == "cloned" and d["hasCloned"] is True
+
+    def test_clone_applies_in_session(self, client, monkeypatch):
+        monkeypatch.setattr(app_module, "_enroll_voice_id", lambda uid, data: "qwen-omni-vc-xyz")
+        tok, uid = _email_register(client)
+        client.post("/voice/clone", json={"audio": "AAAA"}, headers={"Authorization": f"Bearer {tok}"})
+        voice, _instr = app_module._voice_session_config(uid)
+        assert voice == "qwen-omni-vc-xyz"  # 复刻音色进 session
+
+    def test_clone_no_audio(self, client):
+        tok, _ = _email_register(client)
+        assert client.post("/voice/clone", json={}, headers={"Authorization": f"Bearer {tok}"}).status_code == 400
+
+    def test_clone_enroll_failure(self, client, monkeypatch):
+        monkeypatch.setattr(app_module, "_enroll_voice_id", lambda uid, data: "")
+        tok, _ = _email_register(client)
+        r = client.post("/voice/clone", json={"audio": "AAAA"}, headers={"Authorization": f"Bearer {tok}"})
+        assert r.status_code == 502
+
+    def test_clone_too_large(self, client):
+        tok, _ = _email_register(client)
+        r = client.post("/voice/clone", json={"audio": "A" * 14_000_001}, headers={"Authorization": f"Bearer {tok}"})
+        assert r.status_code == 413
