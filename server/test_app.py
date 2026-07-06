@@ -2846,3 +2846,77 @@ class TestVoiceDemoPage:
         assert app_module._voice_origin_ok(_WS("api.octoapk.com:443"), "https://api.octoapk.com:443") is True
         # 跨源且不在白名单 → 拒
         assert app_module._voice_origin_ok(_WS("api.octoapk.com"), "https://evil.example") is False
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# 实时语音工具接管(Phase 3):VOICE_TOOLS / _execute_voice_tool / _handle_voice_tool_call
+# ═══════════════════════════════════════════════════════════════════════
+class _FakeUpTool:
+    def __init__(self):
+        self.sent = []
+
+    async def send(self, m):
+        self.sent.append(m)
+
+
+class _FakeClientTool:
+    def __init__(self):
+        self.jsons = []
+
+    async def send_json(self, o):
+        self.jsons.append(o)
+
+
+class TestVoiceTools:
+    def test_tools_wellformed(self):
+        assert len(app_module.VOICE_TOOLS) >= 1
+        for t in app_module.VOICE_TOOLS:
+            assert t["type"] == "function" and t["name"] and "parameters" in t
+
+    def test_execute_credit_balance(self, client):
+        _tok, uid = _email_register(client)
+        with closing(db()) as c:
+            bal = app_module._total_available(c, uid)
+        assert app_module._execute_voice_tool("get_credit_balance", uid) == {"balance": bal}
+
+    def test_execute_membership_guest(self, client):
+        _tok, uid = _email_register(client)
+        out = app_module._execute_voice_tool("get_membership_status", uid)
+        assert out["active"] is False and out["remaining_days"] == 0
+
+    def test_execute_voice_quota(self, client):
+        _tok, uid = _email_register(client)
+        app_module.set_config("voice_free_min_guest", 3)
+        app_module.set_config("voice_credits_per_min", 5)
+        out = app_module._execute_voice_tool("get_voice_quota", uid)
+        assert out["free_minutes_remaining"] == 3 and out["credits_per_min"] == 5
+
+    def test_execute_unknown_tool(self, client):
+        _tok, uid = _email_register(client)
+        assert app_module._execute_voice_tool("nope", uid) == {"error": "unknown_tool"}
+
+    def test_handle_tool_call_feeds_upstream(self, client):
+        _tok, uid = _email_register(client)
+        up, cws = _FakeUpTool(), _FakeClientTool()
+        ev = {"type": "response.function_call_arguments.done",
+              "name": "get_credit_balance", "call_id": "c1", "arguments": "{}"}
+        asyncio.run(app_module._handle_voice_tool_call(ev, up, cws, uid))
+        # 通知客户端(UI)
+        assert {"type": "voice.tool", "name": "get_credit_balance"} in cws.jsons
+        # 喂回上游:function_call_output(带 call_id + 真实余额)+ response.create
+        assert len(up.sent) == 2
+        item = json.loads(up.sent[0])
+        assert item["type"] == "conversation.item.create"
+        assert item["item"]["type"] == "function_call_output"
+        assert item["item"]["call_id"] == "c1"
+        assert "balance" in item["item"]["output"]
+        assert json.loads(up.sent[1])["type"] == "response.create"
+
+    def test_handle_unsupported_tool(self, client):
+        _tok, uid = _email_register(client)
+        up, cws = _FakeUpTool(), _FakeClientTool()
+        ev = {"type": "response.function_call_arguments.done",
+              "name": "delete_everything", "call_id": "x", "arguments": "{}"}
+        asyncio.run(app_module._handle_voice_tool_call(ev, up, cws, uid))
+        # 未知工具 → 回 unsupported,不执行任何真实操作
+        assert "unsupported_tool" in json.loads(up.sent[0])["item"]["output"]

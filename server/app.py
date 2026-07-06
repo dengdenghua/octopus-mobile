@@ -80,7 +80,10 @@ AGNES_BASE_URL = os.environ.get("AGNES_BASE_URL", "").rstrip("/")
 VOICE_REALTIME_URL = os.environ.get(
     "VOICE_REALTIME_URL", "wss://dashscope.aliyuncs.com/api-ws/v1/realtime"
 ).rstrip("/")
-VOICE_REALTIME_MODEL = os.environ.get("VOICE_REALTIME_MODEL", "qwen3-omni-flash-realtime")
+# 用 3.5 系:支持 function-calling(工具接管的前提)+ 正常消费 input_text;3.0 不支持工具且忽略文字。
+# ⚠️3.5 音色:Ethan/Serena/Dylan/Tina 可真出声,Cherry/Chelsie 会在生成时 400(session.update 假通过)。
+VOICE_REALTIME_MODEL = os.environ.get("VOICE_REALTIME_MODEL", "qwen3.5-omni-flash-realtime")
+VOICE_REALTIME_VOICE = os.environ.get("VOICE_REALTIME_VOICE", "Serena")
 # 允许客户端指定的实时模型白名单(防注入任意 model 名到上游 URL)。缺省回落 VOICE_REALTIME_MODEL。
 VOICE_ALLOWED_MODELS = {
     "qwen3-omni-flash-realtime", "qwen3.5-omni-flash-realtime",
@@ -1939,8 +1942,62 @@ async def _voice_reject(ws: WebSocket, code: str, message: str, close_code: int)
     await ws.close(code=close_code, reason=code)
 
 
+# 语音可调工具(工具接管 Phase 3)。这批是**服务端执行**的只读账户查询(无副作用、无需确认),
+# omni 决定调用 → 代理执行 → 结果喂回上游让模型口播。设备侧工具(开网页等)后续走客户端中继。
+VOICE_TOOLS: list[dict[str, Any]] = [
+    {"type": "function", "name": "get_credit_balance",
+     "description": "查询当前用户的积分余额(可用积分总数)。用户问『我还有多少积分/余额』时调用。",
+     "parameters": {"type": "object", "properties": {}, "required": []}},
+    {"type": "function", "name": "get_membership_status",
+     "description": "查询当前用户的会员状态与到期时间。用户问『我是会员吗/会员还有多久到期』时调用。",
+     "parameters": {"type": "object", "properties": {}, "required": []}},
+    {"type": "function", "name": "get_voice_quota",
+     "description": "查询当前用户今日剩余免费语音分钟与每分钟计费。问『还能语音多久/语音怎么收费』时调用。",
+     "parameters": {"type": "object", "properties": {}, "required": []}},
+]
+_VOICE_TOOL_NAMES = {t["name"] for t in VOICE_TOOLS}
+
+
+def _execute_voice_tool(name: str, user_id: str) -> dict[str, Any]:
+    """执行语音工具(只读账户查询),返回给模型口播的结构化结果。"""
+    with closing(db()) as c:
+        row = c.execute("SELECT member_expire_at FROM users WHERE user_id=?", (user_id,)).fetchone()
+        member_exp = int(row["member_expire_at"]) if row else 0
+        is_member = member_exp > now_ms()
+        if name == "get_credit_balance":
+            return {"balance": _total_available(c, user_id)}
+        if name == "get_membership_status":
+            days = max(0, (member_exp - now_ms()) // (24 * 3600 * 1000)) if is_member else 0
+            return {"active": is_member, "remaining_days": int(days)}
+        if name == "get_voice_quota":
+            allowance = int(get_config(
+                "voice_free_min_member" if is_member else "voice_free_min_guest",
+                10 if is_member else 1,
+            ))
+            used = _voice_free_used_today(c, user_id)
+            return {"free_minutes_remaining": max(0, allowance - used),
+                    "credits_per_min": int(get_config("voice_credits_per_min", 5))}
+    return {"error": "unknown_tool"}
+
+
+async def _handle_voice_tool_call(ev: dict[str, Any], upstream: Any, client_ws: WebSocket, user_id: str) -> None:
+    """收到 omni 的 function_call → 服务端执行 → 结果喂回上游让模型口播 + 通知客户端(UI)。"""
+    name = str(ev.get("name") or "")
+    call_id = str(ev.get("call_id") or "")
+    output = _execute_voice_tool(name, user_id) if name in _VOICE_TOOL_NAMES else {"error": "unsupported_tool"}
+    try:  # 通知客户端可展示"正在查询…"
+        await client_ws.send_json({"type": "voice.tool", "name": name})
+    except Exception:
+        pass
+    await upstream.send(json.dumps({"type": "conversation.item.create", "item": {
+        "type": "function_call_output", "call_id": call_id,
+        "output": json.dumps(output, ensure_ascii=False),
+    }}))
+    await upstream.send(json.dumps({"type": "response.create"}))
+
+
 async def _voice_relay(client_ws: WebSocket, upstream: Any, meter: "_VoiceMeter") -> str:
-    """双向透传 + 每分钟计费。三个协程任一结束即整体收尾;返回结束原因。"""
+    """双向透传 + 每分钟计费 + 工具接管。三个协程任一结束即整体收尾;返回结束原因。"""
     stop = asyncio.Event()
     reason = {"v": "client_closed"}
 
@@ -1959,7 +2016,16 @@ async def _voice_relay(client_ws: WebSocket, upstream: Any, meter: "_VoiceMeter"
         try:
             while not stop.is_set():
                 msg = await upstream.recv()
-                await client_ws.send_text(msg if isinstance(msg, str) else msg.decode("utf-8", "ignore"))
+                text = msg if isinstance(msg, str) else msg.decode("utf-8", "ignore")
+                await client_ws.send_text(text)
+                # 工具接管:只在出现 function_call 完成事件时才解析(避开逐条解析海量音频分片)
+                if '"response.function_call_arguments.done"' in text:
+                    try:
+                        ev = json.loads(text)
+                    except (ValueError, TypeError):
+                        ev = None
+                    if isinstance(ev, dict) and ev.get("type") == "response.function_call_arguments.done":
+                        await _handle_voice_tool_call(ev, upstream, client_ws, meter.user_id)
         except Exception:
             reason["v"] = "upstream_closed"
         finally:
@@ -2036,12 +2102,16 @@ async def voice_realtime_ws(ws: WebSocket, token: str = "", model: str = "") -> 
         _voice_finish(sid, meter, "upstream_failed")
         await _voice_reject(ws, "upstream_failed", "语音上游连接失败,请稍后重试", 4502)
         return
-    try:  # 注入默认会话参数(中文口语、pcm16、服务端 VAD);客户端可再发 session.update 覆盖
+    try:  # 注入默认会话参数(中文口语、pcm16、服务端 VAD、工具接管);客户端可再发 session.update 覆盖
         await upstream.send(json.dumps({"type": "session.update", "session": {
-            "modalities": ["text", "audio"], "voice": "Cherry",
-            "instructions": "你是「章鱼」App 的智能语音助手,用简体中文、口语化、简洁地回答。",
+            "modalities": ["text", "audio"], "voice": VOICE_REALTIME_VOICE,
+            "instructions": (
+                "你是「章鱼」App 的智能语音助手,用简体中文、口语化、简洁地回答。"
+                "涉及用户的积分余额、会员状态、语音额度时,必须调用对应工具查询真实数据,不要编造。"
+            ),
             "input_audio_format": "pcm16", "output_audio_format": "pcm16",
             "turn_detection": {"type": "server_vad"},
+            "tools": VOICE_TOOLS, "tool_choice": "auto",
         }}))
     except Exception:
         pass
