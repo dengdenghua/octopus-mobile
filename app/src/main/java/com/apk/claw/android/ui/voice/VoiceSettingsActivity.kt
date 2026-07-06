@@ -2,11 +2,17 @@
 
 package com.apk.claw.android.ui.voice
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.os.Bundle
+import android.util.Base64
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -51,7 +57,11 @@ import com.apk.claw.android.ui.compose.theme.OctopusShape
 import com.apk.claw.android.ui.compose.theme.OctopusSpacing
 import com.apk.claw.android.ui.compose.theme.OctopusType
 import com.apk.claw.android.ui.compose.theme.OctopusTheme
+import com.apk.claw.android.voice.realtime.VoiceEnrollRecorder
 import com.apk.claw.android.voice.realtime.VoicePrefsApi
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /** 语音个性化设置:选音色 + 设人设。对接 server /voice/prefs;下次通话生效。 */
@@ -73,6 +83,39 @@ private fun VoiceSettingsScreen(onClose: () -> Unit) {
     var hasCloned by remember { mutableStateOf(false) }
     var selected by remember { mutableStateOf("") }
     var persona by remember { mutableStateOf("") }
+    var cloneStage by remember { mutableStateOf("idle") }  // idle/recording/uploading/done
+    var countdown by remember { mutableStateOf(0) }
+    val hasMic = {
+        ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+    }
+    val permLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    val startClone = {
+        if (!hasMic()) {
+            permLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        } else if (cloneStage != "recording" && cloneStage != "uploading") {
+            scope.launch {
+                cloneStage = "recording"
+                val wavJob = async(Dispatchers.IO) { VoiceEnrollRecorder.record(15) }
+                for (s in 15 downTo 1) { countdown = s; delay(1000) }
+                val wav = wavJob.await()
+                if (wav == null) {
+                    cloneStage = "idle"
+                    Toast.makeText(context, "录音失败,请重试", Toast.LENGTH_SHORT).show()
+                } else {
+                    cloneStage = "uploading"
+                    val vid = runCatching { VoicePrefsApi.clone(Base64.encodeToString(wav, Base64.NO_WRAP)) }.getOrNull()
+                    if (vid != null) {
+                        hasCloned = true; selected = "cloned"; cloneStage = "done"
+                        Toast.makeText(context, "复刻成功!已选用你的声音", Toast.LENGTH_SHORT).show()
+                    } else {
+                        cloneStage = "idle"
+                        Toast.makeText(context, "复刻失败,换段更清晰的录音重试", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+        Unit
+    }
 
     androidx.compose.runtime.LaunchedEffect(Unit) {
         runCatching { VoicePrefsApi.get() }.getOrNull()?.let { p ->
@@ -112,6 +155,8 @@ private fun VoiceSettingsScreen(onClose: () -> Unit) {
                 VoiceRow(label = voiceLabel(v), selected = v == selected, onClick = { selected = v })
                 Spacer(Modifier.height(OctopusSpacing.sm))
             }
+            Spacer(Modifier.height(OctopusSpacing.lg))
+            CloneVoiceCard(stage = cloneStage, countdown = countdown, onStart = startClone)
             Spacer(Modifier.height(OctopusSpacing.lg))
             Text("人设(可选)", color = OctopusColors.TextSecondary, fontSize = OctopusType.label, fontWeight = FontWeight.Medium)
             Spacer(Modifier.height(OctopusSpacing.sm))
@@ -157,6 +202,36 @@ private fun VoiceRow(label: String, selected: Boolean, onClick: () -> Unit) {
         Text(label, color = OctopusColors.TextPrimary, fontSize = OctopusType.body, modifier = Modifier.weight(1f))
         if (selected) {
             Icon(Icons.Filled.Check, contentDescription = null, tint = OctopusColors.Primary, modifier = Modifier.size(20.dp))
+        }
+    }
+}
+
+@Composable
+private fun CloneVoiceCard(stage: String, countdown: Int, onStart: () -> Unit) {
+    val busy = stage == "recording" || stage == "uploading"
+    val label = when (stage) {
+        "recording" -> "🔴 录音中… $countdown"
+        "uploading" -> "复刻中…"
+        "done" -> "✅ 已复刻,上方选「我的声音」"
+        else -> "🎤 复刻我的声音"
+    }
+    Column(
+        modifier = Modifier.fillMaxWidth().clip(OctopusShape.large).background(OctopusBackground.cardSurface).padding(OctopusSpacing.lg),
+    ) {
+        Text("声音复刻", color = OctopusColors.TextPrimary, fontSize = OctopusType.body, fontWeight = FontWeight.Medium)
+        Spacer(Modifier.height(OctopusSpacing.xs))
+        Text("录约 15 秒你的声音,让助手用你的音色说话", color = OctopusColors.TextTertiary, fontSize = OctopusType.caption)
+        Spacer(Modifier.height(OctopusSpacing.md))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(OctopusShape.capsule)
+                .background(if (busy) OctopusColors.FillSecondary else OctopusColors.PrimaryContainer)
+                .clickable(enabled = !busy) { onStart() }
+                .padding(vertical = OctopusSpacing.md),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(label, color = OctopusColors.Primary, fontSize = OctopusType.body, fontWeight = FontWeight.Medium)
         }
     }
 }

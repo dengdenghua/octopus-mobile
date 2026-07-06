@@ -1,3 +1,5 @@
+@file:Suppress("MagicNumber")
+
 package com.apk.claw.android.voice.realtime
 
 import com.apk.claw.android.account.AccountConfig
@@ -54,4 +56,24 @@ internal object VoicePrefsApi {
             .post(payload.toRequestBody(jsonType)).build()
         http.newCall(req).execute().use { it.isSuccessful }
     }
+
+    /** 上传本人录音(base64 WAV)做声音复刻。成功返回 voiceId,失败返回 null(含服务端 4xx/5xx)。 */
+    suspend fun clone(audioBase64: String): String? = withContext(Dispatchers.IO) {
+        val cloneHttp = OctoHttp.shared.newBuilder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(90, TimeUnit.SECONDS)   // enroll 上游可能稍慢
+            .writeTimeout(60, TimeUnit.SECONDS)
+            .build()
+        val payload = gson.toJson(mapOf("audio" to audioBase64))
+        val req = Request.Builder().url(base() + "/voice/clone")
+            .header("Authorization", "Bearer " + AccountStore.token)
+            .post(payload.toRequestBody(jsonType)).build()
+        cloneHttp.newCall(req).execute().use { resp ->
+            if (!resp.isSuccessful) return@withContext null
+            val body = resp.body?.string().orEmpty()
+            runCatching { gson.fromJson(body, CloneResult::class.java)?.voiceId }.getOrNull()
+        }
+    }
+
+    private data class CloneResult(val ok: Boolean = false, val voiceId: String = "")
 }
