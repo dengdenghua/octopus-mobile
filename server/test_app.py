@@ -76,7 +76,7 @@ def clean_state():
                   "registry_assets", "crash_reports",
                   "square_posts", "square_comments", "square_likes", "square_follows",
                   "square_favorites", "square_unlocks", "plugin_subscriptions", "config_kv",
-                  "cost_snapshots", "pricing_proposals", "voice_sessions"):
+                  "cost_snapshots", "pricing_proposals", "voice_sessions", "voice_prefs"):
             c.execute(f"DELETE FROM {t}")
         c.commit()
     app_module._rl.clear()
@@ -2969,3 +2969,81 @@ class TestVoiceClientTools:
         asyncio.run(app_module._relay_client_tool(ev, up, CWS(), {}))
         assert "client_timeout" in json.loads(up.sent[0])["item"]["output"]
         assert json.loads(up.sent[1])["type"] == "response.create"
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# 语音个性化(Phase 4-A):/voice/prefs + session.update 应用 per-user 音色/人设
+# ═══════════════════════════════════════════════════════════════════════
+class TestVoicePrefs:
+    def test_default(self, client):
+        tok, _ = _email_register(client)
+        d = client.get("/voice/prefs", headers={"Authorization": f"Bearer {tok}"}).json()
+        assert d["voice"] == app_module.VOICE_REALTIME_VOICE
+        assert "Ethan" in d["presets"] and d["hasCloned"] is False
+
+    def test_set_and_get(self, client):
+        tok, _ = _email_register(client)
+        h = {"Authorization": f"Bearer {tok}"}
+        assert client.post("/voice/prefs", json={"voice": "Dylan", "persona": "简短有力"}, headers=h).status_code == 200
+        d = client.get("/voice/prefs", headers=h).json()
+        assert d["voice"] == "Dylan" and d["persona"] == "简短有力"
+
+    def test_reject_bad_voice(self, client):
+        tok, _ = _email_register(client)
+        r = client.post("/voice/prefs", json={"voice": "Cherry"}, headers={"Authorization": f"Bearer {tok}"})
+        assert r.status_code == 400  # Cherry 3.5 生成会 400,不给选
+
+    def test_cloned_requires_enrollment(self, client):
+        tok, _ = _email_register(client)
+        r = client.post("/voice/prefs", json={"voice": "cloned"}, headers={"Authorization": f"Bearer {tok}"})
+        assert r.status_code == 400  # 没复刻不能选 cloned
+
+    def test_persona_capped(self, client):
+        tok, _ = _email_register(client)
+        h = {"Authorization": f"Bearer {tok}"}
+        client.post("/voice/prefs", json={"persona": "x" * 999}, headers=h)
+        assert len(client.get("/voice/prefs", headers=h).json()["persona"]) == 500
+
+    def test_session_config_applies_pref(self, client):
+        _tok, uid = _email_register(client)
+        with closing(db()) as c:
+            c.execute("INSERT INTO voice_prefs(user_id,voice,persona,updated_at) VALUES(?,?,?,?)",
+                      (uid, "Ethan", "你是我的健身教练", _now_ms()))
+            c.commit()
+        voice, instr = app_module._voice_session_config(uid)
+        assert voice == "Ethan"
+        assert instr.startswith("你是我的健身教练")  # 人设前置
+        assert "章鱼" in instr  # 基础指令仍在
+
+    def test_cloned_voice_selected(self, client):
+        _tok, uid = _email_register(client)
+        with closing(db()) as c:
+            c.execute("INSERT INTO voice_prefs(user_id,voice,cloned_voice,updated_at) VALUES(?,?,?,?)",
+                      (uid, "cloned", "voice-abc123", _now_ms()))
+            c.commit()
+        voice, _instr = app_module._voice_session_config(uid)
+        assert voice == "voice-abc123"  # 复刻音色 id 被选用
+
+
+class TestVoicePrefsInSession:
+    def test_ws_injects_pref_voice(self, client, monkeypatch):
+        monkeypatch.setattr(app_module, "QWEN_API_KEY", "test-key")
+        created = []
+
+        async def fake_open(model):
+            up = _FakeUpstream()
+            created.append(up)
+            return up
+        monkeypatch.setattr(app_module, "_open_upstream_voice_ws", fake_open)
+        tok, _uid = _email_register(client)
+        app_module.set_config("voice_free_min_guest", 5)
+        client.post("/voice/prefs", json={"voice": "Ethan", "persona": "你是健身教练"},
+                    headers={"Authorization": f"Bearer {tok}"})
+        with client.websocket_connect(f"/voice/realtime?token={tok}") as ws:
+            ws.receive_json()  # voice.session
+            ws.receive_json()  # 注入回显
+        injected = [s for s in created[0].sent if "session.update" in s]
+        assert injected
+        sess = json.loads(injected[0])["session"]
+        assert sess["voice"] == "Ethan"
+        assert "健身教练" in sess["instructions"]  # 人设注入(解码后中文)

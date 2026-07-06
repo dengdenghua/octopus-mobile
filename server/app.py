@@ -84,6 +84,10 @@ VOICE_REALTIME_URL = os.environ.get(
 # ⚠️3.5 音色:Ethan/Serena/Dylan/Tina 可真出声,Cherry/Chelsie 会在生成时 400(session.update 假通过)。
 VOICE_REALTIME_MODEL = os.environ.get("VOICE_REALTIME_MODEL", "qwen3.5-omni-flash-realtime")
 VOICE_REALTIME_VOICE = os.environ.get("VOICE_REALTIME_VOICE", "Serena")
+# 3.5 实测能真出声的预设音色(Cherry/Chelsie 生成时 400,已排除)。用户可在这几个里选。
+VOICE_PRESET_VOICES = {"Serena", "Ethan", "Dylan", "Tina", "Sunny", "Jada"}
+# 声音复刻(Phase 4-B):enrollment 用 qwen-voice-enrollment,target_model 须与合成模型匹配。
+VOICE_ENROLL_TARGET = os.environ.get("VOICE_ENROLL_TARGET", "qwen3.5-omni-flash-realtime")
 # 允许客户端指定的实时模型白名单(防注入任意 model 名到上游 URL)。缺省回落 VOICE_REALTIME_MODEL。
 VOICE_ALLOWED_MODELS = {
     "qwen3-omni-flash-realtime", "qwen3.5-omni-flash-realtime",
@@ -764,6 +768,12 @@ def init_db() -> None:
             "end_reason TEXT DEFAULT '')"
         )
         c.execute("CREATE INDEX IF NOT EXISTS idx_voice_sessions_user ON voice_sessions(user_id, started_ms)")
+        # 语音个性化(Phase 4):per-user 音色 + 人设。voice 为预设名或复刻 voice_id;persona 前置进 instructions。
+        c.execute(
+            "CREATE TABLE IF NOT EXISTS voice_prefs("
+            "user_id TEXT PRIMARY KEY, voice TEXT DEFAULT '', persona TEXT DEFAULT '', "
+            "cloned_voice TEXT DEFAULT '', updated_at INTEGER NOT NULL DEFAULT 0)"
+        )
         # 迁移:给已存在的 remote_devices 表补新列(幂等)
         for _col in (
             "push_token TEXT DEFAULT ''", "os_version TEXT DEFAULT ''",
@@ -1980,6 +1990,32 @@ def _execute_voice_tool(name: str, user_id: str) -> dict[str, Any]:
     return {"error": "unknown_tool"}
 
 
+_VOICE_BASE_INSTRUCTIONS = (
+    "你是「章鱼」App 的智能语音助手,用简体中文、口语化、简洁地回答。"
+    "涉及用户的积分余额、会员状态、语音额度时,必须调用对应工具查询真实数据,不要编造。"
+    "需要打开网页或看手机电量时,调用相应设备工具。"
+)
+
+
+def _voice_session_config(user_id: str) -> "tuple[str, str]":
+    """读 per-user 语音个性化(Phase 4),返回 (voice, instructions)。复刻音色 > 预设 > 默认;人设前置。"""
+    voice, persona = VOICE_REALTIME_VOICE, ""
+    with closing(db()) as c:
+        row = c.execute(
+            "SELECT voice, persona, cloned_voice FROM voice_prefs WHERE user_id=?", (user_id,)
+        ).fetchone()
+    if row:
+        pv = (row["voice"] or "").strip()
+        cloned = (row["cloned_voice"] or "").strip()
+        if pv == "cloned" and cloned:
+            voice = cloned            # 用户选了自己复刻的音色
+        elif pv in VOICE_PRESET_VOICES:
+            voice = pv
+        persona = (row["persona"] or "").strip()
+    instructions = (persona + "\n" + _VOICE_BASE_INSTRUCTIONS) if persona else _VOICE_BASE_INSTRUCTIONS
+    return voice, instructions
+
+
 async def _handle_voice_tool_call(ev: dict[str, Any], upstream: Any, client_ws: WebSocket, user_id: str) -> None:
     """收到 omni 的 function_call → 服务端执行 → 结果喂回上游让模型口播 + 通知客户端(UI)。"""
     name = str(ev.get("name") or "")
@@ -2160,13 +2196,11 @@ async def voice_realtime_ws(ws: WebSocket, token: str = "", model: str = "") -> 
         _voice_finish(sid, meter, "upstream_failed")
         await _voice_reject(ws, "upstream_failed", "语音上游连接失败,请稍后重试", 4502)
         return
-    try:  # 注入默认会话参数(中文口语、pcm16、服务端 VAD、工具接管);客户端可再发 session.update 覆盖
+    _pref_voice, _pref_instructions = _voice_session_config(u["user_id"])  # per-user 音色/人设(Phase 4)
+    try:  # 注入会话参数(个性化音色/人设、pcm16、服务端 VAD、工具接管);客户端可再发 session.update 覆盖
         await upstream.send(json.dumps({"type": "session.update", "session": {
-            "modalities": ["text", "audio"], "voice": VOICE_REALTIME_VOICE,
-            "instructions": (
-                "你是「章鱼」App 的智能语音助手,用简体中文、口语化、简洁地回答。"
-                "涉及用户的积分余额、会员状态、语音额度时,必须调用对应工具查询真实数据,不要编造。"
-            ),
+            "modalities": ["text", "audio"], "voice": _pref_voice,
+            "instructions": _pref_instructions,
             "input_audio_format": "pcm16", "output_audio_format": "pcm16",
             "turn_detection": {"type": "server_vad"},
             "tools": VOICE_TOOLS + VOICE_CLIENT_TOOLS, "tool_choice": "auto",
@@ -2200,6 +2234,44 @@ def voice_demo_page() -> HTMLResponse:
                                     "connect-src 'self' ws: wss:; media-src 'self' blob:; "
                                     "base-uri 'none'; form-action 'none'"),
     })
+
+
+@app.get("/voice/prefs")
+def voice_prefs_get(u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    """读语音个性化:当前音色 + 人设 + 可选预设 + 是否已复刻(供 App 设置页渲染)。"""
+    with closing(db()) as c:
+        row = c.execute(
+            "SELECT voice, persona, cloned_voice FROM voice_prefs WHERE user_id=?", (u["user_id"],)
+        ).fetchone()
+    return {
+        "voice": (row["voice"] if row else "") or VOICE_REALTIME_VOICE,
+        "persona": (row["persona"] if row else "") or "",
+        "presets": sorted(VOICE_PRESET_VOICES),
+        "hasCloned": bool(row and (row["cloned_voice"] or "").strip()),
+        "default": VOICE_REALTIME_VOICE,
+    }
+
+
+@app.post("/voice/prefs")
+def voice_prefs_set(body: dict[str, Any], u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    """设语音个性化。voice=预设名 / 'cloned'(需已复刻);persona 上限 500 字前置进 instructions。"""
+    voice = str(body.get("voice", "")).strip()
+    persona = str(body.get("persona", "")).strip()[:500]
+    if voice and voice != "cloned" and voice not in VOICE_PRESET_VOICES:
+        raise HTTPException(status_code=400, detail="不支持的音色")
+    with closing(db()) as c:
+        if voice == "cloned":
+            has = c.execute("SELECT cloned_voice FROM voice_prefs WHERE user_id=?", (u["user_id"],)).fetchone()
+            if not (has and (has["cloned_voice"] or "").strip()):
+                raise HTTPException(status_code=400, detail="你还没有复刻音色")
+        c.execute(
+            "INSERT INTO voice_prefs(user_id, voice, persona, updated_at) VALUES(?,?,?,?) "
+            "ON CONFLICT(user_id) DO UPDATE SET voice=excluded.voice, persona=excluded.persona, "
+            "updated_at=excluded.updated_at",
+            (u["user_id"], voice, persona, now_ms()),
+        )
+        c.commit()
+    return {"ok": True, "voice": voice or VOICE_REALTIME_VOICE, "persona": persona}
 
 
 @app.get("/voice/quota")
