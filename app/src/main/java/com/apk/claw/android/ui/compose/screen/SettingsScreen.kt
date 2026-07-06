@@ -150,6 +150,8 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}, onNavigateToCreatorCenter: 
     var pairBusy by remember { mutableStateOf(false) }
     var showWorkspaceDialog by remember { mutableStateOf(false) }
     var workspaceDraft by remember { mutableStateOf("") }
+    var showFallbackDialog by remember { mutableStateOf(false) }
+    var fallbackDraft by remember { mutableStateOf("") }
     var showKeepAliveDialog by remember { mutableStateOf(false) }
     DisposableEffect(lifecycleOwner) {
         val obs = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_RESUME) refreshTick++ }
@@ -263,6 +265,39 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}, onNavigateToCreatorCenter: 
             },
             dismissButton = {
                 TextButton(onClick = { showWorkspaceDialog = false }) { Text(stringResource(R.string.cancel)) }
+            },
+        )
+    }
+
+    if (showFallbackDialog) {
+        AlertDialog(
+            onDismissRequest = { showFallbackDialog = false },
+            title = { Text("LLM 备用模型") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(OctopusSpacing.sm)) {
+                    Text(
+                        "主模型限流/超载/不存在时,自动按顺序切到备用模型(与主模型同 baseUrl/apiKey,只换模型名)。" +
+                            "逗号分隔,留空=不启用。例:qwen3.5-flash,deepseek-chat",
+                        color = TextMuted, fontSize = OctopusType.caption, lineHeight = 16.sp,
+                    )
+                    OutlinedTextField(
+                        value = fallbackDraft,
+                        onValueChange = { fallbackDraft = it },
+                        singleLine = true,
+                        label = { Text("备用模型(逗号分隔)") },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    KVUtils.setLlmFallbackModels(fallbackDraft.trim())
+                    showFallbackDialog = false
+                    refreshTick++
+                }) { Text(stringResource(R.string.confirm)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showFallbackDialog = false }) { Text(stringResource(R.string.cancel)) }
             },
         )
     }
@@ -461,6 +496,14 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}, onNavigateToCreatorCenter: 
                     ClickableSettingsRow(Icons.Filled.Storage, stringResource(R.string.settings_workspace_title), currentWorkspace) {
                         workspaceDraft = KVUtils.getScriptWorkspace()
                         showWorkspaceDialog = true
+                    }
+                    SettingsDivider()
+                    val currentFallback = remember(refreshTick) {
+                        KVUtils.getLlmFallbackModels().joinToString(", ").ifEmpty { "未设置(单模型,不故障转移)" }
+                    }
+                    ClickableSettingsRow(Icons.Filled.Api, "LLM 备用模型", currentFallback) {
+                        fallbackDraft = KVUtils.getLlmFallbackModels().joinToString(",")
+                        showFallbackDialog = true
                     }
                     SettingsDivider()
                     ClickableSettingsRow(Icons.Filled.Hub, stringResource(R.string.settings_octopus_runtime_title), stringResource(R.string.settings_runtime_plain_desc)) {
