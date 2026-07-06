@@ -590,6 +590,7 @@ Shizuku 是安全、开源的本地辅助工具。</string>
     <string name="voice_call_reason_insufficient">积分不足，请充值或购买会员</string>
     <string name="voice_call_reason_limit">已达单次通话时长上限</string>
     <string name="voice_call_entry">语音通话</string>
+    <string name="voice_settings_title">语音设置</string>
     <string name="chat_voice_stop_agent">■  停止任务</string>
     <string name="chat_voice_listening_release">正在听… 松开发送</string>
     <string name="chat_voice_hold_to_speak">按住说话</string>

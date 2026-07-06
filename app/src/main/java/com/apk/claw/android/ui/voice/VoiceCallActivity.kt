@@ -1,4 +1,4 @@
-@file:Suppress("TooManyFunctions", "MagicNumber", "MaxLineLength")
+@file:Suppress("TooManyFunctions", "MagicNumber", "MaxLineLength", "LongMethod")
 
 package com.apk.claw.android.ui.voice
 
@@ -33,6 +33,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -129,7 +130,14 @@ private fun VoiceCallScreen(onClose: () -> Unit) {
             .padding(horizontal = OctopusSpacing.lg),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        CallHeader(state = state, seconds = seconds, stats = stats, onClose = onClose)
+        CallHeader(
+            state = state, seconds = seconds, stats = stats, onClose = onClose,
+            onSettings = {
+                runCatching {
+                    context.startActivity(android.content.Intent(context, VoiceSettingsActivity::class.java))
+                }
+            },
+        )
         Box(
             modifier = Modifier.weight(1f).fillMaxWidth(),
             contentAlignment = Alignment.Center,
@@ -149,7 +157,7 @@ private fun VoiceCallScreen(onClose: () -> Unit) {
 }
 
 @Composable
-private fun CallHeader(state: VoiceState, seconds: Int, stats: VoiceStats, onClose: () -> Unit) {
+private fun CallHeader(state: VoiceState, seconds: Int, stats: VoiceStats, onClose: () -> Unit, onSettings: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = OctopusSpacing.md),
         verticalAlignment = Alignment.CenterVertically,
@@ -165,6 +173,9 @@ private fun CallHeader(state: VoiceState, seconds: Int, stats: VoiceStats, onClo
             if (sub.isNotEmpty()) {
                 Text(sub, color = OctopusColors.TextTertiary, fontSize = OctopusType.caption)
             }
+        }
+        IconButton(onClick = onSettings) {
+            Icon(Icons.Filled.Tune, contentDescription = stringResource(R.string.voice_settings_title), tint = OctopusColors.TextSecondary)
         }
         IconButton(onClick = onClose) {
             Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.voice_call_close), tint = OctopusColors.TextSecondary)
