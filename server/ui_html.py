@@ -392,3 +392,143 @@ async function rejectProposal(id){ try{ await api("/admin/api/pricing/proposals/
 if(tok())api("/admin/api/stats").then(enter).catch(()=>logout());
 $("#tokIn").addEventListener("keydown",e=>{if(e.key==="Enter")doLogin();});
 </script></body></html>"""
+
+
+# ─────────────────────────── 实时语音 Demo(协议验证:浏览器麦克风 ↔ /voice/realtime) ──
+# 用途:在真机写 Android 音频前,先在浏览器打通实时语音全链路,敲定音频格式/采样率/延迟。
+# 输入 16k pcm16(server_vad 自动断句),播放 24k pcm16。同源连 WS(token query 鉴权)。
+VOICE_DEMO_HTML = r"""<!doctype html><html lang="zh"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>章鱼 · 实时语音 Demo</title>
+<style>
+:root{color-scheme:dark}
+body{margin:0;background:#0b0e14;color:#e6e6e6;font:15px/1.5 -apple-system,system-ui,sans-serif;padding:16px;max-width:640px;margin:0 auto}
+h1{font-size:19px;margin:8px 0 4px} .mut{color:#8a93a6;font-size:13px}
+.card{background:#141a24;border:1px solid #222c3a;border-radius:12px;padding:14px;margin:12px 0}
+input{background:#0b0e14;border:1px solid #2a3546;color:#e6e6e6;border-radius:8px;padding:9px 11px;font-size:15px;width:100%;box-sizing:border-box;margin:4px 0}
+button{background:#2563eb;color:#fff;border:0;border-radius:9px;padding:11px 16px;font-size:15px;font-weight:600;cursor:pointer;margin:4px 6px 4px 0}
+button.g{background:#16a34a} button.r{background:#dc2626} button:disabled{opacity:.4;cursor:not-allowed}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.dot{width:10px;height:10px;border-radius:50%;background:#555;display:inline-block;margin-right:6px}
+.dot.on{background:#16a34a;box-shadow:0 0 8px #16a34a} .dot.err{background:#dc2626}
+#log{background:#080b10;border-radius:8px;padding:10px;height:150px;overflow:auto;font:12px/1.5 ui-monospace,monospace;color:#93b3d6;white-space:pre-wrap}
+.bubble{margin:6px 0;padding:8px 11px;border-radius:10px;max-width:85%}
+.me{background:#1e3a5f;margin-left:auto} .ai{background:#1f2937}
+#chat{min-height:60px;display:flex;flex-direction:column}
+.pill{display:inline-block;background:#1f2937;border-radius:20px;padding:3px 10px;font-size:12px;margin-right:6px}
+</style></head><body>
+<h1>🐙 章鱼 · 实时语音 Demo</h1>
+<div class="mut">协议验证工具:浏览器麦克风 → 服务端代理 → Qwen-Omni-Realtime。用来敲定音频参数,再照抄成 Android。</div>
+
+<div class="card" id="loginCard">
+  <div class="mut">① 登录拿 token（用你的邮箱，收真验证码）</div>
+  <input id="email" type="email" placeholder="邮箱" autocomplete="email">
+  <div class="row"><button id="btnSend">发送验证码</button><span class="mut" id="sendMsg"></span></div>
+  <input id="code" placeholder="6 位验证码" inputmode="numeric">
+  <button id="btnLogin" class="g">登录</button>
+  <div class="mut">或直接粘贴已有 token：</div>
+  <input id="tokenPaste" placeholder="Bearer token（可选）">
+  <button id="btnUseTok">使用此 token</button>
+</div>
+
+<div class="card">
+  <div class="row"><span class="dot" id="dot"></span><b id="state">未连接</b></div>
+  <div id="quota" class="mut" style="margin:6px 0"></div>
+  <div class="row" style="margin-top:8px">
+    <button id="btnStart" class="g" disabled>🎙️ 开始通话</button>
+    <button id="btnStop" class="r" disabled>挂断</button>
+  </div>
+  <div style="margin-top:8px">
+    <span class="pill" id="pMin">0 分钟</span>
+    <span class="pill" id="pBill">—</span>
+    <span class="pill" id="pCred">0 积分</span>
+  </div>
+</div>
+
+<div class="card"><div class="mut">实时字幕</div><div id="chat"></div></div>
+<div class="card"><div class="mut">事件日志</div><div id="log"></div></div>
+
+<script>
+const $=s=>document.querySelector(s);
+let TOKEN="", ws=null, capCtx=null, capNode=null, micStream=null, playCtx=null, nextT=0, lastAiBubble=null;
+function log(m){const l=$("#log");l.textContent+=m+"\n";l.scrollTop=l.scrollHeight;}
+function setState(t,cls){$("#state").textContent=t;const d=$("#dot");d.className="dot"+(cls?(" "+cls):"");}
+
+async function apiPost(path,body){
+  const r=await fetch(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+  const d=await r.json().catch(()=>({})); if(!r.ok) throw new Error(d.detail||("HTTP "+r.status)); return d;
+}
+$("#btnSend").onclick=async()=>{
+  try{ await apiPost("/auth/email/send",{email:$("#email").value.trim()}); $("#sendMsg").textContent="已发送，查收邮件"; }
+  catch(e){ $("#sendMsg").textContent="失败："+e.message; }
+};
+$("#btnLogin").onclick=async()=>{
+  try{ const d=await apiPost("/auth/email/login",{email:$("#email").value.trim(),code:$("#code").value.trim()});
+    onToken(d.token); }catch(e){ alert("登录失败："+e.message); }
+};
+$("#btnUseTok").onclick=()=>{ const t=$("#tokenPaste").value.trim(); if(t) onToken(t); };
+
+async function onToken(t){
+  TOKEN=t; $("#loginCard").style.display="none"; $("#btnStart").disabled=false; setState("已登录，可通话");
+  try{ const r=await fetch("/voice/quota",{headers:{Authorization:"Bearer "+TOKEN}}); const q=await r.json();
+    $("#quota").textContent="每分钟 "+q.perMinCredits+" 积分 · 今日免费剩 "+q.freeMinutesRemaining+"/"+q.freeMinutesDaily+" 分钟 · 余额 "+q.creditsBalance+" · 约可撑 "+q.estimatedMinutes+" 分钟 · 上限 "+q.maxMinutes+" 分钟";
+    if(!q.enabled) $("#quota").textContent="⚠️ 服务端未配置语音上游";
+  }catch(e){ log("quota 查询失败:"+e.message); }
+}
+
+// ── 音频工具 ──
+function downTo16k(f32,inRate){ if(inRate===16000)return f32; const r=inRate/16000,n=Math.floor(f32.length/r),o=new Float32Array(n); for(let i=0;i<n;i++)o[i]=f32[Math.floor(i*r)]; return o; }
+function f32ToPCM16(f32){ const b=new Int16Array(f32.length); for(let i=0;i<f32.length;i++){let s=Math.max(-1,Math.min(1,f32[i]));b[i]=s<0?s*0x8000:s*0x7FFF;} return b; }
+function pcm16ToB64(i16){ const u=new Uint8Array(i16.buffer);let s="";for(let i=0;i<u.length;i++)s+=String.fromCharCode(u[i]);return btoa(s); }
+function b64ToF32(b64){ const bin=atob(b64),u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i); const i16=new Int16Array(u.buffer),f=new Float32Array(i16.length);for(let i=0;i<i16.length;i++)f[i]=i16[i]/32768;return f; }
+function playPCM(b64){ if(!playCtx){playCtx=new AudioContext({sampleRate:24000});nextT=playCtx.currentTime;} const f=b64ToF32(b64); const buf=playCtx.createBuffer(1,f.length,24000); buf.copyToChannel(f,0); const src=playCtx.createBufferSource(); src.buffer=buf; src.connect(playCtx.destination); const t=Math.max(playCtx.currentTime,nextT); src.start(t); nextT=t+buf.duration; }
+
+function aiSay(txt){ if(!lastAiBubble){lastAiBubble=document.createElement("div");lastAiBubble.className="bubble ai";$("#chat").appendChild(lastAiBubble);} lastAiBubble.textContent+=txt; $("#chat").scrollTop=1e9; }
+function meSay(txt){ const b=document.createElement("div");b.className="bubble me";b.textContent="🗣️ "+txt;$("#chat").appendChild(b);$("#chat").scrollTop=1e9; }
+
+$("#btnStart").onclick=async()=>{
+  try{
+    micStream=await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:true,noiseSuppression:true}});
+  }catch(e){ alert("麦克风获取失败："+e.message); return; }
+  const wssBase=(location.protocol==="https:"?"wss://":"ws://")+location.host;
+  ws=new WebSocket(wssBase+"/voice/realtime?token="+encodeURIComponent(TOKEN));
+  setState("连接中…"); $("#btnStart").disabled=true;
+  ws.onopen=()=>{ setState("通话中","on"); $("#btnStop").disabled=false; startCapture(); };
+  ws.onerror=()=>{ setState("连接错误","err"); };
+  ws.onclose=(e)=>{ setState("已挂断"+(e.reason?("："+e.reason):""), e.code!==1000?"err":""); teardown(); };
+  ws.onmessage=(ev)=>{
+    let m; try{m=JSON.parse(ev.data);}catch(_){return;}
+    const t=m.type;
+    if(t==="voice.session"){ log("session "+m.sessionId+" model="+m.model+" billed="+m.billedMode); }
+    else if(t==="response.audio.delta"){ playPCM(m.delta); }
+    else if(t==="response.audio_transcript.delta"){ aiSay(m.delta); }
+    else if(t==="response.audio_transcript.done"||t==="response.done"){ lastAiBubble=null; }
+    else if(t==="conversation.item.input_audio_transcription.completed"){ if(m.transcript)meSay(m.transcript); }
+    else if(t==="voice.tick"){ $("#pMin").textContent=m.minute+" 分钟"; $("#pBill").textContent=m.billedMode; $("#pCred").textContent=m.creditsSpent+" 积分"; }
+    else if(t==="voice.ended"){ log("voice.ended: "+m.reason); }
+    else if(t==="error"){ log("ERR "+JSON.stringify(m.error||m)); }
+    else { log(t); }
+  };
+};
+function startCapture(){
+  capCtx=new AudioContext();
+  const src=capCtx.createMediaStreamSource(micStream);
+  capNode=capCtx.createScriptProcessor(4096,1,1);
+  const mute=capCtx.createGain(); mute.gain.value=0;
+  src.connect(capNode); capNode.connect(mute); mute.connect(capCtx.destination);
+  capNode.onaudioprocess=(e)=>{
+    if(!ws||ws.readyState!==1)return;
+    const ds=downTo16k(e.inputBuffer.getChannelData(0),capCtx.sampleRate);
+    ws.send(JSON.stringify({type:"input_audio_buffer.append",audio:pcm16ToB64(f32ToPCM16(ds))}));
+  };
+  log("采集 @"+capCtx.sampleRate+"Hz → 降采样 16k pcm16");
+}
+function teardown(){
+  try{capNode&&(capNode.onaudioprocess=null,capNode.disconnect());}catch(_){}
+  try{capCtx&&capCtx.close();}catch(_){}
+  try{micStream&&micStream.getTracks().forEach(t=>t.stop());}catch(_){}
+  capCtx=capNode=micStream=null;
+  $("#btnStart").disabled=false; $("#btnStop").disabled=true;
+}
+$("#btnStop").onclick=()=>{ try{ws&&ws.close(1000,"user");}catch(_){}; teardown(); };
+</script></body></html>"""

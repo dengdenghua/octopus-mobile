@@ -31,7 +31,7 @@ import asyncio
 from contextlib import closing
 from typing import Any
 
-from ui_html import ADMIN_HTML, REMOTE_CONSOLE_HTML
+from ui_html import ADMIN_HTML, REMOTE_CONSOLE_HTML, VOICE_DEMO_HTML
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, Response, StreamingResponse
@@ -1918,6 +1918,19 @@ def _voice_finish(sid: str, meter: "_VoiceMeter", reason: str) -> None:
         c.commit()
 
 
+def _voice_origin_ok(ws: WebSocket, origin: str) -> bool:
+    """语音 WS 用 token(query)鉴权,非 cookie,无 CSWSH 面 → 放行同源 + WS_ALLOWED_ORIGINS 白名单。
+    (原生 App 的 OkHttp 不发 Origin 头,走上层 `if origin and ...` 直接放行,不到这。)"""
+    if _is_allowed_origin(origin):
+        return True
+    from urllib.parse import urlparse
+    host = ws.headers.get("host", "").lower()
+    try:
+        return bool(host) and urlparse(origin).netloc.lower() == host
+    except ValueError:
+        return False
+
+
 async def _voice_reject(ws: WebSocket, code: str, message: str, close_code: int) -> None:
     try:
         await ws.send_json({"type": "error", "error": {"code": code, "message": message}})
@@ -1987,7 +2000,7 @@ async def _voice_relay(client_ws: WebSocket, upstream: Any, meter: "_VoiceMeter"
 async def voice_realtime_ws(ws: WebSocket, token: str = "", model: str = "") -> None:
     """实时语音对话代理入口。鉴权 → 预扣首分钟(付不起且无免费额度即零成本拒绝)→ 连上游 → 中继。"""
     origin = ws.headers.get("origin", "")
-    if origin and not _is_allowed_origin(origin):
+    if origin and not _voice_origin_ok(ws, origin):
         await ws.accept()
         await ws.close(code=4403, reason="origin not allowed")
         return
@@ -2045,6 +2058,20 @@ async def voice_realtime_ws(ws: WebSocket, token: str = "", model: str = "") -> 
             await ws.close()
         except Exception:
             pass
+
+
+@app.get("/voice/demo", response_class=HTMLResponse)
+@app.get("/voice/demo/", response_class=HTMLResponse)
+def voice_demo_page() -> HTMLResponse:
+    """实时语音协议验证页(浏览器麦克风打通全链路,给 Android 音频对参数)。同源连 WS。"""
+    return HTMLResponse(VOICE_DEMO_HTML, headers={
+        "X-Robots-Tag": "noindex",
+        "Permissions-Policy": "microphone=(self)",
+        "Content-Security-Policy": ("default-src 'self'; img-src 'self' data:; "
+                                    "style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; "
+                                    "connect-src 'self' ws: wss:; media-src 'self' blob:; "
+                                    "base-uri 'none'; form-action 'none'"),
+    })
 
 
 @app.get("/voice/quota")

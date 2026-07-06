@@ -2827,3 +2827,22 @@ class TestVoiceRealtimeWS:
             err = ws.receive_json()
             assert err["type"] == "error"
             assert err["error"]["code"] == "voice_unavailable"
+
+
+class TestVoiceDemoPage:
+    def test_demo_page_served(self, client):
+        r = client.get("/voice/demo")
+        assert r.status_code == 200
+        assert "text/html" in r.headers["content-type"]
+        assert "实时语音" in r.text
+        assert r.headers.get("permissions-policy", "").startswith("microphone")
+
+    def test_origin_same_host_ok(self):
+        class _WS:
+            def __init__(self, host):
+                self.headers = {"host": host}
+        # 同源放行(demo 页与 WS 同域)
+        assert app_module._voice_origin_ok(_WS("api.octoapk.com"), "https://api.octoapk.com") is True
+        assert app_module._voice_origin_ok(_WS("api.octoapk.com:443"), "https://api.octoapk.com:443") is True
+        # 跨源且不在白名单 → 拒
+        assert app_module._voice_origin_ok(_WS("api.octoapk.com"), "https://evil.example") is False
