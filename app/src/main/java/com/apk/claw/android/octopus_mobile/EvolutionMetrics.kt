@@ -24,6 +24,7 @@ object EvolutionMetrics {
     const val LEDGER_ERROR = "ledger_error"
     const val LEDGER_REPAIR = "ledger_repair"
     const val MITIGATION_INJECTED = "mitigation_injected"
+    const val MODEL_FAILOVER = "model_failover"
 
     private const val KEY = "EVOLUTION_METRICS"
     private val counters = ConcurrentHashMap<String, AtomicLong>()
@@ -39,6 +40,7 @@ object EvolutionMetrics {
     fun ledgerError() { c(LEDGER_ERROR).incrementAndGet() }
     fun ledgerRepair() { c(LEDGER_REPAIR).incrementAndGet() }
     fun mitigationInjected() { c(MITIGATION_INJECTED).incrementAndGet() }
+    fun modelFailover() { c(MODEL_FAILOVER).incrementAndGet() }
 
     fun get(key: String): Long = counters[key]?.get() ?: 0L
 
@@ -67,7 +69,8 @@ object EvolutionMetrics {
             append(" ($hit/$reflexTotal, 省 $hit 次 LLM); ")
             append("ImmuneSystem 告警率 ").append(pct(immuneWarnRate()))
             append(" (${get(IMMUNE_WARN)}/${get(IMMUNE_CALL)}); ")
-            append("经验账本 记错 ${get(LEDGER_ERROR)} / 修复 ${get(LEDGER_REPAIR)} / 注入 ${get(MITIGATION_INJECTED)} 次")
+            append("经验账本 记错 ${get(LEDGER_ERROR)} / 修复 ${get(LEDGER_REPAIR)} / 注入 ${get(MITIGATION_INJECTED)} 次; ")
+            append("模型故障转移 ${get(MODEL_FAILOVER)} 次")
         }
     }
 

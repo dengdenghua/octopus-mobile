@@ -433,6 +433,7 @@ private fun EvolutionMetricsCard(tick: Int, onReset: () -> Unit) {
     val ledgerErr = remember(tick) { EvolutionMetrics.get(EvolutionMetrics.LEDGER_ERROR) }
     val ledgerRepair = remember(tick) { EvolutionMetrics.get(EvolutionMetrics.LEDGER_REPAIR) }
     val injected = remember(tick) { EvolutionMetrics.get(EvolutionMetrics.MITIGATION_INJECTED) }
+    val failover = remember(tick) { EvolutionMetrics.get(EvolutionMetrics.MODEL_FAILOVER) }
     val hasData = hit + miss + immuneCall + ledgerErr > 0L
     FCard {
         MetricRow("⚡ 反射快路径命中率", reflexRate, "省下 $hit 次完整 LLM（$hit/${hit + miss}）")
@@ -440,6 +441,8 @@ private fun EvolutionMetricsCard(tick: Int, onReset: () -> Unit) {
         MetricRow("🛡️ 免疫系统告警率", immuneRate, "$immuneWarn 次告警 / $immuneCall 次预检")
         Spacer(Modifier.height(8.dp))
         MetricRow("📒 经验账本", "记 $ledgerErr", "修复 $ledgerRepair · 注入规避 $injected 次")
+        Spacer(Modifier.height(8.dp))
+        MetricRow("🔀 模型故障转移", "$failover 次", "主模型失败自动切备用(需在配置里填备用模型)")
         if (!hasData) {
             Text(
                 "暂无数据——跑几个任务后这里会显示反射命中率、免疫告警率等硬指标。",

@@ -566,6 +566,12 @@ object KVUtils {
     fun getScriptWorkspace(): String = getString(KEY_SCRIPT_WORKSPACE, DEFAULT_SCRIPT_WORKSPACE)
     fun setScriptWorkspace(value: String) = putString(KEY_SCRIPT_WORKSPACE, value.trimEnd('/') + "/")
 
+    // ── LLM 多模型故障转移:备用模型(逗号分隔,与主模型同 baseUrl/apiKey);空=不启用 ──
+    private const val KEY_LLM_FALLBACK_MODELS = "KEY_LLM_FALLBACK_MODELS"
+    fun getLlmFallbackModels(): List<String> =
+        getString(KEY_LLM_FALLBACK_MODELS, "").split(",").map { it.trim() }.filter { it.isNotEmpty() }
+    fun setLlmFallbackModels(csv: String) = putString(KEY_LLM_FALLBACK_MODELS, csv)
+
     // ── Octopus Mobile 方案 F 便捷方法 ──
     fun getOctopusRpcUrl(): String = getString(KEY_OCTOPUS_RPC_URL, "")
     fun setOctopusRpcUrl(value: String) = putString(KEY_OCTOPUS_RPC_URL, value)

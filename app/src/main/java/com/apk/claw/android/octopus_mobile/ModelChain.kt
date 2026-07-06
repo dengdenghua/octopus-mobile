@@ -1,3 +1,9 @@
+@file:Suppress(
+    "PackageNaming", "MagicNumber", "MaxLineLength", "ReturnCount",
+    "TooGenericExceptionThrown", "TooGenericExceptionCaught",
+    "CyclomaticComplexMethod", "InstanceOfCheckForException", "NestedBlockDepth", "ThrowsCount",
+)   // 并行原文件存量:下划线包/HTTP 码等内联常量/失败链多出口/HTTP 重试圈复杂度
+
 package com.apk.claw.android.octopus_mobile
 
 import android.util.Log
@@ -28,7 +34,11 @@ class ModelChain(
 
         fun fromEffective(eff: com.apk.claw.android.account.EffectiveLlm, http: okhttp3.OkHttpClient): ModelChain {
             val primary = ModelEndpoint(eff.baseUrl, eff.apiKey, eff.model)
-            return ModelChain(primary, emptyList(), http)
+            // 备用模型:与主模型同 baseUrl/apiKey,只换 model 名(KVUtils 配置,逗号分隔);空=退化为单端点。
+            val fallbacks = com.apk.claw.android.utils.KVUtils.getLlmFallbackModels()
+                .filter { it != eff.model }
+                .map { ModelEndpoint(eff.baseUrl, eff.apiKey, it) }
+            return ModelChain(primary, fallbacks, http)
         }
     }
 
@@ -56,6 +66,7 @@ class ModelChain(
             try {
                 val result = callEndpoint(endpoint, userPrompt, temperature, retriesPerEndpoint, baseRetryMs)
                 if (idx > 0) {
+                    EvolutionMetrics.modelFailover()
                     Log.i(TAG, "Failover to $endpointName succeeded")
                 }
                 return result

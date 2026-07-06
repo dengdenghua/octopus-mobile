@@ -1,9 +1,15 @@
+@file:Suppress(
+    "LargeClass", "LongMethod", "MagicNumber", "MaxLineLength",
+    "ReturnCount", "UnusedPrivateProperty", "VariableNaming",
+)   // 并行原文件存量样式债(大类/长方法/内联常量等);本次改动仅去重 callLlm→ModelChain
+
 package com.apk.claw.android.tool.impl
 
 import com.apk.claw.android.ClawApplication
 import com.apk.claw.android.account.EffectiveLlm
 import com.apk.claw.android.account.LlmRouting
 import com.apk.claw.android.octopus_mobile.ExperienceLedger
+import com.apk.claw.android.octopus_mobile.ModelChain
 import com.apk.claw.android.octopus_mobile.ReflexArc
 import com.apk.claw.android.octopus_mobile.TurnScorer
 import com.apk.claw.android.plugin.PluginManifest
@@ -13,15 +19,10 @@ import com.apk.claw.android.tool.ToolResult
 import com.apk.claw.android.utils.OctoHttp
 import com.google.gson.Gson
 import android.util.Log
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.util.concurrent.TimeUnit
-import kotlin.math.pow
-import kotlin.random.Random
 
 class GenerateAppTool : BaseTool() {
 
@@ -734,73 +735,14 @@ $lines
      * - CLARIFY = 0.1  选择题分类必须高度确定
      * - REPAIR  = 0.1  修复阶段严格遵循约束
      */
+    // 单发 LLM 调用委托给 ModelChain:统一重试/退避,并在 KVUtils 配置了备用模型时自动故障转移。
     private fun callLlm(
         eff: EffectiveLlm,
         userPrompt: String,
         temperature: Double = 0.2,
         maxRetries: Int = 2,
         baseRetryMs: Long = 800,
-    ): String {
-        val url = eff.baseUrl.trimEnd('/') + "/chat/completions"
-        var lastError: Exception? = null
-
-        for (attempt in 0..maxRetries) {
-            try {
-                val body = JSONObject().apply {
-                    put("model", eff.model)
-                    put("temperature", temperature)
-                    put("messages", JSONArray().put(JSONObject().put("role", "user").put("content", userPrompt)))
-                }
-                val request = Request.Builder()
-                    .url(url)
-                    .addHeader("Authorization", "Bearer ${eff.apiKey}")
-                    .addHeader("Content-Type", "application/json")
-                    .post(body.toString().toRequestBody("application/json".toMediaType()))
-                    .build()
-                http.newCall(request).execute().use { resp ->
-                    val respBody = resp.body?.string().orEmpty()
-                    if (!resp.isSuccessful) {
-                        val isTransient = resp.code == 429 || resp.code >= 500
-                        if (isTransient && attempt < maxRetries) {
-                            val delayMs = computeBackoff(attempt, baseRetryMs)
-                            Log.w("GenerateApp", "LLM HTTP ${resp.code} (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${delayMs}ms")
-                            Thread.sleep(delayMs)
-                            return@use
-                        }
-                        error("HTTP ${resp.code}: ${respBody.take(200)}")
-                    }
-                    val message = JSONObject(respBody)
-                        .getJSONArray("choices").getJSONObject(0).getJSONObject("message")
-                    return message.optString("content", "").takeIf { it.isNotBlank() }
-                        ?: message.optString("reasoning_content", "")
-                }
-            } catch (e: Exception) {
-                lastError = e
-                if (attempt < maxRetries && isTransientException(e)) {
-                    val delayMs = computeBackoff(attempt, baseRetryMs)
-                    Log.w("GenerateApp", "LLM call failed (attempt ${attempt + 1}/${maxRetries + 1}): ${e.message}, retrying in ${delayMs}ms")
-                    Thread.sleep(delayMs)
-                } else {
-                    throw e
-                }
-            }
-        }
-        throw lastError ?: RuntimeException("LLM call failed after $maxRetries retries")
-    }
-
-    private fun isTransientException(e: Exception): Boolean {
-        val msg = e.message ?: return false
-        return msg.contains("HTTP 429") || msg.contains("HTTP 5") ||
-                msg.contains("timeout", ignoreCase = true) ||
-                msg.contains("connection", ignoreCase = true) ||
-                msg.contains("reset", ignoreCase = true)
-    }
-
-    private fun computeBackoff(attempt: Int, baseDelayMs: Long): Long {
-        val raw = (baseDelayMs * 2.0.pow(attempt)).toLong().coerceAtMost(15_000L)
-        val jitter = 0.75 + Random.nextDouble() * 0.25
-        return (raw * jitter).toLong().coerceAtLeast(0)
-    }
+    ): String = ModelChain.fromEffective(eff, http).call(userPrompt, temperature, maxRetries, baseRetryMs)
 
     private fun assessClarityWithOptions(eff: EffectiveLlm, description: String): List<Pair<String, List<String>>> {
         val raw = callLlm(eff, clarifyPromptWithOptions(description), temperature = 0.1).trim()
