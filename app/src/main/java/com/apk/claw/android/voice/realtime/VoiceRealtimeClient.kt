@@ -81,6 +81,11 @@ class VoiceRealtimeClient {
     val userTranscript: StateFlow<String> = _userTranscript.asStateFlow()
     private val _speaking = MutableStateFlow(false)
     val speaking: StateFlow<Boolean> = _speaking.asStateFlow()
+    private val _toolHint = MutableStateFlow("")
+    val toolHint: StateFlow<String> = _toolHint.asStateFlow()
+
+    /** 设备工具执行器(UI 层提供,持 Context):入参 (name, argsJson) → 返回结果 JSON 串。 */
+    var onDeviceTool: ((String, String) -> String)? = null
 
     fun connect() {
         if (ws != null) return
@@ -138,13 +143,15 @@ class VoiceRealtimeClient {
             "voice.session" -> onVoiceSession(obj)
             "voice.tick" -> onVoiceTick(obj)
             "voice.ended" -> endedByServer(obj.get("reason")?.asString ?: "通话已结束")
-            "response.created" -> _aiTranscript.value = ""
+            "response.created" -> { _aiTranscript.value = ""; _toolHint.value = "" }
             "response.audio.delta" -> onAudioDelta(obj)
             "response.audio.done" -> _speaking.value = false
             "response.audio_transcript.delta" -> _aiTranscript.value += (obj.get("delta")?.asString ?: "")
             "input_audio_buffer.speech_started" -> { audioOut?.interrupt(); _speaking.value = false }
             "conversation.item.input_audio_transcription.completed" ->
                 obj.get("transcript")?.asString?.let { if (it.isNotBlank()) _userTranscript.value = it }
+            "voice.tool" -> _toolHint.value = toolHintFor(obj.get("name")?.asString ?: "")
+            "voice.tool_call" -> onDeviceToolCall(obj)
             "error" -> onError(obj)
             else -> { /* 其他控制事件忽略 */ }
         }
@@ -190,6 +197,25 @@ class VoiceRealtimeClient {
         ws = null
         teardownAudio()
         _state.value = VoiceState.Ended(reason)
+    }
+
+    private fun onDeviceToolCall(obj: JsonObject) {
+        val name = obj.get("name")?.asString ?: return
+        val callId = obj.get("callId")?.asString ?: ""
+        val args = obj.get("arguments")?.asString ?: "{}"
+        _toolHint.value = toolHintFor(name)
+        val result = runCatching { onDeviceTool?.invoke(name, args) }.getOrNull()
+            ?: """{"error":"unhandled"}"""
+        ws?.send("""{"type":"voice.tool_result","callId":"$callId","result":$result}""")
+    }
+
+    private fun toolHintFor(name: String): String = when (name) {
+        "get_credit_balance" -> "正在查积分余额…"
+        "get_membership_status" -> "正在查会员状态…"
+        "get_voice_quota" -> "正在查语音额度…"
+        "open_url" -> "正在打开网页…"
+        "get_battery_level" -> "正在查电量…"
+        else -> "正在处理…"
     }
 
     private fun startAudio() {

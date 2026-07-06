@@ -105,8 +105,12 @@ private fun VoiceCallScreen(onClose: () -> Unit) {
         if (hasMic()) client.connect() else micLauncher.launch(Manifest.permission.RECORD_AUDIO)
     }
 
-    LaunchedEffect(Unit) { startCall() }
+    LaunchedEffect(Unit) {
+        client.onDeviceTool = { name, args -> executeDeviceTool(context, name, args) }
+        startCall()
+    }
     DisposableEffect(Unit) { onDispose { client.disconnect() } }
+    val toolHint by client.toolHint.collectAsState()
 
     var seconds by remember { mutableIntStateOf(0) }
     LaunchedEffect(state) {
@@ -131,7 +135,7 @@ private fun VoiceCallScreen(onClose: () -> Unit) {
             contentAlignment = Alignment.Center,
         ) {
             when (val s = state) {
-                is VoiceState.Connected -> ActiveCallView(speaking = speaking, aiText = aiText, userText = userText)
+                is VoiceState.Connected -> ActiveCallView(speaking = speaking, aiText = aiText, userText = userText, toolHint = toolHint)
                 is VoiceState.Ended -> EndedView(reason = s.reason, onRetry = startCall, onClose = onClose)
                 is VoiceState.Error -> EndedView(reason = s.msg, onRetry = startCall, onClose = onClose)
                 else -> ConnectingView()
@@ -190,13 +194,17 @@ private fun ConnectingView() {
 }
 
 @Composable
-private fun ActiveCallView(speaking: Boolean, aiText: String, userText: String) {
+private fun ActiveCallView(speaking: Boolean, aiText: String, userText: String, toolHint: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
         VoiceOrb(speaking = speaking)
         Spacer(Modifier.height(OctopusSpacing.xl))
         Text(
-            if (speaking) stringResource(R.string.voice_call_speaking) else stringResource(R.string.voice_call_listening),
-            color = OctopusColors.TextTertiary,
+            when {
+                toolHint.isNotBlank() -> "🔧 $toolHint"
+                speaking -> stringResource(R.string.voice_call_speaking)
+                else -> stringResource(R.string.voice_call_listening)
+            },
+            color = if (toolHint.isNotBlank()) OctopusColors.Primary else OctopusColors.TextTertiary,
             fontSize = OctopusType.caption,
         )
         Spacer(Modifier.height(OctopusSpacing.lg))
@@ -277,6 +285,37 @@ private fun RoundTextButton(text: String, primary: Boolean, onClick: () -> Unit)
             fontWeight = FontWeight.Medium,
         )
     }
+}
+
+private val voiceToolMainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
+/**
+ * 设备侧工具执行(Phase 3-B)。omni 决定调用 → 服务端中继 → 这里在设备上执行 → 返回 JSON 结果串。
+ * get_battery_level:读电量(只读);open_url:打开网址(有副作用,主线程起 Intent,不阻塞语音线程)。
+ */
+private fun executeDeviceTool(context: android.content.Context, name: String, argsJson: String): String = when (name) {
+    "get_battery_level" -> {
+        val bm = context.getSystemService(android.content.Context.BATTERY_SERVICE) as? android.os.BatteryManager
+        val lvl = bm?.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY) ?: -1
+        """{"level":$lvl}"""
+    }
+    "open_url" -> {
+        val url = runCatching { org.json.JSONObject(argsJson).optString("url") }.getOrNull().orEmpty()
+        if (url.isBlank()) {
+            """{"ok":false,"error":"no_url"}"""
+        } else {
+            voiceToolMainHandler.post {
+                runCatching {
+                    context.startActivity(
+                        android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+                    )
+                }
+            }
+            """{"ok":true}"""
+        }
+    }
+    else -> """{"error":"unknown_tool"}"""
 }
 
 @Composable
