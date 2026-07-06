@@ -45,6 +45,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.DesktopWindows
 import androidx.compose.material.icons.filled.Stop
@@ -100,6 +101,7 @@ import com.apk.claw.android.plugin.MiniAppRegistry
 import com.apk.claw.android.ui.compose.screen.AgentSquareScreen
 import com.apk.claw.android.ui.compose.screen.ChatScreen
 import com.apk.claw.android.ui.compose.screen.DiscoverScreen
+import com.apk.claw.android.ui.voice.VoiceCallActivity
 import com.apk.claw.android.ui.device.DeviceListActivity
 import com.apk.claw.android.utils.KVUtils
 import com.apk.claw.android.ui.compose.theme.OctopusTheme
@@ -1118,6 +1120,20 @@ private fun DesktopReplyBar(running: Boolean, onSend: (String) -> Unit, onStop: 
                         inner()
                     },
                 )
+                // 实时语音通话:进全屏通话页(TV 桌面上即大屏语音对话,豆包式)
+                Box(
+                    Modifier.size(36.dp).clip(CircleShape).holoFocus(CircleShape).clickable {
+                        runCatching {
+                            ctx.startActivity(android.content.Intent(ctx, VoiceCallActivity::class.java))
+                        }
+                    },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Filled.Call, contentDescription = "实时语音通话",
+                        tint = Color(0xCC1A1A1A), modifier = Modifier.size(20.dp),
+                    )
+                }
                 // 麦克风:收起成小圆气泡语音模式(无权限先申请)
                 Box(
                     Modifier.size(36.dp).clip(CircleShape).holoFocus(CircleShape).clickable {
