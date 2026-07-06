@@ -41,6 +41,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.apk.claw.android.R
 import com.apk.claw.android.octopus_mobile.ControlTarget
+import com.apk.claw.android.octopus_mobile.EvolutionMetrics
 import com.apk.claw.android.octopus_mobile.SetupReadiness
 import com.apk.claw.android.server.ConfigServerManager
 import com.apk.claw.android.service.ClawAccessibilityService
@@ -309,6 +310,9 @@ fun TrustCenterScreen(onBack: () -> Unit) {
                 desc = "查看 Agent 最近的中/高危工具调用记录与拦截决策",
             ) { ctx.startActivity(Intent(ctx, AuditLogActivity::class.java)) }
 
+            FSectionTitle("自进化引擎 · 实测效果")
+            EvolutionMetricsCard(tick) { tick++ }
+
             FSectionTitle(stringResource(R.string.trustcenter_section_target))
             FCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -408,5 +412,59 @@ private fun NavRow(title: String, desc: String, onClick: () -> Unit) {
             }
             Text("›", color = FMuted, fontSize = 18.sp, modifier = Modifier.padding(start = 6.dp))
         }
+    }
+}
+
+private const val PCT_SCALE = 100.0
+
+/** 自进化引擎(反射/免疫/经验账本)的实测效果 —— 数据来自 [EvolutionMetrics]。 */
+@Composable
+private fun EvolutionMetricsCard(tick: Int, onReset: () -> Unit) {
+    val hit = remember(tick) { EvolutionMetrics.get(EvolutionMetrics.REFLEX_HIT) }
+    val miss = remember(tick) { EvolutionMetrics.get(EvolutionMetrics.REFLEX_MISS) }
+    val reflexRate = remember(tick) {
+        String.format(java.util.Locale.US, "%.1f%%", EvolutionMetrics.reflexHitRate() * PCT_SCALE)
+    }
+    val immuneCall = remember(tick) { EvolutionMetrics.get(EvolutionMetrics.IMMUNE_CALL) }
+    val immuneWarn = remember(tick) { EvolutionMetrics.get(EvolutionMetrics.IMMUNE_WARN) }
+    val immuneRate = remember(tick) {
+        String.format(java.util.Locale.US, "%.1f%%", EvolutionMetrics.immuneWarnRate() * PCT_SCALE)
+    }
+    val ledgerErr = remember(tick) { EvolutionMetrics.get(EvolutionMetrics.LEDGER_ERROR) }
+    val ledgerRepair = remember(tick) { EvolutionMetrics.get(EvolutionMetrics.LEDGER_REPAIR) }
+    val injected = remember(tick) { EvolutionMetrics.get(EvolutionMetrics.MITIGATION_INJECTED) }
+    val hasData = hit + miss + immuneCall + ledgerErr > 0L
+    FCard {
+        MetricRow("⚡ 反射快路径命中率", reflexRate, "省下 $hit 次完整 LLM（$hit/${hit + miss}）")
+        Spacer(Modifier.height(8.dp))
+        MetricRow("🛡️ 免疫系统告警率", immuneRate, "$immuneWarn 次告警 / $immuneCall 次预检")
+        Spacer(Modifier.height(8.dp))
+        MetricRow("📒 经验账本", "记 $ledgerErr", "修复 $ledgerRepair · 注入规避 $injected 次")
+        if (!hasData) {
+            Text(
+                "暂无数据——跑几个任务后这里会显示反射命中率、免疫告警率等硬指标。",
+                color = FMuted, fontSize = 10.sp, lineHeight = 14.sp,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+        Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.End) {
+            Text(
+                "重置统计", color = FWarning, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .clickable { EvolutionMetrics.reset(); EvolutionMetrics.persist(); onReset() }
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun MetricRow(label: String, value: String, sub: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(label, color = FText, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            Text(sub, color = FMuted, fontSize = 10.sp, lineHeight = 14.sp)
+        }
+        FPill(value, FPrimary)
     }
 }
