@@ -2920,3 +2920,52 @@ class TestVoiceTools:
         asyncio.run(app_module._handle_voice_tool_call(ev, up, cws, uid))
         # 未知工具 → 回 unsupported,不执行任何真实操作
         assert "unsupported_tool" in json.loads(up.sent[0])["item"]["output"]
+
+
+class TestVoiceClientTools:
+    def test_client_tools_declared(self):
+        names = {t["name"] for t in app_module.VOICE_CLIENT_TOOLS}
+        assert "open_url" in names and "get_battery_level" in names
+
+    def test_relay_client_tool_roundtrip(self, client):
+        ev = {"type": "response.function_call_arguments.done",
+              "name": "get_battery_level", "call_id": "cc", "arguments": "{}"}
+        up = _FakeUpTool()
+        sent = []
+
+        class CWS:
+            async def send_json(self, o):
+                sent.append(o)
+
+        async def scenario():
+            pending = {}
+            task = asyncio.create_task(app_module._relay_client_tool(ev, up, CWS(), pending))
+            for _ in range(100):
+                await asyncio.sleep(0.01)
+                if "cc" in pending and not pending["cc"].done():
+                    break
+            pending["cc"].set_result({"level": 88})
+            await task
+        asyncio.run(scenario())
+        # 中继给客户端
+        assert sent[0]["type"] == "voice.tool_call" and sent[0]["name"] == "get_battery_level"
+        assert sent[0]["callId"] == "cc"
+        # 客户端结果喂回上游
+        item = json.loads(up.sent[0])
+        assert item["item"]["type"] == "function_call_output"
+        assert item["item"]["call_id"] == "cc" and "88" in item["item"]["output"]
+        assert json.loads(up.sent[1])["type"] == "response.create"
+
+    def test_relay_client_tool_timeout(self, client, monkeypatch):
+        monkeypatch.setattr(app_module, "VOICE_TOOL_TIMEOUT_S", 0.2)
+        ev = {"type": "response.function_call_arguments.done",
+              "name": "open_url", "call_id": "t1", "arguments": '{"url":"https://x.com"}'}
+        up = _FakeUpTool()
+
+        class CWS:
+            async def send_json(self, o):
+                pass  # 客户端从不回 → 超时兜底
+
+        asyncio.run(app_module._relay_client_tool(ev, up, CWS(), {}))
+        assert "client_timeout" in json.loads(up.sent[0])["item"]["output"]
+        assert json.loads(up.sent[1])["type"] == "response.create"

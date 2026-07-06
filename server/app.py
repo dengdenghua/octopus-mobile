@@ -1996,15 +1996,73 @@ async def _handle_voice_tool_call(ev: dict[str, Any], upstream: Any, client_ws: 
     await upstream.send(json.dumps({"type": "response.create"}))
 
 
+# 设备侧工具(有副作用/需读设备状态)——由**客户端**执行,服务端只中继(Phase 3-B)。
+VOICE_TOOL_TIMEOUT_S = 15
+VOICE_CLIENT_TOOLS: list[dict[str, Any]] = [
+    {"type": "function", "name": "open_url",
+     "description": "在用户手机上打开一个网址。用户说『打开某网站/帮我打开 xxx』时调用,url 用完整 https 链接。",
+     "parameters": {"type": "object", "properties": {
+         "url": {"type": "string", "description": "要打开的完整网址,如 https://www.baidu.com"}},
+         "required": ["url"]}},
+    {"type": "function", "name": "get_battery_level",
+     "description": "查询用户手机当前电量百分比。用户问『我手机还有多少电/电量多少』时调用。",
+     "parameters": {"type": "object", "properties": {}, "required": []}},
+]
+_VOICE_CLIENT_TOOL_NAMES = {t["name"] for t in VOICE_CLIENT_TOOLS}
+
+
+async def _relay_client_tool(ev: dict[str, Any], upstream: Any, client_ws: WebSocket,
+                             pending: dict[str, "asyncio.Future[Any]"]) -> None:
+    """设备工具中继:转发 voice.tool_call 给客户端,等 voice.tool_result(超时兜底),结果喂回上游。"""
+    name = str(ev.get("name") or "")
+    call_id = str(ev.get("call_id") or "")
+    args = ev.get("arguments") or "{}"
+    fut: "asyncio.Future[Any]" = asyncio.get_running_loop().create_future()
+    pending[call_id] = fut
+    try:
+        await client_ws.send_json({"type": "voice.tool_call", "name": name, "callId": call_id, "arguments": args})
+        result: Any = await asyncio.wait_for(fut, timeout=VOICE_TOOL_TIMEOUT_S)
+    except asyncio.TimeoutError:
+        result = {"error": "client_timeout"}
+    except Exception:
+        result = {"error": "relay_failed"}
+    finally:
+        pending.pop(call_id, None)
+    await upstream.send(json.dumps({"type": "conversation.item.create", "item": {
+        "type": "function_call_output", "call_id": call_id,
+        "output": json.dumps(result if result is not None else {"ok": True}, ensure_ascii=False),
+    }}))
+    await upstream.send(json.dumps({"type": "response.create"}))
+
+
 async def _voice_relay(client_ws: WebSocket, upstream: Any, meter: "_VoiceMeter") -> str:
-    """双向透传 + 每分钟计费 + 工具接管。三个协程任一结束即整体收尾;返回结束原因。"""
+    """双向透传 + 每分钟计费 + 工具接管(服务端就地执行 / 设备工具中继客户端)。任一协程结束即收尾。"""
     stop = asyncio.Event()
     reason = {"v": "client_closed"}
+    pending_tools: dict[str, "asyncio.Future[Any]"] = {}  # call_id → 等客户端设备工具结果
+
+    async def dispatch_tool_call(ev: dict[str, Any]) -> None:
+        if str(ev.get("name") or "") in _VOICE_CLIENT_TOOL_NAMES:
+            await _relay_client_tool(ev, upstream, client_ws, pending_tools)   # 设备工具 → 中继客户端
+        else:
+            await _handle_voice_tool_call(ev, upstream, client_ws, meter.user_id)  # 服务端只读工具/未知
 
     async def pump_client_to_upstream() -> None:
         try:
             while not stop.is_set():
-                await upstream.send(await client_ws.receive_text())
+                text = await client_ws.receive_text()
+                # 拦客户端回传的设备工具结果:兑现对应 Future,不转发上游
+                if '"voice.tool_result"' in text:
+                    try:
+                        res = json.loads(text)
+                    except (ValueError, TypeError):
+                        res = None
+                    if isinstance(res, dict) and res.get("type") == "voice.tool_result":
+                        fut = pending_tools.get(str(res.get("callId") or ""))
+                        if fut is not None and not fut.done():
+                            fut.set_result(res.get("result"))
+                        continue
+                await upstream.send(text)
         except WebSocketDisconnect:
             reason["v"] = "client_closed"
         except Exception:
@@ -2025,7 +2083,7 @@ async def _voice_relay(client_ws: WebSocket, upstream: Any, meter: "_VoiceMeter"
                     except (ValueError, TypeError):
                         ev = None
                     if isinstance(ev, dict) and ev.get("type") == "response.function_call_arguments.done":
-                        await _handle_voice_tool_call(ev, upstream, client_ws, meter.user_id)
+                        await dispatch_tool_call(ev)
         except Exception:
             reason["v"] = "upstream_closed"
         finally:
@@ -2111,7 +2169,7 @@ async def voice_realtime_ws(ws: WebSocket, token: str = "", model: str = "") -> 
             ),
             "input_audio_format": "pcm16", "output_audio_format": "pcm16",
             "turn_detection": {"type": "server_vad"},
-            "tools": VOICE_TOOLS, "tool_choice": "auto",
+            "tools": VOICE_TOOLS + VOICE_CLIENT_TOOLS, "tool_choice": "auto",
         }}))
     except Exception:
         pass
