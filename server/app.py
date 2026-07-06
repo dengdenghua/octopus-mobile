@@ -3239,12 +3239,19 @@ def square_feed(request: Request, limit: int = 20, offset: int = 0, q: str = "",
 
         # ── 小程序帖(混合展示;仅首页、无搜索、无分类过滤时追加,避免分页错乱) ──
         if not search_query and not filter_topic and offset == 0:
+            # 去重:图文帖已按 app_ref 覆盖的 mini-app 不再重复追加 registry 资产帖。
+            # 且 registry 资产 id 形如 plugin/<slug>(带斜杠),它不是 square_posts、无法作为帖子详情
+            # 打开(/square/posts/plugin/<slug> 会 404),重复展示只会让用户"点进去内容加载不了"。
+            seen_refs = {str(it.get("appRef") or "") for it in items if it.get("appRef")}
             mini_rows = c.execute(
                 "SELECT * FROM registry_assets WHERE type='plugin' AND kind='mini-app' "
                 "AND status='approved' ORDER BY updated_at DESC LIMIT ?",
                 (limit,),
             ).fetchall()
             for r in mini_rows:
+                slug = str(r["id"]).split("/", 1)[-1]
+                if slug in seen_refs:
+                    continue
                 items.append(_present_miniapp_as_post(c, r, viewer))
 
     # 数据库为空时回退到内置静态示例(向后兼容,首次部署无帖也能展示);

@@ -40,6 +40,9 @@
 -keep class com.apk.claw.android.plugin.PluginInfo { *; }
 -keep class com.apk.claw.android.plugin.PluginToolParam { *; }
 -keep class com.apk.claw.android.plugin.HttpRecipe { *; }
+# 浏览器插件清单(BrowserPluginHost$PluginFile,Gson 反射目标):不保留则 release 下 R8 改名 →
+# GM 脚本/浏览器插件读不出 → 装了不生效。
+-keep class com.apk.claw.android.octopus_mobile.browser.BrowserPluginHost$PluginFile { *; }
 
 # Channel（钉钉/飞书回调，保留泛型签名）
 -keep class com.apk.claw.android.channel.** { *; }
@@ -60,6 +63,11 @@
 #   /api/universe/feed 的 day/beliefs/goals/friends/memory/diary/growth 等全空。
 # 该包内所有 *Dto 一律整类保留字段名；非 Dto 命名的 wire 类显式列出。
 -keep class com.apk.claw.android.ui.compose.screen.**Dto { *; }
+# SquarePostApi 的 wire 结果类(PostDetailResult/AcquireResult/SubscribeResult/SubStatus/
+# Like/Favorite/Follow/PublishPost/Comments/CommentPost/UploadImage/UserProfileResult)：非 *Dto 命名、
+# 字段名==JSON键无全量 @SerializedName。不保留则 release 下 R8 改名 → 帖子详情/复刻/点赞/评论/订阅
+# 全解析为空(feed 用 SquareFeedDto 是 *Dto 已护,故"列表能出但点进去内容全空")。整类保留。
+-keep class com.apk.claw.android.ui.compose.screen.SquarePostApi$* { *; }
 -keep class com.apk.claw.android.ui.compose.screen.RemoteConfig$AppConfigDto { *; }
 -keep class com.apk.claw.android.ui.compose.screen.EchoCharacterOption { *; }
 -keep class com.apk.claw.android.ui.compose.screen.GhostChatMessage { *; }
