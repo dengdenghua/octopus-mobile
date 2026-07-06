@@ -1961,23 +1961,51 @@ private sealed class ChatRow {
     data class ToolGroup(val tools: List<ChatMessage.ToolCall>) : ChatRow() { override val key = "g${tools.first().id}" }
 }
 
-/** 把连续的 ToolCall 合并成一组，其余消息原样保留。 */
+/**
+ * 逐「轮」成行(轮 = 用户消息之间的一段助手消息)。轮内:连续 ToolCall 折叠成组;
+ * 产物(Artifact:HTML 预览 / 生成的图片、文件等)整体沉到该轮末尾,让助手文字回复
+ * 先出、产物/预览垫底(用户要求),工具卡与文字的相对顺序不变。跨轮不重排。
+ */
 private fun buildChatRows(msgs: List<ChatMessage>): List<ChatRow> {
     val out = mutableListOf<ChatRow>()
     var i = 0
     while (i < msgs.size) {
-        val m = msgs[i]
-        if (m is ChatMessage.ToolCall) {
-            val group = mutableListOf<ChatMessage.ToolCall>()
-            while (i < msgs.size && msgs[i] is ChatMessage.ToolCall) {
-                group.add(msgs[i] as ChatMessage.ToolCall); i++
-            }
-            out.add(ChatRow.ToolGroup(group))
+        if (msgs[i] is ChatMessage.UserMessage) {
+            out.add(ChatRow.Single(msgs[i])); i++
         } else {
-            out.add(ChatRow.Single(m)); i++
+            val turnEnd = nextTurnEnd(msgs, i)
+            out.addAll(turnRows(msgs.subList(i, turnEnd)))
+            i = turnEnd
         }
     }
     return out
+}
+
+/** 从 start 起找到下一条 UserMessage 的下标(本轮助手消息的右开边界)。 */
+private fun nextTurnEnd(msgs: List<ChatMessage>, start: Int): Int {
+    var j = start
+    while (j < msgs.size && msgs[j] !is ChatMessage.UserMessage) { j++ }
+    return j
+}
+
+/** 一轮助手消息成行:连续 ToolCall 折叠;产物行整体后移到末尾,其余保持原序。 */
+private fun turnRows(turn: List<ChatMessage>): List<ChatRow> {
+    val rows = mutableListOf<ChatRow>()
+    var i = 0
+    while (i < turn.size) {
+        val m = turn[i]
+        if (m is ChatMessage.ToolCall) {
+            val group = mutableListOf<ChatMessage.ToolCall>()
+            while (i < turn.size && turn[i] is ChatMessage.ToolCall) {
+                group.add(turn[i] as ChatMessage.ToolCall); i++
+            }
+            rows.add(ChatRow.ToolGroup(group))
+        } else {
+            rows.add(ChatRow.Single(m)); i++
+        }
+    }
+    val (artifacts, others) = rows.partition { it is ChatRow.Single && it.msg is ChatMessage.Artifact }
+    return others + artifacts
 }
 
 private fun toolIcon(name: String): androidx.compose.ui.graphics.vector.ImageVector = when (name) {
