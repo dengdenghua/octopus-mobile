@@ -74,6 +74,18 @@ QWEN_BASE_URL = os.environ.get("QWEN_BASE_URL", "").rstrip("/")  # OpenAI 兼容
 # 留作生图/生视频等低频增值用途。
 AGNES_API_KEY = os.environ.get("AGNES_API_KEY", "")
 AGNES_BASE_URL = os.environ.get("AGNES_BASE_URL", "").rstrip("/")
+# 实时语音(Qwen-Omni-Realtime,豆包式实时对话):注意——实时 WS 走**标准 DashScope host**
+# (wss://dashscope.aliyuncs.com/api-ws/v1/realtime),不是 compatible-mode base;后者只做 HTTP 聊天。
+# key 是账号级的,标准 host 也认。用 QWEN_API_KEY(同一把)。已实测端到端跑通(音频回包 OK)。
+VOICE_REALTIME_URL = os.environ.get(
+    "VOICE_REALTIME_URL", "wss://dashscope.aliyuncs.com/api-ws/v1/realtime"
+).rstrip("/")
+VOICE_REALTIME_MODEL = os.environ.get("VOICE_REALTIME_MODEL", "qwen3-omni-flash-realtime")
+# 允许客户端指定的实时模型白名单(防注入任意 model 名到上游 URL)。缺省回落 VOICE_REALTIME_MODEL。
+VOICE_ALLOWED_MODELS = {
+    "qwen3-omni-flash-realtime", "qwen3.5-omni-flash-realtime",
+    "qwen3-s2s-flash-realtime", "qwen-omni-turbo",
+}
 # provider 注册:模型 spec 里的 "provider" 决定走哪个上游(base + key)。(mimo 已移除)
 PROVIDERS = {
     "qwen": {"base_url": QWEN_BASE_URL, "api_key": QWEN_API_KEY},
@@ -738,6 +750,17 @@ def init_db() -> None:
             "current_value TEXT, suggested_value TEXT NOT NULL, reason TEXT, "
             "status TEXT DEFAULT 'pending', created_at INTEGER NOT NULL, decided_at INTEGER DEFAULT 0)"
         )
+        # 实时语音会话台账(按分钟计费):每次通话一行,起始即插入、结束更新用量。
+        # 今日已用免费分钟 = SUM(free_minutes) WHERE started_ms>=当天0点(免费额度每日重置)。
+        c.execute(
+            "CREATE TABLE IF NOT EXISTS voice_sessions("
+            "id TEXT PRIMARY KEY, user_id TEXT NOT NULL, model TEXT DEFAULT '', "
+            "started_ms INTEGER NOT NULL, ended_ms INTEGER NOT NULL DEFAULT 0, "
+            "minutes INTEGER NOT NULL DEFAULT 0, free_minutes INTEGER NOT NULL DEFAULT 0, "
+            "paid_minutes INTEGER NOT NULL DEFAULT 0, credits INTEGER NOT NULL DEFAULT 0, "
+            "end_reason TEXT DEFAULT '')"
+        )
+        c.execute("CREATE INDEX IF NOT EXISTS idx_voice_sessions_user ON voice_sessions(user_id, started_ms)")
         # 迁移:给已存在的 remote_devices 表补新列(幂等)
         for _col in (
             "push_token TEXT DEFAULT ''", "os_version TEXT DEFAULT ''",
@@ -1810,6 +1833,246 @@ async def remote_console_ws(ws: WebSocket, device_id: str = "", token: str = "")
         pass
     finally:
         await remote_hub.detach_console(device_id, ws)
+
+
+# ─────────────────────────── 实时语音代理(Qwen-Omni-Realtime) ───────────────────────────
+# 架构:客户端 ↔ 本服务(/voice/realtime WS)↔ DashScope 实时 WS。为什么必须服务端中转:
+#   ① API key 只在服务端,App 永不见;② 按分钟计费/额度门控只能在服务端强制。
+# 计费:免费分钟(会员/游客每日额度)优先,耗尽按 voice_credits_per_min 扣积分(3 桶),
+#       单次封顶 voice_max_session_min。整分钟向上取整(进入某分钟即预扣)。事件协议透传。
+def _utc_day_start_ms() -> int:
+    now = datetime.datetime.now(datetime.timezone.utc)
+    midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    return int(midnight.timestamp() * 1000)
+
+
+def _voice_free_used_today(c: sqlite3.Connection, user_id: str) -> int:
+    """今日已用免费语音分钟数(免费额度每日 UTC 0 点重置)。"""
+    row = c.execute(
+        "SELECT COALESCE(SUM(free_minutes),0) AS n FROM voice_sessions "
+        "WHERE user_id=? AND started_ms>=?",
+        (user_id, _utc_day_start_ms()),
+    ).fetchone()
+    return int((row["n"] if row else 0) or 0)
+
+
+class _VoiceMeter:
+    """一次语音通话的计费状态机。charge_minute() 在通话开始与每个整分钟边界调用一次。"""
+
+    def __init__(self, user_id: str, is_member: bool, sid: str) -> None:
+        self.user_id = user_id
+        self.sid = sid
+        self.per_min = max(0, int(get_config("voice_credits_per_min", 5)))
+        self.max_min = max(1, int(get_config("voice_max_session_min", 30)))
+        allowance = int(get_config(
+            "voice_free_min_member" if is_member else "voice_free_min_guest",
+            10 if is_member else 1,
+        ))
+        with closing(db()) as c:
+            used = _voice_free_used_today(c, user_id)
+        self.free_remaining = max(0, allowance - used)
+        self.charged = 0
+        self.free_used = 0
+        self.paid_used = 0
+        self.credits = 0
+
+    def charge_minute(self) -> "tuple[bool, str]":
+        """预扣一分钟。返回 (是否成功, 计费方式)。失败方式:session_limit / insufficient_credits。"""
+        if self.charged >= self.max_min:
+            return False, "session_limit"
+        if self.free_remaining > 0:
+            self.free_remaining -= 1
+            self.free_used += 1
+            self.charged += 1
+            return True, "free"
+        if self.per_min <= 0:  # 运营把单价设为 0 → 视同免费
+            self.charged += 1
+            return True, "free"
+        if _reserve_usage_credits(self.user_id, self.per_min, ref_id=self.sid) is None:
+            return False, "insufficient_credits"
+        self.paid_used += 1
+        self.credits += self.per_min
+        self.charged += 1
+        return True, "paid"
+
+
+async def _open_upstream_voice_ws(model: str) -> Any:
+    """连上游 DashScope 实时 WS(server 持 key)。测试用 monkeypatch 替换成假上游。"""
+    import websockets  # 惰性 import:仅语音功能需要,不拖累主进程启动
+    url = f"{VOICE_REALTIME_URL}?model={model}"
+    hdr = {"Authorization": "Bearer " + QWEN_API_KEY, "OpenAI-Beta": "realtime=v1"}
+    try:
+        return await websockets.connect(url, additional_headers=hdr, max_size=None)
+    except TypeError:  # websockets<14 用 extra_headers
+        return await websockets.connect(url, extra_headers=hdr, max_size=None)
+
+
+def _voice_finish(sid: str, meter: "_VoiceMeter", reason: str) -> None:
+    """通话结束:落用量到 voice_sessions(供对账/免费额度统计/成本核算)。"""
+    with closing(db()) as c:
+        c.execute(
+            "UPDATE voice_sessions SET ended_ms=?, minutes=?, free_minutes=?, "
+            "paid_minutes=?, credits=?, end_reason=? WHERE id=?",
+            (now_ms(), meter.charged, meter.free_used, meter.paid_used, meter.credits, reason, sid),
+        )
+        c.commit()
+
+
+async def _voice_reject(ws: WebSocket, code: str, message: str, close_code: int) -> None:
+    try:
+        await ws.send_json({"type": "error", "error": {"code": code, "message": message}})
+    except Exception:
+        pass
+    await ws.close(code=close_code, reason=code)
+
+
+async def _voice_relay(client_ws: WebSocket, upstream: Any, meter: "_VoiceMeter") -> str:
+    """双向透传 + 每分钟计费。三个协程任一结束即整体收尾;返回结束原因。"""
+    stop = asyncio.Event()
+    reason = {"v": "client_closed"}
+
+    async def pump_client_to_upstream() -> None:
+        try:
+            while not stop.is_set():
+                await upstream.send(await client_ws.receive_text())
+        except WebSocketDisconnect:
+            reason["v"] = "client_closed"
+        except Exception:
+            reason["v"] = "relay_error"
+        finally:
+            stop.set()
+
+    async def pump_upstream_to_client() -> None:
+        try:
+            while not stop.is_set():
+                msg = await upstream.recv()
+                await client_ws.send_text(msg if isinstance(msg, str) else msg.decode("utf-8", "ignore"))
+        except Exception:
+            reason["v"] = "upstream_closed"
+        finally:
+            stop.set()
+
+    async def meter_loop() -> None:
+        while not stop.is_set():
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=60)
+                return  # 已停止,不再计费
+            except asyncio.TimeoutError:
+                ok, mode = meter.charge_minute()
+                if not ok:
+                    reason["v"] = mode
+                    try:
+                        await client_ws.send_json({"type": "voice.ended", "reason": mode})
+                    except Exception:
+                        pass
+                    stop.set()
+                    return
+                try:
+                    await client_ws.send_json({
+                        "type": "voice.tick", "minute": meter.charged,
+                        "billedMode": mode, "creditsSpent": meter.credits,
+                    })
+                except Exception:
+                    pass
+
+    tasks = [asyncio.create_task(co()) for co in (pump_client_to_upstream, pump_upstream_to_client, meter_loop)]
+    await stop.wait()
+    for t in tasks:
+        t.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
+    return reason["v"]
+
+
+@app.websocket("/voice/realtime")
+async def voice_realtime_ws(ws: WebSocket, token: str = "", model: str = "") -> None:
+    """实时语音对话代理入口。鉴权 → 预扣首分钟(付不起且无免费额度即零成本拒绝)→ 连上游 → 中继。"""
+    origin = ws.headers.get("origin", "")
+    if origin and not _is_allowed_origin(origin):
+        await ws.accept()
+        await ws.close(code=4403, reason="origin not allowed")
+        return
+    await ws.accept()
+    u = user_from_bearer_token(token)
+    if u is None:
+        await ws.close(code=4001, reason="auth failed")
+        return
+    if not QWEN_API_KEY:
+        await _voice_reject(ws, "voice_unavailable", "语音服务未配置", 4501)
+        return
+    model = model if model in VOICE_ALLOWED_MODELS else VOICE_REALTIME_MODEL
+    is_member = u["member_expire_at"] > now_ms()
+    sid = "vs_" + secrets.token_urlsafe(12)
+    meter = _VoiceMeter(u["user_id"], is_member, sid)
+    ok, mode = meter.charge_minute()
+    if not ok:
+        await _voice_reject(ws, "insufficient_credits", "语音额度不足,请充值或购买会员", 4402)
+        return
+    with closing(db()) as c:
+        c.execute(
+            "INSERT INTO voice_sessions(id, user_id, model, started_ms) VALUES(?,?,?,?)",
+            (sid, u["user_id"], model, now_ms()),
+        )
+        c.commit()
+    await ws.send_json({
+        "type": "voice.session", "sessionId": sid, "model": model,
+        "billedMode": mode, "maxMinutes": meter.max_min, "perMinCredits": meter.per_min,
+    })
+    try:
+        upstream = await _open_upstream_voice_ws(model)
+    except Exception:
+        _voice_finish(sid, meter, "upstream_failed")
+        await _voice_reject(ws, "upstream_failed", "语音上游连接失败,请稍后重试", 4502)
+        return
+    try:  # 注入默认会话参数(中文口语、pcm16、服务端 VAD);客户端可再发 session.update 覆盖
+        await upstream.send(json.dumps({"type": "session.update", "session": {
+            "modalities": ["text", "audio"], "voice": "Cherry",
+            "instructions": "你是「章鱼」App 的智能语音助手,用简体中文、口语化、简洁地回答。",
+            "input_audio_format": "pcm16", "output_audio_format": "pcm16",
+            "turn_detection": {"type": "server_vad"},
+        }}))
+    except Exception:
+        pass
+    reason = "client_closed"
+    try:
+        reason = await _voice_relay(ws, upstream, meter)
+    finally:
+        try:
+            await upstream.close()
+        except Exception:
+            pass
+        _voice_finish(sid, meter, reason)
+        try:
+            await ws.close()
+        except Exception:
+            pass
+
+
+@app.get("/voice/quota")
+def voice_quota(u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    """通话前查语音额度:剩余免费分钟 + 每分钟单价 + 余额可撑分钟数,供 App 拨号页展示。"""
+    is_member = u["member_expire_at"] > now_ms()
+    per_min = max(0, int(get_config("voice_credits_per_min", 5)))
+    max_min = max(1, int(get_config("voice_max_session_min", 30)))
+    allowance = int(get_config(
+        "voice_free_min_member" if is_member else "voice_free_min_guest",
+        10 if is_member else 1,
+    ))
+    with closing(db()) as c:
+        used = _voice_free_used_today(c, u["user_id"])
+        bal = _total_available(c, u["user_id"])
+    free_remaining = max(0, allowance - used)
+    paid_minutes = (bal // per_min) if per_min > 0 else max_min
+    return {
+        "enabled": bool(QWEN_API_KEY),
+        "perMinCredits": per_min,
+        "maxMinutes": max_min,
+        "freeMinutesDaily": allowance,
+        "freeMinutesRemaining": free_remaining,
+        "creditsBalance": bal,
+        "estimatedMinutes": free_remaining + paid_minutes,
+        "model": VOICE_REALTIME_MODEL,
+        "isMember": is_member,
+    }
 
 
 # ─────────────────────────── endpoints: App 设备绑定 / 心跳 / 上报 ───────────────────────────

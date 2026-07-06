@@ -14,6 +14,7 @@ Octopus 服务端 pytest 测试套件。
 
 运行: cd server && python -m pytest test_app.py -v
 """
+import asyncio
 import json
 import math
 import os
@@ -60,6 +61,7 @@ from app import (  # noqa: E402
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
+from starlette.websockets import WebSocketDisconnect  # noqa: E402
 
 
 # ─────────────────────────── fixtures ───────────────────────────
@@ -74,7 +76,7 @@ def clean_state():
                   "registry_assets", "crash_reports",
                   "square_posts", "square_comments", "square_likes", "square_follows",
                   "square_favorites", "square_unlocks", "plugin_subscriptions", "config_kv",
-                  "cost_snapshots", "pricing_proposals"):
+                  "cost_snapshots", "pricing_proposals", "voice_sessions"):
             c.execute(f"DELETE FROM {t}")
         c.commit()
     app_module._rl.clear()
@@ -2658,3 +2660,170 @@ class TestPricingAdvisor:
         r = client.get("/admin/api/pricing/proposals", headers=self._ADMIN)
         assert r.status_code == 200 and len(r.json()["proposals"]) == 1
         assert client.get("/admin/api/pricing/proposals").status_code in (401, 403, 503)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# 实时语音代理(/voice/realtime + /voice/quota + _VoiceMeter 计费)
+# ═══════════════════════════════════════════════════════════════════════
+class _FakeUpstream:
+    """假的上游实时 WS:每收到一条 client 消息就回一条 audio.delta,便于测中继。"""
+
+    def __init__(self):
+        self.sent = []
+        self._q = asyncio.Queue()
+        self.closed = False
+
+    async def send(self, msg):
+        self.sent.append(msg)
+        await self._q.put(json.dumps({"type": "response.audio.delta", "delta": "QUJD"}))
+
+    async def recv(self):
+        return await self._q.get()
+
+    async def close(self):
+        self.closed = True
+
+
+class TestVoiceMeter:
+    """计费状态机:免费分钟优先 → 扣积分 → 单次封顶。纯单元,不走 WS。"""
+
+    def test_free_then_paid(self, client):
+        _tok, uid = _email_register(client)
+        app_module.set_config("voice_free_min_guest", 2)
+        app_module.set_config("voice_credits_per_min", 5)
+        app_module.set_config("voice_max_session_min", 30)
+        with closing(db()) as c:
+            bal0 = app_module._total_available(c, uid)
+        m = app_module._VoiceMeter(uid, False, "vs_x")
+        assert m.charge_minute() == (True, "free")   # 第1分钟免费
+        assert m.charge_minute() == (True, "free")   # 第2分钟免费
+        assert m.charge_minute() == (True, "paid")   # 第3分钟扣 5
+        assert m.charge_minute() == (True, "paid")   # 第4分钟扣 5
+        assert m.free_used == 2 and m.paid_used == 2 and m.credits == 10
+        with closing(db()) as c:
+            assert app_module._total_available(c, uid) == bal0 - 10
+
+    def test_session_limit(self, client):
+        _tok, uid = _email_register(client)
+        app_module.set_config("voice_free_min_guest", 100)   # 全免费,只测封顶
+        app_module.set_config("voice_max_session_min", 3)
+        m = app_module._VoiceMeter(uid, False, "vs_y")
+        assert m.charge_minute()[0] is True
+        assert m.charge_minute()[0] is True
+        assert m.charge_minute()[0] is True
+        assert m.charge_minute() == (False, "session_limit")   # 第4分钟被封顶拒绝
+
+    def test_insufficient_credits(self, client):
+        _tok, uid = _email_register(client)
+        app_module.set_config("voice_free_min_guest", 0)         # 无免费额度
+        app_module.set_config("voice_credits_per_min", 10_000)   # 天价:签到礼付不起
+        m = app_module._VoiceMeter(uid, False, "vs_z")
+        assert m.charge_minute() == (False, "insufficient_credits")
+        assert m.charged == 0 and m.credits == 0
+
+    def test_free_minutes_daily_sum(self, client):
+        """今日已用免费分钟从 voice_sessions 累计;新 meter 的剩余额度应扣掉它。"""
+        _tok, uid = _email_register(client)
+        app_module.set_config("voice_free_min_guest", 3)
+        with closing(db()) as c:
+            c.execute(
+                "INSERT INTO voice_sessions(id,user_id,model,started_ms,free_minutes) VALUES(?,?,?,?,?)",
+                ("vs_old", uid, "m", _now_ms(), 2),
+            )
+            c.commit()
+        m = app_module._VoiceMeter(uid, False, "vs_new")
+        assert m.free_remaining == 1   # 3 - 今日已用 2
+
+    def test_member_gets_more_free(self, client):
+        _tok, uid = _email_register(client)
+        app_module.set_config("voice_free_min_member", 10)
+        app_module.set_config("voice_free_min_guest", 1)
+        guest = app_module._VoiceMeter(uid, False, "vs_g")
+        member = app_module._VoiceMeter(uid, True, "vs_m")
+        assert guest.free_remaining == 1
+        assert member.free_remaining == 10
+
+
+class TestVoiceQuota:
+    def test_quota(self, client, monkeypatch):
+        monkeypatch.setattr(app_module, "QWEN_API_KEY", "test-key")
+        tok, _uid = _email_register(client)
+        app_module.set_config("voice_free_min_guest", 3)
+        app_module.set_config("voice_credits_per_min", 5)
+        r = client.get("/voice/quota", headers={"Authorization": f"Bearer {tok}"})
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert d["enabled"] is True
+        assert d["perMinCredits"] == 5
+        assert d["freeMinutesDaily"] == 3
+        assert d["freeMinutesRemaining"] == 3
+        assert d["estimatedMinutes"] == 3 + d["creditsBalance"] // 5
+
+    def test_quota_requires_auth(self, client):
+        assert client.get("/voice/quota").status_code in (401, 403)
+
+
+class TestVoiceRealtimeWS:
+    def _fake_open(self, monkeypatch):
+        created = []
+
+        async def fake_open(model):
+            up = _FakeUpstream()
+            created.append(up)
+            return up
+
+        monkeypatch.setattr(app_module, "_open_upstream_voice_ws", fake_open)
+        return created
+
+    def test_relay_happy_path(self, client, monkeypatch):
+        monkeypatch.setattr(app_module, "QWEN_API_KEY", "test-key")
+        created = self._fake_open(monkeypatch)
+        tok, uid = _email_register(client)
+        app_module.set_config("voice_free_min_guest", 5)
+        with client.websocket_connect(f"/voice/realtime?token={tok}") as ws:
+            sess = ws.receive_json()
+            assert sess["type"] == "voice.session"
+            assert sess["billedMode"] == "free"
+            assert sess["sessionId"].startswith("vs_")
+            # 服务端注入的 session.update 回显
+            ev = ws.receive_json()
+            assert ev["type"] == "response.audio.delta"
+            ws.send_text(json.dumps({"type": "response.create"}))
+            ev2 = ws.receive_json()
+            assert ev2["type"] == "response.audio.delta"
+        # 上游收到了注入的 session.update + 客户端的 response.create
+        assert any("session.update" in s for s in created[0].sent)
+        assert any("response.create" in s for s in created[0].sent)
+        # 会话落库,首分钟已计
+        with closing(db()) as c:
+            row = c.execute("SELECT * FROM voice_sessions WHERE user_id=?", (uid,)).fetchone()
+        assert row is not None and row["minutes"] == 1 and row["free_minutes"] == 1
+
+    def test_auth_failure(self, client, monkeypatch):
+        monkeypatch.setattr(app_module, "QWEN_API_KEY", "test-key")
+        self._fake_open(monkeypatch)
+        with pytest.raises(WebSocketDisconnect):
+            with client.websocket_connect("/voice/realtime?token=bad-token") as ws:
+                ws.receive_json()
+
+    def test_insufficient_credits_at_connect(self, client, monkeypatch):
+        monkeypatch.setattr(app_module, "QWEN_API_KEY", "test-key")
+        opened = self._fake_open(monkeypatch)
+        tok, _uid = _email_register(client)
+        app_module.set_config("voice_free_min_guest", 0)
+        app_module.set_config("voice_credits_per_min", 10_000)
+        with client.websocket_connect(f"/voice/realtime?token={tok}") as ws:
+            err = ws.receive_json()
+            assert err["type"] == "error"
+            assert err["error"]["code"] == "insufficient_credits"
+            with pytest.raises(WebSocketDisconnect):
+                ws.receive_json()
+        assert opened == []   # 付不起时根本不连上游,零成本
+
+    def test_unavailable_when_no_key(self, client, monkeypatch):
+        monkeypatch.setattr(app_module, "QWEN_API_KEY", "")
+        tok, _uid = _email_register(client)
+        with client.websocket_connect(f"/voice/realtime?token={tok}") as ws:
+            err = ws.receive_json()
+            assert err["type"] == "error"
+            assert err["error"]["code"] == "voice_unavailable"
