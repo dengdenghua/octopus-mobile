@@ -55,6 +55,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DesktopWindows
 import androidx.compose.material.icons.filled.Devices
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Monitor
 import androidx.compose.material.icons.filled.Keyboard
@@ -104,6 +105,7 @@ import com.apk.claw.android.octopus_mobile.VoiceInput
 import com.apk.claw.android.server.ConfigServerManager
 import com.apk.claw.android.service.ClawAccessibilityService
 import com.apk.claw.android.ui.settings.LlmConfigActivity
+import com.apk.claw.android.ui.voice.VoiceCallActivity
 import com.apk.claw.android.ui.featurescreens.ActivityActivity
 import com.apk.claw.android.ui.featurescreens.MemoryActivity
 import com.apk.claw.android.ui.featurescreens.MiniAppListActivity
@@ -973,8 +975,29 @@ fun ChatScreen() {
                     }
                 }
             } else {
-                // ── 文本模式：左侧麦克风切回 + 文本框 + 发送/停止 ──
+                // ── 文本模式：左侧实时语音通话 + 麦克风切回 + 文本框 + 发送/停止 ──
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .background(SurfaceDeepColor, CircleShape)
+                            .clickable {
+                                runCatching {
+                                    context.startActivity(
+                                        android.content.Intent(context, VoiceCallActivity::class.java),
+                                    )
+                                }
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            Icons.Filled.Call,
+                            contentDescription = stringResource(R.string.voice_call_entry),
+                            tint = PrimaryColor,
+                            modifier = Modifier.size(OctopusIconSize.medium),
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(OctopusSpacing.md))
                     Box(
                         modifier = Modifier
                             .size(38.dp)

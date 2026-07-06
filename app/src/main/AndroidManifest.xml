@@ -162,6 +162,7 @@
             android:hardwareAccelerated="true"
             android:screenOrientation="landscape"
             android:configChanges="orientation|screenSize|keyboardHidden" />
+        <activity android:name=".ui.voice.VoiceCallActivity" android:exported="false" />
         <activity android:name=".ui.featurescreens.MiniAppListActivity" android:exported="false" />
         <activity android:name=".ui.featurescreens.MiniAppMarketplaceActivity" android:exported="false" />
         <activity android:name=".ui.featurescreens.SkillsActivity" android:exported="false" />

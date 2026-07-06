@@ -576,6 +576,20 @@ Shizuku 是安全、开源的本地辅助工具。</string>
     <string name="chat_agent_bridge_manually_stopped">已手动停止</string>
     <string name="chat_mic_permission_granted">已授权，按住即可说话</string>
     <string name="chat_mic_permission_denied">未授权录音，暂不能语音输入</string>
+    <!-- 实时语音通话 -->
+    <string name="voice_call_title">实时语音通话</string>
+    <string name="voice_call_connecting">连接中…</string>
+    <string name="voice_call_listening">在听…说话吧</string>
+    <string name="voice_call_speaking">正在回答</string>
+    <string name="voice_call_hangup">挂断</string>
+    <string name="voice_call_retry">重新通话</string>
+    <string name="voice_call_close">关闭</string>
+    <string name="voice_call_ended">通话已结束</string>
+    <string name="voice_call_billing_free">免费时长</string>
+    <string name="voice_call_billing_paid">已扣 %1$d 积分</string>
+    <string name="voice_call_reason_insufficient">积分不足，请充值或购买会员</string>
+    <string name="voice_call_reason_limit">已达单次通话时长上限</string>
+    <string name="voice_call_entry">语音通话</string>
     <string name="chat_voice_stop_agent">■  停止任务</string>
     <string name="chat_voice_listening_release">正在听… 松开发送</string>
     <string name="chat_voice_hold_to_speak">按住说话</string>
