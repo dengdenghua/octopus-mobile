@@ -2203,6 +2203,8 @@ async def voice_realtime_ws(ws: WebSocket, token: str = "", model: str = "") -> 
             "instructions": _pref_instructions,
             "input_audio_format": "pcm16", "output_audio_format": "pcm16",
             "turn_detection": {"type": "server_vad"},
+            # 转录用户语音(L2 共享记忆:客户端据此把"用户那半句"存进聊天历史)。实测 gummy 可用、默认{}不转。
+            "input_audio_transcription": {"model": "gummy-realtime-v1"},
             "tools": VOICE_TOOLS + VOICE_CLIENT_TOOLS, "tool_choice": "auto",
         }}))
     except Exception:

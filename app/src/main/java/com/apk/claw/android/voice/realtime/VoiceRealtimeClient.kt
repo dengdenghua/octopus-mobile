@@ -87,6 +87,14 @@ class VoiceRealtimeClient {
     /** 设备工具执行器(UI 层提供,持 Context):入参 (name, argsJson) → 返回结果 JSON 串。 */
     var onDeviceTool: ((String, String) -> String)? = null
 
+    // L2 共享记忆:与文字/TV桌面同一会话打通。
+    /** 通话前置入的最近聊天历史(fromUser, text);连上后注入 omni 作为上下文(续文字对话)。 */
+    var seedHistory: List<Pair<Boolean, String>> = emptyList()
+    /** 一轮用户语音转录完成 → UI 层存进共享聊天历史。 */
+    var onUserTurn: ((String) -> Unit)? = null
+    /** 一轮 AI 语音回答完成 → UI 层存进共享聊天历史。 */
+    var onAiTurn: ((String) -> Unit)? = null
+
     fun connect() {
         if (ws != null) return
         if (!AccountStore.isLoggedIn) {
@@ -147,9 +155,13 @@ class VoiceRealtimeClient {
             "response.audio.delta" -> onAudioDelta(obj)
             "response.audio.done" -> _speaking.value = false
             "response.audio_transcript.delta" -> _aiTranscript.value += (obj.get("delta")?.asString ?: "")
+            "response.audio_transcript.done" ->
+                _aiTranscript.value.takeIf { it.isNotBlank() }?.let { onAiTurn?.invoke(it) }
             "input_audio_buffer.speech_started" -> { audioOut?.interrupt(); _speaking.value = false }
             "conversation.item.input_audio_transcription.completed" ->
-                obj.get("transcript")?.asString?.let { if (it.isNotBlank()) _userTranscript.value = it }
+                obj.get("transcript")?.asString?.let {
+                    if (it.isNotBlank()) { _userTranscript.value = it; onUserTurn?.invoke(it) }
+                }
             "voice.tool" -> _toolHint.value = toolHintFor(obj.get("name")?.asString ?: "")
             "voice.tool_call" -> onDeviceToolCall(obj)
             "error" -> onError(obj)
@@ -165,7 +177,27 @@ class VoiceRealtimeClient {
             minute = 1,
         )
         _state.value = VoiceState.Connected
+        sendSeedHistory()
         startAudio()
+    }
+
+    /** 把最近聊天历史作为对话项注入 omni(不触发响应,仅作上下文),让语音接着文字聊。 */
+    private fun sendSeedHistory() {
+        val sock = ws ?: return
+        for ((fromUser, text) in seedHistory) {
+            if (text.isBlank()) continue
+            val item = mapOf(
+                "type" to "conversation.item.create",
+                "item" to mapOf(
+                    "type" to "message",
+                    "role" to if (fromUser) "user" else "assistant",
+                    "content" to listOf(
+                        mapOf("type" to if (fromUser) "input_text" else "text", "text" to text),
+                    ),
+                ),
+            )
+            runCatching { sock.send(gson.toJson(item)) }
+        }
     }
 
     private fun onVoiceTick(obj: JsonObject) {

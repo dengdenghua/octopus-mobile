@@ -65,7 +65,8 @@ android {
         // vc11 = 1.0.0 正式合并发布:历史/图片修复 + 玻璃移除 + TV 桌面 + 合入 main 的沙箱安全修复。
         // vc12 = 1.0.0 实时语音发布:全屏语音通话(两入口)+ 工具接管 + 语音个性化/声音克隆 + LLM 备用模型。
         // vc13 = 语音通话免提外放修复(强制 MODE_IN_COMMUNICATION + 扬声器,原走听筒声音小)。
-        versionCode = 13
+        // vc14 = 语音↔文字记忆打通(L2):语音挂同一会话,注入历史续上下文 + 每轮转录存回 ChatStore。
+        versionCode = 14
         versionName = "1.0.0"
         buildConfigField("String", "VERSION_INFO", getVersionGit())
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

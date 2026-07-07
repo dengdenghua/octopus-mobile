@@ -68,6 +68,10 @@ import com.apk.claw.android.ui.compose.theme.OctopusSpacing
 import com.apk.claw.android.ui.compose.theme.OctopusType
 import com.apk.claw.android.ui.compose.theme.OctopusTheme
 import com.apk.claw.android.voice.realtime.VoiceRealtimeClient
+import com.apk.claw.android.ui.compose.screen.ChatMessage
+import com.apk.claw.android.ui.compose.screen.ChatStore
+import com.apk.claw.android.ui.compose.screen.SessionStore
+import com.apk.claw.android.ui.desktop.CharacterRegistry
 import com.apk.claw.android.voice.realtime.VoiceState
 import com.apk.claw.android.voice.realtime.VoiceStats
 import kotlinx.coroutines.delay
@@ -111,6 +115,7 @@ private fun VoiceCallScreen(onClose: () -> Unit) {
     }
 
     LaunchedEffect(Unit) {
+        bindSharedSession(client)  // L2:挂到与文字/TV桌面同一会话,注入历史 + 每轮存回
         client.onDeviceTool = { name, args -> executeDeviceTool(context, name, args) }
         startCall()
     }
@@ -326,6 +331,32 @@ private fun RoundTextButton(text: String, primary: Boolean, onClick: () -> Unit)
             fontWeight = FontWeight.Medium,
         )
     }
+}
+
+/**
+ * L2 共享记忆:把语音通话挂到与文字聊天/TV桌面**同一角色同一会话**(SessionStore/ChatStore),
+ * 通话前置入最近历史(注入 omni 续上下文),每轮用户/AI 转录完成即存回该会话。
+ */
+private fun bindSharedSession(client: VoiceRealtimeClient) {
+    val charId = CharacterRegistry.current.id
+    val now = System.currentTimeMillis()
+    SessionStore.ensureAtLeastOne(now, emptyList(), charId)
+    val sid = SessionStore.currentId(charId) ?: SessionStore.create(now, charId).id
+    client.seedHistory = ChatStore.load(sid).orEmpty().mapNotNull {
+        when (it) {
+            is ChatMessage.UserMessage -> true to it.text
+            is ChatMessage.AgentMessage -> false to it.text
+            else -> null
+        }
+    }.takeLast(12)
+    client.onUserTurn = { t -> appendVoiceTurn(sid, ChatMessage.UserMessage(t)) }
+    client.onAiTurn = { t -> appendVoiceTurn(sid, ChatMessage.AgentMessage(t)) }
+}
+
+private fun appendVoiceTurn(sid: String, msg: ChatMessage) {
+    val cur = ChatStore.load(sid).orEmpty().toMutableList()
+    cur.add(msg)
+    ChatStore.save(sid, cur)
 }
 
 private val voiceToolMainHandler = android.os.Handler(android.os.Looper.getMainLooper())
