@@ -3,7 +3,11 @@
 package com.apk.claw.android.ui.voice
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
+import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -111,6 +115,32 @@ private fun VoiceCallScreen(onClose: () -> Unit) {
         startCall()
     }
     DisposableEffect(Unit) { onDispose { client.disconnect() } }
+    // 免提外放:通话时切 VoIP 通信模式并强制走扬声器 —— 默认 USAGE_VOICE_COMMUNICATION 走听筒(声音小),
+    // MODE_IN_COMMUNICATION 又能保留 AudioIn/AudioOut 的硬件回声消除。离屏还原。
+    DisposableEffect(Unit) {
+        val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        val prevMode = am.mode
+        am.mode = AudioManager.MODE_IN_COMMUNICATION
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            am.availableCommunicationDevices
+                .firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
+                ?.let { spk -> runCatching { am.setCommunicationDevice(spk) } }
+        } else {
+            @Suppress("DEPRECATION")
+            am.isSpeakerphoneOn = true
+        }
+        onDispose {
+            runCatching {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    am.clearCommunicationDevice()
+                } else {
+                    @Suppress("DEPRECATION")
+                    am.isSpeakerphoneOn = false
+                }
+                am.mode = prevMode
+            }
+        }
+    }
     val toolHint by client.toolHint.collectAsState()
 
     var seconds by remember { mutableIntStateOf(0) }
