@@ -804,7 +804,11 @@ class DefaultAgentService : AgentService {
     }
 
     private fun buildInitialMessages(userPrompt: String): MutableList<ChatMessage> {
-        val fullSystemPrompt = config.systemPrompt + buildDeviceContext() + config.dynamicPromptSuffix + config.memoryPromptSuffix
+        // GUI 交互经验:把这台设备过往界面失败的规避策略追加进系统提示(每任务重算,故实时反映最新教训)。
+        val guiLessons = com.apk.claw.android.octopus_mobile.InteractionLedger.getMitigationsSection()
+        val fullSystemPrompt = config.systemPrompt + buildDeviceContext() +
+            config.dynamicPromptSuffix + config.memoryPromptSuffix +
+            (if (guiLessons.isNotBlank()) "\n\n$guiLessons" else "")
         return mutableListOf(
             SystemMessage.from(fullSystemPrompt),
             UserMessage.from(userPrompt),

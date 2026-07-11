@@ -10,6 +10,7 @@ import com.apk.claw.android.octopus_mobile.DeviceDiscoveryManager
 import com.apk.claw.android.octopus_mobile.DeviceRegistry
 import com.apk.claw.android.octopus_mobile.EvolutionMetrics
 import com.apk.claw.android.octopus_mobile.ExperienceLedger
+import com.apk.claw.android.octopus_mobile.InteractionLedger
 import com.apk.claw.android.octopus_mobile.SkillManifest
 import com.apk.claw.android.octopus_mobile.TurnScorer
 import com.apk.claw.android.octopus_mobile.nerves.EventBus
@@ -113,6 +114,7 @@ open class ClawApplication : BaseApp() {
         XLog.e(TAG, "ClawApplication initialized | device=${DeviceUtils.getDeviceDescription(this)} | tools=${ToolRegistry.getInstance().getAllTools().size}")
 
         runCatching { ExperienceLedger.init(filesDir) }.onFailure { XLog.e(TAG, "ExperienceLedger init failed", it) }
+        runCatching { InteractionLedger.init(filesDir) }.onFailure { XLog.e(TAG, "InteractionLedger init failed", it) }
         runCatching { TurnScorer.init(filesDir) }.onFailure { XLog.e(TAG, "TurnScorer init failed", it) }
         runCatching { EvolutionMetrics.load() }.onFailure { XLog.e(TAG, "EvolutionMetrics load failed", it) }
 

@@ -14,6 +14,7 @@ import com.apk.claw.android.octopus_mobile.BrainModeSelector
 import com.apk.claw.android.octopus_mobile.EvolutionMetrics
 import com.apk.claw.android.octopus_mobile.ExperienceLedger
 import com.apk.claw.android.octopus_mobile.ImmuneSystem
+import com.apk.claw.android.octopus_mobile.InteractionLedger
 import com.apk.claw.android.octopus_mobile.evolution.EvolutionEngine
 import com.apk.claw.android.octopus_mobile.evolution.LessonStore
 import com.apk.claw.android.octopus_mobile.memory.MemoryStore
@@ -504,7 +505,12 @@ class TaskOrchestrator(
                 val latencyMs = System.currentTimeMillis() - startTs
                 ImmuneSystem.postResult(toolName, latencyMs, result.data?.length ?: 0, !result.isSuccess)
                 if (!result.isSuccess) {
-                    ExperienceLedger.recordError(result.error ?: "", parameters.take(ERR_CONTEXT_MAX))
+                    // 按工具域路由失败入账:GUI 交互失败→InteractionLedger(避免污染代码域账本),其余→ExperienceLedger。
+                    if (InteractionLedger.isGuiTool(toolName)) {
+                        InteractionLedger.recordFailure(toolName, parameters, result.error ?: "")
+                    } else {
+                        ExperienceLedger.recordError(result.error ?: "", parameters.take(ERR_CONTEXT_MAX))
+                    }
                 }
                 val app = ClawApplication.instance
                 val status = if (result.isSuccess) app.getString(R.string.channel_msg_tool_success) else app.getString(R.string.channel_msg_tool_failure)

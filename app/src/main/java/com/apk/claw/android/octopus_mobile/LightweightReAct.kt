@@ -56,6 +56,9 @@ class LightweightReAct(
             if (extraSystemContext.isNotBlank()) append("\n\n").append(extraSystemContext)
             val mitigations = ExperienceLedger.getMitigationsSection()
             if (mitigations.isNotBlank()) append("\n\n").append(mitigations)
+            // GUI 交互经验(找不到节点/弹窗遮挡/加载超时…)与代码经验同注入,让轻路径也从界面失败中学。
+            val guiLessons = InteractionLedger.getMitigationsSection()
+            if (guiLessons.isNotBlank()) append("\n\n").append(guiLessons)
         }
         history += ChatMessage.System(content = systemContent)
         history += ChatMessage.User(content = task)
@@ -164,9 +167,14 @@ class LightweightReAct(
                     }
                     val latency = System.currentTimeMillis() - toolStart
                     ImmuneSystem.postResult(toolCall.name, latency, result.display.length, result is ToolExecutionResult.Failure)
-                    // 工具失败记入经验账本,下次生成/执行时注入规避策略(与 GenerateAppTool 共用同一账本)。
+                    // 工具失败记入经验账本,下次生成/执行时注入规避策略。按域路由:
+                    // GUI 交互失败→InteractionLedger,代码/生成类→ExperienceLedger(避免两域互相污染)。
                     if (result is ToolExecutionResult.Failure) {
-                        ExperienceLedger.recordError(result.display, toolCall.name)
+                        if (InteractionLedger.isGuiTool(toolCall.name)) {
+                            InteractionLedger.recordFailure(toolCall.name, "", result.display)
+                        } else {
+                            ExperienceLedger.recordError(result.display, toolCall.name)
+                        }
                     }
 
                     onStep?.invoke(ReActStep.ToolCallDone(step, toolCall, result))
