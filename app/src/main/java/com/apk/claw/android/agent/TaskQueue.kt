@@ -24,6 +24,9 @@ class TaskQueue {
         val isBackground: Boolean = false,  // 后台任务不阻塞队列
         val createdAt: Long = System.currentTimeMillis(),
         var status: TaskStatus = TaskStatus.QUEUED,
+        /** 任务来源是否受信任。false（默认）= 不可信来源（聊天渠道/LAN 控制台），高危工具走来源闸门拦截；
+         *  true = 受信任来源（内部系统触发），不施加来源闸门。安全默认 false。 */
+        val trusted: Boolean = false,
     ) : Comparable<QueuedTask> {
         override fun compareTo(other: QueuedTask): Int {
             // 优先级高的先执行；同优先级按创建时间排序

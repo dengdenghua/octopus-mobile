@@ -42,6 +42,7 @@ object ExperienceLedger {
     )
 
     private val entries = mutableListOf<ErrorEntry>()
+    @Volatile
     private var loaded = false
 
     fun init(filesDir: File) {

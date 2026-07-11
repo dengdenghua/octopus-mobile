@@ -72,6 +72,7 @@ object MiniAppHost {
 
         val bridge = OctopusBridge(manifest, WeakReference(activity))
         bridge.attachWebView(wv)
+        wv.tag = bridge
         wv.addJavascriptInterface(bridge, "octopusNative")
 
         wv.webViewClient = object : WebViewClient() {
@@ -183,12 +184,13 @@ object MiniAppHost {
     }
 
     fun destroyWebView(webView: WebView?) {
-        runCatching {
-            webView?.stopLoading()
-            webView?.removeJavascriptInterface("octopusNative")
-            webView?.webChromeClient = null
-            webView?.webViewClient = WebViewClient()
-            webView?.destroy()
+        webView?.let { wv ->
+            runCatching { (wv.tag as? OctopusBridge)?.detach() }
+            runCatching { wv.stopLoading() }
+            runCatching { wv.removeJavascriptInterface("octopusNative") }
+            runCatching { wv.webChromeClient = null }
+            runCatching { wv.webViewClient = WebViewClient() }
+            runCatching { wv.destroy() }
         }
         progressBarRef?.clear()
         progressBarRef = null

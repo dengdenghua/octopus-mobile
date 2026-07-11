@@ -3,6 +3,8 @@ package com.apk.claw.android.octopus_mobile.safety
 import android.util.Log
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
+import org.json.JSONArray
+import org.json.JSONObject
 
 /**
  * 工具调用护栏 —— 从母体 runtime/safety/immunity/tool_guardrails.py 移植.
@@ -28,9 +30,11 @@ class ToolCallGuardrailController(
         /** 幂等工具（只读，无副作用） */
         val IDEMPOTENT_TOOLS: Set<String> = setOf(
             "get_screen_info", "find_node_info", "get_installed_apps",
-            "take_screenshot", "find_text", "wait",
+            "take_screenshot", "wait",
             "browser_get_dom", "browser_screenshot",
-            "read_file", "get_clipboard", "get_current_app",
+            "look_at_screen", "list_apps", "app_action", "read_app_events",
+            "read_calendar", "browse_files", "search_files",
+            "vpn_status", "check_video", "list_pm_projects", "get_usage_stats",
         )
 
         /** 变异工具（有副作用，但可接受） */
@@ -40,6 +44,12 @@ class ToolCallGuardrailController(
             "browser_navigate", "browser_click", "browser_type",
             "install_app", "set_clipboard", "write_file",
             "preview_html",  // 离屏渲染任意 HTML，副作用限于 WebView 内
+            "send_sms", "send_intent", "file_ops", "edit_file", "backup_app",
+            "browser_evaluate", "browser_install_extension",
+            "start_vpn", "stop_vpn",
+            "generate_image", "generate_video", "generate_app",
+            "generate_plugin", "generate_tool",
+            "share_to_square", "spawn_subagent",
         )
 
         /** 危险工具（需要额外审批） */
@@ -50,10 +60,12 @@ class ToolCallGuardrailController(
         )
 
         fun classifyTool(name: String): ToolKind {
+            // DANGEROUS 优先级最高：若某工具同时在 DANGEROUS 与 MUTATING 中
+            // （如 browser_evaluate），应保留 DANGEROUS 分类，不因加入 MUTATING 而降级。
             return when {
+                name in DANGEROUS_TOOLS -> ToolKind.DANGEROUS
                 name in IDEMPOTENT_TOOLS -> ToolKind.IDEMPOTENT
                 name in MUTATING_TOOLS -> ToolKind.MUTATING
-                name in DANGEROUS_TOOLS -> ToolKind.DANGEROUS
                 else -> ToolKind.UNKNOWN
             }
         }
@@ -145,11 +157,8 @@ class ToolCallGuardrailController(
     private fun handleFailure(
         sig: ToolCallSignature, toolName: String, result: String?
     ): GuardrailDecision {
-        val exactCount = (exactFailureCounts[sig] ?: 0) + 1
-        exactFailureCounts[sig] = exactCount
-
-        val sameCount = (sameToolFailureCounts[toolName] ?: 0) + 1
-        sameToolFailureCounts[toolName] = sameCount
+        val exactCount = exactFailureCounts.compute(sig) { _, v -> (v ?: 0) + 1 }!!
+        val sameCount = sameToolFailureCounts.compute(toolName) { _, v -> (v ?: 0) + 1 }!!
 
         // 硬停：完全相同的调用失败太多次
         if (config.hardStopEnabled && exactCount >= config.exactFailureBlockAfter) {
@@ -203,10 +212,11 @@ class ToolCallGuardrailController(
     private fun handleNoProgress(
         sig: ToolCallSignature, toolName: String, result: String?
     ): GuardrailDecision {
-        val (prevResult, prevCount) = noProgress[sig] ?: ("" to 0)
-        val newCount = prevCount + 1
         val resultStr = (result ?: "").take(200)
-        noProgress[sig] = resultStr to newCount
+        val newCount = noProgress.compute(sig) { _, v ->
+            val (_, pc) = v ?: ("" to 0)
+            resultStr to (pc + 1)
+        }!!.second
 
         if (newCount < config.noProgressWarnAfter) {
             return GuardrailDecision(action = GuardrailAction.ALLOW, toolName = toolName, count = newCount)
@@ -278,8 +288,14 @@ data class ToolCallSignature(
         }
 
         private fun canonicalArgs(args: Map<String, Any>): String {
-            val sorted = args.toSortedMap()
-            return sorted.entries.joinToString(",") { "${it.key}:${it.value}" }
+            val sorted = args.toSortedMap(compareBy<String> { it })
+            return sorted.entries.joinToString(",") { (k, v) ->
+                "$k:" + when (v) {
+                    is Map<*, *> -> JSONObject(v).toString()
+                    is List<*> -> JSONArray(v).toString()
+                    else -> v.toString()
+                }
+            }
         }
 
         private fun sha256(text: String): String {

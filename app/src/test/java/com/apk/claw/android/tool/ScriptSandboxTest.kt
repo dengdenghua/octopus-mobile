@@ -308,8 +308,8 @@ class ScriptSandboxTest {
 
         val result = resultRef.get()
         assertFalse("Expected failure after cancellation", result.isSuccess)
-        assertTrue("Error should indicate interruption/timeout: ${result.error}",
-            result.error?.contains("中断") == true || result.error?.contains("超时") == true)
+        assertTrue("Error should indicate interruption/timeout/cancellation: ${result.error}",
+            result.error?.contains("中断") == true || result.error?.contains("超时") == true || result.error?.contains("取消") == true)
     }
 
     @Test

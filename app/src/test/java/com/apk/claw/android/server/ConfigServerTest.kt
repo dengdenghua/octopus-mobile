@@ -133,11 +133,12 @@ class ConfigServerTest {
         val session = mock(NanoHTTPD.IHTTPSession::class.java)
         `when`(session.method).thenReturn(NanoHTTPD.Method.OPTIONS)
         `when`(session.uri).thenReturn("/api/llm")
+        `when`(session.headers).thenReturn(mapOf("origin" to "http://192.168.1.100:8080"))
 
         val response = server.serve(session)
 
         assertEquals(NanoHTTPD.Response.Status.OK, response.status)
-        assertEquals("*", response.getHeader("Access-Control-Allow-Origin"))
+        assertEquals("http://192.168.1.100:8080", response.getHeader("Access-Control-Allow-Origin"))
         assertNotNull(response.getHeader("Access-Control-Allow-Methods"))
     }
 

@@ -27,6 +27,7 @@ class TelegramChannelHandler(
     private var lastChatId: Long? = null
     @Volatile
     private var pollingActive = false
+    @Volatile
     private var pollingThread: Thread? = null
 
     private val pollingHttpClient: OkHttpClient by lazy {
@@ -51,6 +52,7 @@ class TelegramChannelHandler(
         pollingActive = true
         pollingThread = Thread({
             var offset = 0L
+            var retryDelay = 5000L
             XLog.i(TAG, "Telegram polling 线程启动")
             while (pollingActive) {
                 try {
@@ -61,7 +63,7 @@ class TelegramChannelHandler(
                     }
                     val request = okhttp3.Request.Builder()
                         .url(apiUrl("getUpdates"))
-                        .post(okhttp3.RequestBody.create("application/json".toMediaTypeOrNull(), reqBody.toString()))
+                        .post(reqBody.toString().toRequestBody("application/json".toMediaTypeOrNull()))
                         .build()
                     val response = pollingHttpClient.newCall(request).execute()
                     val body = response.body?.string()
@@ -80,9 +82,18 @@ class TelegramChannelHandler(
                             XLog.e(TAG, "Telegram Bot Token 无效，停止轮询")
                             break
                         }
-                        Thread.sleep(5000)
+                        try {
+                            Thread.sleep(retryDelay)
+                        } catch (ie: InterruptedException) {
+                            Thread.currentThread().interrupt()
+                            break
+                        }
+                        retryDelay = minOf(retryDelay * 2, 60_000L)
                         continue
                     }
+
+                    // 成功 → 重置退避
+                    retryDelay = 5000L
 
                     val result = json.optJSONArray("result") ?: continue
                     for (i in 0 until result.length()) {
@@ -108,8 +119,14 @@ class TelegramChannelHandler(
                     XLog.d(TAG, "Telegram polling 超时，继续轮询")
                 } catch (e: Exception) {
                     if (pollingActive) {
-                        XLog.w(TAG, "Telegram polling 异常，5 秒后重试", e)
-                        try { Thread.sleep(5000) } catch (_: InterruptedException) { break }
+                        XLog.w(TAG, "Telegram polling 异常，${retryDelay}ms 后重试", e)
+                        try {
+                            Thread.sleep(retryDelay)
+                        } catch (ie: InterruptedException) {
+                            Thread.currentThread().interrupt()
+                            break
+                        }
+                        retryDelay = minOf(retryDelay * 2, 60_000L)
                     }
                 }
             }
@@ -243,7 +260,7 @@ class TelegramChannelHandler(
             put("text", text)
             if (parseMode != null) put("parse_mode", parseMode)
         }
-        val body = okhttp3.RequestBody.create("application/json".toMediaTypeOrNull(), json.toString())
+        val body = json.toString().toRequestBody("application/json".toMediaTypeOrNull())
         val request = okhttp3.Request.Builder()
             .url(apiUrl("sendMessage"))
             .post(body)

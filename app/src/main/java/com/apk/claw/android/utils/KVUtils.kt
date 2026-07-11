@@ -55,8 +55,12 @@ object KVUtils {
     private lateinit var mmkv: MMKV
     private lateinit var securePrefs: EncryptedSharedPreferences
     private val disabledToolsFallback = mutableSetOf<String>()
+    @Volatile
+    private var disabledToolsCache: Set<String>? = null
     private val stringFallback = ConcurrentHashMap<String, String>()
     private val boolFallback = ConcurrentHashMap<String, Boolean>()
+    private val intFallback = ConcurrentHashMap<String, Int>()
+    private val longFallback = ConcurrentHashMap<String, Long>()
 
     private const val DEFAULT_INT = 0
     private const val DEFAULT_LONG = 0L
@@ -184,19 +188,29 @@ object KVUtils {
 
     // ==================== Int ====================
     fun putInt(key: String, value: Int): Boolean {
+        if (!::mmkv.isInitialized) {
+            intFallback[key] = value
+            return true
+        }
         return mmkv.encode(key, value)
     }
 
     fun getInt(key: String, defaultValue: Int = DEFAULT_INT): Int {
+        if (!::mmkv.isInitialized) return intFallback[key] ?: defaultValue
         return mmkv.decodeInt(key, defaultValue)
     }
 
     // ==================== Long ====================
     fun putLong(key: String, value: Long): Boolean {
+        if (!::mmkv.isInitialized) {
+            longFallback[key] = value
+            return true
+        }
         return mmkv.encode(key, value)
     }
 
     fun getLong(key: String, defaultValue: Long = DEFAULT_LONG): Long {
+        if (!::mmkv.isInitialized) return longFallback[key] ?: defaultValue
         return mmkv.decodeLong(key, defaultValue)
     }
 
@@ -260,6 +274,8 @@ object KVUtils {
         // 内存兜底也要清（MMKV 未初始化时 string/bool 走 fallback map）。生产环境 map 为空，无副作用。
         stringFallback.remove(key)
         boolFallback.remove(key)
+        intFallback.remove(key)
+        longFallback.remove(key)
         if (::mmkv.isInitialized) mmkv.removeValueForKey(key)
     }
 
@@ -285,7 +301,10 @@ object KVUtils {
     fun resetForTest() {
         stringFallback.clear()
         boolFallback.clear()
+        intFallback.clear()
+        longFallback.clear()
         disabledToolsFallback.clear()
+        disabledToolsCache = null
     }
 
     fun getAllKeys(): Array<String> {
@@ -509,7 +528,10 @@ object KVUtils {
     private const val KEY_DISABLED_TOOLS = "KEY_DISABLED_TOOLS"
     fun getDisabledTools(): Set<String> {
         if (!::mmkv.isInitialized) return disabledToolsFallback.toSet()
-        return getString(KEY_DISABLED_TOOLS, "").split(",").filter { it.isNotBlank() }.toSet()
+        disabledToolsCache?.let { return it }
+        val set = getString(KEY_DISABLED_TOOLS, "").split(",").filter { it.isNotBlank() }.toSet()
+        disabledToolsCache = set
+        return set
     }
     fun setToolDisabled(name: String, disabled: Boolean) {
         if (!::mmkv.isInitialized) {
@@ -518,6 +540,7 @@ object KVUtils {
         }
         val s = getDisabledTools().toMutableSet()
         if (disabled) s.add(name) else s.remove(name)
+        disabledToolsCache = null
         putString(KEY_DISABLED_TOOLS, s.joinToString(","))
     }
 

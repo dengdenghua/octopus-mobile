@@ -13,7 +13,6 @@ import com.apk.claw.android.agent.llm.LlmClient
 import com.apk.claw.android.agent.llm.LlmClientFactory
 import com.apk.claw.android.agent.llm.LlmResponse
 import com.apk.claw.android.agent.llm.StreamingListener
-import com.apk.claw.android.octopus_mobile.memory.ContextCompressor
 import com.apk.claw.android.service.ClawAccessibilityService
 import com.apk.claw.android.octopus_mobile.GoalVerifier
 import com.apk.claw.android.octopus_mobile.VisionAnalyzer
@@ -71,6 +70,9 @@ class DefaultAgentService : AgentService {
         /** JPEG 压缩质量，用于 VLM 图片 */
         private const val VISION_JPEG_QUALITY = 50
 
+        /** 非流式 LLM chat 调用的硬超时(ms):FutureTask.get 兜底,防止网络挂起永久阻塞。 */
+        private const val LLM_CHAT_TIMEOUT_MS = 120_000L
+
         /** 是否将网络请求/响应原始数据输出到沙盒缓存文件，方便调试 */
         @JvmField
         var FILE_LOGGING_ENABLED = false
@@ -82,6 +84,8 @@ class DefaultAgentService : AgentService {
     private lateinit var llmClient: LlmClient
     private lateinit var toolSpecs: List<dev.langchain4j.agent.tool.ToolSpecification>
     private var executor: ExecutorService? = null
+    /** 后台单线程执行器:异步写 TaskCheckpoint(MMKV 同步写盘),避免阻塞 Agent executor 线程。 */
+    private var checkpointExecutor: ExecutorService? = null
     private val running = AtomicBoolean(false)
     @Volatile
     private var cancelToken: CancellationToken = CancellationToken()
@@ -91,6 +95,9 @@ class DefaultAgentService : AgentService {
         this.llmClient = LlmClientFactory.create(config)
         this.toolSpecs = LangChain4jToolBridge.buildToolSpecifications()
         this.executor = Executors.newSingleThreadExecutor()
+        this.checkpointExecutor = Executors.newSingleThreadExecutor { r ->
+            Thread(r, "checkpoint").apply { isDaemon = true }
+        }
         XLog.i(TAG, "Agent initialized: provider=${config.provider}, model=${config.modelName}, streaming=${config.streaming}")
     }
 
@@ -100,6 +107,7 @@ class DefaultAgentService : AgentService {
             XLog.w(TAG, "Task was running during config update, cancelled")
         }
         executor?.shutdownNow()
+        checkpointExecutor?.shutdownNow()
         initialize(config)
         XLog.i(TAG, "Agent config updated, new model: ${config.modelName}")
     }
@@ -127,7 +135,7 @@ class DefaultAgentService : AgentService {
      * 工具调用频率计数器（包名 → 调用次数），用于自进化：当某个 open_app 模式
      * 被高频使用（≥3 次），自动生成一条 ReflexRouter 快路径规则，跳过 LLM 推理。
      */
-    private val toolCallFrequency = mutableMapOf<String, Int>()
+    private val toolCallFrequency = java.util.concurrent.ConcurrentHashMap<String, Int>()
 
     /** 不可信来源运行时，把工具调用包进来源闸门：高危工具默认拦截，满血/远程放行时通过。 */
     private fun execTool(toolName: String, params: Map<String, Any>): com.apk.claw.android.tool.ToolResult {
@@ -411,7 +419,9 @@ class DefaultAgentService : AgentService {
                         override fun onError(error: Throwable) {}
                     }, cancelToken)
                 } else {
-                    llmClient.chat(messages, toolSpecs)
+                    // 非流式 chat 不接受 CancellationToken,用 FutureTask + 独立线程包装,
+                    // poll 等待以便在 cancelToken 取消时 future.cancel(true) 中断底层 HTTP 调用。
+                    chatWithCancellation(messages)
                 }
                 // 网关上游 5xx 常表现为 HTTP 200、但流式 body 是 {"error":...}，被解析层吞成"空回复"
                 // （无正文、无工具调用）。把它当作可重试的瞬时错误，复用下方分类重试，而不是误判为"任务已完成"。
@@ -463,6 +473,42 @@ class DefaultAgentService : AgentService {
         throw lastException ?: RuntimeException("LLM call failed after $MAX_API_RETRIES retries")
     }
 
+    /**
+     * 非流式 LLM chat 的可取消包装:用 FutureTask + 独立 daemon 线程执行 [llmClient.chat],
+     * executor 线程 poll 等待(每 [POLL_INTERVAL_MS] 检查一次 [cancelToken]),
+     * 取消时 future.cancel(true) 中断底层 HTTP 调用,带 [LLM_CHAT_TIMEOUT_MS] 硬超时兜底。
+     */
+    @Suppress("TooGenericExceptionCaught", "ReturnCount")
+    private fun chatWithCancellation(messages: List<ChatMessage>): LlmResponse {
+        val future = java.util.concurrent.FutureTask {
+            llmClient.chat(messages, toolSpecs)
+        }
+        Thread(future, "llm-chat").apply { isDaemon = true }.start()
+
+        val deadline = System.currentTimeMillis() + LLM_CHAT_TIMEOUT_MS
+        try {
+            while (System.currentTimeMillis() < deadline) {
+                if (cancelToken.isCancelled()) {
+                    future.cancel(true)
+                    throw RuntimeException(ClawApplication.instance.getString(R.string.agent_task_cancelled))
+                }
+                try {
+                    return future.get(POLL_INTERVAL_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+                } catch (e: java.util.concurrent.TimeoutException) {
+                    // 继续轮询,下一轮检查 cancelToken
+                }
+            }
+            future.cancel(true)
+            throw RuntimeException("LLM chat timed out after ${LLM_CHAT_TIMEOUT_MS}ms")
+        } catch (e: java.util.concurrent.ExecutionException) {
+            throw e.cause ?: e
+        } catch (e: InterruptedException) {
+            future.cancel(true)
+            Thread.currentThread().interrupt()
+            throw RuntimeException(ClawApplication.instance.getString(R.string.agent_task_cancelled))
+        }
+    }
+
     /** 从异常中提取 HTTP 状态码（LangChain4j HttpException 或消息中的状态码）。 */
     private fun extractStatusCode(e: Throwable): Int? {
         if (e is dev.langchain4j.exception.HttpException) {
@@ -483,12 +529,11 @@ class DefaultAgentService : AgentService {
 
     // ==================== 上下文压缩 ====================
 
-    /**
-     * ContextCompressor 实例，提供分层压缩策略。
-     * 注入 [ContextSummarizer.summarize] 作为「更早历史」的 LLM 真总结通道——比硬截断更能
-     * 保住「试过 X 因 Y 失败」这类关键历史;调用失败会自动退回硬截断,不阻断主循环。
-     */
-    private val contextCompressor = ContextCompressor(summarizer = ContextSummarizer::summarize)
+    /** 上下文总字符上限：超过则对保护区外的 AiMessage 文本做截断 */
+    private val CONTEXT_MAX_CHARS = 80000
+
+    /** 保护区外 AiMessage 文本截断长度 */
+    private val CONTEXT_CHUNK_TRUNCATE_CHARS = 500
 
     /** 保护区：最近 N 轮完整保留 */
     private val KEEP_RECENT_ROUNDS = 3
@@ -509,9 +554,6 @@ class DefaultAgentService : AgentService {
      * - get_screen_info：全局只保留最新一条完整结果
      * - 保护区（最近 KEEP_RECENT_ROUNDS 轮）：完整保留
      * - 保护区外：AI thinking 不动，tool result 压缩为一行摘要
-     *
-     * 注：ContextCompressor.compress() 未被调用，仅复用其 config（maxChars/chunkTruncateChars）。
-     * 如需启用完整的"older 消息汇总为 [Context Summary]"策略，可替换为 compressor.compress()。
      */
     private fun compressHistoryForSend(messages: MutableList<ChatMessage>) {
         // 压缩前统计总字符数
@@ -578,7 +620,7 @@ class DefaultAgentService : AgentService {
 
         // ── ContextCompressor 二次压缩层 ──
         // 如果现有压缩后总字符仍超过 maxChars，对保护区外的 AiMessage 文本做截断
-        if (charsAfter > contextCompressor.config.maxChars && aiIndices.size > KEEP_RECENT_ROUNDS) {
+        if (charsAfter > CONTEXT_MAX_CHARS && aiIndices.size > KEEP_RECENT_ROUNDS) {
             applyContextCompressorTruncation(messages, aiIndices, KEEP_RECENT_ROUNDS)
             val charsAfterSecondPass = countMessagesChars(messages)
             val secondSaved = charsAfter - charsAfterSecondPass
@@ -611,7 +653,7 @@ class DefaultAgentService : AgentService {
         keepRecent: Int
     ) {
         val totalRounds = aiIndices.size
-        val truncLimit = contextCompressor.config.chunkTruncateChars
+        val truncLimit = CONTEXT_CHUNK_TRUNCATE_CHARS
 
         for (roundIdx in aiIndices.indices) {
             val roundFromEnd = totalRounds - roundIdx
@@ -683,6 +725,8 @@ class DefaultAgentService : AgentService {
         var lastScreenHash = 0
         /** 剩余目标修复轮数（VLM 判未达成时消耗）。 */
         var goalRepairsLeft = MAX_GOAL_REPAIRS
+        /** 任务是否成功完成:仅 LLM 正常 finish 或目标校验通过时置 true,finishLoop 据此决定是否 commit 动作录制。 */
+        var taskSucceeded = false
     }
 
     private enum class IterationOutcome { CONTINUE, TERMINATE }
@@ -728,15 +772,35 @@ class DefaultAgentService : AgentService {
         finishLoop(state, callback)
     }
 
-    /** 保存检查点到持久化存储，供崩溃恢复。 */
+    /** 保存检查点到持久化存储，供崩溃恢复。异步提交到 [checkpointExecutor],不阻塞 Agent 线程。 */
     private fun saveCheckpoint(state: AgentLoopState) {
-        TaskCheckpoint.save(
-            goal = state.goal,
-            iterations = state.iterations,
-            goalRepairsLeft = state.goalRepairsLeft,
-            untrusted = untrustedRun,
-            messages = state.messages,
-        )
+        val exec = checkpointExecutor ?: return
+        val goal = state.goal
+        val iterations = state.iterations
+        val goalRepairsLeft = state.goalRepairsLeft
+        val untrusted = untrustedRun
+        val messages = state.messages
+        exec.submit {
+            TaskCheckpoint.save(
+                goal = goal,
+                iterations = iterations,
+                goalRepairsLeft = goalRepairsLeft,
+                untrusted = untrusted,
+                messages = messages,
+            )
+        }
+    }
+
+    /**
+     * 同步等待 [checkpointExecutor] 中所有已提交任务完成(最多 2 秒)。
+     * 在 cancel/finishLoop 清除检查点前调用,确保不会有滞后的异步写盘在 clear 之后落盘。
+     */
+    private fun flushCheckpointExecutor() {
+        try {
+            checkpointExecutor?.submit { }?.get(2, java.util.concurrent.TimeUnit.SECONDS)
+        } catch (e: Exception) {
+            XLog.w(TAG, "checkpoint executor flush timed out", e)
+        }
     }
 
     private fun buildInitialMessages(userPrompt: String): MutableList<ChatMessage> {
@@ -778,7 +842,10 @@ class DefaultAgentService : AgentService {
         } catch (e: Exception) {
             XLog.w(TAG, "Auto-screenshot injection failed", e)
         } finally {
-            scaledBitmap?.recycle()
+            // 回收缩放产物(若产生了);原图 bitmap 也统一回收。
+            // 修复:原实现 no-scale 路径不回收 bitmap,每轮累积导致 OOM。
+            if (scaledBitmap != null && !scaledBitmap!!.isRecycled) scaledBitmap!!.recycle()
+            if (!bitmap.isRecycled) bitmap.recycle()
         }
     }
 
@@ -849,6 +916,7 @@ class DefaultAgentService : AgentService {
                 messages.add(UserMessage.from(repair))
                 return false
             }
+            taskSucceeded = true
             callback.onComplete(iterations, llmResponse.text ?: ClawApplication.instance.getString(R.string.agent_task_completed), totalTokens)
             return true
         }
@@ -938,8 +1006,7 @@ class DefaultAgentService : AgentService {
         if (toolName == "open_app" && result.isSuccess) {
             val packageName = params["package"] as? String
             if (packageName != null) {
-                val count = (toolCallFrequency[packageName] ?: 0) + 1
-                toolCallFrequency[packageName] = count
+                val count = toolCallFrequency.merge(packageName, 1, Int::plus) ?: 1
                 if (count >= 3) {
                     // ≥3 次：自动提炼规则，生成快路径
                     TaskOrchestrator.current?.getReflexRouter()?.learnFromPattern(toolName, params, count)
@@ -956,6 +1023,7 @@ class DefaultAgentService : AgentService {
                 messages.add(UserMessage.from(repair))
                 return ToolHandleResult.CONTINUE
             }
+            taskSucceeded = true
             callback.onComplete(iterations, result.data ?: ClawApplication.instance.getString(R.string.agent_task_completed), totalTokens)
             return ToolHandleResult.TERMINATE
         }
@@ -1139,6 +1207,8 @@ class DefaultAgentService : AgentService {
         while (System.currentTimeMillis() < deadline) {
             if (cancelToken.isCancelled()) {
                 vlmThread.interrupt()
+                // 等待 VLM 线程退出,避免调用方 recycle bitmap 时线程仍在做 base64/网络传输导致 use-after-recycle 崩溃。
+                joinVlmThread(vlmThread)
                 XLog.w(TAG, "goal verify cancelled by CancellationToken")
                 return null
             }
@@ -1148,6 +1218,7 @@ class DefaultAgentService : AgentService {
         // 如果 VLM 线程还在跑(超时未返回),中断它避免线程泄漏。
         if (vlmThread.isAlive) {
             vlmThread.interrupt()
+            joinVlmThread(vlmThread)
             XLog.w(TAG, "goal verify timed out, VLM thread interrupted")
             return null
         }
@@ -1156,11 +1227,30 @@ class DefaultAgentService : AgentService {
         return result.get()
     }
 
+    /**
+     * 等待 VLM 线程退出(带 3 秒超时),用于 [verifyGoalWithCancellation] 取消/超时路径。
+     * 确保 VLM 线程不再持有 bitmap 引用后,调用方才 recycle bitmap,避免 use-after-recycle 崩溃。
+     */
+    private fun joinVlmThread(thread: Thread) {
+        try {
+            thread.join(3_000L)
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+        }
+        if (thread.isAlive) {
+            XLog.w(TAG, "VLM thread still alive after join(3s), bitmap recycle may race")
+        }
+    }
+
     private fun finishLoop(state: AgentLoopState, callback: AgentCallback) {
-        if (!config.skipCheckpoint) TaskCheckpoint.clear()
-        // ── 动作录制：任务成功完成且有录制动作 → 提交到快路径缓存 ──
-        if (state.iterations < state.maxIterations && !cancelToken.isCancelled()) {
-            // 任务正常完成（不是被取消或超迭代）→ 提交快路径缓存
+        if (!config.skipCheckpoint) {
+            flushCheckpointExecutor()
+            TaskCheckpoint.clear()
+        }
+        // ── 动作录制：仅在任务真正成功完成时才提交快路径缓存 ──
+        // 旧逻辑用 iterations < maxIterations 判断"正常完成",但 LLM 报错提前终止也满足该条件,
+        // 会把失败动作序列缓存到快路径。改用显式的 taskSucceeded 标志位。
+        if (state.taskSucceeded && !cancelToken.isCancelled()) {
             actionRecorder?.commit(state.goal.hashCode().toString(), state.goal)
         }
         when {
@@ -1180,12 +1270,16 @@ class DefaultAgentService : AgentService {
 
     override fun cancel() {
         cancelToken.cancel(ClawApplication.instance.getString(R.string.agent_task_cancel))
-        if (!config.skipCheckpoint) TaskCheckpoint.clear()
+        if (!config.skipCheckpoint) {
+            flushCheckpointExecutor()
+            TaskCheckpoint.clear()
+        }
     }
 
     override fun shutdown() {
         cancel()
         executor?.shutdownNow()
+        checkpointExecutor?.shutdown()
     }
 
     override fun isRunning(): Boolean = running.get()

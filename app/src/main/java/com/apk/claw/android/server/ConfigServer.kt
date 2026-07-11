@@ -84,6 +84,16 @@ class ConfigServer(
     )
 
     override fun serve(session: IHTTPSession): Response {
+        routeContext.bindRequestOrigin(session)
+        return try {
+            // 隐藏 NanoHTTPD 默认 Server 头(含版本信息),统一改为通用值
+            serveInternal(session).also { it.addHeader("Server", "octopus") }
+        } finally {
+            routeContext.clearRequestOrigin()
+        }
+    }
+
+    private fun serveInternal(session: IHTTPSession): Response {
         // CORS 预检请求
         if (session.method == Method.OPTIONS) {
             return routeContext.corsResponse(newFixedLengthResponse(Response.Status.OK, MIME_PLAINTEXT, ""))
@@ -124,7 +134,7 @@ class ConfigServer(
             routeContext.corsResponse(
                 newFixedLengthResponse(
                     Response.Status.INTERNAL_ERROR, MIME_JSON,
-                    """{"code":-1,"message":"${e.message}"}"""
+                    """{"code":-1,"message":"Internal error"}"""
                 )
             )
         }

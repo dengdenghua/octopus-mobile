@@ -706,6 +706,8 @@ object ScriptSandbox {
             )
         is InterruptedException ->
             ToolResult.error("执行被中断", ToolErr.TIMEOUT)
+        is com.apk.claw.android.agent.TaskCancelledException ->
+            ToolResult.error("执行被取消: ${e.message}", ToolErr.TIMEOUT)
         else ->
             ToolResult.error("执行异常: ${e.message}", ToolErr.INTERNAL)
     }

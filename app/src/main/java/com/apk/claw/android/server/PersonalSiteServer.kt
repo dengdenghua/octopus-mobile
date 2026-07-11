@@ -26,15 +26,14 @@ object PersonalSiteServer {
     private const val HTTP_TOO_LARGE = 413
     private const val TEXT_PLAIN = "text/plain; charset=utf-8"
 
-    /** 只读响应:状态码 + Content-Type + 字节体。 */
-    data class SiteResponse(val status: Int, val contentType: String, val body: ByteArray) {
-        override fun equals(other: Any?): Boolean =
-            other is SiteResponse && status == other.status &&
-                contentType == other.contentType && body.contentEquals(other.body)
-
-        override fun hashCode(): Int =
-            (status * 31 + contentType.hashCode()) * 31 + body.contentHashCode()
-    }
+    /** 只读响应:状态码 + Content-Type + 字节流 + 安全头。调用方负责关闭 body 流。 */
+    data class SiteResponse(
+        val status: Int,
+        val contentType: String,
+        val body: java.io.InputStream,
+        /** 安全响应头:调用方(经 WebSocket 隧道的服务端)应原样应用到最终 HTTP 响应。 */
+        val headers: Map<String, String> = mapOf("X-Content-Type-Options" to "nosniff"),
+    )
 
     /** 网站根目录 `filesDir/site`;首次创建时写入一份 starter 页,好让绑定后立刻可访问。 */
     fun rootDir(context: Context): File {
@@ -58,8 +57,8 @@ object PersonalSiteServer {
         val inRoot = canon == rootCanon || canon.startsWith(rootCanon + File.separator)
         when {
             !inRoot || !target.isFile -> notFound()
-            target.length() > MAX_BYTES -> SiteResponse(HTTP_TOO_LARGE, TEXT_PLAIN, "文件过大".toByteArray())
-            else -> SiteResponse(HTTP_OK, mimeOf(target.name), target.readBytes())
+            target.length() > MAX_BYTES -> SiteResponse(HTTP_TOO_LARGE, TEXT_PLAIN, java.io.ByteArrayInputStream("文件过大".toByteArray()))
+            else -> SiteResponse(HTTP_OK, mimeOf(target.name), java.io.FileInputStream(target))
         }
     }.getOrElse {
         XLog.w(TAG, "serve failed for '$rawPath': ${it.message}")
@@ -97,7 +96,7 @@ object PersonalSiteServer {
         return if (needsCharset) "$base; charset=utf-8" else base
     }
 
-    private fun notFound(): SiteResponse = SiteResponse(HTTP_NOT_FOUND, TEXT_PLAIN, "Not Found".toByteArray())
+    private fun notFound(): SiteResponse = SiteResponse(HTTP_NOT_FOUND, TEXT_PLAIN, java.io.ByteArrayInputStream("Not Found".toByteArray()))
 
     private val STARTER_HTML = """
         <!doctype html><html lang=zh><meta charset=utf-8>

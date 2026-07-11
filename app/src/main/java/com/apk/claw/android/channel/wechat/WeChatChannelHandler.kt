@@ -272,6 +272,8 @@ class WeChatChannelHandler(
     private val BUFFER_DELAY_MS = 12000L
     /** 至少攒够这么多条才合并发送（不够的话继续等） */
     private val MIN_BUFFER_COUNT = 8
+    /** 缓冲绝对上限：tryFlush 持续延迟时防止 buffer 无限增长，超过则丢弃最旧消息 */
+    private val MAX_BUFFER_ABSOLUTE = 500
 
     /**
      * 强制 flush（不管条数），用于：图片/文件发送前、用户切换、disconnect。
@@ -333,6 +335,10 @@ class WeChatChannelHandler(
             // 如果目标用户变了，先 flush 旧的
             if (bufferUserId != null && bufferUserId != fromUserId) {
                 flushMessageBuffer()
+            }
+            if (messageBuffer.size >= MAX_BUFFER_ABSOLUTE) {
+                messageBuffer.removeAt(0)  // 丢弃最旧
+                XLog.w(TAG, "messageBuffer 达到上限 $MAX_BUFFER_ABSOLUTE，丢弃最旧消息")
             }
             messageBuffer.add(content)
             bufferUserId = fromUserId

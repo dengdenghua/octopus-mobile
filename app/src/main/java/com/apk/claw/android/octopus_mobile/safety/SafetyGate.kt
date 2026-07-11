@@ -98,8 +98,18 @@ open class SafetyGate(
      * 便捷方法：把参数 map 转成字符串后检查.
      */
     open fun checkToolCall(toolName: String, args: Map<String, Any>): Verdict {
-        val argsText = args.entries.joinToString("; ") { "${it.key}=${it.value}" }
-        return check("tool:$toolName args:$argsText", "tool_call")
+        // 逐值扫描,避免拼接导致边界模糊 (value 含 ; 或 = 时分隔符失效,
+        // SecretRedactor 正则可能匹配不到)
+        val allPiiHits = mutableListOf<PrivacyScanner.RuleHit>()
+        for ((key, value) in args) {
+            val text = "${key}=${value}"
+            val verdict = check(text, "tool_call")
+            allPiiHits.addAll(verdict.piiHits)
+            if (verdict.action != JudgeAction.ALLOW) {
+                return verdict
+            }
+        }
+        return Verdict(JudgeAction.ALLOW, piiHits = allPiiHits)
     }
 }
 

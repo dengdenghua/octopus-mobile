@@ -98,6 +98,9 @@ object PythonSandbox {
         } catch (e: InterruptedException) {
             future.cancel(true)
             ToolResult.error("执行被中断", ToolErr.TIMEOUT)
+        } catch (e: com.apk.claw.android.agent.TaskCancelledException) {
+            future.cancel(true)
+            ToolResult.error("执行被取消: ${e.message}", ToolErr.TIMEOUT)
         } catch (e: Exception) {
             ToolResult.error("Python 执行异常: ${e.message}", ToolErr.INTERNAL)
         }
@@ -137,6 +140,8 @@ object PythonSandbox {
             ToolResult.error("Python 错误: ${e.message}", ToolErr.SCRIPT_ERROR)
         } catch (e: InterruptedException) {
             ToolResult.error("执行被中断", ToolErr.TIMEOUT)
+        } catch (e: com.apk.claw.android.agent.TaskCancelledException) {
+            ToolResult.error("执行被取消: ${e.message}", ToolErr.TIMEOUT)
         } catch (e: Exception) {
             ToolResult.error("Python 执行异常: ${e.message}", ToolErr.INTERNAL)
         }
@@ -223,9 +228,9 @@ object PythonSandbox {
                 resp.close()
                 result.toString()
             } catch (e: SecurityException) {
-                throw RuntimeException("fetch blocked: ${e.message}")
+                throw RuntimeException("fetch blocked: ${e.message}", e)
             } catch (e: Exception) {
-                throw RuntimeException("fetch: ${e.message}")
+                throw RuntimeException("fetch: ${e.message}", e)
             }
         }
 
@@ -248,7 +253,7 @@ object PythonSandbox {
                     throw RuntimeException("callTool '$name' failed: ${result.error}")
                 }
             } catch (e: Exception) {
-                throw RuntimeException("callTool '$name' error: ${e.message}")
+                throw RuntimeException("callTool '$name' error: ${e.message}", e)
             }
         }
 

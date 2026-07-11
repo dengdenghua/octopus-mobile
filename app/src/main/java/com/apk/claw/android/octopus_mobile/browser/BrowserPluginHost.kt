@@ -6,7 +6,6 @@ import com.apk.claw.android.utils.OctoHttp
 import com.google.gson.Gson
 import okhttp3.Request
 import java.io.File
-import java.util.concurrent.ConcurrentHashMap
 
 object BrowserPluginHost {
 
@@ -50,7 +49,13 @@ object BrowserPluginHost {
     var stealthEnabled: Boolean = true
 
     @Volatile
-    private var scriptCache = ConcurrentHashMap<String, String>()
+    private var scriptCache: MutableMap<String, String> = java.util.Collections.synchronizedMap(
+        object : LinkedHashMap<String, String>(16, 0.75f, true) {
+            override fun removeEldestEntry(eldest: Map.Entry<String, String>?): Boolean {
+                return size > 32
+            }
+        }
+    )
 
     fun setScripts(list: List<UserScriptEntry>) {
         scripts = list.filter { it.enabled }
@@ -324,40 +329,55 @@ object BrowserPluginHost {
     private fun downloadRequires(urls: List<String>, context: Context): String {
         val sb = StringBuilder()
         val http = OctoHttp.shared
+        val uncached = mutableListOf<String>()
         for (url in urls) {
             val cached = scriptCache[url]
             if (cached != null) {
                 sb.append("\n").append(cached).append("\n")
-                continue
+            } else {
+                uncached.add(url)
             }
-            val content = runCatching {
-                val req = Request.Builder().url(url).build()
-                http.newCall(req).execute().use { resp ->
-                    if (resp.isSuccessful) resp.body?.string().orEmpty() else ""
+        }
+        // 未缓存的 @require 脚本放到后台线程下载,避免主线程同步 HTTP 导致 ANR。
+        // 下载完成后写入缓存,下次构建脚本时即可命中缓存直接拼入。
+        if (uncached.isNotEmpty()) {
+            Thread {
+                for (url in uncached) {
+                    if (scriptCache.containsKey(url)) continue
+                    runCatching {
+                        val req = Request.Builder().url(url).build()
+                        http.newCall(req).execute().use { resp ->
+                            if (resp.isSuccessful) {
+                                val content = resp.body?.string().orEmpty()
+                                if (content.isNotBlank()) {
+                                    scriptCache[url] = content
+                                }
+                            }
+                        }
+                    }.onFailure { Log.w(TAG, "@require download failed: $url (${it.message})") }
                 }
-            }.getOrElse { Log.w(TAG, "@require download failed: $url (${it.message})"); "" }
-            if (content.isNotBlank()) {
-                scriptCache[url] = content
-                sb.append("\n").append(content).append("\n")
-            }
+            }.apply { isDaemon = true }.start()
         }
         return sb.toString()
     }
 
     private fun cacheResources(resources: Map<String, String>, context: Context) {
         val http = OctoHttp.shared
-        for ((name, url) in resources) {
-            runCatching {
-                val req = Request.Builder().url(url).build()
-                http.newCall(req).execute().use { resp ->
-                    if (resp.isSuccessful) {
-                        val bytes = resp.body?.bytes() ?: return@use
-                        val gmBridge = GmApiBridge(context)
-                        gmBridge.cacheResource(name, bytes)
+        // @resource 下载放到后台线程,避免主线程同步 HTTP 导致 ANR。
+        Thread {
+            for ((name, url) in resources) {
+                runCatching {
+                    val req = Request.Builder().url(url).build()
+                    http.newCall(req).execute().use { resp ->
+                        if (resp.isSuccessful) {
+                            val bytes = resp.body?.bytes() ?: return@use
+                            val gmBridge = GmApiBridge(context)
+                            gmBridge.cacheResource(name, bytes)
+                        }
                     }
-                }
-            }.onFailure { Log.w(TAG, "@resource download failed: $name ($url): ${it.message}") }
-        }
+                }.onFailure { Log.w(TAG, "@resource download failed: $name ($url): ${it.message}") }
+            }
+        }.apply { isDaemon = true }.start()
     }
 
     // ── SystemWebViewEngine 调用的读出口 ────────────

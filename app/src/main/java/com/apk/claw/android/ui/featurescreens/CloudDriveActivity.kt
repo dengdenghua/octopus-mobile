@@ -71,10 +71,12 @@ fun CloudDriveScreen(onBack: () -> Unit) {
         selected = m; pathStack = listOf(m.rootPath.ifBlank { "/" }); load(m, pathStack.last())
     }
     fun enter(href: String) {
-        pathStack = pathStack + href; load(selected!!, href)
+        val m = selected ?: return
+        pathStack = pathStack + href; load(m, href)
     }
     fun up() {
-        if (pathStack.size > 1) { pathStack = pathStack.dropLast(1); load(selected!!, pathStack.last()) }
+        val m = selected
+        if (pathStack.size > 1 && m != null) { pathStack = pathStack.dropLast(1); load(m, pathStack.last()) }
         else { selected = null; entries = null }
     }
 
@@ -135,7 +137,8 @@ fun CloudDriveScreen(onBack: () -> Unit) {
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier.fillMaxWidth().let {
                                     if (playable) it.clickable {
-                                        val url = WebDavMounts.playUrl(selected!!, e.href)
+                                        val m = selected ?: return@clickable
+                                        val url = WebDavMounts.playUrl(m, e.href)
                                         runCatching { ctx.startActivity(PlayerActivity.intent(ctx, url, null, 0, e.name)) }
                                     } else it
                                 },

@@ -4,8 +4,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.BatteryManager
-import android.util.Log
 import com.apk.claw.android.service.ClawAccessibilityService
+import com.apk.claw.android.utils.XLog
 import com.apk.claw.android.utils.KVUtils
 import kotlinx.coroutines.*
 
@@ -41,6 +41,9 @@ class HeartbeatReporter(
 
     private var heartbeatJob: Job? = null
 
+    /** start() 传入的 scope,stop() 时取消以避免协程泄漏 */
+    private var scope: CoroutineScope? = null
+
     /** 上次收到母体 ACK 的时间戳（用于检测母体僵死） */
     @Volatile
     private var lastAckReceivedAt: Long = 0L
@@ -60,11 +63,12 @@ class HeartbeatReporter(
      */
     fun start(scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)) {
         stop()
+        this.scope = scope
         // 注册 ACK 回调
         client.onHeartbeatAck = {
             lastAckReceivedAt = System.currentTimeMillis()
             missedAcks = 0
-            Log.d(tag, "heartbeat ACK received")
+            XLog.d(tag, "heartbeat ACK received")
         }
         heartbeatJob = scope.launch {
             lastAckReceivedAt = System.currentTimeMillis()
@@ -81,9 +85,9 @@ class HeartbeatReporter(
                     val timeSinceAck = System.currentTimeMillis() - lastAckReceivedAt
                     if (timeSinceAck > ackTimeoutMs) {
                         missedAcks++
-                        Log.w(tag, "heartbeat ACK timeout ($missedAcks/$maxMissedAcks), ${timeSinceAck}ms since last ACK")
+                        XLog.w(tag, "heartbeat ACK timeout ($missedAcks/$maxMissedAcks), ${timeSinceAck}ms since last ACK")
                         if (missedAcks >= maxMissedAcks) {
-                            Log.e(tag, "Parent runtime appears unresponsive ($maxMissedAcks missed ACKs), forcing reconnect")
+                            XLog.e(tag, "Parent runtime appears unresponsive ($maxMissedAcks missed ACKs), forcing reconnect")
                             missedAcks = 0
                             // 主动断开触发重连（OctopusMobileClient 的 onFailure/onClosed 会处理重连）
                             client.forceReconnect()
@@ -95,7 +99,7 @@ class HeartbeatReporter(
                 sendOnce()
             }
         }
-        Log.i(tag, "HeartbeatReporter started (interval=${intervalMs}ms, ackTimeout=${ackTimeoutMs}ms)")
+        XLog.i(tag, "HeartbeatReporter started (interval=${intervalMs}ms, ackTimeout=${ackTimeoutMs}ms)")
     }
 
     /**
@@ -104,6 +108,8 @@ class HeartbeatReporter(
     fun stop() {
         heartbeatJob?.cancel()
         heartbeatJob = null
+        scope?.cancel()
+        scope = null
         client.onHeartbeatAck = null
     }
 
@@ -124,9 +130,9 @@ class HeartbeatReporter(
         )
         try {
             client.send(envelope)
-            Log.d(tag, "heartbeat sent: battery=$battery% charging=$isCharging app=$currentApp")
+            XLog.d(tag, "heartbeat sent: battery=$battery% charging=$isCharging app=$currentApp")
         } catch (e: Exception) {
-            Log.w(tag, "heartbeat send failed: ${e.message}")
+            XLog.w(tag, "heartbeat send failed: ${e.message}")
         }
     }
 

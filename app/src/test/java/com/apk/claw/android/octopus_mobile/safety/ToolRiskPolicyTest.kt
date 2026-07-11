@@ -45,14 +45,16 @@ class ToolRiskPolicyTest {
     @Test
     fun `sensitive keys detected case-insensitively`() {
         for (k in listOf("apiKey", "TOKEN", "password", "Authorization", "Cookie",
-                         "credential", "api_base", "user_secret", "pwd")) {
+                         "credential", "user_secret", "pwd",
+                         "phone", "email", "cvv", "otp", "card_number")) {
             assertTrue("$k should be sensitive", ToolRiskPolicy.isSensitiveKey(k))
         }
     }
 
     @Test
     fun `non-sensitive keys not flagged`() {
-        for (k in listOf("url", "text", "x", "y", "appName", "count")) {
+        for (k in listOf("url", "text", "x", "y", "appName", "count",
+                         "api_version", "caption", "mapping", "discard")) {
             assertFalse("$k should not be sensitive", ToolRiskPolicy.isSensitiveKey(k))
         }
     }

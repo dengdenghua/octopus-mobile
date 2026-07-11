@@ -9,6 +9,7 @@ import fi.iki.elonen.NanoHTTPD
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -124,14 +125,35 @@ class RouteContextTest {
 
     @Test
     fun `corsResponse adds required headers`() {
+        val session = mock(NanoHTTPD.IHTTPSession::class.java)
+        `when`(session.headers).thenReturn(mapOf("origin" to "http://192.168.1.100:8080"))
+        routeContext.bindRequestOrigin(session)
+
         val response = NanoHTTPD.newFixedLengthResponse(
             NanoHTTPD.Response.Status.OK, "text/plain", "ok"
         )
         val cors = routeContext.corsResponse(response)
 
-        assertEquals("*", cors.getHeader("Access-Control-Allow-Origin"))
+        assertEquals("http://192.168.1.100:8080", cors.getHeader("Access-Control-Allow-Origin"))
         assertNotNull(cors.getHeader("Access-Control-Allow-Methods"))
         assertNotNull(cors.getHeader("Access-Control-Allow-Headers"))
+        routeContext.clearRequestOrigin()
+    }
+
+    @Test
+    fun `corsResponse blocks non-local origin`() {
+        val session = mock(NanoHTTPD.IHTTPSession::class.java)
+        `when`(session.headers).thenReturn(mapOf("origin" to "https://evil.com"))
+        routeContext.bindRequestOrigin(session)
+
+        val response = NanoHTTPD.newFixedLengthResponse(
+            NanoHTTPD.Response.Status.OK, "text/plain", "ok"
+        )
+        val cors = routeContext.corsResponse(response)
+
+        // 非局域网来源不回显 Origin(等价同源限制)
+        assertNull(cors.getHeader("Access-Control-Allow-Origin"))
+        routeContext.clearRequestOrigin()
     }
 
     // ==================== 来源提取 ====================

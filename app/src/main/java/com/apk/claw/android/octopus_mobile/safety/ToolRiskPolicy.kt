@@ -142,7 +142,10 @@ object ToolRiskPolicy {
 
     private val SENSITIVE_KEY_PARTS = listOf(
         "key", "token", "secret", "password", "passwd", "pwd",
-        "authorization", "cookie", "credential", "api"
+        "authorization", "cookie", "credential",
+        "phone", "email", "address", "cvv", "otp", "session",
+        "card_number", "card_no", "credit_card", "bank_card",
+        "pin_code", "pincode"
     )
 
     fun riskOf(toolName: String): String = when (toolName) {
@@ -155,16 +158,22 @@ object ToolRiskPolicy {
 
     fun summarizeParams(params: Map<String, Any>, maxValueChars: Int = 160): String {
         if (params.isEmpty()) return "{}"
-        return params.entries
-            .sortedBy { it.key }
-            .joinToString(prefix = "{", postfix = "}") { (key, value) ->
-                // 敏感键名整体打码；其余值再过一遍 SecretRedactor，
-                // 防止无害键名的 value 里夹带密钥/验证码等明文。
-                val shown = if (isSensitiveKey(key)) "<redacted>"
-                    else SecretRedactor.redact(value.toString()) ?: ""
-                "$key=${shown.take(maxValueChars)}"
+        val sb = StringBuilder()
+        for ((key, value) in params.toSortedMap()) {
+            // 敏感键名整体打码；其余值再过一遍 SecretRedactor，
+            // 防止无害键名的 value 里夹带密钥/验证码等明文。
+            val shown = if (isSensitiveKey(key)) "<redacted>"
+                else SecretRedactor.redact(value.toString()) ?: ""
+            val entry = "$key=${shown.take(maxValueChars)}"
+            // +2 为 ", " 分隔符的 worst case; 超限则追加 "..." 并 break,避免在条目中间截断
+            if (sb.length + entry.length + 2 > 1000) {
+                sb.append("...")
+                break
             }
-            .take(1000)
+            if (sb.isNotEmpty()) sb.append(", ")
+            sb.append(entry)
+        }
+        return "{${sb}}"
     }
 
     fun summarizeResult(result: String?, maxChars: Int = 240): String {

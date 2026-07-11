@@ -163,38 +163,62 @@ class TaskOrchestrator(
      * 入队并调度：判断是否需要抢占当前任务，或直接启动。
      */
     private fun enqueueAndSchedule(queuedTask: TaskQueue.QueuedTask): Boolean {
-        synchronized(scheduleLock) {
+        var needsRebuild = false
+        val result = synchronized(scheduleLock) {
             val cur = currentTask
             // 判断是否需要抢占
             if (cur != null && taskQueue.shouldPreempt(queuedTask, cur)) {
                 // 暂停当前任务，入队新任务并立即执行
                 XLog.i(TAG, "Preempting current task: ${cur.id} with higher priority task: ${queuedTask.id}")
                 pauseCurrentTask()
+                needsRebuild = true
                 if (!taskQueue.enqueue(queuedTask)) {
                     startNextTask()
-                    return false
+                    return@synchronized false
                 }
                 startNextTask()
-                return true
+                return@synchronized true
             }
             // 无需抢占，入队
-            if (!taskQueue.enqueue(queuedTask)) return false
+            if (!taskQueue.enqueue(queuedTask)) return@synchronized false
             // 如果当前无任务在执行，立即启动
             if (cur == null) {
                 startNextTask()
             }
-            return true
+            true
         }
+        // 锁外重建 AgentService（shutdown + create 含 I/O，不能在 scheduleLock 内执行）
+        if (needsRebuild) rebuildAgentService()
+        return result
     }
 
     /**
      * 暂停当前正在执行的任务（被高优先级抢占时）。
+     *
+     * **注意**:本方法只做状态变更（标记暂停、清空 currentTask），不做 I/O。
+     * shutdown/create 等 I/O 操作由 [rebuildAgentService] 在锁外执行，避免主线程等锁 ANR。
+     * 调用方需在 scheduleLock 内调用本方法，并在锁外调用 [rebuildAgentService]。
      */
     private fun pauseCurrentTask() {
         val cur = currentTask ?: return
-        // 取消旧 Agent 执行，并重建服务，避免新任务撞上 "Agent is already running"。
-        if (::agentService.isInitialized) {
-            agentService.shutdown()
+        // 锁内只做状态变更：标记任务为暂停、清空 currentTask
+        taskQueue.pauseRunningTask(cur)
+        currentTask = null
+        // 通知当前任务被暂停
+        ChannelManager.sendMessage(cur.channel, ClawApplication.instance.getString(R.string.channel_msg_task_cancelled), cur.messageId)
+        FloatingCircleManager.setErrorState()
+        XLog.i(TAG, "Current task paused: ${cur.id}")
+    }
+
+    /**
+     * 锁外重建 AgentService —— shutdown 旧实例（含 MMKV 写盘）+ create 新实例（含 OkHttp 连接池初始化）。
+     *
+     * 在 [pauseCurrentTask] 之后、[executeCurrentTask] 之前调用，确保新任务不会撞上
+     * "Agent is already running"。必须在 scheduleLock 外调用，避免阻塞主线程导致 ANR。
+     */
+    private fun rebuildAgentService() {
+        runCatching {
+            if (::agentService.isInitialized) agentService.shutdown()
         }
         agentService = AgentServiceFactory.create()
         try {
@@ -202,13 +226,6 @@ class TaskOrchestrator(
         } catch (e: Exception) {
             XLog.e(TAG, "Failed to reinitialize AgentService after preemption", e)
         }
-        // 通知当前任务被暂停
-        ChannelManager.sendMessage(cur.channel, ClawApplication.instance.getString(R.string.channel_msg_task_cancelled), cur.messageId)
-        // 暂停当前任务：保持暂停态等待显式恢复，不立即 resume（否则 pause 形同虚设）
-        taskQueue.pauseRunningTask(cur)
-        currentTask = null
-        FloatingCircleManager.setErrorState()
-        XLog.i(TAG, "Current task paused: ${cur.id}")
     }
 
     /**
@@ -378,12 +395,15 @@ class TaskOrchestrator(
             isBackground = isBackground,
         )
 
+        var needsRebuild = false
+        var queueFull = false
         synchronized(scheduleLock) {
             val cur = currentTask
             // 判断是否需要抢占当前任务
             if (cur != null && taskQueue.shouldPreempt(queuedTask, cur)) {
                 XLog.i(TAG, "Preempting current task: ${cur.id} with higher priority task: ${queuedTask.id}")
                 pauseCurrentTask()
+                needsRebuild = true
             }
             // 入队
             if (!taskQueue.enqueue(queuedTask)) {
@@ -392,13 +412,19 @@ class TaskOrchestrator(
                 if (currentTask == null) {
                     startNextTask()
                 }
-                return
-            }
-            // 如果当前无任务在执行，立即调度
-            if (cur == null || currentTask == null) {
-                startNextTask()
+                queueFull = true
+            } else {
+                // 如果当前无任务在执行，立即调度
+                if (cur == null || currentTask == null) {
+                    startNextTask()
+                }
             }
         }
+
+        // 锁外重建 AgentService（shutdown + create 含 I/O，不能在 scheduleLock 内执行）
+        if (needsRebuild) rebuildAgentService()
+
+        if (queueFull) return
 
         // ── 执行当前任务（在锁外执行以避免死锁） ──
         executeCurrentTask()
@@ -591,7 +617,7 @@ class TaskOrchestrator(
                 // 任务失败后，如果有下一个任务，通过 Handler 延迟调度，避免回调递归
                 scheduleHandler.post { executeCurrentTask() }
             }
-        }, untrusted = true)   // 聊天渠道来源：高危工具走来源闸门（默认拦截，满血/远程放行）
+        }, untrusted = !taskInfo.trusted)   // 来源闸门：trusted=false 时高危工具走拦截（默认安全），内部系统触发可设 trusted=true 放行
     }
 
     // ==================== 自进化反思钩子 ====================
@@ -651,6 +677,6 @@ class TaskOrchestrator(
             } catch (e: Exception) {
                 XLog.w(TAG, "EvolutionEngine reflect error: ${e.message}")
             }
-        }, "evolution-reflect").start()
+        }, "evolution-reflect").apply { isDaemon = true }.start()
     }
 }

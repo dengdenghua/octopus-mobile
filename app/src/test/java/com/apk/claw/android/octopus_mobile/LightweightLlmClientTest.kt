@@ -215,19 +215,22 @@ class LightweightLlmClientTest {
 
     @Test(expected = LlmException::class)
     fun `chat throws on HTTP 500`(): Unit = runBlocking {
-        server.enqueue(MockResponse().setResponseCode(500).setBody("server error"))
+        // HTTP 500 是 transient 错误,client 会重试 4 次(retryAttempts=3),每次都返回 500
+        repeat(4) { server.enqueue(MockResponse().setResponseCode(500).setBody("server error")) }
         client.chat(listOf(ChatMessage.User(content = "x")), emptyList())
     }
 
     @Test(expected = LlmException::class)
     fun `chat throws on HTTP 401`(): Unit = runBlocking {
-        server.enqueue(MockResponse().setResponseCode(401).setBody("""{"error":{"message":"unauthorized"}}"""))
+        // HTTP 401 非 transient 但仍会重试,需匹配 retryAttempts+1 个响应
+        repeat(4) { server.enqueue(MockResponse().setResponseCode(401).setBody("""{"error":{"message":"unauthorized"}}""")) }
         client.chat(listOf(ChatMessage.User(content = "x")), emptyList())
     }
 
     @Test
     fun `chat handles malformed response gracefully`() = runBlocking {
-        server.enqueue(MockResponse().setBody("not json at all"))
+        // 200 成功响应不重试,但解析失败会重试,所以需要多个响应
+        repeat(4) { server.enqueue(MockResponse().setBody("not json at all")) }
         try {
             client.chat(listOf(ChatMessage.User(content = "x")), emptyList())
             assert(false) { "should have thrown" }

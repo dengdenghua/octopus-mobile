@@ -2,6 +2,7 @@ package com.apk.claw.android.octopus_mobile.safety
 
 import android.util.Log
 import java.util.concurrent.ConcurrentLinkedDeque
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * 断路器 —— 从母体 runtime/safety/ink/breaker.py 移植.
@@ -61,8 +62,7 @@ class CircuitBreaker(
 
     private val events = ConcurrentLinkedDeque<Event>()
 
-    @Volatile
-    private var state: CircuitState = CircuitState.CLOSED
+    private val state = AtomicReference(CircuitState.CLOSED)
 
     @Volatile
     private var openedAtMs: Long = 0L
@@ -72,19 +72,19 @@ class CircuitBreaker(
 
     // ── 查询 ──────────────────────────────────────────
 
-    fun getState(): CircuitState = state
+    fun getState(): CircuitState = state.get()
 
     fun snapshot(): Map<String, Any?> {
         prune()
         val totalCost = events.sumOf { it.costUsd }
         val errors = events.count { !it.success }
         return mapOf(
-            "state" to state.name,
+            "state" to state.get().name,
             "calls_in_window" to events.size,
             "cost_in_window_usd" to (totalCost * 1_000_000).toInt() / 1_000_000.0,
             "errors" to errors,
-            "opened_at" to if (state != CircuitState.CLOSED) openedAtMs else null,
-            "reason" to if (state != CircuitState.CLOSED) openReason else null,
+            "opened_at" to if (state.get() != CircuitState.CLOSED) openedAtMs else null,
+            "reason" to if (state.get() != CircuitState.CLOSED) openReason else null,
         )
     }
 
@@ -100,11 +100,11 @@ class CircuitBreaker(
         val now = System.currentTimeMillis()
         prune()
 
-        when (state) {
+        when (state.get()) {
             CircuitState.OPEN -> {
                 val elapsed = (now - openedAtMs) / 1000.0
-                if (elapsed >= cooldownSeconds) {
-                    state = CircuitState.HALF_OPEN
+                if (elapsed >= cooldownSeconds &&
+                    state.compareAndSet(CircuitState.OPEN, CircuitState.HALF_OPEN)) {
                     Log.i(TAG, "Circuit → HALF_OPEN (cooldown elapsed)")
                     return CircuitState.HALF_OPEN
                 }
@@ -137,10 +137,10 @@ class CircuitBreaker(
         events.add(Event(tsMs = now, success = success, costUsd = costUsd))
         prune()
 
-        when (state) {
+        when (state.get()) {
             CircuitState.HALF_OPEN -> {
                 if (success) {
-                    state = CircuitState.CLOSED
+                    state.set(CircuitState.CLOSED)
                     openedAtMs = 0L
                     openReason = ""
                     Log.i(TAG, "Circuit → CLOSED (probe succeeded)")
@@ -165,7 +165,7 @@ class CircuitBreaker(
      */
     fun reset() {
         events.clear()
-        state = CircuitState.CLOSED
+        state.set(CircuitState.CLOSED)
         openedAtMs = 0L
         openReason = ""
         Log.i(TAG, "Circuit reset → CLOSED")
@@ -181,26 +181,28 @@ class CircuitBreaker(
     }
 
     private fun evaluateThresholds(): String? {
-        if (maxCallsPerWindow != null && events.size > maxCallsPerWindow) {
-            return "max_calls (${events.size} > $maxCallsPerWindow/${windowSeconds}s)"
+        var totalCount = 0
+        var failCount = 0
+        var totalCost = 0.0
+        for (e in events) {
+            totalCount++
+            if (!e.success) failCount++
+            totalCost += e.costUsd
         }
-        if (maxCostPerWindow != null) {
-            val total = events.sumOf { it.costUsd }
-            if (total > maxCostPerWindow) {
-                return "max_cost (\$${"%.4f".format(total)} > \$${"%.4f".format(maxCostPerWindow)}/${windowSeconds}s)"
-            }
+        if (maxCallsPerWindow != null && totalCount > maxCallsPerWindow) {
+            return "max_calls ($totalCount > $maxCallsPerWindow/${windowSeconds}s)"
         }
-        if (maxErrorsPerWindow != null) {
-            val errors = events.count { !it.success }
-            if (errors > maxErrorsPerWindow) {
-                return "max_errors ($errors > $maxErrorsPerWindow/${windowSeconds}s)"
-            }
+        if (maxCostPerWindow != null && totalCost > maxCostPerWindow) {
+            return "max_cost (\$${"%.4f".format(totalCost)} > \$${"%.4f".format(maxCostPerWindow)}/${windowSeconds}s)"
+        }
+        if (maxErrorsPerWindow != null && failCount > maxErrorsPerWindow) {
+            return "max_errors ($failCount > $maxErrorsPerWindow/${windowSeconds}s)"
         }
         return null
     }
 
     private fun trip(reason: String, nowMs: Long) {
-        state = CircuitState.OPEN
+        state.set(CircuitState.OPEN)
         openedAtMs = nowMs
         openReason = reason
         Log.w(TAG, "Circuit → OPEN: $reason")

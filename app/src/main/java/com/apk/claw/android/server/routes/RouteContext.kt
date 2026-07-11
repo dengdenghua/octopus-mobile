@@ -19,8 +19,52 @@ class RouteContext(
     val gson: Gson,
 ) {
 
+    companion object {
+        /** 每请求的 Origin,用于 CORS 回显。NanoHTTPD 单请求单线程,ThreadLocal 安全。 */
+        private val requestOrigin = ThreadLocal<String?>()
+    }
+
+    /** 在请求入口绑定 Origin,供 corsResponse 回显。 */
+    fun bindRequestOrigin(session: NanoHTTPD.IHTTPSession) {
+        val origin = session.headers["origin"]?.trim()?.takeIf { it.isNotEmpty() }
+        requestOrigin.set(origin)
+    }
+
+    /** 请求结束后清理,避免线程复用时 Origin 串号。 */
+    fun clearRequestOrigin() {
+        requestOrigin.remove()
+    }
+
+    /**
+     * 仅放行本机与局域网来源(localhost / 127.0.0.1 / 192.168.x / 10.x),
+     * 其它来源不回显 Origin(等价同源限制),避免 `*` 暴露接口给任意公网页面。
+     * 通过解析 host 判断,防止 `http://10.evil.com` 这类前缀绕过。
+     */
+    private fun allowedOrigin(): String? {
+        val origin = requestOrigin.get() ?: return null
+        val host = try {
+            java.net.URI(origin).host?.lowercase()
+        } catch (e: Exception) {
+            null
+        }
+        if (host.isNullOrBlank()) return null
+        if (host == "localhost" || host == "::1" || host == "127.0.0.1") return origin
+        val parts = host.split(".")
+        if (parts.size == 4) {
+            val a = parts[0].toIntOrNull() ?: return null
+            val b = parts[1].toIntOrNull() ?: return null
+            if (a == 10) return origin               // 10.0.0.0/8
+            if (a == 192 && b == 168) return origin   // 192.168.0.0/16
+        }
+        return null
+    }
+
     fun corsResponse(response: NanoHTTPD.Response): NanoHTTPD.Response {
-        response.addHeader("Access-Control-Allow-Origin", "*")
+        val allowed = allowedOrigin()
+        if (allowed != null) {
+            response.addHeader("Access-Control-Allow-Origin", allowed)
+            response.addHeader("Vary", "Origin")
+        }
         response.addHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         response.addHeader("Access-Control-Allow-Headers", "Content-Type, Authorization")
         return response

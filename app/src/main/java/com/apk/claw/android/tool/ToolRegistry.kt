@@ -123,6 +123,7 @@ object ToolRegistry {
         registerSystemTools()
     }
 
+    @Synchronized
     fun setBrowserEngine(engine: com.apk.claw.android.octopus_mobile.browser.BrowserEngine) {
         browserEngine = engine
         // 重新注册 browser tools（用新 engine）

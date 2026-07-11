@@ -247,6 +247,7 @@ class GenerateAppTool : BaseTool() {
 
     override fun execute(params: Map<String, Any>): ToolResult {
         val startTime = System.currentTimeMillis()
+        currentCancellationToken()?.checkCancelled()
         val description = requireString(params, "description").take(MAX_DESC_LEN)
         val appName = optionalString(params, "app_name", "").ifBlank { "我的应用" }
         val assets = optionalString(params, "assets", "").take(MAX_ASSETS_LEN)
@@ -272,6 +273,7 @@ class GenerateAppTool : BaseTool() {
         }
 
         com.apk.claw.android.agent.AgentProgressBus.set("规划功能中…")
+        currentCancellationToken()?.checkCancelled()
         val plan = runCatching { callLlm(eff, planPrompt(description), temperature = 0.3) }
             .getOrElse {
                 TurnScorer.recordFailure(System.currentTimeMillis() - startTime, "plan_failed: ${it.message?.take(60)}")
@@ -282,6 +284,7 @@ class GenerateAppTool : BaseTool() {
         val preset = presetIndex[presetId] ?: DESIGN_PRESETS[0]
 
         com.apk.claw.android.agent.AgentProgressBus.set("生成代码中…")
+        currentCancellationToken()?.checkCancelled()
         val raw = runCatching { callLlm(eff, codePrompt(appName, description, plan, preset, assets), temperature = 0.2) }
             .getOrElse {
                 TurnScorer.recordFailure(System.currentTimeMillis() - startTime, "code_failed: ${it.message?.take(60)}")
@@ -304,6 +307,7 @@ class GenerateAppTool : BaseTool() {
         }.getOrDefault(emptyList())
         errors.forEach { err -> ExperienceLedger.recordError(err, html.take(500)) }
         while (errors.isNotEmpty() && repairRounds < MAX_REPAIR) {
+            currentCancellationToken()?.checkCancelled()
             repairRounds++
             com.apk.claw.android.agent.AgentProgressBus.set("自检修复中(第 $repairRounds 轮)…")
             val fixedRaw = runCatching { callLlm(eff, repairPrompt(html, errors), temperature = 0.1) }.getOrNull() ?: break
@@ -325,6 +329,7 @@ class GenerateAppTool : BaseTool() {
         if (com.apk.claw.android.octopus_mobile.VisionAnalyzer.isConfigured()) {
             var visualRounds = 0
             while (visualRounds < MAX_VISUAL_REPAIR) {
+                currentCancellationToken()?.checkCancelled()
                 com.apk.claw.android.agent.AgentProgressBus.set("视觉验收中(第${visualRounds + 1}轮)…")
                 val shot = runCatching { HtmlLinter.lint(ClawApplication.instance, html, capture = true).screenshot }.getOrNull()
                 if (shot == null) break
@@ -338,6 +343,7 @@ class GenerateAppTool : BaseTool() {
                 visualRounds++
                 if (visualRounds > MAX_VISUAL_REPAIR) break
                 ExperienceLedger.recordError("VISUAL_VERIFY_FAIL: ${verdict.reason.take(80)}", html.take(500))
+                currentCancellationToken()?.checkCancelled()
                 com.apk.claw.android.agent.AgentProgressBus.set("视觉修复中(第${visualRounds}轮)…")
                 val fixedRaw = runCatching {
                     callLlm(eff, repairPromptVisual(html, description, verdict.reason), temperature = 0.1)
@@ -839,6 +845,36 @@ $lines
             issues.add("uses prompt() — replace with custom input UI")
         if (!html.contains("<meta name=\"viewport\"", ignoreCase = true) && !html.contains("viewport", ignoreCase = true))
             issues.add("missing viewport meta tag")
+
+        // 外部脚本加载：只允许 inline script 和相对路径，禁止 http(s):// 和协议相对 //
+        if (Regex("""<script[^>]*\bsrc\s*=\s*["']?\s*(?:https?:|//)""", RegexOption.IGNORE_CASE).containsMatchIn(html))
+            issues.add("loads external script via <script src> — inline scripts only, no external dependencies")
+
+        // 内联事件处理器 onXXX=（警告：建议改用 addEventListener）
+        val inlineEventCount = Regex(
+            """\son(?:load|error|click|change|submit|mouseover|mouseout|mousedown|mouseup|mousemove|""" +
+                """keydown|keyup|keypress|input|focus|blur|touchstart|touchend|touchmove|wheel|resize|scroll|dblclick)\s*=""",
+            RegexOption.IGNORE_CASE,
+        ).findAll(html).count()
+        if (inlineEventCount > 0)
+            issues.add("uses inline event handlers (onXXX=) — prefer addEventListener ($inlineEventCount occurrences)")
+
+        // 可疑的 eval / new Function / document.write 调用
+        if (Regex("""\beval\s*\(""").containsMatchIn(html))
+            issues.add("uses eval() — potential XSS/security risk, avoid dynamic code execution")
+        if (Regex("""\bnew\s+Function\s*\(""").containsMatchIn(html))
+            issues.add("uses new Function() — potential XSS/security risk, avoid dynamic code execution")
+        if (Regex("""\bdocument\.write\s*\(""").containsMatchIn(html))
+            issues.add("uses document.write() — can break DOM parsing, use DOM APIs instead")
+
+        // 外部 fetch/XMLHttpRequest/open 到非 http(s) 协议的 URL（javascript:/data:/file: 等潜在 XSS 向量）
+        if (Regex("""(?:fetch|\.open)\s*\(\s*["'`](?:javascript|data|file|ftp):""", RegexOption.IGNORE_CASE).containsMatchIn(html))
+            issues.add("fetch/XHR/open to non-http(s) URL — potential XSS or data exfiltration vector")
+
+        // iframe 标签（警告：需确认 src 可信）
+        if (Regex("""<iframe""", RegexOption.IGNORE_CASE).containsMatchIn(html))
+            issues.add("uses <iframe> — verify src is trusted (warning)")
+
         return issues
     }
 

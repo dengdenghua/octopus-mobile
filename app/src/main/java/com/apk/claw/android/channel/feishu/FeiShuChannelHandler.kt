@@ -67,7 +67,7 @@ class FeiShuChannelHandler(
                             ChannelManager.dispatchMessage(channel, text, messageId, senderOpenId)
                         }
                     } catch (e: Exception) {
-                        e.printStackTrace()
+                        XLog.e(TAG, "飞书消息事件处理异常", e)
                     }
                 }
             })

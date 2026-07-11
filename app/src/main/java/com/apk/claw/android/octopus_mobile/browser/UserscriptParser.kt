@@ -168,8 +168,8 @@ object UserscriptParser {
         if (script.match.isEmpty() && script.include.isEmpty()) return false
 
         for (ex in script.exclude) {
-            val r = matchPatternToRegex(ex)
-            if (r == null || r.containsMatchIn(url)) return false
+            val r = matchPatternToRegex(ex) ?: continue
+            if (r.containsMatchIn(url)) return false
         }
 
         for (m in script.match) {

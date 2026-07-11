@@ -105,15 +105,12 @@
 # ============================================================
 -dontwarn okhttp3.**
 -dontwarn okio.**
--keep class okhttp3.** { *; }
--keep interface okhttp3.** { *; }
 -keepnames class okhttp3.internal.publicsuffix.PublicSuffixDatabase
 
 # ============================================================
 # Retrofit
 # ============================================================
 -dontwarn retrofit2.**
--keep class retrofit2.** { *; }
 -keepattributes RuntimeVisibleAnnotations, RuntimeVisibleParameterAnnotations
 -keepclassmembers,allowshrinking,allowobfuscation interface * {
     @retrofit2.http.* <methods>;
@@ -129,17 +126,6 @@
 -dontwarn dev.langchain4j.**
 -keep class dev.langchain4j.** { *; }
 -keep interface dev.langchain4j.** { *; }
-
-# ============================================================
-# Jackson (LangChain4j 内部依赖，序列化需要保留构造器和字段)
-# ============================================================
--dontwarn com.fasterxml.jackson.**
--keep class com.fasterxml.jackson.** { *; }
--keep interface com.fasterxml.jackson.** { *; }
--keepclassmembers class * {
-    @com.fasterxml.jackson.annotation.* <fields>;
-    @com.fasterxml.jackson.annotation.* <init>(...);
-}
 
 # ============================================================
 # Jackson（LangChain4j OpenAI 内部 JSON 序列化依赖）
@@ -313,9 +299,7 @@
 -dontwarn pl.droidsonroids.gif.**
 
 # Coil（图片加载:发现页收藏 favicon / 搜索引擎图标用 coil.compose.AsyncImage）
-# release 下 R8 会裁掉 Coil 的 fetcher/decoder 导致图片不显示,这里保活。
--keep class coil.** { *; }
--keep interface coil.** { *; }
+# Coil 自带 consumer proguard 规则,这里仅忽略缺失类警告。
 -dontwarn coil.**
 
 # Rhino JS 引擎（run_code 沙箱）

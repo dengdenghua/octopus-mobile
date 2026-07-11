@@ -2,6 +2,12 @@ package com.apk.claw.android.agent
 
 import java.util.concurrent.atomic.AtomicBoolean
 
+/**
+ * 任务取消时抛出的异常。使用 RuntimeException 而非 InterruptedException,
+ * 避免调用方误将其当作线程中断信号并重新设置线程中断标志。
+ */
+class TaskCancelledException(message: String) : RuntimeException(message)
+
 class CancellationToken {
 
     private val cancelled = AtomicBoolean(false)
@@ -23,7 +29,7 @@ class CancellationToken {
 
     fun checkCancelled() {
         if (cancelled.get()) {
-            throw InterruptedException(reason ?: "Task cancelled")
+            throw TaskCancelledException(reason ?: "Task cancelled")
         }
     }
 

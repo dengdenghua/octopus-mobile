@@ -1,6 +1,6 @@
 package com.apk.claw.android.octopus_mobile
 
-import android.util.Log
+import com.apk.claw.android.utils.XLog
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import com.apk.claw.android.octopus_mobile.proactive.ProactiveRuleEngine
@@ -57,7 +57,7 @@ class ScreenStreamer(
     fun start() {
         if (running) return
         running = true
-        Log.i(tag, "ScreenStreamer started (throttle=${throttleMs}ms)")
+        XLog.i(tag, "ScreenStreamer started (throttle=${throttleMs}ms)")
     }
 
     /**
@@ -70,7 +70,7 @@ class ScreenStreamer(
         // 取消整个协程作用域,释放 SupervisorJob + IO 线程;否则 stop 后 scope 仍存活,
         // flushNow 等仍可调度新协程到已"停止"的 streamer 上。
         scope.cancel()
-        Log.i(tag, "ScreenStreamer stopped")
+        XLog.i(tag, "ScreenStreamer stopped")
     }
 
     /**
@@ -150,9 +150,9 @@ class ScreenStreamer(
             // 同步给 HeartbeatReporter，让心跳包也带上最新 hash
             heartbeatReporter?.lastScreenHash = currentHash
             heartbeatReporter?.currentApp = currentApp
-            Log.d(tag, "screen_changed sent: app=$currentApp hash=$currentHash")
+            XLog.d(tag, "screen_changed sent: app=$currentApp hash=$currentHash")
         } catch (e: Exception) {
-            Log.w(tag, "screen_changed send failed: ${e.message}")
+            XLog.w(tag, "screen_changed send failed: ${e.message}")
         }
 
         // 触发主动规则引擎检查
@@ -160,10 +160,10 @@ class ScreenStreamer(
             try {
                 val results = engine.onScreenChanged(currentApp, tree)
                 results.forEach { result ->
-                    Log.d(tag, "Proactive: ${result.message}")
+                    XLog.d(tag, "Proactive: ${result.message}")
                 }
             } catch (e: Exception) {
-                Log.w(tag, "Proactive rule execution failed", e)
+                XLog.w(tag, "Proactive rule execution failed", e)
             }
         }
     }

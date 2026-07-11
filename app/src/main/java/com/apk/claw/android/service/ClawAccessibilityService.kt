@@ -222,9 +222,13 @@ class ClawAccessibilityService : AccessibilityService() {
 
         if (!dispatched) return false
 
+        val deadline = System.currentTimeMillis() + 5000
         return try {
-            latch.await(5, TimeUnit.SECONDS)
-            result.get()
+            while (System.currentTimeMillis() < deadline) {
+                if (Thread.currentThread().isInterrupted) return false
+                if (latch.await(200, TimeUnit.MILLISECONDS)) return result.get()
+            }
+            false
         } catch (e: InterruptedException) {
             Thread.currentThread().interrupt()
             false
@@ -559,11 +563,19 @@ class ClawAccessibilityService : AccessibilityService() {
         }
         val latch = CountDownLatch(1)
         val bitmapRef = AtomicReference<Bitmap?>(null)
+        val resolved = AtomicBoolean(false)
 
         takeScreenshot(Display.DEFAULT_DISPLAY, mainExecutor,
             object : TakeScreenshotCallback {
                 override fun onSuccess(result: ScreenshotResult) {
                     val bmp = Bitmap.wrapHardwareBuffer(result.hardwareBuffer, result.colorSpace)
+                    if (!resolved.compareAndSet(false, true)) {
+                        // 已超时或已处理：方法已返回 null，此时设置的 bitmapRef
+                        // 永远不会被读取，直接回收资源避免泄漏
+                        bmp?.recycle()
+                        result.hardwareBuffer.close()
+                        return
+                    }
                     bitmapRef.set(bmp)
                     result.hardwareBuffer.close()
                     latch.countDown()
@@ -571,14 +583,26 @@ class ClawAccessibilityService : AccessibilityService() {
 
                 override fun onFailure(errorCode: Int) {
                     XLog.e(TAG, "Screenshot failed with error code: $errorCode")
+                    resolved.compareAndSet(false, true)
                     latch.countDown()
                 }
             })
 
         try {
-            latch.await(timeoutMs, TimeUnit.MILLISECONDS)
+            if (!latch.await(timeoutMs, TimeUnit.MILLISECONDS)) {
+                // 超时：标记已超时，后续到达的 onSuccess 会进入回收分支
+                if (resolved.compareAndSet(false, true)) {
+                    return null
+                }
+                // 回调已赢得 CAS 但可能尚未设置 bitmapRef，返回当前值（可能为 null）
+                return bitmapRef.get()
+            }
         } catch (e: InterruptedException) {
             Thread.currentThread().interrupt()
+            if (resolved.compareAndSet(false, true)) {
+                return null
+            }
+            return bitmapRef.get()
         }
         return bitmapRef.get()
     }

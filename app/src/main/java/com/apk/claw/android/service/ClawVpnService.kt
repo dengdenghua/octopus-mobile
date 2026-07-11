@@ -8,8 +8,8 @@ import android.content.Intent
 import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
-import android.util.Log
 import com.apk.claw.android.R
+import com.apk.claw.android.utils.XLog
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
@@ -88,7 +88,7 @@ class ClawVpnService : VpnService() {
                 ctx.startService(i)
                 true
             } catch (e: Exception) {
-                Log.e(TAG, "startService failed", e)
+                XLog.e(TAG, "startService failed", e)
                 false
             }
         }
@@ -119,14 +119,14 @@ class ClawVpnService : VpnService() {
     ) {
         @Volatile var state: TcpState = TcpState.SYN_SENT
         // 客户端→代理方向累计已确认字节数(相对ISN)
-        var clientSeq: Int = 0
+        @Volatile var clientSeq: Int = 0
         // 代理→客户端方向累计已确认字节数
-        var proxySeq: Int = 0
+        @Volatile var proxySeq: Int = 0
         // 客户端的初始SEQ
-        var clientIsn: Int = 0
+        @Volatile var clientIsn: Int = 0
         // 我们给客户端的SYN+ACK用的ISN
         val ourIsn: Int = nextIsn.getAndAdd(0x1000)
-        var lastActive: Long = System.currentTimeMillis()
+        @Volatile var lastActive: Long = System.currentTimeMillis()
         var proxyThread: Thread? = null
         // 入站(设备app → TUN → SOCKS5)是否已关闭写
         @Volatile var clientClosedWrite = false
@@ -184,7 +184,7 @@ class ClawVpnService : VpnService() {
         try {
             tunInterface = builder.establish()
         } catch (e: Exception) {
-            Log.e(TAG, "establish tun failed (用户可能未授权 VPN)", e)
+            XLog.e(TAG, "establish tun failed (用户可能未授权 VPN)", e)
             stopSelf()
             return
         }
@@ -219,7 +219,7 @@ class ClawVpnService : VpnService() {
             try {
                 handleIpPacket(packet)
             } catch (e: Exception) {
-                Log.w(TAG, "handle packet error: ${e.message}")
+                XLog.w(TAG, "handle packet error: ${e.message}")
             }
         }
     }
@@ -324,7 +324,7 @@ class ClawVpnService : VpnService() {
                 writeTun(udpResp)
                 closeQuietly(ch)
             } catch (e: Exception) {
-                Log.d(TAG, "DNS relay failed: ${e.message}")
+                XLog.d(TAG, "DNS relay failed: ${e.message}")
             } finally {
                 udpDnsCh.remove(key)
             }
@@ -480,9 +480,9 @@ class ClawVpnService : VpnService() {
                 )
                 // 修正:srcPort = 原始dstPort, dstPort = key.srcPort
                 writeTcpSynAck(synAck, dstPort, key.srcPort)
-                Log.d(TAG, "TCP SYN+ACK sent for ${ipIntToStr(key.srcIp)}:${key.srcPort} -> ${ipBytesToStr(dstIp)}:$dstPort")
+                XLog.d(TAG, "TCP SYN+ACK sent for ${ipIntToStr(key.srcIp)}:${key.srcPort} -> ${ipBytesToStr(dstIp)}:$dstPort")
             } catch (e: Exception) {
-                Log.w(TAG, "outbound connect failed: ${e.message}")
+                XLog.w(TAG, "outbound connect failed: ${e.message}")
                 sendRstToKey(key, clientIsn, dstPort)
             }
         }, "vpn-out-${ipBytesToStr(dstIp)}:$dstPort").apply { isDaemon = true; start() }
@@ -501,8 +501,10 @@ class ClawVpnService : VpnService() {
                     }
                     if (n == 0) continue
                     val data = buf.array().copyOf(n)
-                    entry.proxySeq += n
-                    entry.lastActive = System.currentTimeMillis()
+                    synchronized(entry) {
+                        entry.proxySeq += n
+                        entry.lastActive = System.currentTimeMillis()
+                    }
 
                     // 回PSH+ACK包给客户端
                     val tcpPkt = buildTcpPacket(
@@ -528,7 +530,7 @@ class ClawVpnService : VpnService() {
                     writeTun(fin)
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "proxy reader error: ${e.message}")
+                XLog.w(TAG, "proxy reader error: ${e.message}")
                 // 出错发RST
                 sendRst(vpnIp, entry.key.srcIp, entry.dstPort, entry.key.srcPort,
                     entry.clientIsn + 1 + entry.clientSeq, entry.ourIsn + 1 + entry.proxySeq)
@@ -548,10 +550,12 @@ class ClawVpnService : VpnService() {
             while (buf.hasRemaining()) {
                 entry.channel.write(buf)
             }
-            entry.clientSeq += data.size
-            entry.lastActive = System.currentTimeMillis()
+            synchronized(entry) {
+                entry.clientSeq += data.size
+                entry.lastActive = System.currentTimeMillis()
+            }
         } catch (e: Exception) {
-            Log.w(TAG, "write to proxy failed: ${e.message}")
+            XLog.w(TAG, "write to proxy failed: ${e.message}")
             sendRst(vpnIp, entry.key.srcIp, entry.dstPort, entry.key.srcPort,
                 entry.clientIsn + 1 + entry.clientSeq, entry.ourIsn + 1 + entry.proxySeq)
             closeEntry(entry, true)
@@ -637,7 +641,7 @@ class ClawVpnService : VpnService() {
             try {
                 tunOut?.write(pkt)
             } catch (e: IOException) {
-                Log.w(TAG, "write TUN failed: ${e.message}")
+                XLog.w(TAG, "write TUN failed: ${e.message}")
             }
         }
     }

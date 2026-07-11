@@ -26,12 +26,16 @@ import androidx.core.graphics.drawable.IconCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.apk.claw.android.account.AccountRepository
+import com.apk.claw.android.octopus_mobile.safety.SsrfSafeHttp
 import com.apk.claw.android.tool.ToolRegistry
+import com.apk.claw.android.utils.XLog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import okhttp3.Headers
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
@@ -51,6 +55,7 @@ class OctopusBridge(
     private val manifest: PluginManifest,
     private val activityRef: WeakReference<Activity>? = null,
 ) {
+    private val TAG = "OctopusBridge"
     private val mainHandler = Handler(Looper.getMainLooper())
     private val ioScope = CoroutineScope(Dispatchers.IO + Job())
     private val httpClient: OkHttpClient by lazy {
@@ -58,14 +63,21 @@ class OctopusBridge(
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
-            .followRedirects(true)
-            .followSslRedirects(true)
+            .followRedirects(false)
+            .followSslRedirects(false)
             .build()
     }
     private var webViewRef: WeakReference<WebView>? = null
 
     internal fun attachWebView(webView: WebView) {
         webViewRef = WeakReference(webView)
+    }
+
+    /** WebView 销毁时调用:取消所有后台协程,避免回调到已销毁的 WebView。 */
+    fun detach() {
+        ioScope.cancel()
+        webViewRef?.clear()
+        webViewRef = null
     }
 
     @JavascriptInterface
@@ -133,7 +145,11 @@ class OctopusBridge(
                 } else {
                     reqBuilder.method(method, null)
                 }
-                httpClient.newCall(reqBuilder.build()).execute().use { resp ->
+                SsrfSafeHttp.execute(
+                    client = httpClient,
+                    initial = reqBuilder.build(),
+                    hopAllowed = { hopUrl -> PermissionGate.allowHost(manifest, hopUrl) },
+                ).use { resp ->
                     val respBody = resp.body?.string() ?: ""
                     val result = JSONObject()
                         .put("ok", true)
@@ -156,7 +172,49 @@ class OctopusBridge(
     }
 
     @JavascriptInterface
-    fun pay(orderJson: String?): String {
+    fun pay(orderJson: String?, callbackId: String) {
+        if (!PermissionGate.allowPay(manifest)) {
+            postCallback(callbackId, err("pay not granted")); return
+        }
+        val o = runCatching { JSONObject(orderJson ?: "{}") }.getOrNull()
+            ?: run { postCallback(callbackId, err("invalid order JSON")); return }
+        val item = o.optString("item").trim().ifBlank {
+            postCallback(callbackId, err("item required")); return
+        }
+        val credits = o.optInt("credits", 0).takeIf { it in 1..1000 }
+            ?: run { postCallback(callbackId, err("credits must be 1–1000")); return }
+        val description = o.optString("description", item).take(200)
+        val activity = activityRef?.get() ?: run { postCallback(callbackId, err("activity unavailable")); return }
+
+        mainHandler.post {
+            if (activity.isFinishing || activity.isDestroyed) {
+                postCallback(callbackId, err("activity unavailable")); return@post
+            }
+            AlertDialog.Builder(activity)
+                .setTitle("${manifest.name} 请求支付")
+                .setMessage("「$description」\n扣除 $credits 积分")
+                .setPositiveButton("确认") { _, _ ->
+                    ioScope.launch {
+                        val result = AccountRepository.pluginPay(manifest.id, item, credits, description)
+                        val r = result.fold(
+                            onSuccess = { res ->
+                                if (res.success) ok(JSONObject().put("balance_after", res.data?.balanceAfter ?: 0).toString())
+                                else err("支付失败:积分不足或服务错误")
+                            },
+                            onFailure = { err("支付失败:${it.message}") }
+                        )
+                        postCallback(callbackId, r)
+                    }
+                }
+                .setNegativeButton("取消") { _, _ -> postCallback(callbackId, err("用户取消支付")) }
+                .setOnCancelListener { postCallback(callbackId, err("用户取消支付")) }
+                .show()
+        }
+    }
+
+    /** 同步支付(遗留兼容):分段 await 以响应中断,网络调用受 [PAY_NETWORK_TIMEOUT_MS] 限制。优先使用异步 [pay]。 */
+    @JavascriptInterface
+    fun paySync(orderJson: String?): String {
         if (!PermissionGate.allowPay(manifest)) return err("pay not granted")
         val o = runCatching { JSONObject(orderJson ?: "{}") }.getOrNull()
             ?: return err("invalid order JSON")
@@ -178,18 +236,31 @@ class OctopusBridge(
                 .setOnCancelListener { latch.countDown() }
                 .show()
         }
-        val responded = latch.await(PAY_CONFIRM_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+        val deadline = System.currentTimeMillis() + PAY_CONFIRM_TIMEOUT_MS
+        var responded = false
+        while (System.currentTimeMillis() < deadline) {
+            if (Thread.currentThread().isInterrupted) return err("支付确认被中断")
+            if (latch.await(POLL_INTERVAL_MS, TimeUnit.MILLISECONDS)) { responded = true; break }
+        }
         if (!responded) return err("支付确认超时")
         if (!confirmed.get()) return err("用户取消支付")
 
-        val result = runBlocking { AccountRepository.pluginPay(manifest.id, item, credits, description) }
-        return result.fold(
-            onSuccess = { r ->
-                if (r.success) ok(JSONObject().put("balance_after", r.data?.balanceAfter ?: 0).toString())
-                else err("支付失败:积分不足或服务错误")
-            },
-            onFailure = { err("支付失败:${it.message}") }
-        )
+        return runBlocking {
+            val result = try {
+                withTimeout(PAY_NETWORK_TIMEOUT_MS) {
+                    AccountRepository.pluginPay(manifest.id, item, credits, description)
+                }
+            } catch (e: Exception) {
+                return@runBlocking err("支付失败:${e.message}")
+            }
+            result.fold(
+                onSuccess = { r ->
+                    if (r.success) ok(JSONObject().put("balance_after", r.data?.balanceAfter ?: 0).toString())
+                    else err("支付失败:积分不足或服务错误")
+                },
+                onFailure = { err("支付失败:${it.message}") }
+            )
+        }
     }
 
     @JavascriptInterface
@@ -325,7 +396,7 @@ class OctopusBridge(
                 WindowCompat.getInsetsController(window, window.decorView)?.let { ctrl ->
                     ctrl.isAppearanceLightStatusBars = isLight
                 }
-            } catch (_: Exception) {}
+            } catch (e: Exception) { XLog.w(TAG, "setStatusBarColor failed: ${e.message}") }
         }
     }
 
@@ -340,7 +411,7 @@ class OctopusBridge(
                 WindowCompat.getInsetsController(window, window.decorView)?.let { ctrl ->
                     ctrl.isAppearanceLightNavigationBars = isLight
                 }
-            } catch (_: Exception) {}
+            } catch (e: Exception) { XLog.w(TAG, "setNavigationBarColor failed: ${e.message}") }
         }
     }
 
@@ -445,8 +516,9 @@ class OctopusBridge(
     private fun postCallback(callbackId: String, resultJson: String) {
         val wv = webViewRef?.get() ?: return
         mainHandler.post {
-            val escaped = resultJson.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n")
-            wv.evaluateJavascript("window.octopus._recv('$callbackId','$escaped')", null)
+            val quoted = JSONObject.quote(resultJson)
+            val quotedCb = JSONObject.quote(callbackId)
+            wv.evaluateJavascript("window.octopus._recv($quotedCb, $quoted)", null)
         }
     }
 
@@ -484,7 +556,9 @@ class OctopusBridge(
     private fun err(msg: String) = JSONObject().put("ok", false).put("error", msg).toString()
 
     companion object {
-        private const val PAY_CONFIRM_TIMEOUT_MS = 60_000L
+        private const val PAY_CONFIRM_TIMEOUT_MS = 15_000L
+        private const val PAY_NETWORK_TIMEOUT_MS = 15_000L
+        private const val POLL_INTERVAL_MS = 500L
         private const val STORAGE_PREFIX = "miniapp_storage_"
 
         const val SHIM_JS = """
@@ -521,7 +595,14 @@ class OctopusBridge(
       });
     },
 
-    pay: function (order) { return parse(octopusNative.pay(order ? JSON.stringify(order) : null)); },
+    pay: function (order) {
+      return new Promise(function (resolve, reject) {
+        var id = 'cb_' + (cid++);
+        cbs[id] = { resolve: resolve, reject: reject };
+        try { octopusNative.pay(order ? JSON.stringify(order) : null, id); }
+        catch (e) { delete cbs[id]; reject(e); }
+      });
+    },
     device: function (cap, args) { return parse(octopusNative.deviceAutomate(cap, args ? JSON.stringify(args) : null)); },
 
     toast: function (msg) { try { octopusNative.showToast(String(msg || '')); } catch (e) {} },

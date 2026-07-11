@@ -182,17 +182,23 @@ open class ClawApplication : BaseApp() {
         val url = KVUtils.getOctopusRpcUrl().ifEmpty { return false }
         val httpUrl = url.replaceFirst("ws://", "http://").replaceFirst("wss://", "https://")
             .substringBeforeLast("/")
+        val conn = try {
+            java.net.URL(httpUrl).openConnection() as java.net.HttpURLConnection
+        } catch (e: Exception) {
+            XLog.d(TAG, "Runtime not reachable: ${e.message}")
+            return false
+        }
         return try {
-            val conn = java.net.URL(httpUrl).openConnection() as java.net.HttpURLConnection
             conn.connectTimeout = 3_000
             conn.readTimeout = 3_000
             conn.requestMethod = "HEAD"
             val code = conn.responseCode
-            conn.disconnect()
             code in 200..499
         } catch (e: Exception) {
             XLog.d(TAG, "Runtime not reachable: ${e.message}")
             false
+        } finally {
+            conn.disconnect()
         }
     }
 

@@ -45,8 +45,10 @@ class GmApiBridge(private val context: Context) {
         Thread(r, "gm-worker-${System.nanoTime()}").apply { isDaemon = true }
     }
     private val menuCommands = ConcurrentHashMap<String, MenuCommand>()
-    private var webView: android.webkit.WebView? = null
+    private var webView: java.lang.ref.WeakReference<android.webkit.WebView>? = null
     private var currentUrl: String = ""
+    /** @connect 白名单(host)。为空时仅禁止访问内网/本机地址。 */
+    private var connectWhitelist: Set<String> = emptySet()
 
     data class MenuCommand(
         val id: String,
@@ -56,7 +58,7 @@ class GmApiBridge(private val context: Context) {
     )
 
     fun attach(webView: android.webkit.WebView, url: String) {
-        this.webView = webView
+        this.webView = java.lang.ref.WeakReference(webView)
         this.currentUrl = url
         try {
             webView.addJavascriptInterface(this, INTERFACE_NAME)
@@ -68,10 +70,16 @@ class GmApiBridge(private val context: Context) {
     fun detach() {
         webView = null
         menuCommands.clear()
+        workerPool.shutdown()
     }
 
     fun updateUrl(url: String) {
         currentUrl = url
+    }
+
+    /** 设置脚本 manifest 中声明的 @connect host 白名单。 */
+    fun setConnectWhitelist(hosts: Set<String>) {
+        connectWhitelist = hosts
     }
 
     fun buildBridgeScript(grantedApis: Set<String>): String {
@@ -162,6 +170,7 @@ class GmApiBridge(private val context: Context) {
     var aborted = false;
     window[cbId] = function(event, arg) {
       if (aborted) return;
+      if (typeof arg === 'string') { try { arg = JSON.parse(arg); } catch(e){} }
       try {
         if (event === 'load' && details.onload) details.onload(arg);
         else if (event === 'error' && details.onerror) details.onerror(arg);
@@ -328,12 +337,60 @@ class GmApiBridge(private val context: Context) {
         }
     }
 
+    private fun isUrlAllowed(rawUrl: String): Boolean {
+        val host = try {
+            java.net.URI(rawUrl).host?.lowercase()
+        } catch (e: Exception) {
+            return false
+        }
+        if (host.isNullOrBlank()) return false
+        if (connectWhitelist.isNotEmpty()) {
+            return connectWhitelist.any { hostMatches(host, it.lowercase()) }
+        }
+        return !isPrivateOrLocalhost(host)
+    }
+
+    private fun hostMatches(host: String, pattern: String): Boolean {
+        if (pattern == "*") return true
+        if (pattern.startsWith("*.")) {
+            val suffix = pattern.substring(2)
+            return host == suffix || host.endsWith(".$suffix")
+        }
+        return host == pattern
+    }
+
+    private fun isPrivateOrLocalhost(host: String): Boolean {
+        if (host == "localhost" || host == "::1" || host == "[::1]") return true
+        val parts = host.split(".")
+        if (parts.size == 4) {
+            val a = parts[0].toIntOrNull() ?: return false
+            val b = parts[1].toIntOrNull() ?: return false
+            return when {
+                a == 0 -> true                  // 0.0.0.0/8
+                a == 10 -> true                 // 10.0.0.0/8
+                a == 127 -> true                // 127.0.0.0/8
+                a == 192 && b == 168 -> true     // 192.168.0.0/16
+                a == 172 && b in 16..31 -> true  // 172.16.0.0/12
+                a == 169 && b == 254 -> true     // 169.254.0.0/16 link-local
+                else -> false
+            }
+        }
+        return false
+    }
+
     @JavascriptInterface
     fun xmlhttpRequest(callbackId: String, cfgJson: String) {
         workerPool.execute {
             try {
                 val cfg = JSONObject(cfgJson)
                 val url = cfg.optString("url")
+                if (!isUrlAllowed(url)) {
+                    val err = JSONObject()
+                        .put("error", "URL not allowed by @connect policy")
+                        .put("readyState", 4)
+                    postCallback(callbackId, "error", err.toString())
+                    return@execute
+                }
                 val method = cfg.optString("method", "GET")
                 val headers = cfg.optJSONObject("headers")
                 val data = if (cfg.has("data") && !cfg.isNull("data")) cfg.optString("data") else null
@@ -494,9 +551,10 @@ class GmApiBridge(private val context: Context) {
 
     private fun postCallback(cbId: String, event: String, jsonArg: String) {
         mainHandler.post {
-            val wv = webView
+            val wv = webView?.get()
             if (wv != null) {
-                val js = """if(window['$cbId']){window['$cbId']('$event', $jsonArg);}"""
+                val safeArg = JSONObject.quote(jsonArg)
+                val js = """if(window['$cbId']){window['$cbId']('$event', $safeArg);}"""
                 wv.evaluateJavascript(js, null)
             }
         }

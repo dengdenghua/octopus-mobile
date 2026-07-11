@@ -1,7 +1,7 @@
 package com.apk.claw.android.octopus_mobile
 import com.apk.claw.android.utils.OctoHttp
+import com.apk.claw.android.utils.XLog
 
-import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
@@ -62,7 +62,7 @@ open class OctopusMobileClient(
                         .add(host, certPin)
                         .build()
                 )
-                Log.i(tag, "certificate pinning enabled for $host")
+                XLog.i(tag, "certificate pinning enabled for $host")
             }
         }
         builder.build()
@@ -123,15 +123,15 @@ open class OctopusMobileClient(
             allowInsecureRuntime = KVUtils.isInsecureOctopusRuntimeAllowed(),
         )
         if (!transport.allowed) {
-            Log.w(tag, "blocked runtime connection to $runtimeUrl: ${transport.reason}")
+            XLog.w(tag, "blocked runtime connection to $runtimeUrl: ${transport.reason}")
             diagnostics.onDisconnected("blocked: ${transport.reason}", System.currentTimeMillis())
             setState(ConnectionState.DISCONNECTED)
             return
         }
         if (runtimeUrl.startsWith("ws://") && !transport.localDevelopment) {
-            Log.w(tag, "⚠️ connecting to runtime over plaintext ws:// — auth token is exposed to network MITM. Use wss:// in production.")
+            XLog.w(tag, "⚠️ connecting to runtime over plaintext ws:// — auth token is exposed to network MITM. Use wss:// in production.")
         }
-        Log.i(tag, "connecting to $runtimeUrl as $tentacleId")
+        XLog.i(tag, "connecting to $runtimeUrl as $tentacleId")
 
         val request = Request.Builder()
             .url(runtimeUrl)
@@ -143,7 +143,7 @@ open class OctopusMobileClient(
 
         val listener = object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                Log.i(tag, "websocket opened")
+                XLog.i(tag, "websocket opened")
                 this@OctopusMobileClient.webSocket = webSocket
                 setState(ConnectionState.CONNECTED)
 
@@ -168,26 +168,26 @@ open class OctopusMobileClient(
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
-                Log.d(tag, "received: $text")
+                XLog.d(tag, "received: $text")
                 handleIncomingMessage(text)
             }
 
             override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
                 // 二进制帧：母体 push_pc_frame 推来的 PC 屏幕帧（远程桌面）
                 if (state == ConnectionState.HELLO_SENT) {
-                    Log.w(tag, "binary frame ignored before hello acknowledgement")
+                    XLog.w(tag, "binary frame ignored before hello acknowledgement")
                     return
                 }
                 onPcFrame?.invoke(bytes.toByteArray())
             }
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
-                Log.i(tag, "websocket closing code=$code reason=$reason")
+                XLog.i(tag, "websocket closing code=$code reason=$reason")
                 webSocket.close(code, reason)
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                Log.i(tag, "websocket closed code=$code reason=$reason")
+                XLog.i(tag, "websocket closed code=$code reason=$reason")
                 this@OctopusMobileClient.webSocket = null
                 // code 1000 = 正常关闭（用户主动 disconnect），不重连
                 if (code == 1000) {
@@ -201,7 +201,7 @@ open class OctopusMobileClient(
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                Log.w(tag, "websocket failure: ${t.message}")
+                XLog.w(tag, "websocket failure: ${t.message}")
                 this@OctopusMobileClient.webSocket = null
                 setState(ConnectionState.DISCONNECTED)
                 diagnostics.onDisconnected("failed: ${t.message}", System.currentTimeMillis())
@@ -234,7 +234,7 @@ open class OctopusMobileClient(
             val expDelay = minOf(baseDelay * (1L shl (attempts - 1).coerceIn(0, 30)), maxDelay)
             val jitter = (Math.random() * baseDelay).toLong()
             val totalDelay = (expDelay + jitter).coerceAtMost(maxDelay + baseDelay)
-            Log.i(tag, "Reconnecting in ${totalDelay}ms (attempt $attempts, state=$state)")
+            XLog.i(tag, "Reconnecting in ${totalDelay}ms (attempt $attempts, state=$state)")
             diagnostics.onReconnectAttempt()
             reconnectJob?.cancel()
             reconnectJob = scope.launch {
@@ -302,7 +302,7 @@ open class OctopusMobileClient(
                     // 连接、或握手前抢注的 MITM 直接驱动工具(高危工具虽仍过来源闸门,但握手前
                     // 就不该接受任何指令)。
                     if (state != ConnectionState.ONLINE) {
-                        Log.w(tag, "tool/execute rejected before handshake ack (state=$state)")
+                        XLog.w(tag, "tool/execute rejected before handshake ack (state=$state)")
                         return
                     }
                     val callId = root.get("id")?.asString ?: return
@@ -316,7 +316,7 @@ open class OctopusMobileClient(
                 "config/sync_pull_response" -> {
                     // 同上:握手确认前不应用任何远程配置(敏感键另有 SYNC_BLOCKED 黑名单兜底)。
                     if (state != ConnectionState.ONLINE) {
-                        Log.w(tag, "config/sync_pull_response rejected before handshake ack (state=$state)")
+                        XLog.w(tag, "config/sync_pull_response rejected before handshake ack (state=$state)")
                         return
                     }
                     onConfigChange?.invoke(text)
@@ -330,14 +330,14 @@ open class OctopusMobileClient(
                 }
             }
         } catch (e: Exception) {
-            Log.w(tag, "handleIncomingMessage error: ${e.message}")
+            XLog.w(tag, "handleIncomingMessage error: ${e.message}")
         }
         // 通用消息分发（所有监听器）
         for (listener in messageListeners) {
             try {
                 listener.invoke(text)
             } catch (e: Exception) {
-                Log.w(tag, "messageListener failed: ${e.message}")
+                XLog.w(tag, "messageListener failed: ${e.message}")
             }
         }
     }
@@ -355,7 +355,7 @@ open class OctopusMobileClient(
             if (serverNonce != null) {
                 val expected = pendingHelloNonce
                 if (expected == null || serverNonce != expected) {
-                    Log.w(tag, "hello_ack nonce mismatch — possible replay attack, disconnecting")
+                    XLog.w(tag, "hello_ack nonce mismatch — possible replay attack, disconnecting")
                     pendingHelloId = null
                     pendingHelloNonce = null
                     webSocket?.close(1008, "nonce mismatch")
@@ -382,7 +382,7 @@ open class OctopusMobileClient(
         val id = root.get("id")?.asString ?: return false
         if (id != helloId || !root.has("error")) return false
         val message = root.getAsJsonObject("error")?.get("message")?.asString ?: "hello rejected"
-        Log.w(tag, "runtime hello rejected: $message")
+        XLog.w(tag, "runtime hello rejected: $message")
         pendingHelloId = null
         pendingHelloNonce = null
         diagnostics.onDisconnected("hello rejected: $message", System.currentTimeMillis())
@@ -393,7 +393,7 @@ open class OctopusMobileClient(
 
     private fun markHelloAcknowledged(reason: String) {
         if (state == ConnectionState.HELLO_SENT) {
-            Log.i(tag, "runtime hello acknowledged: $reason")
+            XLog.i(tag, "runtime hello acknowledged: $reason")
             pendingHelloId = null
             pendingHelloNonce = null
             setState(ConnectionState.ONLINE)
@@ -531,7 +531,7 @@ open class OctopusMobileClient(
      */
     fun send(envelope: Envelope) {
         val ws = webSocket ?: run {
-            Log.w(tag, "send skipped: not connected")
+            XLog.w(tag, "send skipped: not connected")
             return
         }
         ws.send(envelope.toJson())
@@ -543,6 +543,7 @@ open class OctopusMobileClient(
     fun disconnect() {
         reconnectJob?.cancel()
         reconnectAttempts.set(0)
+        scope.cancel()
         webSocket?.close(1000, "client disconnect")
         webSocket = null
         setState(ConnectionState.OFFLINE)
@@ -554,7 +555,7 @@ open class OctopusMobileClient(
      * 与 [disconnect] 不同，不设为 OFFLINE，而是走 DISCONNECTED → 重连流程。
      */
     fun forceReconnect() {
-        Log.i(tag, "forceReconnect: closing current connection")
+        XLog.i(tag, "forceReconnect: closing current connection")
         reconnectAttempts.set(0)
         webSocket?.close(1001, "force reconnect")
         webSocket = null
@@ -572,7 +573,7 @@ open class OctopusMobileClient(
                 // 重连恢复：到达 ONLINE 时，若此前订阅过母体 PC 屏幕流则自动重订阅。
                 // 否则远程桌面在一次网络抖动后掉线，便永远等不到新帧（母体侧订阅已随旧连接失效）。
                 if (pcScreenSubscribed) {
-                    Log.i(tag, "reconnected ONLINE, restoring pc_screen subscription")
+                    XLog.i(tag, "reconnected ONLINE, restoring pc_screen subscription")
                     send(Envelope.Request(method = "pc_screen/subscribe", params = mapOf("tentacle_id" to tentacleId)))
                 }
             }
@@ -600,7 +601,7 @@ open class OctopusMobileClient(
         return try {
             gson.fromJson(element, mapType) ?: emptyMap()
         } catch (e: Exception) {
-            Log.w(tag, "parseArgs failed: ${e.message}")
+            XLog.w(tag, "parseArgs failed: ${e.message}")
             emptyMap()
         }
     }

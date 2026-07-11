@@ -292,7 +292,7 @@ fun ChatScreen() {
     LaunchedEffect(messages.size) {
         if (messages.size > CHAT_MESSAGES_LIMIT) {
             val drop = messages.size - CHAT_MESSAGES_LIMIT
-            repeat(drop) { messages.removeAt(0) }
+            messages.subList(0, drop).clear()
         }
     }
 
@@ -1903,6 +1903,7 @@ private fun InlineVideo(url: String) {
                 setMediaController(controller)
             }
         },
+        onRelease = { it.stopPlayback() },
     )
 }
 

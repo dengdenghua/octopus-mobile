@@ -15,7 +15,7 @@ import com.apk.claw.android.utils.XLog
  * 输出到 [ImageReader],后台线程持续把最近一帧转成 [Bitmap] 缓存起来。
  *
  * 对比无障碍 `takeScreenshot`(200-500ms/帧、2-5fps),这里帧是**推**过来的、随取随有,
- * MJPEG 拉流可以真正跑到 20-30fps。取帧时在锁内直接压 JPEG,避免整屏 Bitmap 拷贝。
+ * MJPEG 拉流可以真正跑到 20-30fps。取帧时锁内仅交换 bitmap 引用,锁外压 JPEG,避免阻塞帧推送。
  *
  * 生命周期由 [ScreenCaptureService] 持有;用户/系统撤销投屏时 [MediaProjection.Callback.onStop]
  * 会回调,这里自动 [release]。
@@ -106,16 +106,16 @@ class ScreenProjectionSource(
         }
     }
 
-    /** 最近一帧压 JPEG(原尺寸)。锁内压,避免整屏拷贝;暂无帧返回 null。 */
-    fun captureJpeg(quality: Int): ByteArray? = synchronized(lock) {
-        val bmp = latest ?: return null
-        runCatching { BitmapJpeg.compress(bmp, quality) }.getOrNull()
+    /** 最近一帧压 JPEG(原尺寸)。锁内仅取引用,锁外压缩,避免阻塞 onFrame;暂无帧返回 null。 */
+    fun captureJpeg(quality: Int): ByteArray? {
+        val bmp = synchronized(lock) { latest } ?: return null
+        return runCatching { BitmapJpeg.compress(bmp, quality) }.getOrNull()
     }
 
-    /** 最近一帧等比缩放到 [maxWidth] 后压 JPEG。暂无帧返回 null。 */
-    fun captureScaledJpeg(maxWidth: Int, quality: Int): ByteArray? = synchronized(lock) {
-        val bmp = latest ?: return null
-        runCatching { BitmapJpeg.scaleAndCompress(bmp, maxWidth, quality) }.getOrNull()
+    /** 最近一帧等比缩放到 [maxWidth] 后压 JPEG。锁内仅取引用,锁外压缩;暂无帧返回 null。 */
+    fun captureScaledJpeg(maxWidth: Int, quality: Int): ByteArray? {
+        val bmp = synchronized(lock) { latest } ?: return null
+        return runCatching { BitmapJpeg.scaleAndCompress(bmp, maxWidth, quality) }.getOrNull()
     }
 
     /** 当前采集分辨率(真实像素)。 */

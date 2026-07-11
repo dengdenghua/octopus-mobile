@@ -46,6 +46,7 @@ object RemoteConsoleGateway {
         .connectTimeout(12, TimeUnit.SECONDS)
         .readTimeout(0, TimeUnit.MILLISECONDS)
         .writeTimeout(12, TimeUnit.SECONDS)
+        .pingInterval(30, TimeUnit.SECONDS)
         .build()
 
     @Volatile private var socket: WebSocket? = null
@@ -210,8 +211,8 @@ object RemoteConsoleGateway {
             "ping" -> ws.send(gson.toJson(mapOf("type" to "pong", "id" to id)))
             "control" -> {
                 val action = msg.get("action")?.asString.orEmpty()
-                val ok = runCatching { performControl(action, msg) }.getOrElse {
-                    XLog.e(TAG, "远程控制执行失败: ${it.message}")
+                val ok = runCatching { performControl(action, msg) }.getOrElse { e ->
+                    XLog.e(TAG, "远程控制执行失败: ${e.message}", e)
                     false
                 }
                 sendResult(ws, id, ok, if (ok) "操作已执行" else "操作失败: $action")
@@ -220,13 +221,16 @@ object RemoteConsoleGateway {
             // 静态字节回去 —— 刻意不走 performControl/ToolRegistry,匿名访客永远碰不到任何带权能力。
             "http" -> {
                 val r = PersonalSiteServer.serve(ClawApplication.instance, msg.get("path")?.asString.orEmpty())
-                ws.send(gson.toJson(mapOf(
-                    "type" to "http_response",
-                    "id" to id,
-                    "status" to r.status,
-                    "contentType" to r.contentType,
-                    "bodyB64" to Base64.encodeToString(r.body, Base64.NO_WRAP),
-                )))
+                r.body.use { stream ->
+                    ws.send(gson.toJson(mapOf(
+                        "type" to "http_response",
+                        "id" to id,
+                        "status" to r.status,
+                        "contentType" to r.contentType,
+                        "headers" to r.headers,
+                        "bodyB64" to Base64.encodeToString(stream.readBytes(), Base64.NO_WRAP),
+                    )))
+                }
             }
             else -> sendResult(ws, id, false, "暂不支持的指令类型")
         }
@@ -301,7 +305,10 @@ object RemoteConsoleGateway {
 
     private fun scheduleReconnect() {
         if (manualStop || !isPaired) return
-        val delay = retryMs.coerceAtMost(60_000L)
+        val base = retryMs.coerceAtMost(60_000L)
+        // 0-30% 的 jitter:避免大量设备同时断线后集中重连(thundering herd)
+        val jitter = (Math.random() * 0.3 * base).toLong()
+        val delay = base + jitter
         retryMs = (retryMs * 2).coerceAtMost(60_000L)
         mainHandler.postDelayed({ connect() }, delay)
     }

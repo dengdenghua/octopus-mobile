@@ -1,11 +1,14 @@
 package com.apk.claw.android.octopus_mobile
 
+import android.os.Handler
+import android.os.Looper
 import com.apk.claw.android.utils.KVUtils
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.apk.claw.android.utils.XLog
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * 设备注册表 —— 存储局域网内发现的 Octopus Mobile 设备信息。
@@ -23,12 +26,20 @@ class DeviceRegistry {
 
     private val gson = Gson()
 
-    /** 设备列表（内存缓存） */
-    private val devices = mutableMapOf<String, DeviceInfo>()
+    /** 设备列表（内存缓存）—— ConcurrentHashMap 保证单次读写线程安全，
+     *  复合操作（遍历+修改）仍需 synchronized(devices) 保护 */
+    private val devices = ConcurrentHashMap<String, DeviceInfo>()
 
     /** 供 UI 观察的设备列表 */
     private val _deviceList = MutableStateFlow<List<DeviceInfo>>(emptyList())
     val deviceList: StateFlow<List<DeviceInfo>> = _deviceList
+
+    // ── persist 防抖 ──
+    // 多协程频繁 upsert/markOffline 会触发多次全量序列化写盘,
+    // 用 Handler.postDelayed 延迟 500ms 合并,避免高频 IO
+    private val persistHandler = Handler(Looper.getMainLooper())
+    private val persistLock = Any()
+    private var persistTask: Runnable? = null
 
     init {
         loadFromStorage()
@@ -38,14 +49,16 @@ class DeviceRegistry {
      * 插入或更新设备。
      */
     fun upsertDevice(device: DeviceInfo) {
-        val existing = devices[device.deviceId]
-        val updated = device.copy(
-            lastSeenTs = System.currentTimeMillis(),
-            online = true,
-            firstSeenTs = existing?.firstSeenTs ?: device.firstSeenTs
-        )
-        devices[device.deviceId] = updated
-        emitUpdate()
+        synchronized(devices) {
+            val existing = devices[device.deviceId]
+            val updated = device.copy(
+                lastSeenTs = System.currentTimeMillis(),
+                online = true,
+                firstSeenTs = existing?.firstSeenTs ?: device.firstSeenTs
+            )
+            devices[device.deviceId] = updated
+            emitUpdate()
+        }
         persist()
         XLog.d(TAG, "upsertDevice: ${device.deviceId} (${device.deviceName}) at ${device.ip}:${device.configServerPort}")
     }
@@ -54,8 +67,10 @@ class DeviceRegistry {
      * 移除设备。
      */
     fun removeDevice(deviceId: String) {
-        devices.remove(deviceId)
-        emitUpdate()
+        synchronized(devices) {
+            devices.remove(deviceId)
+            emitUpdate()
+        }
         persist()
     }
 
@@ -63,14 +78,18 @@ class DeviceRegistry {
      * 获取所有在线设备。
      */
     fun getOnlineDevices(): List<DeviceInfo> {
-        return devices.values.filter { it.online }.toList()
+        return synchronized(devices) {
+            devices.values.filter { it.online }.toList()
+        }
     }
 
     /**
      * 获取所有设备（含离线）。
      */
     fun getAllDevices(): List<DeviceInfo> {
-        return devices.values.toList()
+        return synchronized(devices) {
+            devices.values.toList()
+        }
     }
 
     /**
@@ -85,15 +104,19 @@ class DeviceRegistry {
     fun markStaleOffline() {
         val now = System.currentTimeMillis()
         var changed = false
-        for ((id, device) in devices) {
-            if (device.online && (now - device.lastSeenTs) > OFFLINE_TIMEOUT_MS) {
-                devices[id] = device.copy(online = false)
-                changed = true
-                XLog.d(TAG, "Mark offline: $id (last seen ${now - device.lastSeenTs}ms ago)")
+        synchronized(devices) {
+            for ((id, device) in devices) {
+                if (device.online && (now - device.lastSeenTs) > OFFLINE_TIMEOUT_MS) {
+                    devices[id] = device.copy(online = false)
+                    changed = true
+                    XLog.d(TAG, "Mark offline: $id (last seen ${now - device.lastSeenTs}ms ago)")
+                }
+            }
+            if (changed) {
+                emitUpdate()
             }
         }
         if (changed) {
-            emitUpdate()
             persist()
         }
     }
@@ -102,11 +125,13 @@ class DeviceRegistry {
      * 标记指定设备为离线。
      */
     fun markOffline(deviceId: String) {
-        val device = devices[deviceId] ?: return
-        if (device.online) {
-            devices[deviceId] = device.copy(online = false)
-            emitUpdate()
-            persist()
+        synchronized(devices) {
+            val device = devices[deviceId] ?: return
+            if (device.online) {
+                devices[deviceId] = device.copy(online = false)
+                emitUpdate()
+                persist()
+            }
         }
     }
 
@@ -118,15 +143,19 @@ class DeviceRegistry {
     fun applyAccountTokens(hostToToken: Map<String, String>) {
         if (hostToToken.isEmpty()) return
         var changed = false
-        for ((id, device) in devices) {
-            val token = hostToToken[device.ip] ?: continue
-            if (token.isNotBlank() && device.authToken != token) {
-                devices[id] = device.copy(authToken = token)
-                changed = true
+        synchronized(devices) {
+            for ((id, device) in devices) {
+                val token = hostToToken[device.ip] ?: continue
+                if (token.isNotBlank() && device.authToken != token) {
+                    devices[id] = device.copy(authToken = token)
+                    changed = true
+                }
+            }
+            if (changed) {
+                emitUpdate()
             }
         }
         if (changed) {
-            emitUpdate()
             persist()
             XLog.d(TAG, "applyAccountTokens: 补全 ${hostToToken.size} 台账号设备的 LAN token")
         }
@@ -136,8 +165,10 @@ class DeviceRegistry {
      * 清空所有设备。
      */
     fun clear() {
-        devices.clear()
-        emitUpdate()
+        synchronized(devices) {
+            devices.clear()
+            emitUpdate()
+        }
         persist()
     }
 
@@ -148,8 +179,22 @@ class DeviceRegistry {
     // ── 持久化 ──
 
     private fun persist() {
+        // 防抖：500ms 内多次 mutation 合并为一次全量写盘
+        synchronized(persistLock) {
+            persistTask?.let { persistHandler.removeCallbacks(it) }
+            val task = Runnable {
+                synchronized(persistLock) { persistTask = null }
+                doPersist()
+            }
+            persistTask = task
+            persistHandler.postDelayed(task, 500)
+        }
+    }
+
+    private fun doPersist() {
         try {
-            val json = gson.toJson(devices.values.toList())
+            val list = synchronized(devices) { devices.values.toList() }
+            val json = gson.toJson(list)
             KVUtils.putString(KEY_DEVICE_REGISTRY, json)
         } catch (e: Exception) {
             XLog.e(TAG, "persist failed: ${e.message}")

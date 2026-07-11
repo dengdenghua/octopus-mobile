@@ -109,6 +109,8 @@ abstract class BaseTool {
                 execute(params)
             } catch (ie: InterruptedException) {
                 ToolResult.error("Task cancelled during tool execution")
+            } catch (e: com.apk.claw.android.agent.TaskCancelledException) {
+                ToolResult.error("Task cancelled during tool execution")
             }
             if (result.isSuccess) {
                 val waitMs = optionalLong(params, "wait_after", 0)
@@ -148,7 +150,7 @@ abstract class BaseTool {
         return !Thread.interrupted()
     }
 
-    /** 子类可调用：若当前任务已取消则抛 InterruptedException。 */
+    /** 子类可调用：若当前任务已取消则抛 TaskCancelledException。 */
     protected fun checkCancelled() {
         currentCancellationToken()?.checkCancelled()
     }
@@ -177,7 +179,9 @@ abstract class BaseTool {
         val value = params[key] ?: throw IllegalArgumentException("Missing required parameter: $key")
         return when (value) {
             is Number -> value.toInt()
-            else -> value.toString().toInt()
+            else -> try { value.toString().toInt() } catch (e: NumberFormatException) {
+                throw IllegalArgumentException("Parameter '$key' must be an integer, got: $value")
+            }
         }
     }
 
@@ -185,7 +189,9 @@ abstract class BaseTool {
         val value = params[key] ?: throw IllegalArgumentException("Missing required parameter: $key")
         return when (value) {
             is Number -> value.toLong()
-            else -> value.toString().toLong()
+            else -> try { value.toString().toLong() } catch (e: NumberFormatException) {
+                throw IllegalArgumentException("Parameter '$key' must be a long, got: $value")
+            }
         }
     }
 

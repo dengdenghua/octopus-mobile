@@ -39,12 +39,18 @@ class PluginManager(private val context: Context) {
     /** 已加载的插件 */
     private val loadedPlugins = ConcurrentHashMap<String, PluginInfo>()
 
+    /** discoverPlugins 扫描到的全部 manifest 缓存(含非 dex),供 loadNonDexPlugins 复用,避免重复扫描。 */
+    @Volatile private var cachedAssetsManifests: List<PluginManifest>? = null
+    @Volatile private var cachedFilesManifests: List<Pair<String, PluginManifest>>? = null
+
     /**
      * 发现所有可用插件（扫描 assets + filesDir）。
      * 应在 Application 启动时调用一次。
      */
     fun discoverPlugins(): List<PluginInfo> {
         discoveredPlugins.clear()
+        cachedAssetsManifests = null
+        cachedFilesManifests = null
 
         // 1. 扫描 assets/plugins/
         discoverAssetsPlugins()
@@ -188,7 +194,7 @@ class PluginManager(private val context: Context) {
      * @return 安装成功的 PluginInfo，失败返回 null
      */
     fun installFromFile(dexFile: File, manifestFile: File): PluginInfo? {
-        val manifest = PluginManifest.fromStream(manifestFile.inputStream()) ?: run {
+        val manifest = manifestFile.inputStream().use { PluginManifest.fromStream(it) } ?: run {
             Log.e(TAG, "Invalid manifest file")
             return null
         }
@@ -217,7 +223,11 @@ class PluginManager(private val context: Context) {
      * 供 [com.apk.claw.android.tool.impl.GenerateAppTool] 现场生成小程序后立即刷新
      * [MiniAppRegistry],不需要用户重启 App 就能在「小程序」列表里看到、打开。
      */
-    fun refreshNonDexPlugins() = loadNonDexPlugins()
+    fun refreshNonDexPlugins() {
+        cachedAssetsManifests = null
+        cachedFilesManifests = null
+        loadNonDexPlugins()
+    }
 
     /**
      * 卸载一个小程序:删 filesDir/plugins 与 filesDir/generated_apps 下对应目录 + 移出 registry 清单,
@@ -377,8 +387,10 @@ class PluginManager(private val context: Context) {
     /**
      * 扫描 filesDir/plugins 下所有 manifest(不要求 dex 文件存在)。
      * 返回 Pair(目录名, manifest),目录名即 registry slug,调用方用它过滤可信来源。
+     * 优先复用 discoverPlugins 的缓存。
      */
     private fun scanFilesManifests(): List<Pair<String, PluginManifest>> {
+        cachedFilesManifests?.let { return it }
         val out = mutableListOf<Pair<String, PluginManifest>>()
         val pluginsDir = File(context.filesDir, FILES_PLUGIN_DIR)
         if (!pluginsDir.isDirectory) return out
@@ -393,8 +405,9 @@ class PluginManager(private val context: Context) {
         return out
     }
 
-    /** 扫描 assets/plugins 下所有 manifest（不要求 dex 文件存在）。 */
+    /** 扫描 assets/plugins 下所有 manifest（不要求 dex 文件存在）。优先复用 discoverPlugins 的缓存。 */
     private fun scanAssetsManifests(): List<PluginManifest> {
+        cachedAssetsManifests?.let { return it }
         val out = mutableListOf<PluginManifest>()
         try {
             context.assets.list(ASSETS_PLUGIN_DIR)?.forEach { dir ->
@@ -413,14 +426,20 @@ class PluginManager(private val context: Context) {
     // ── 内部扫描方法 ─────────────────────────────────
 
     private fun discoverAssetsPlugins() {
+        val all = mutableListOf<PluginManifest>()
         try {
-            val dirs = context.assets.list(ASSETS_PLUGIN_DIR) ?: return
+            val dirs = context.assets.list(ASSETS_PLUGIN_DIR) ?: run {
+                cachedAssetsManifests = all
+                return
+            }
             for (dir in dirs) {
                 val manifestPath = "$ASSETS_PLUGIN_DIR/$dir/manifest.json"
                 try {
                     val manifest = context.assets.open(manifestPath).use { stream ->
                         PluginManifest.fromStream(stream)
                     } ?: continue
+
+                    all.add(manifest)
 
                     // 非 dex 类型(browser-script/tool/mini-app)不走 dex 加载,由 loadNonDexPlugins 处理
                     if (manifest.type != "dex") continue
@@ -444,18 +463,25 @@ class PluginManager(private val context: Context) {
         } catch (e: Exception) {
             Log.d(TAG, "No assets plugins directory: ${e.message}")
         }
+        cachedAssetsManifests = all
     }
 
     private fun discoverFilesPlugins() {
+        val all = mutableListOf<Pair<String, PluginManifest>>()
         val pluginsDir = File(context.filesDir, FILES_PLUGIN_DIR)
-        if (!pluginsDir.exists() || !pluginsDir.isDirectory) return
+        if (!pluginsDir.exists() || !pluginsDir.isDirectory) {
+            cachedFilesManifests = all
+            return
+        }
 
         pluginsDir.listFiles()?.forEach { dir ->
             if (!dir.isDirectory) return@forEach
             val manifestFile = File(dir, "manifest.json")
             if (!manifestFile.exists()) return@forEach
 
-            val manifest = PluginManifest.fromStream(manifestFile.inputStream()) ?: return@forEach
+            val manifest = manifestFile.inputStream().use { PluginManifest.fromStream(it) } ?: return@forEach
+
+            all.add(dir.name to manifest)
 
             // 非 dex 类型由 loadNonDexPlugins 处理(但当前仅信任 assets 源,files 非 dex 不加载)
             if (manifest.type != "dex") return@forEach
@@ -475,5 +501,6 @@ class PluginManager(private val context: Context) {
                 dexPath = dexFile.absolutePath
             )
         }
+        cachedFilesManifests = all
     }
 }
