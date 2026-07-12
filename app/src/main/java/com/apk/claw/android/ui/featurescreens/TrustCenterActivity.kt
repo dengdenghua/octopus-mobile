@@ -2,10 +2,13 @@
 
 package com.apk.claw.android.ui.featurescreens
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.widget.Toast
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
@@ -48,6 +51,7 @@ import com.apk.claw.android.R
 import com.apk.claw.android.octopus_mobile.ControlTarget
 import com.apk.claw.android.octopus_mobile.EvolutionMetrics
 import com.apk.claw.android.octopus_mobile.InteractionLedger
+import com.apk.claw.android.octopus_mobile.KnowledgeBundle
 import com.apk.claw.android.octopus_mobile.memory.MemoryStore
 import com.apk.claw.android.octopus_mobile.SetupReadiness
 import com.apk.claw.android.server.ConfigServerManager
@@ -345,6 +349,9 @@ fun TrustCenterScreen(onBack: () -> Unit) {
 
             FSectionTitle("关于你的记忆 · Agent 记住的")
             UserMemoryCard(tick) { tick++ }
+
+            FSectionTitle("知识备份 · 带走 Agent 的脑子")
+            KnowledgeBackupCard { tick++ }
 
             FSectionTitle(stringResource(R.string.trustcenter_section_target))
             FCard {
@@ -684,5 +691,68 @@ private fun UserMemoryCard(tick: Int, onReset: () -> Unit) {
             },
             dismissButton = { TextButton(onClick = { showAdd = false }) { Text("取消") } },
         )
+    }
+}
+
+/**
+ * 知识备份/迁移 —— 把用户规矩([InteractionLedger] manual)+ 记忆([MemoryStore])打成
+ * [KnowledgeBundle] 文本存进剪贴板;导入则从剪贴板还原。只在本机之间迁移,不上传服务器。
+ */
+@Composable
+@Suppress("LongMethod")   // Compose 卡片:说明 + 导出/导入两个带剪贴板逻辑的按钮,声明式偏长
+private fun KnowledgeBackupCard(onChanged: () -> Unit) {
+    val context = LocalContext.current
+    FCard {
+        Text(
+            "把你教的规矩 + Agent 记住的关于你的事,导出成一段文本(复制到剪贴板),可存档或换机后导入恢复。" +
+                "只在本机之间迁移,不上传任何服务器。",
+            color = FMuted, fontSize = 11.sp, lineHeight = 15.sp,
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                "导出到剪贴板", color = FPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .clickable {
+                        val rules = InteractionLedger.snapshot().filter { it.manual }.map { it.title }
+                        val mems = MemoryStore().getMemories()
+                            .map { KnowledgeBundle.MemItem(it.content, it.type.name) }
+                        val json = KnowledgeBundle.export(rules, mems)
+                        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        cm.setPrimaryClip(ClipData.newPlainText("octopus-knowledge", json))
+                        Toast.makeText(
+                            context, "已复制 ${rules.size} 条规矩 + ${mems.size} 条记忆到剪贴板", Toast.LENGTH_SHORT,
+                        ).show()
+                    }
+                    .padding(horizontal = 6.dp, vertical = 4.dp),
+            )
+            Text(
+                "从剪贴板导入", color = FPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .clickable {
+                        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        val text = cm.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString() ?: ""
+                        if (!KnowledgeBundle.looksValid(text)) {
+                            Toast.makeText(context, "剪贴板里不是有效的知识包", Toast.LENGTH_SHORT).show()
+                        } else {
+                            val p = KnowledgeBundle.parse(text)
+                            p.rules.forEach { InteractionLedger.addManualRule(it) }
+                            val store = MemoryStore()
+                            p.memories.forEach {
+                                val t = runCatching { MemoryStore.MemoryType.valueOf(it.type) }
+                                    .getOrDefault(MemoryStore.MemoryType.FACT)
+                                store.addUserFact(it.content, t)
+                            }
+                            Toast.makeText(
+                                context, "已导入 ${p.rules.size} 条规矩 + ${p.memories.size} 条记忆", Toast.LENGTH_SHORT,
+                            ).show()
+                            onChanged()
+                        }
+                    }
+                    .padding(horizontal = 6.dp, vertical = 4.dp),
+            )
+        }
     }
 }
