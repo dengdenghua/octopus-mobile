@@ -68,6 +68,8 @@ import com.apk.claw.android.ui.compose.theme.OctopusLayout
 import com.apk.claw.android.ui.compose.theme.OctopusShape
 import com.apk.claw.android.ui.compose.theme.OctopusSpacing
 import com.apk.claw.android.ui.compose.theme.OctopusType
+import com.apk.claw.android.ui.compose.theme.tvFocusable
+import com.apk.claw.android.ui.compose.theme.tvOverscan
 import com.apk.claw.android.ui.featurescreens.EvolutionActivity
 import com.apk.claw.android.ui.featurescreens.MemoryActivity
 import com.apk.claw.android.ui.featurescreens.TrustCenterActivity
@@ -309,7 +311,7 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}, onNavigateToCreatorCenter: 
     }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize().background(OctopusBackground.pageBrush()).statusBarsPadding(),
+        modifier = Modifier.fillMaxSize().background(OctopusBackground.pageBrush()).statusBarsPadding().tvOverscan(),
         contentPadding = PaddingValues(
             start = OctopusSpacing.lg,
             end = OctopusSpacing.lg,
@@ -938,7 +940,7 @@ private fun SettingsRow(icon: ImageVector, title: String, subtitle: String, trai
 @Composable
 private fun ClickableSettingsRow(icon: ImageVector, title: String, subtitle: String, onClick: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = OctopusSpacing.xs),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).tvFocusable().padding(vertical = OctopusSpacing.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         IconBubble(icon, PrimaryColor)
@@ -981,7 +983,7 @@ private fun SettingsCard(
             .clip(shape)
             .background(OctopusBackground.cardSurface, shape)
             .border(1.dp, OctopusBackground.cardBorder, shape)
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick).tvFocusable() else Modifier),
     ) {
         Column(modifier = Modifier.padding(horizontal = OctopusSpacing.md, vertical = OctopusSpacing.sm)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.sm)) {

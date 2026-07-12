@@ -57,6 +57,7 @@ import com.apk.claw.android.ui.compose.theme.OctopusIconSize
 import com.apk.claw.android.ui.compose.theme.OctopusShape
 import com.apk.claw.android.ui.compose.theme.OctopusSpacing
 import com.apk.claw.android.ui.compose.theme.OctopusType
+import com.apk.claw.android.ui.compose.theme.tvFocusable
 
 // OctopusShapes 已统一到 OctopusShape（见 OctopusDesign.kt），以下为向后兼容别名
 object OctopusShapes {
@@ -247,6 +248,7 @@ fun OctopusPill(
                 indication = null,
                 onClick = onClick,
             )
+            .tvFocusable()
             .padding(horizontal = OctopusSpacing.md, vertical = OctopusSpacing.sm),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
@@ -295,6 +297,7 @@ fun OctopusTextPill(
                 indication = null,
                 onClick = onClick,
             )
+            .tvFocusable()
             .padding(horizontal = OctopusSpacing.md, vertical = OctopusSpacing.sm),
         contentAlignment = Alignment.Center,
     ) {

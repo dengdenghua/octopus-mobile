@@ -67,6 +67,8 @@ import com.apk.claw.android.ui.compose.theme.OctopusColors
 import com.apk.claw.android.ui.compose.theme.OctopusShape
 import com.apk.claw.android.ui.compose.theme.OctopusSpacing
 import com.apk.claw.android.ui.compose.theme.OctopusType
+import com.apk.claw.android.ui.compose.theme.tvFocusable
+import com.apk.claw.android.ui.compose.theme.tvOverscan
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -197,7 +199,8 @@ fun CreatePostScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(OctopusBackground.pageBrush())
-            .statusBarsPadding(),
+            .statusBarsPadding()
+            .tvOverscan(),
     ) {
         // ── 顶栏 ──
         Row(
@@ -226,6 +229,7 @@ fun CreatePostScreen(
                 enabled = !publishing && title.isNotBlank(),
                 colors = ButtonDefaults.buttonColors(containerColor = OctopusColors.Primary),
                 contentPadding = PaddingValues(horizontal = OctopusSpacing.md, vertical = OctopusSpacing.xs),
+                modifier = Modifier.tvFocusable(),
             ) {
                 if (publishing) {
                     CircularProgressIndicator(
@@ -425,7 +429,8 @@ private fun AddImageButton(remaining: Int, onClick: () -> Unit) {
             .clip(RoundedCornerShape(12.dp))
             .background(OctopusBackground.cardSurface)
             .border(1.dp, OctopusBackground.cardBorder, RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick),
+            .clickable(onClick = onClick)
+            .tvFocusable(),
         contentAlignment = Alignment.Center,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {

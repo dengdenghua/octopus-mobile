@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 平板/折叠屏尺寸放大 -->
+    <dimen name="text_size_caption">13sp</dimen>
+    <dimen name="text_size_body">15sp</dimen>
+    <dimen name="text_size_title">18sp</dimen>
+    <dimen name="text_size_headline">22sp</dimen>
+    <dimen name="text_size_display">28sp</dimen>
+    <dimen name="spacing_sm">6dp</dimen>
+    <dimen name="spacing_md">10dp</dimen>
+    <dimen name="spacing_lg">16dp</dimen>
+    <dimen name="spacing_xl">24dp</dimen>
+    <dimen name="card_corner_radius">14dp</dimen>
+    <dimen name="button_height">48dp</dimen>
+    <dimen name="icon_size_medium">28dp</dimen>
+</resources>

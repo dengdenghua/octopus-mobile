@@ -1,5 +1,6 @@
 package com.apk.claw.android
 
+import android.content.res.Configuration
 import com.apk.claw.android.agent.DefaultAgentService
 import com.apk.claw.android.base.BaseApp
 import com.apk.claw.android.channel.ChannelManager
@@ -79,6 +80,12 @@ open class ClawApplication : BaseApp() {
         super.onCreate()
         instance = this
         initializeApp()
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        // 配置变化（如插拔显示器、切换 UiMode）可能改变 TV 判定，失效缓存以便重新探测
+        DeviceUtils.invalidateTvCache()
     }
 
     /**

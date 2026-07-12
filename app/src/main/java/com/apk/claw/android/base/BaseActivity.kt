@@ -3,6 +3,7 @@ package com.apk.claw.android.base
 import android.content.res.Configuration
 import android.content.res.Resources
 import android.os.Bundle
+import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
 import androidx.appcompat.app.AppCompatActivity
@@ -12,6 +13,7 @@ import androidx.core.view.updatePadding
 import com.blankj.utilcode.util.AdaptScreenUtils
 import com.blankj.utilcode.util.BarUtils
 import com.apk.claw.android.R
+import com.apk.claw.android.utils.DeviceUtils
 
 /**
  *
@@ -42,6 +44,39 @@ open class BaseActivity : AppCompatActivity() {
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         applyStatusBarMode()
+    }
+
+    /**
+     * TV 遥控器按键兜底:
+     * - DPAD_CENTER/ENTER → 模拟点击当前焦点元素(确保 Compose 可点击元素能被遥控器"确认")
+     * - BACK → 触发返回(在 TV 上物理返回键走 dispatchKeyEvent 而非系统返回手势)
+     *
+     * 手机上走默认分发,不影响触摸交互。
+     */
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (DeviceUtils.isTvDevice(this)) {
+            when (event.keyCode) {
+                KeyEvent.KEYCODE_DPAD_CENTER,
+                KeyEvent.KEYCODE_ENTER -> {
+                    if (event.action == KeyEvent.ACTION_DOWN) {
+                        // 模拟点击当前焦点元素
+                        val focused = currentFocus
+                        if (focused != null) {
+                            focused.performClick()
+                            return true
+                        }
+                    }
+                }
+                KeyEvent.KEYCODE_BACK -> {
+                    if (event.action == KeyEvent.ACTION_UP) {
+                        @Suppress("DEPRECATION")
+                        onBackPressed()
+                        return true
+                    }
+                }
+            }
+        }
+        return super.dispatchKeyEvent(event)
     }
 
     /**

@@ -4,10 +4,14 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.StateListDrawable
 import android.os.Bundle
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewGroup
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
 import android.widget.FrameLayout
@@ -63,6 +67,9 @@ class RemoteControlActivity : BaseActivity() {
 
         setContentView(buildLayout())
 
+        // TV D-pad:首屏自动聚焦第一个按钮,确保遥控器可立即操作
+        modeButton?.requestFocus()
+
         // 拉设备分辨率(失败不致命,映射回退到画面像素比例)
         lifecycleScope.launch {
             runCatching { remote.getScreenInfo(device) }.getOrNull()?.let { info ->
@@ -75,6 +82,17 @@ class RemoteControlActivity : BaseActivity() {
     override fun onStart() {
         super.onStart()
         startStream()
+    }
+
+    /** TV D-pad:OK/Enter 键触发当前焦点元素的点击。 */
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        when (keyCode) {
+            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> {
+                currentFocus?.performClick()
+                return true
+            }
+        }
+        return super.onKeyDown(keyCode, event)
     }
 
     /** 按当前画质档拼流地址并开播。token 由 [MjpegImageView] 自动转成 Authorization: Bearer 头。 */
@@ -98,7 +116,10 @@ class RemoteControlActivity : BaseActivity() {
     }
 
     private fun buildLayout(): FrameLayout {
-        val root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
+        val root = FrameLayout(this).apply {
+            setBackgroundColor(Color.BLACK)
+            descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
+        }
 
         mjpeg = MjpegImageView(this).apply {
             scaleType = ImageView.ScaleType.FIT_CENTER
@@ -125,10 +146,19 @@ class RemoteControlActivity : BaseActivity() {
             textSize = 13f
             gravity = Gravity.CENTER
             setPadding(dp(18), dp(8), dp(18), dp(8))
-            background = android.graphics.drawable.GradientDrawable().apply {
+            val normal = GradientDrawable().apply {
                 setColor(Color.argb(150, 0, 0, 0)); cornerRadius = dp(18).toFloat()
             }
+            val focused = GradientDrawable().apply {
+                setColor(Color.argb(220, 88, 86, 214)); cornerRadius = dp(18).toFloat()
+            }
+            background = StateListDrawable().apply {
+                addState(intArrayOf(android.R.attr.state_focused), focused)
+                addState(intArrayOf(), normal)
+            }
             isClickable = true
+            isFocusable = true
+            isFocusableInTouchMode = true
             setOnClickListener { onClick() }
         }
         return LinearLayout(this).apply {

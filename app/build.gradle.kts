@@ -257,6 +257,8 @@ dependencies {
     implementation(libs.compose.ui.graphics)
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.compose.material3)
+    // WindowSizeClass 断点系统:大屏(TV/平板/桌面)布局自适应。版本由 composeBom 统一管理。
+    implementation("androidx.compose.material3:material3-window-size-class")
     implementation(libs.compose.material.icons)
     implementation(libs.compose.navigation)
     implementation(libs.compose.activity)

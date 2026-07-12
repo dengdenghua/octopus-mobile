@@ -15,7 +15,9 @@ import android.os.Build
  */
 object DeviceUtils {
 
+    @Volatile
     private var _isTv: Boolean? = null
+    @Volatile
     private var _isMobile: Boolean? = null
 
     /**
@@ -30,6 +32,16 @@ object DeviceUtils {
             || !pm.hasSystemFeature("android.hardware.touchscreen")
         _isTv = isTv
         return isTv
+    }
+
+    /**
+     * 清除 TV/手机类型检测缓存，下次调用 isTvDevice/isMobileDevice 时重新探测。
+     * 应在配置变化（如 onConfigurationChanged）时由调用方触发，以应对插拔显示器、
+     * 切换 UiMode 等导致设备类型判定改变的场景。
+     */
+    fun invalidateTvCache() {
+        _isTv = null
+        _isMobile = null
     }
 
     /**

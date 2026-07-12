@@ -59,6 +59,8 @@ import com.apk.claw.android.ui.compose.theme.OctopusShape
 import com.apk.claw.android.ui.compose.theme.OctopusSpacing
 import com.apk.claw.android.ui.compose.theme.OctopusTints
 import com.apk.claw.android.ui.compose.theme.OctopusType
+import com.apk.claw.android.ui.compose.theme.tvFocusable
+import com.apk.claw.android.ui.compose.theme.tvOverscan
 
 /**
  * 灵感广场 —— 双列灵感瀑布流，展示自动化技能、用法、作品卡片。
@@ -89,7 +91,8 @@ fun AgentSquareScreen(
             .fillMaxSize()
             .background(OctopusBackground.pageBrush())
             .statusBarsPadding()
-            .navigationBarsPadding(),
+            .navigationBarsPadding()
+            .tvOverscan(),
     ) {
         AgentSquareTopBar(onBack, onOpenSearch, onCreatePost)
         CategoryTabs()
@@ -158,7 +161,7 @@ private fun CategoryTabs() {
                 shape = OctopusShape.capsule,
                 color = if (isSelected) OctopusColors.Primary else OctopusColors.SurfaceDeep.copy(alpha = 0.5f),
                 border = if (isSelected) null else androidx.compose.foundation.BorderStroke(1.dp, OctopusColors.Border.copy(alpha = 0.6f)),
-                modifier = Modifier.clickable { selected = index },
+                modifier = Modifier.clickable { selected = index }.tvFocusable(),
             ) {
                 Text(
                     stringResource(tabRes),
@@ -187,7 +190,7 @@ private fun AgentFeed(
     }
     val posts = local + (remote ?: emptyList())
     LazyVerticalStaggeredGrid(
-        columns = StaggeredGridCells.Fixed(2),
+        columns = StaggeredGridCells.Adaptive(160.dp),
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(OctopusSpacing.lg),
         horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.md),
@@ -218,7 +221,8 @@ internal fun AgentPostCard(post: AgentPost, onClick: () -> Unit = {}) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(OctopusShape.large)
-            .clickable(onClick = onClick),
+            .clickable(onClick = onClick)
+            .tvFocusable(),
     ) {
         Column {
             // 封面:图文帖有图片封面优先用 AsyncImage;否则回退渐变封面

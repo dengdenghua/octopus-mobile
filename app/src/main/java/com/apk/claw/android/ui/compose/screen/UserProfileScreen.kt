@@ -210,7 +210,7 @@ fun UserProfileScreen(
                     CenterText(msg)
                 } else {
                     LazyVerticalStaggeredGrid(
-                        columns = StaggeredGridCells.Fixed(2),
+                        columns = StaggeredGridCells.Adaptive(160.dp),
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(OctopusSpacing.lg),
                         horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.md),

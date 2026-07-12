@@ -77,6 +77,8 @@ import com.apk.claw.android.ui.compose.theme.OctopusColors
 import com.apk.claw.android.ui.compose.theme.OctopusShape
 import com.apk.claw.android.ui.compose.theme.OctopusSpacing
 import com.apk.claw.android.ui.compose.theme.OctopusType
+import com.apk.claw.android.ui.compose.theme.tvFocusable
+import com.apk.claw.android.ui.compose.theme.tvOverscan
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -188,7 +190,8 @@ fun PostDetailScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(OctopusBackground.pageBrush())
-            .statusBarsPadding(),
+            .statusBarsPadding()
+            .tvOverscan(),
     ) {
         // ── 顶栏 ──
         Row(
@@ -714,6 +717,7 @@ private fun ActionPill(
         modifier = Modifier
             .clip(RoundedCornerShape(50))
             .clickable(onClick = onClick)
+            .tvFocusable()
             .padding(horizontal = OctopusSpacing.sm, vertical = OctopusSpacing.xs),
     ) {
         Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
@@ -811,7 +815,8 @@ private fun CommentInputBar(
                 color = if (text.isNotBlank()) OctopusColors.Primary else OctopusColors.SurfaceVariant,
                 modifier = Modifier
                     .size(40.dp)
-                    .clickable(enabled = text.isNotBlank(), onClick = onSend),
+                    .clickable(enabled = text.isNotBlank(), onClick = onSend)
+                    .tvFocusable(),
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Text(

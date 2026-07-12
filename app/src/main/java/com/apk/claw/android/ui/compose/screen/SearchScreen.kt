@@ -179,7 +179,7 @@ private fun SearchResults(q: String, onOpenPost: (String) -> Unit) {
                 EmptyState(text = stringResource(R.string.square_search_no_result))
             } else {
                 LazyVerticalStaggeredGrid(
-                    columns = StaggeredGridCells.Fixed(2),
+                    columns = StaggeredGridCells.Adaptive(160.dp),
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(OctopusSpacing.lg),
                     horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.md),

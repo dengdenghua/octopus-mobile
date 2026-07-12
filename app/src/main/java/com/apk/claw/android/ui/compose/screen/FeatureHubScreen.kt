@@ -84,6 +84,8 @@ import com.apk.claw.android.ui.compose.theme.OctopusLayout
 import com.apk.claw.android.ui.compose.theme.OctopusShape
 import com.apk.claw.android.ui.compose.theme.OctopusSpacing
 import com.apk.claw.android.ui.compose.theme.OctopusType
+import com.apk.claw.android.ui.compose.theme.tvFocusable
+import com.apk.claw.android.ui.compose.theme.tvOverscan
 import com.apk.claw.android.ui.featurescreens.BrowserSettingsActivity
 import com.apk.claw.android.ui.featurescreens.CloudDriveActivity
 import com.apk.claw.android.ui.featurescreens.EvolutionActivity
@@ -141,7 +143,7 @@ fun FeatureHubScreen(
     var tab by remember { mutableStateOf(0) }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        Column(modifier = Modifier.fillMaxSize().background(OctopusBackground.pageBrush()).statusBarsPadding()) {
+        Column(modifier = Modifier.fillMaxSize().background(OctopusBackground.pageBrush()).statusBarsPadding().tvOverscan()) {
             // 顶部双 Tab
             Row(
                 modifier = Modifier.fillMaxWidth().padding(start = OctopusSpacing.xl, end = OctopusSpacing.xl, top = OctopusSpacing.md, bottom = OctopusSpacing.xs),
@@ -175,7 +177,7 @@ fun FeatureHubScreen(
 /** 顶部 Tab 文本：选中=大号加粗+主题色下划线；未选=灰色常规。 */
 @Composable
 private fun TabLabel(text: String, selected: Boolean, onClick: () -> Unit) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable(onClick = onClick)) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable(onClick = onClick).tvFocusable()) {
         Text(
             text,
             color = if (selected) OctopusColors.TextPrimary else OctopusColors.TextMuted,
@@ -218,7 +220,7 @@ private fun ExploreTab(
     }
 
     LazyVerticalStaggeredGrid(
-        columns = StaggeredGridCells.Fixed(2),
+        columns = StaggeredGridCells.Adaptive(160.dp),
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
             start = OctopusSpacing.lg,

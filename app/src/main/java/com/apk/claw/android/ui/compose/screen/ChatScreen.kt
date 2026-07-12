@@ -129,6 +129,8 @@ import com.apk.claw.android.ui.compose.theme.OctopusShape
 import com.apk.claw.android.ui.compose.theme.OctopusSpacing
 import com.apk.claw.android.ui.compose.theme.OctopusTints
 import com.apk.claw.android.ui.compose.theme.OctopusType
+import com.apk.claw.android.ui.compose.theme.tvFocusable
+import com.apk.claw.android.ui.compose.theme.tvOverscan
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import java.util.Calendar
@@ -662,7 +664,7 @@ fun ChatScreen() {
             )
         },
     ) {
-    Column(modifier = Modifier.fillMaxSize().background(OctopusBackground.pageBrush())) {
+    Column(modifier = Modifier.fillMaxSize().background(OctopusBackground.pageBrush()).tvOverscan()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -680,7 +682,7 @@ fun ChatScreen() {
                 Box {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.clickable { charMenuOpen = true },
+                        modifier = Modifier.clickable { charMenuOpen = true }.tvFocusable(),
                     ) {
                         Text(
                             curProfile?.zh ?: "Octopus",
@@ -987,7 +989,8 @@ fun ChatScreen() {
                                         android.content.Intent(context, VoiceCallActivity::class.java),
                                     )
                                 }
-                            },
+                            }
+                            .tvFocusable(),
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
@@ -1002,7 +1005,8 @@ fun ChatScreen() {
                         modifier = Modifier
                             .size(38.dp)
                             .background(SurfaceDeepColor, CircleShape)
-                            .clickable { voiceMode = true },
+                            .clickable { voiceMode = true }
+                            .tvFocusable(),
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(Icons.Filled.KeyboardVoice, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(OctopusIconSize.medium))
@@ -1039,7 +1043,8 @@ fun ChatScreen() {
                                     .copy(alpha = if (btnActive) 1f else 0.35f),
                                 CircleShape
                             )
-                            .clickable(onClick = if (isRunning) stop else send),
+                            .clickable(onClick = if (isRunning) stop else send)
+                            .tvFocusable(),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -1172,7 +1177,7 @@ private fun ChatSessionDrawer(
             DrawerStatusPanel(llmOk = llmOk, a11yOk = a11yOk, deviceCount = deviceCount)
             Spacer(Modifier.height(OctopusSpacing.lg))
             Surface(
-                modifier = Modifier.fillMaxWidth().clickable(enabled = !isRunning, onClick = onNewChat),
+                modifier = Modifier.fillMaxWidth().clickable(enabled = !isRunning, onClick = onNewChat).tvFocusable(),
                 shape = OctopusShape.large,
                 color = PrimaryColor.copy(alpha = if (isRunning) 0.12f else 0.18f),
                 border = BorderStroke(1.dp, PrimaryColor.copy(alpha = 0.28f)),

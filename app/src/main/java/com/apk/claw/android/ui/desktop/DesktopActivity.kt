@@ -105,6 +105,7 @@ import com.apk.claw.android.ui.voice.VoiceCallActivity
 import com.apk.claw.android.ui.device.DeviceListActivity
 import com.apk.claw.android.utils.KVUtils
 import com.apk.claw.android.ui.compose.theme.OctopusTheme
+import com.apk.claw.android.ui.compose.theme.tvOverscan
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -381,7 +382,7 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
 
     // Apple TV 式首页:壁纸全出血打底 + 顶栏 + 大图焦点磁贴网格;选中磁贴/头像 → 全屏内容层。
     // 头像作为常驻「悬浮桌面 agent」浮在右下角,点开即对话。
-    Box(Modifier.fillMaxSize()) {
+    Box(Modifier.fillMaxSize().tvOverscan()) {
         HoloBackground(Modifier.fillMaxSize())
         // 响应式:无触屏(TV/盒子)= 3 米外 10-foot 观看 → 图标/字号放大;手机触屏用常规尺寸。
         // 比例不写死:图标架给自然高度,Hero 用 weight(1f) 吃掉剩余高度,任意屏幕比例(手机 2.2:1 /
