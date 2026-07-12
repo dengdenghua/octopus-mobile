@@ -16,6 +16,7 @@ import com.apk.claw.android.octopus_mobile.safety.PermissionPolicy
 import com.apk.claw.android.octopus_mobile.safety.ApprovalFlow
 import com.apk.claw.android.octopus_mobile.safety.IrreversibleActions
 import com.apk.claw.android.octopus_mobile.safety.UndoWindow
+import com.apk.claw.android.octopus_mobile.safety.DryRunGate
 import com.apk.claw.android.octopus_mobile.ToolAuditLog
 import com.apk.claw.android.octopus_mobile.MobileActionTimeline
 import com.apk.claw.android.octopus_mobile.evolution.TurnScorer
@@ -369,6 +370,13 @@ object ToolRegistry {
         if (!isToolEnabled(name)) {
             eventBus?.publish(EventBus.ToolBlockedEvent(name, "tool_disabled", "settings"))
             return audited(ToolResult.error("工具已停用: $name", ToolErr.BLOCKED), blockedBy = "settings")
+        }
+
+        // ── 演示/只读模式:改动型工具全跳过(只演示不执行),只读工具照常,让用户安全预览 ──
+        // 早于所有门:短路返回演示结果,不真正改动设备/账号。fail-safe——只增拦截。
+        if (DryRunGate.shouldSkip(name, com.apk.claw.android.utils.KVUtils.isDryRunMode())) {
+            eventBus?.publish(EventBus.ToolBlockedEvent(name, "dry_run", "dry_run"))
+            return audited(DryRunGate.skipResult(name), blockedBy = "dry_run")
         }
 
         // ── 权限策略（统一读取 PermissionModeManager）──

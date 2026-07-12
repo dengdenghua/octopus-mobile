@@ -516,6 +516,13 @@ object KVUtils {
     fun isFrugalPerceptionMode(): Boolean = getBoolean(KEY_FRUGAL_PERCEPTION, false)
     fun setFrugalPerceptionMode(enabled: Boolean) = putBoolean(KEY_FRUGAL_PERCEPTION, enabled)
 
+    // ── 演示/只读模式(dry-run) ──
+    // 开:改动型工具全跳过(只演示不执行)、只读工具照常,让用户安全预览 Agent 会怎么做。默认关。
+    // fail-safe:只增拦截、绝不放行。
+    private const val KEY_DRY_RUN = "KEY_DRY_RUN_MODE"
+    fun isDryRunMode(): Boolean = getBoolean(KEY_DRY_RUN, false)
+    fun setDryRunMode(enabled: Boolean) = putBoolean(KEY_DRY_RUN, enabled)
+
     // ── 心跳 ACK 超时是否触发强制重连 ──
     // 仅当母体 octopus-agent runtime 确实回 {"method":"heartbeat/ack"} 时才应开启。
     // 默认 false:母体若不回 ack,开启会让每台设备每 ~90s 强制重连一次、自我制造重连风暴。

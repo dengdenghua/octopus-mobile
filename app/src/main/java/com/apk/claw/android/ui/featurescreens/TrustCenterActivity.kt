@@ -129,6 +129,7 @@ fun TrustCenterScreen(onBack: () -> Unit) {
     var lanOn by remember(tick) { mutableStateOf(KVUtils.isLanControlEnabled()) }
     var advOn by remember(tick) { mutableStateOf(KVUtils.isAdvancedAutomationMode()) }
     var remoteHi by remember(tick) { mutableStateOf(KVUtils.isRemoteHighRiskAllowed()) }
+    var dryRunOn by remember(tick) { mutableStateOf(KVUtils.isDryRunMode()) }
 
     FeatureScaffold(title = stringResource(R.string.trustcenter_title), onBack = onBack) {
         Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
@@ -247,6 +248,25 @@ fun TrustCenterScreen(onBack: () -> Unit) {
                         checked = advOn,
                         onCheckedChange = { if (it) { PermissionModeManager.switchMode(PermissionMode.FULL_POWER, "user_switch_trustcenter"); advOn = true } },
                         colors = SwitchDefaults.colors(checkedTrackColor = FWarning, checkedThumbColor = Color.White),
+                    )
+                }
+            }
+
+            // 演示/只读模式:安全预览 Agent 会怎么做(改动型全跳过,只读照常)。fail-safe。
+            FCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("演示 / 只读模式", color = FText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "开启后 Agent 能看屏、规划、走完流程,但所有会改动的操作(点按/输入/发消息/" +
+                                "装应用/跑代码…)全部跳过、只演示不执行。安全预览它会怎么做——首次上手或不放心时用。",
+                            color = FMuted, fontSize = 10.sp, lineHeight = 14.sp,
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Switch(
+                        checked = dryRunOn,
+                        onCheckedChange = { dryRunOn = it; KVUtils.setDryRunMode(it) },
                     )
                 }
             }
