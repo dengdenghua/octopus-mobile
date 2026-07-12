@@ -12,18 +12,18 @@ class AgentConfigTest {
     // ==================== data class 默认值与 Builder 默认值一致 ====================
 
     @Test
-    fun `data class default maxIterations is 60`() {
+    fun `data class default maxIterations is 80`() {
         val config = AgentConfig(apiKey = "key", baseUrl = "http://localhost")
-        assertEquals(60, config.maxIterations)
+        assertEquals(80, config.maxIterations)
     }
 
     @Test
-    fun `Builder default maxIterations is 60`() {
+    fun `Builder default maxIterations is 80`() {
         val config = AgentConfig.Builder()
             .apiKey("key")
             .baseUrl("http://localhost")
             .build()
-        assertEquals(60, config.maxIterations)
+        assertEquals(80, config.maxIterations)
     }
 
     @Test

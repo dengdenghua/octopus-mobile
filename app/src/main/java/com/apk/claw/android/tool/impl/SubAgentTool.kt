@@ -23,15 +23,15 @@ import java.util.concurrent.atomic.AtomicReference
  * - 子 Agent 使用简化系统提示词（聚焦执行，不含完整规则集）
  * - 子 Agent 跳过 TaskCheckpoint（避免与主 Agent 的 checkpoint 冲突）
  * - 子 Agent 的 callback 不转发到 UI（静默执行）
- * - 子 Agent 最大迭代数默认 15（可通过参数调整）
+ * - 子 Agent 最大迭代数默认 20（可通过参数调整）
  * - 子 Agent 共享主 Agent 的 LLM 配置和工具集
  */
 class SubAgentTool : BaseTool() {
 
     companion object {
         private const val TAG = "SubAgentTool"
-        private const val DEFAULT_MAX_ITERATIONS = 15
-        private const val MAX_ITERATIONS_LIMIT = 30
+        private const val DEFAULT_MAX_ITERATIONS = 20
+        private const val MAX_ITERATIONS_LIMIT = 50
         private const val SUB_AGENT_TIMEOUT_MS = 120_000L  // 2 分钟超时
         private const val LOG_TASK_PREVIEW_CHARS = 80
         private const val LOG_CONTENT_PREVIEW_CHARS = 60
@@ -70,7 +70,7 @@ class SubAgentTool : BaseTool() {
         ToolParameter(
             "max_iterations",
             "integer",
-            "Maximum iterations for the sub-agent (default 15, max 30). Keep small for focused tasks.",
+            "Maximum iterations for the sub-agent (default 20, max 50). Keep small for focused tasks.",
             false
         )
     )
@@ -196,7 +196,7 @@ class SubAgentTool : BaseTool() {
 
         Parameters:
         - task: Clear, self-contained sub-task description
-        - max_iterations: Max iterations for sub-agent (default 15, max 30)
+        - max_iterations: Max iterations for sub-agent (default 20, max 50)
     """.trimIndent()
 
     override fun getDescriptionCN(): String = """
@@ -214,6 +214,6 @@ class SubAgentTool : BaseTool() {
 
         参数：
         - task: 清晰、自包含的子任务描述
-        - max_iterations: 子 Agent 最大迭代数（默认 15，上限 30）
+        - max_iterations: 子 Agent 最大迭代数（默认 20，上限 50）
     """.trimIndent()
 }

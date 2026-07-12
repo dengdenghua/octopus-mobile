@@ -49,7 +49,7 @@ Messaging channels (DingTalk / Feishu / QQ / Discord / Telegram / WeChat)
 - **LLM backends** are pluggable via `LlmClientFactory`: OpenAI-compatible (`OpenAiLlmClient`) and Anthropic (`AnthropicLlmClient`), both streaming and non-streaming. The HTTP layer uses an OkHttp adapter instead of the JDK HttpClient for Android compatibility.
 - **Retries**: up to 3 attempts with exponential backoff (1s → 2s → 4s); no retry on 401/403.
 - **Self-evolution**: every tool result is scored (`TurnScorer`); periodically the agent reflects on recent turns and stores "lessons" (MMKV) that are injected into later prompts.
-- **Config** (`AgentConfig`): `apiKey`, `baseUrl` (default `https://api.openai.com/v1`), `modelName`, `provider` (`OPENAI` default / `ANTHROPIC`), `temperature` (0.1), `maxIterations` (40), `streaming`.
+- **Config** (`AgentConfig`): `apiKey`, `baseUrl` (default `https://api.openai.com/v1`), `modelName`, `provider` (`OPENAI` default / `ANTHROPIC`), `temperature` (0.1), `maxIterations` (80), `streaming`.
 
 ## Tools
 

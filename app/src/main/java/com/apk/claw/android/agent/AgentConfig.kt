@@ -7,7 +7,7 @@ data class AgentConfig(
     val baseUrl: String,
     val modelName: String = "",
     val systemPrompt: String = DEFAULT_SYSTEM_PROMPT,
-    val maxIterations: Int = 60,
+    val maxIterations: Int = 80,
     val temperature: Double = 0.1,
     val provider: LlmProvider = LlmProvider.OPENAI,
     val streaming: Boolean = false,
@@ -106,7 +106,7 @@ data class AgentConfig(
 
 规则 11：复杂任务用子 Agent 分工。
   当任务有多个独立阶段（如"搜索 X 并发邮件"、"先查日历再预约"），用 spawn_subagent(task="...") 派生子 Agent 执行子任务。
-  子 Agent 有独立的迭代预算（默认 15 轮）和消息历史，不会消耗主循环的迭代次数。
+  子 Agent 有独立的迭代预算（默认 20 轮）和消息历史，不会消耗主循环的迭代次数。
   子 Agent 的执行结果作为工具返回值，据此决策下一步。
   注意：子 Agent 适合"可以独立完成的子任务"，不适合需要主 Agent 上下文的连续操作。
 
@@ -177,8 +177,8 @@ run_code 适用：纯计算、数据处理、文件读写、API 调用、UI 自�
         private var baseUrl: String = ""
         private var modelName: String = ""
         private var systemPrompt: String = DEFAULT_SYSTEM_PROMPT
-        // 与 data class 主构造默认值保持一致（60），避免 Builder 与直接构造产生不同行为
-        private var maxIterations: Int = 60
+        // 与 data class 主构造默认值保持一致（80），避免 Builder 与直接构造产生不同行为
+        private var maxIterations: Int = 80
         private var temperature: Double = 0.1
         private var provider: LlmProvider = LlmProvider.OPENAI
         private var streaming: Boolean = false

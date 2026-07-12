@@ -307,7 +307,7 @@ Agent 循环核心。关键设计：
 | 上下文压缩 | `compressHistoryForSend`：仅保留最近 `get_screen_info`，保护最近 3 轮，旧轮摘要；超长再截断 |
 | 死循环检测 | 4 轮滑动窗口 `(screenHash, toolCall)` 指纹；3 次警告强制结束 |
 | 弹窗处理 | `get_screen_info` 返回 `SYSTEM_DIALOG_BLOCKED` → VLM 截图分析（max 720px, JPEG 50%） |
-| 完成条件 | `finish` 工具成功 → `onComplete`；达 `maxIterations`(默认 60) → `onError` |
+| 完成条件 | `finish` 工具成功 → `onComplete`；达 `maxIterations`(默认 80) → `onError` |
 
 ```kotlin
 private fun AgentLoopState.executeSingleTool(toolRequest, callback): ToolHandleResult {
@@ -329,7 +329,7 @@ private fun AgentLoopState.executeSingleTool(toolRequest, callback): ToolHandleR
 data class AgentConfig(
     val apiKey: String, val baseUrl: String, val modelName: String = "",
     val systemPrompt: String = DEFAULT_SYSTEM_PROMPT,
-    val maxIterations: Int = 60, val temperature: Double = 0.1,
+    val maxIterations: Int = 80, val temperature: Double = 0.1,
     val provider: LlmProvider = LlmProvider.OPENAI,
     val streaming: Boolean = false,
     val dynamicPromptSuffix: String = "",   // 教训注入

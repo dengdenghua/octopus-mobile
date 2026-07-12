@@ -203,7 +203,7 @@ object ChatAgentBridge {
             .baseUrl(baseUrl)
             .modelName(eff.model.ifBlank { if (eff.platform) "mimo-v2-flash" else "deepseek-chat" })
             .temperature(0.1)
-            .maxIterations(40)
+            .maxIterations(80)
             .enableVision(false)
             .streaming(true)   // 逐字流式输出
             .dynamicPromptSuffix(lessonSuffix + skillSuffix)

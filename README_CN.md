@@ -94,7 +94,7 @@ Agent 遵循 **观察 → 思考 → 行动 → 验证** 协议：
 - `modelName`：用户可选
 - `provider`：`OPENAI`（默认）或 `ANTHROPIC`
 - `temperature`：0.1（确定性输出）
-- `maxIterations`：40
+- `maxIterations`：80
 - `streaming`：可配置（默认关闭）
 
 ### LangChain4j 桥接层
