@@ -1,12 +1,14 @@
 package com.apk.claw.android.ui.desktop
 
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -14,6 +16,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -38,11 +42,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -102,21 +107,30 @@ private const val FOCUS_SHADOW = 18f     // 焦点投影高度(浮起感)
 
 @Composable
 fun Modifier.holoFocus(shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(12.dp)): Modifier {
-    var focused by remember { mutableStateOf(false) }
-    // 焦点放大 + 投影「浮起」,3 米外电视遥控导航也能一眼看清当前选中。
-    val scale by animateFloatAsState(if (focused) FOCUS_SCALE else 1f, label = "focusScale")
-    val bw by animateDpAsState(if (focused) 3.dp else 1.dp, label = "focusBorder")
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+    // 焦点放大 + 投影「浮起」(spring 物理动画),3 米外电视遥控导航也能一眼看清当前选中。
+    val scale by animateFloatAsState(
+        targetValue = if (isFocused) FOCUS_SCALE else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "holoFocusScale"
+    )
+    val bw by animateDpAsState(
+        targetValue = if (isFocused) 3.dp else 1.dp,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "holoFocusBorder"
+    )
     return this
-        .onFocusChanged { focused = it.isFocused }
-        .focusable()
-        .graphicsLayer {
-            scaleX = scale
-            scaleY = scale
-            shadowElevation = if (focused) FOCUS_SHADOW else 0f
-            this.shape = shape
-            clip = false
-        }
-        .border(bw, if (focused) Holo.Accent else Holo.Border, shape)
+        .scale(scale)
+        .shadow(if (isFocused) FOCUS_SHADOW.dp else 0.dp, shape)
+        .border(bw, if (isFocused) Holo.Accent else Holo.Border, shape)
+        .focusable(interactionSource = interactionSource)
 }
 
 /**

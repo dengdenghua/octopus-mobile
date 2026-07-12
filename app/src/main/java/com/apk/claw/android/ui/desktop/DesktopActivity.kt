@@ -14,13 +14,11 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -56,6 +54,7 @@ import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -219,8 +218,6 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
     var openContent by remember { mutableStateOf<WinContent?>(null) }
     // 钉住:内容层从居中浮层切到右侧停靠面板(Copilot 式:左桌面 + 右对话)。记住用户偏好,不随开关重置。
     var pinned by remember { mutableStateOf(false) }
-    // 长按桌面小程序图标 → 待确认删除的目标(null=无弹窗)。
-    var appToDelete by remember { mutableStateOf<com.apk.claw.android.plugin.PluginManifest?>(null) }
     val openWindow: (WinContent) -> Unit = { kind -> openContent = kind }
     // app_action 未运行时请桌面把 mini-app 开成窗口(后台线程 → 切主线程 openWindow)
     val mainHandler = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
@@ -394,40 +391,8 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
         // 桌面内容(Apple TV 式):Hero 全宽头 + 图标网格,整屏纵向瀑布流——向下滚/翻页看更多图标。
         // Hero 点击 = 和角色对话。分屏窄区列数减少,自然多排、往下翻。
         val desktopContent = @Composable {
-            BoxWithConstraints(Modifier.fillMaxSize()) {
-                val heroH = maxHeight * TV_HERO_HEIGHT_FRACTION
-                val availW = maxWidth  // 捕获出来:Column/FlowRow 作用域里读不到 BoxWithConstraints 的 maxWidth
-                val maxCols = if (docked) TV_COLS_DOCKED else if (bigUi) TV_COLS_TV else TV_COLS_PHONE
-                // 不 remember:新装/新生成的小程序即时出现在桌面(remember 会把首帧的空列表钉死)。
-                val miniApps = MiniAppRegistry.all()
-                val apps = buildList {
-                    add(
-                        TvAppSpec(
-                            Icons.Filled.ChatBubbleOutline, TvGradChat,
-                            onClick = { openWindow(WinContent.Chat) },
-                        ),
-                    )
-                    add(TvAppSpec(Icons.Filled.Person, TvGradChar, onClick = { openWindow(WinContent.Character) }))
-                    add(TvAppSpec(Icons.Filled.Explore, TvGradDiscover, onClick = { openWindow(WinContent.Discover) }))
-                    add(TvAppSpec(Icons.Filled.Forum, TvGradSquare, onClick = { openWindow(WinContent.Square) }))
-                    // 「全部应用」入口去掉:主页少一个图标,右下角空出来给悬浮头像 agent。
-                    miniApps.forEach { m ->
-                        add(
-                            TvAppSpec(
-                                icon = Icons.Filled.Apps,
-                                grad = TvGradMini,
-                                onClick = { openWindow(WinContent.Mini(m.id, m.name)) },
-                                onLongClick = { appToDelete = m },
-                            ),
-                        )
-                    }
-                }
-                // 列数 = 图标数(封顶 maxCols):图标少时单行填满(统一大小),超过才多排、往下滚(瀑布流)。
-                val cols = apps.size.coerceIn(1, maxCols)
-                // 图标区两边对称留白 → 整行居中(重心不偏);右侧留白正好容纳右下角悬浮头像,不重叠。
-                val sideGap = if (docked) 20.dp else 104.dp
-                // 场景壁纸**全屏打底**:Hero 与图标栏共用同一张、边到边全出血,消除首页中部那道接缝。
-                // 无壁纸(未生成/已关场景)则露出底层 HoloBackground 霓虹。
+            Box(Modifier.fillMaxSize()) {
+                // 场景壁纸全屏打底(若有):与底层 HoloBackground 叠加,柔和压暗保证卡片可读。
                 if (sceneUrl != null) {
                     coil.compose.AsyncImage(
                         model = sceneUrl,
@@ -435,52 +400,108 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
                         contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                         modifier = Modifier.matchParentSize(),
                     )
-                    // 柔和「全屏」压暗:顶部(状态栏/顶栏)与底部(标题/图标)各一点点、中段全透——
-                    // 均匀不偏,取代原来只压 Hero 上半、中部出现硬边「蒙层」的做法。
                     Box(
                         Modifier.matchParentSize()
                             .background(androidx.compose.ui.graphics.Brush.verticalGradient(TvWallScrim)),
                     )
                 }
-                // 整页上下翻页(不是瀑布流连续滚):第 0 页 = Hero + 首屏放得下的图标行;
-                // 其余图标按「整页」分块,一次翻一页(VerticalPager 会吸附到整页)。
-                val spacing = 14.dp
-                val iconW = (availW - sideGap * 2 - spacing * (cols - 1)) / cols
-                val rowStride = iconW / TV_ICON_ASPECT + spacing
-                val page0Rows = ((maxHeight - heroH - 32.dp).value / rowStride.value).toInt().coerceAtLeast(1)
-                val fullRows = ((maxHeight - 56.dp).value / rowStride.value).toInt().coerceAtLeast(1)
-                val page0Count = page0Rows * maxCols
-                val fullCount = fullRows * maxCols
-                val pages = buildList {
-                    add(apps.take(page0Count))
-                    var idx = page0Count
-                    while (idx < apps.size) {
-                        add(apps.subList(idx, minOf(idx + fullCount, apps.size)))
-                        idx += fullCount
+                // ── 数据填充 ── 不 remember:角色切换/新装小程序即时反映(列表小,重建无开销)。
+                val featuredItems = listOf(
+                    TvFeaturedItem(
+                        "f1", character.zh, "${character.codename} · ${character.role}",
+                        listOf(Color(0xFF5856D6), Color(0xFFAF52DE)),
+                        action = { openWindow(WinContent.Chat) },
+                    ),
+                    TvFeaturedItem(
+                        "f2", "广场热门", "发现有趣的 Agent 与对话",
+                        listOf(Color(0xFFFF9500), Color(0xFFFFC24D)),
+                        action = { openWindow(WinContent.Square) },
+                    ),
+                    TvFeaturedItem(
+                        "f3", "小程序中心", "扩展 Octopus 的能力边界",
+                        listOf(Color(0xFF16B8A6), Color(0xFF3DE0D0)),
+                        action = { openWindow(WinContent.Discover) },
+                    ),
+                )
+                val quickActions = listOf(
+                    TvLauncherItem(
+                        "qa_chat", "对话", "和 ${character.zh} 聊聊",
+                        icon = Icons.Filled.ChatBubbleOutline, accentColor = Color(0xFF23A94B),
+                        action = { openWindow(WinContent.Chat) },
+                    ),
+                    TvLauncherItem(
+                        "qa_square", "广场", "Agent 广场",
+                        icon = Icons.Filled.Explore, accentColor = Color(0xFFFF9500),
+                        action = { openWindow(WinContent.Square) },
+                    ),
+                    TvLauncherItem(
+                        "qa_desktop", "桌面", "系统桌面",
+                        icon = Icons.Filled.DesktopWindows, accentColor = Color(0xFF0A84FF),
+                        action = {
+                            val home = android.content.Intent(android.content.Intent.ACTION_MAIN)
+                                .addCategory(android.content.Intent.CATEGORY_HOME)
+                                .setFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                            runCatching { ctx.startActivity(home) }
+                        },
+                    ),
+                    TvLauncherItem(
+                        "qa_settings", "设置", "应用设置",
+                        icon = Icons.Filled.Settings, accentColor = Color(0xFF8E8E93),
+                        action = {
+                            runCatching {
+                                ctx.startActivity(
+                                    android.content.Intent(ctx, com.apk.claw.android.ui.settings.SettingsActivity::class.java),
+                                )
+                            }
+                        },
+                    ),
+                )
+                val squareItems = listOf(
+                    TvLauncherItem("sq1", "热门 Agent", "广场精选", icon = Icons.Filled.AutoAwesome, accentColor = Color(0xFFFF9500), badge = "热", action = { openWindow(WinContent.Square) }),
+                    TvLauncherItem("sq2", "新上线", "本周新品", icon = Icons.Filled.PushPin, accentColor = Color(0xFF5856D6), badge = "新", action = { openWindow(WinContent.Square) }),
+                    TvLauncherItem("sq3", "创作灵感", "找点灵感", icon = Icons.Filled.AutoAwesome, accentColor = Color(0xFFAF52DE), action = { openWindow(WinContent.Square) }),
+                    TvLauncherItem("sq4", "效率工具", "提效合集", icon = Icons.Filled.Devices, accentColor = Color(0xFF0A84FF), action = { openWindow(WinContent.Square) }),
+                )
+                // 小程序:读 MiniAppRegistry(不 remember,新装即时出现);空态给一个去广场的入口。
+                val miniAppItems = MiniAppRegistry.all().let { all ->
+                    if (all.isEmpty()) {
+                        listOf(TvLauncherItem("ma_empty", "去广场安装", "暂无小程序", icon = Icons.Filled.Apps, accentColor = Color(0xFF16B8A6), action = { openWindow(WinContent.Square) }))
+                    } else {
+                        all.map { m ->
+                            TvLauncherItem(
+                                id = "ma_${m.id}", title = m.name.ifBlank { m.id }, subtitle = "小程序",
+                                icon = Icons.Filled.Apps, accentColor = Color(0xFF16B8A6),
+                                action = { openWindow(WinContent.Mini(m.id, m.name)) },
+                            )
+                        }
                     }
                 }
-                val pagerState = androidx.compose.foundation.pager.rememberPagerState(pageCount = { pages.size })
-                androidx.compose.foundation.pager.VerticalPager(
-                    state = pagerState,
+                val skillItems = listOf(
+                    TvLauncherItem("sk1", "对话增强", "更自然的对话", icon = Icons.Filled.ChatBubbleOutline, accentColor = Color(0xFF23A94B), action = { runCatching { ctx.startActivity(android.content.Intent(ctx, com.apk.claw.android.ui.featurescreens.SkillsActivity::class.java)) } }),
+                    TvLauncherItem("sk2", "图像生成", "文字变图片", icon = Icons.Filled.AutoAwesome, accentColor = Color(0xFFAF52DE), action = { runCatching { ctx.startActivity(android.content.Intent(ctx, com.apk.claw.android.ui.featurescreens.SkillsActivity::class.java)) } }),
+                    TvLauncherItem("sk3", "代码助手", "编程好帮手", icon = Icons.Filled.Keyboard, accentColor = Color(0xFF5856D6), action = { runCatching { ctx.startActivity(android.content.Intent(ctx, com.apk.claw.android.ui.featurescreens.SkillsActivity::class.java)) } }),
+                    TvLauncherItem("sk4", "语音识别", "说说话就行", icon = Icons.Filled.Mic, accentColor = Color(0xFFFF9500), action = { runCatching { ctx.startActivity(android.content.Intent(ctx, com.apk.claw.android.ui.featurescreens.SkillsActivity::class.java)) } }),
+                )
+                val mediaItems = listOf(
+                    TvLauncherItem("md1", "视频", "在线视频", icon = Icons.Filled.Videocam, accentColor = Color(0xFFFF4D6A), action = { openWindow(WinContent.Discover) }),
+                    TvLauncherItem("md2", "音乐", "听点音乐", icon = Icons.Filled.Mic, accentColor = Color(0xFFAF52DE), action = { openWindow(WinContent.Discover) }),
+                    TvLauncherItem("md3", "图片", "图库浏览", icon = Icons.Filled.AutoAwesome, accentColor = Color(0xFF16B8A6), action = { openWindow(WinContent.Discover) }),
+                    TvLauncherItem("md4", "资讯", "新闻阅读", icon = Icons.Filled.Language, accentColor = Color(0xFF0A84FF), action = { openWindow(WinContent.Discover) }),
+                )
+                val installedApps = rememberInstalledApps(ctx)
+                // 多行卡片瀑布:Banner + 各分类行,每行横向独立滚动。
+                androidx.compose.foundation.lazy.LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                ) { page ->
-                    if (page == 0) {
-                        Column(Modifier.fillMaxSize()) {
-                            // Hero 全宽头(full-bleed,标题贴左);占视口 ~72%。
-                            TvHero(
-                                character = character,
-                                big = bigUi,
-                                modifier = Modifier.fillMaxWidth().height(heroH),
-                                onClick = { openWindow(WinContent.Chat) },
-                            )
-                            TvIconGrid(pages.getOrElse(0) { emptyList() }, maxCols, sideGap, iconW, firstIconFocus)
-                        }
-                    } else {
-                        Column(Modifier.fillMaxSize()) {
-                            Spacer(Modifier.height(24.dp))
-                            TvIconGrid(pages.getOrElse(page) { emptyList() }, maxCols, sideGap, iconW, null)
-                        }
-                    }
+                    verticalArrangement = Arrangement.spacedBy(24.dp),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 24.dp),
+                ) {
+                    item { TvFeaturedBanner(featuredItems, onItemClick = { it.action() }) }
+                    item { TvLauncherRow("快捷入口", quickActions, onItemClick = { it.action() }, firstItemFocus = firstIconFocus) }
+                    item { TvLauncherRow("广场热门", squareItems, onItemClick = { it.action() }) }
+                    item { TvLauncherRow("小程序", miniAppItems, onItemClick = { it.action() }) }
+                    item { TvLauncherRow("技能", skillItems, onItemClick = { it.action() }) }
+                    item { TvLauncherRow("媒体", mediaItems, onItemClick = { it.action() }) }
+                    item { TvLauncherRow("应用", installedApps, onItemClick = { it.action() }) }
                 }
                 // 极简顶栏:浮在右上(满屏 / 分屏左区均对齐)。
                 TvTopChrome(
@@ -549,29 +570,6 @@ private fun DesktopWorkspace(engine: BrowserEngine) {
                 }
             }
         }
-        // 长按桌面小程序图标 → 确认删除(内置磁贴 onLongClick=null,不会触发)。
-        appToDelete?.let { m ->
-            androidx.compose.material3.AlertDialog(
-                onDismissRequest = { appToDelete = null },
-                title = { androidx.compose.material3.Text("删除小程序") },
-                text = {
-                    androidx.compose.material3.Text(
-                        "确定删除「${m.name.ifBlank { m.id }}」?删除后可在小程序广场重新安装。",
-                    )
-                },
-                confirmButton = {
-                    androidx.compose.material3.TextButton(onClick = {
-                        com.apk.claw.android.ClawApplication.instance.pluginManager.uninstallMiniApp(m.id)
-                        appToDelete = null
-                    }) { androidx.compose.material3.Text("删除") }
-                },
-                dismissButton = {
-                    androidx.compose.material3.TextButton(onClick = { appToDelete = null }) {
-                        androidx.compose.material3.Text("取消")
-                    }
-                },
-            )
-        }
         // 浏览网页:居中较宽浮层(暂不参与右侧分屏)。
         if (browsing) {
             Box(Modifier.fillMaxSize().background(TvOverlayScrim), contentAlignment = Alignment.Center) {
@@ -608,135 +606,14 @@ private fun contentTitle(kind: WinContent, name: String): String = when (kind) {
     is WinContent.Mini -> kind.name
 }
 
-// ── Apple TV 式布局比例 + 配色(top-level 具名常量:满足 MagicNumber 豁免;彩色亮图标) ──
-private const val TV_GLYPH_RATIO = 0.44f            // 图标内白色字形相对图标高度的比例
-private const val TV_HERO_HEIGHT_FRACTION = 0.72f   // Hero 占视口高度比例:首页只露一排图标,往下滑翻出应用页
-private const val TV_ICON_ASPECT = 1.75f            // 图标单元格宽高比(更宽、不那么高,贴 Apple TV)
-private const val TV_COLS_DOCKED = 4                // 分屏窄区列数
-private const val TV_COLS_TV = 7                    // TV/大屏列数(更密、图标更小)
-private const val TV_COLS_PHONE = 6                 // 手机列数
+// ── 布局/动画常量(top-level 具名:满足 MagicNumber 豁免) ──
 private const val TV_SCENE_EVERY = 3                // 连环画:每几轮对话才生成新一格壁纸(节流,省算力/额度)
-private const val TITLE_SHADOW_COLOR = 0xCC000000   // 标题文字投影色:80% 不透明黑
 private const val THINKING_DOT_COUNT = 3            // 思考点动画数量
 private const val THINKING_DOT_DURATION_MS = 460    // 思考点单次脉动时长
 private const val THINKING_DOT_STAGGER_MS = 150     // 思考点依次脉动的错峰间隔
 private val TvShelfBg = Color(0xF20A0B0E)
-private val TvGradChat = listOf(Color(0xFF5AD07A), Color(0xFF23A94B))       // 对话 绿
-private val TvGradChar = listOf(Color(0xFFB18CFF), Color(0xFF6B4BFF))       // 角色 紫
-private val TvGradDiscover = listOf(Color(0xFF5AB0FF), Color(0xFF0A84FF))   // 发现 蓝
-private val TvGradSquare = listOf(Color(0xFFFFC24D), Color(0xFFFF9500))     // 广场 橙
-private val TvGradMini = listOf(Color(0xFF3DE0D0), Color(0xFF16B8A6))       // 小程序 青
 // 全屏壁纸的柔和压暗:顶(状态栏/顶栏可读)—中段全透—底(标题/图标可读),均匀无硬边。
 private val TvWallScrim = listOf(Color(0x40000000), Color(0x00000000), Color(0x00000000), Color(0x73000000))
-
-/** 焦点图标规格(下发到 [TvIconShelf] 渲染)。 */
-private data class TvAppSpec(
-    val icon: androidx.compose.ui.graphics.vector.ImageVector,
-    val grad: List<Color>,
-    val onClick: () -> Unit,
-    val onLongClick: (() -> Unit)? = null,
-)
-
-/**
- * 影院级 Hero:用生成的场景图 [sceneUrl] 当全铺壁纸(没有则暗色渐变兜底),
- * 底部渐隐压出角色名/代号/标语(像影片标题),点击进入直播间。
- */
-@Composable
-private fun TvHero(
-    character: CharacterProfile,
-    big: Boolean,
-    modifier: Modifier,
-    onClick: () -> Unit,
-) {
-    // 壁纸与柔和压暗都在 desktopContent 里做(全屏、均匀);Hero 这里只放标题。
-    // 标题给一层文字投影,保证在明亮壁纸上也读得清,不再靠 Hero 局部大蒙层。
-    val titleShadow = androidx.compose.ui.graphics.Shadow(
-        color = Color(TITLE_SHADOW_COLOR),
-        offset = androidx.compose.ui.geometry.Offset(0f, 2f),
-        blurRadius = 12f,
-    )
-    Box(modifier.clickable(onClick = onClick)) {
-        Column(
-            Modifier.align(Alignment.BottomStart)
-                .padding(start = if (big) 40.dp else 28.dp, bottom = if (big) 32.dp else 20.dp),
-        ) {
-            Text(
-                character.zh, color = Color.White,
-                fontSize = if (big) 46.sp else 34.sp, fontWeight = FontWeight.Bold,
-                style = androidx.compose.ui.text.TextStyle(shadow = titleShadow),
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                "${character.codename} · ${character.role}",
-                color = Color.White.copy(alpha = 0.85f), fontSize = if (big) 18.sp else 14.sp,
-            )
-            Spacer(Modifier.height(6.dp))
-            Text(
-                "“${character.quote}”",
-                color = Color.White.copy(alpha = 0.72f), fontSize = if (big) 16.sp else 13.sp, maxLines = 2,
-            )
-        }
-    }
-}
-
-/**
- * 图标瀑布流:每行居中(spacedBy CenterHorizontally)、满 [maxCols] 自动换行。图标少时一行居中,
- * 多了往下排;整体在外层 verticalScroll 里,向下滑即可翻出更多行。图标按 [rowWidth] 算统一宽度。
- */
-@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
-@Composable
-private fun TvIconGrid(
-    apps: List<TvAppSpec>,
-    maxCols: Int,
-    sideGap: Dp,
-    iconW: Dp,
-    firstIconFocus: FocusRequester?,
-) {
-    val spacing = 14.dp
-    androidx.compose.foundation.layout.FlowRow(
-        modifier = Modifier.fillMaxWidth().padding(start = sideGap, end = sideGap, top = 8.dp, bottom = 24.dp),
-        horizontalArrangement = Arrangement.spacedBy(spacing, Alignment.CenterHorizontally),
-        verticalArrangement = Arrangement.spacedBy(spacing),
-        maxItemsInEachRow = maxCols,
-    ) {
-        apps.forEachIndexed { i, a ->
-            TvAppIcon(
-                a.icon, a.grad, a.onClick,
-                Modifier.width(iconW).then(
-                    if (i == 0 && firstIconFocus != null) Modifier.focusRequester(firstIconFocus) else Modifier,
-                ),
-                onLongClick = a.onLongClick,
-            )
-        }
-    }
-}
-
-/** 单个彩色亮图标(渐变圆角方 + 白色图标 + 焦点高亮)。宽度由调用方给(FlowRow),固定 16:10 宽高比。
- *  [onLongClick] 非空(小程序)则支持长按删除;内置磁贴传 null 不可删。 */
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
-@Composable
-private fun TvAppIcon(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    grad: List<Color>,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    onLongClick: (() -> Unit)? = null,
-) {
-    Box(
-        modifier = modifier
-            .aspectRatio(TV_ICON_ASPECT)
-            .clip(RoundedCornerShape(16.dp))
-            .background(androidx.compose.ui.graphics.Brush.verticalGradient(grad))
-            .holoFocus(RoundedCornerShape(16.dp))
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            icon, contentDescription = null, tint = Color.White,
-            modifier = Modifier.fillMaxHeight(TV_GLYPH_RATIO),
-        )
-    }
-}
 
 /** 控制中心磁贴(图标 + 标签,焦点高亮);active=开启态高亮,danger=危险色。 */
 @Composable
