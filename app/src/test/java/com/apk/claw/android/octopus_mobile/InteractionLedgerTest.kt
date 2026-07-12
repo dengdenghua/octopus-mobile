@@ -118,4 +118,37 @@ class InteractionLedgerTest {
         InteractionLedger.recordFailure("swipe", "", "加载超时")
         assertEquals(1, InteractionLedger.size())
     }
+
+    @Test
+    fun `manual rule is stored injected and marked`() {
+        InteractionLedger.addManualRule("打开淘宝先关弹窗再操作")
+        assertEquals(1, InteractionLedger.size())
+        val snap = InteractionLedger.snapshot()
+        assertTrue("规矩应标记为 manual", snap.any { it.manual && it.title.contains("淘宝") })
+        // 应注入到 prompt,带【用户规矩】前缀
+        val section = InteractionLedger.getMitigationsSection()
+        assertTrue(section.contains("【用户规矩】"))
+        assertTrue(section.contains("打开淘宝先关弹窗再操作"))
+    }
+
+    @Test
+    fun `manual rule dedups and can be removed`() {
+        InteractionLedger.addManualRule("别点广告")
+        InteractionLedger.addManualRule("别点广告")   // 幂等
+        assertEquals(1, InteractionLedger.size())
+        InteractionLedger.removeManualRule("别点广告")
+        assertEquals(0, InteractionLedger.size())
+    }
+
+    @Test
+    fun `clearLessons keeps manual rules but drops learned lessons`() {
+        InteractionLedger.addManualRule("先登录再下单")
+        InteractionLedger.recordFailure("tap", "", "找不到节点")   // 自动学到的
+        assertEquals(2, InteractionLedger.size())
+        InteractionLedger.clearLessons()
+        val snap = InteractionLedger.snapshot()
+        assertEquals("只剩用户规矩", 1, snap.size)
+        assertTrue(snap[0].manual)
+        assertTrue(snap[0].title.contains("先登录"))
+    }
 }

@@ -23,10 +23,13 @@ import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -478,15 +481,22 @@ private fun MetricRow(label: String, value: String, sub: String) {
     }
 }
 
-/** 这台设备从界面操作失败里学到的规避经验 —— 数据来自 [InteractionLedger]，让 #2 的隐形学习看得见。 */
+/**
+ * 这台设备的操作经验 —— 自动学到的规避(来自 [InteractionLedger] GUI 失败)+ 用户手动教的规矩。
+ * 用户可直接「教它一条规矩」(最高优先注入),让 Agent 行为可纠正、可控。
+ */
 @Composable
+@Suppress("LongMethod")   // Compose 卡片:经验列表 + 教规矩入口 + 弹窗,声明式 UI 天然偏长
 private fun InteractionLessonsCard(tick: Int, onReset: () -> Unit) {
+    var showAdd by remember { mutableStateOf(false) }
+    var draft by remember { mutableStateOf("") }
     val lessons = remember(tick) { InteractionLedger.snapshot() }
+    val hasLearned = lessons.any { !it.manual }
     FCard {
         if (lessons.isEmpty()) {
             Text(
-                "暂无——这台设备还没在界面操作里踩过坑,或已重置。跑几个自动化任务后,遇到的坑" +
-                    "(找不到节点/弹窗遮挡/加载超时…)会在这里沉淀成规避经验,下次自动避开。",
+                "还没有经验。点下方「教它一条规矩」直接告诉它怎么操作(如「打开淘宝先关弹窗」);" +
+                    "跑自动化任务遇到的坑(找不到节点/弹窗遮挡/加载超时…)也会自动沉淀在这里,下次避开。",
                 color = FMuted, fontSize = 11.sp, lineHeight = 15.sp,
             )
         } else {
@@ -494,21 +504,74 @@ private fun InteractionLessonsCard(tick: Int, onReset: () -> Unit) {
                 if (i > 0) Spacer(Modifier.height(10.dp))
                 Row(verticalAlignment = Alignment.Top) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(l.title, color = FText, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                        Text("规避:${l.mitigation}", color = FMuted, fontSize = 10.sp, lineHeight = 14.sp)
+                        Text(
+                            (if (l.manual) "📌 " else "") + l.title,
+                            color = FText, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                        )
+                        if (l.mitigation.isNotBlank()) {
+                            Text("规避:${l.mitigation}", color = FMuted, fontSize = 10.sp, lineHeight = 14.sp)
+                        } else if (l.manual) {
+                            Text("你定的规矩 · 优先级最高", color = FMuted, fontSize = 10.sp)
+                        }
                     }
                     Spacer(Modifier.width(8.dp))
-                    FPill("×${l.count}", FPrimary)
+                    if (l.manual) {
+                        Text(
+                            "删除", color = FWarning, fontSize = 11.sp,
+                            modifier = Modifier
+                                .clickable { InteractionLedger.removeManualRule(l.title); onReset() }
+                                .padding(4.dp),
+                        )
+                    } else {
+                        FPill("×${l.count}", FPrimary)
+                    }
                 }
             }
-            Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.End) {
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                "＋ 教它一条规矩", color = FPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .clickable { draft = ""; showAdd = true }
+                    .padding(horizontal = 6.dp, vertical = 4.dp),
+            )
+            if (hasLearned) {
                 Text(
-                    "重置经验", color = FWarning, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                    "重置经验(保留规矩)", color = FWarning, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
                     modifier = Modifier
                         .clickable { InteractionLedger.clearLessons(); onReset() }
-                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                        .padding(horizontal = 6.dp, vertical = 4.dp),
                 )
             }
         }
+    }
+    if (showAdd) {
+        AlertDialog(
+            onDismissRequest = { showAdd = false },
+            title = { Text("教它一条操作规矩") },
+            text = {
+                Column {
+                    Text(
+                        "用一句话告诉 Agent 该怎么操作,会以最高优先级注入。例:打开淘宝先关弹窗再操作;发消息前先确认对象。",
+                        color = FMuted, fontSize = 11.sp, lineHeight = 15.sp,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = draft, onValueChange = { draft = it },
+                        placeholder = { Text("输入一条规矩…") },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    InteractionLedger.addManualRule(draft); showAdd = false; onReset()
+                }) { Text("保存") }
+            },
+            dismissButton = { TextButton(onClick = { showAdd = false }) { Text("取消") } },
+        )
     }
 }

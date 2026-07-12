@@ -32,6 +32,7 @@ object InteractionLedger {
     private const val FILE_NAME = "interaction_ledger.json"
     private const val HALF_LIFE_DAYS = 21.0
     private const val CONTEXT_MAX = 160
+    private const val MANUAL_SCORE = 100.0   // 用户手动规矩的固定高分
 
     /**
      * GUI 交互类工具白名单 —— 只有这些工具的失败才进本账本(其余走 [ExperienceLedger])。
@@ -51,13 +52,14 @@ object InteractionLedger {
     fun isGuiTool(toolName: String): Boolean = toolName in GUI_TOOLS
 
     private data class Lesson(
-        val pattern: String,      // 规范化后的失败模式键(如 "node_not_found")
-        val title: String,        // 人类可读标题
+        val pattern: String,      // 规范化后的失败模式键(如 "node_not_found");手动规矩为 "manual_<hash>"
+        val title: String,        // 人类可读标题;手动规矩即规矩原文
         val count: Int,           // 出现次数
         val firstSeen: Long,
         val lastSeen: Long,
         val lastContext: String,  // 最近一次上下文(工具名 + 参数摘要)
-        val mitigation: String,   // 注入 prompt 的规避策略
+        val mitigation: String,   // 注入 prompt 的规避策略;手动规矩为空(title 即规矩)
+        val manual: Boolean = false,  // 用户手动教的规矩:永远注入、不被 evict/重置淘汰
     )
 
     private val lessons = mutableListOf<Lesson>()
@@ -85,6 +87,7 @@ object InteractionLedger {
                             lastSeen = o.getLong("lastSeen"),
                             lastContext = o.optString("lastContext", ""),
                             mitigation = o.optString("mitigation", ""),
+                            manual = o.optBoolean("manual", false),
                         ))
                     }
                     Log.i(TAG, "Loaded ${lessons.size} GUI lessons")
@@ -153,11 +156,15 @@ object InteractionLedger {
             if (active.isEmpty()) return ""
 
             val sb = StringBuilder()
-            sb.appendLine("## 操作经验(来自过往 GUI 失败,务必规避)")
-            sb.appendLine("以下是这台设备上反复踩过的坑,执行界面操作时严格遵循对应规避方法:")
+            sb.appendLine("## 操作经验(务必遵循)")
+            sb.appendLine("带「用户规矩」的是用户明确要求、优先级最高必须照做;其余是这台设备过往踩坑的规避方法:")
             active.forEachIndexed { i, l ->
-                sb.appendLine("${i + 1}. **${l.title}**")
-                sb.appendLine("   - 规避:${l.mitigation}")
+                if (l.manual) {
+                    sb.appendLine("${i + 1}. **【用户规矩】${l.title}**")
+                } else {
+                    sb.appendLine("${i + 1}. **${l.title}**")
+                    sb.appendLine("   - 规避:${l.mitigation}")
+                }
             }
             EvolutionMetrics.mitigationInjected()
             return sb.toString()
@@ -167,21 +174,46 @@ object InteractionLedger {
     /** 当前教训数(供度量/测试)。 */
     fun size(): Int = synchronized(lessons) { lessons.size }
 
-    /** 展示用视图:一条学到的操作经验(给信任中心可视化,让隐形学习看得见)。 */
-    data class LessonView(val title: String, val count: Int, val mitigation: String)
+    /** 展示用视图:一条操作经验(给信任中心可视化)。manual=用户手动教的规矩。 */
+    data class LessonView(val title: String, val count: Int, val mitigation: String, val manual: Boolean)
 
-    /** 按分(时效×频次)降序返回前 [limit] 条教训的展示视图。纯读,无副作用。 */
+    /** 按分(时效×频次;用户规矩恒最高)降序返回前 [limit] 条的展示视图。纯读,无副作用。 */
     fun snapshot(limit: Int = 8): List<LessonView> = synchronized(lessons) {
         val now = System.currentTimeMillis()
         lessons.sortedByDescending { score(it, now) }
             .take(limit)
-            .map { LessonView(it.title, it.count, it.mitigation) }
+            .map { LessonView(it.title, it.count, it.mitigation, it.manual) }
     }
 
-    /** UI 安全清空:清空并持久化,但保留 loaded/storageDir(区别于测试用 [reset],后者会废掉账本)。 */
+    /**
+     * 用户手动教一条操作规矩(如「打开淘宝先关弹窗再操作」)。存为高优先 manual 规矩,
+     * 永远注入 prompt(优先级最高)、不被 evict/[clearLessons] 淘汰。相同规矩幂等去重。
+     */
+    fun addManualRule(rule: String) {
+        if (!loaded) return
+        val text = rule.trim()
+        if (text.isBlank()) return
+        synchronized(lessons) {
+            val now = System.currentTimeMillis()
+            val pattern = "manual_" + Integer.toHexString(text.hashCode())
+            if (lessons.none { it.pattern == pattern }) {
+                lessons.add(Lesson(pattern, text, 1, now, now, "user", "", manual = true))
+                save()
+            }
+        }
+    }
+
+    /** 删除一条用户规矩(按规矩原文匹配)。 */
+    fun removeManualRule(rule: String) {
+        synchronized(lessons) {
+            if (lessons.removeAll { it.manual && it.title == rule }) save()
+        }
+    }
+
+    /** UI「重置经验」:只清自动学到的教训,**保留用户手动规矩**;持久化。 */
     fun clearLessons() {
         synchronized(lessons) {
-            lessons.clear()
+            lessons.retainAll { it.manual }
             save()
         }
     }
@@ -196,6 +228,7 @@ object InteractionLedger {
     }
 
     private fun score(l: Lesson, now: Long): Double {
+        if (l.manual) return MANUAL_SCORE   // 用户规矩:恒最高分,永远排前 + 注入 + 不被 evict 淘汰
         val ageDays = (now - l.lastSeen) / (1000.0 * 60 * 60 * 24)
         val freshness = Math.pow(0.5, ageDays / HALF_LIFE_DAYS)
         val frequency = (l.count.toDouble() / (l.count + 3.0)).coerceIn(0.0, 1.0)
@@ -274,6 +307,7 @@ object InteractionLedger {
                     put("lastSeen", l.lastSeen)
                     put("lastContext", l.lastContext)
                     put("mitigation", l.mitigation)
+                    put("manual", l.manual)
                 })
             }
             File(dir, FILE_NAME).writeText(JSONObject().put("lessons", arr).put("version", 1).toString(2))
