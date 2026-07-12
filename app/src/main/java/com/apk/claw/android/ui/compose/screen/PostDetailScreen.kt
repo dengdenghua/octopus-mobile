@@ -2,6 +2,8 @@
 
 package com.apk.claw.android.ui.compose.screen
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -33,6 +35,7 @@ import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -53,12 +56,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import com.apk.claw.android.R
 import com.apk.claw.android.account.AccountStore
@@ -101,6 +108,11 @@ fun PostDetailScreen(
     var showPayConfirm by remember { mutableStateOf(false) }
     var subscribing by remember { mutableStateOf(false) }
     var showSubConfirm by remember { mutableStateOf(false) }
+    var replyingTo by remember { mutableStateOf<String?>(null) }  // 回复的评论 id,null=顶级评论
+    var showShareDialog by remember { mutableStateOf(false) }
+    var tryRunHtml by remember { mutableStateOf<String?>(null) }  // null=不显示,非null=显示 WebView
+    var tryRunLoading by remember { mutableStateOf(false) }
+    var forking by remember { mutableStateOf(false) }
 
     fun reload() {
         scope.launch {
@@ -200,6 +212,14 @@ fun PostDetailScreen(
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
             )
+            // 分享按钮
+            IconButton(onClick = { showShareDialog = true }) {
+                Icon(
+                    Icons.Filled.Share,
+                    contentDescription = "分享",
+                    tint = OctopusColors.TextPrimary,
+                )
+            }
         }
 
         when {
@@ -251,6 +271,88 @@ fun PostDetailScreen(
                                 )
                             }
                         }
+                        // 试运行按钮(仅小程序帖显示)
+                        if (p.appKind == "mini-app") {
+                            item {
+                                Surface(
+                                    shape = OctopusShape.medium,
+                                    color = OctopusColors.SurfaceVariant,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = OctopusSpacing.lg)
+                                        .clip(OctopusShape.medium)
+                                        .clickable(enabled = !tryRunLoading) {
+                                            tryRunLoading = true
+                                            scope.launch {
+                                                try {
+                                                    // 下载小程序 HTML(不安装)
+                                                    val dl = CommunitySquareApi.download(p.appRef).getOrThrow()
+                                                    tryRunHtml = dl.body
+                                                } catch (e: Exception) {
+                                                    onMessage("加载失败:${e.message}")
+                                                }
+                                                tryRunLoading = false
+                                            }
+                                        },
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth().padding(vertical = OctopusSpacing.md),
+                                        horizontalArrangement = Arrangement.Center,
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        if (tryRunLoading) {
+                                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = OctopusColors.Primary)
+                                        } else {
+                                            Text("试运行", color = OctopusColors.Primary, fontSize = OctopusType.body, fontWeight = FontWeight.SemiBold)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        // Fork 按钮(仅免费小程序帖且非作者自己时显示)
+                        if (p.appKind == "mini-app" && p.priceCredits == 0 && !p.owned) {
+                            item {
+                                Surface(
+                                    shape = OctopusShape.medium,
+                                    color = Color.Transparent,
+                                    border = BorderStroke(1.dp, OctopusColors.Primary),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = OctopusSpacing.lg, vertical = OctopusSpacing.sm)
+                                        .clip(OctopusShape.medium)
+                                        .clickable(enabled = !forking) {
+                                            forking = true
+                                            scope.launch {
+                                                try {
+                                                    val r = SquarePostApi.forkPost(postId)
+                                                    if (r.ok) {
+                                                        onMessage("已 Fork 到你的名下,去「我的发布」查看")
+                                                        post = post?.copy(owned = true)
+                                                    } else {
+                                                        onMessage(r.message.ifBlank { "Fork 失败" })
+                                                    }
+                                                } catch (e: Exception) {
+                                                    onMessage("Fork 失败:${e.message}")
+                                                }
+                                                forking = false
+                                            }
+                                        },
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth().padding(vertical = OctopusSpacing.md),
+                                        horizontalArrangement = Arrangement.Center,
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Text(
+                                            if (forking) "Fork 中…" else "Fork 到我的名下",
+                                            color = OctopusColors.Primary,
+                                            fontSize = OctopusType.body,
+                                            fontWeight = FontWeight.SemiBold,
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
 
                     // ── 互动栏 ──
@@ -297,8 +399,33 @@ fun PostDetailScreen(
                             }
                         }
                     } else {
-                        items(comments, key = { it.id }) { c ->
-                            CommentRow(c)
+                        // 按 parentId 分组:顶级评论 + 子回复
+                        val topLevel = comments.filter { it.parentId.isBlank() }
+                        val repliesMap = comments.filter { it.parentId.isNotBlank() }.groupBy { it.parentId }
+                        items(topLevel, key = { it.id }) { c ->
+                            CommentRow(
+                                c,
+                                onReply = { replyText ->
+                                    replyingTo = c.id
+                                    newComment = replyText
+                                },
+                            )
+                            // 子回复缩进展示
+                            val replies = repliesMap[c.id].orEmpty()
+                            if (replies.isNotEmpty()) {
+                                Column(modifier = Modifier.padding(start = OctopusSpacing.xl + OctopusSpacing.lg)) {
+                                    replies.forEach { reply ->
+                                        CommentRow(
+                                            reply,
+                                            isReply = true,
+                                            onReply = { replyText ->
+                                                replyingTo = reply.id
+                                                newComment = replyText
+                                            },
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -306,6 +433,7 @@ fun PostDetailScreen(
                 // ── 底部评论输入 ──
                 CommentInputBar(
                     text = newComment,
+                    placeholder = if (replyingTo != null) "回复评论…" else null,
                     onTextChange = { newComment = it },
                     onSend = {
                         val text = newComment.trim()
@@ -316,9 +444,11 @@ fun PostDetailScreen(
                         }
                         scope.launch {
                             try {
-                                val c = SquarePostApi.postComment(postId, text)
+                                val parentId = replyingTo ?: ""
+                                val c = SquarePostApi.postComment(postId, text, parentId)
                                 comments = comments + c
                                 newComment = ""
+                                replyingTo = null
                                 post = post?.copy(commentsCount = (post?.commentsCount ?: 0) + 1)
                             } catch (e: Exception) {
                                 onMessage("评论失败:${e.message}")
@@ -381,6 +511,39 @@ fun PostDetailScreen(
                 },
                 containerColor = OctopusBackground.cardSurface,
             )
+        }
+    }
+
+    if (showShareDialog) {
+        ShareQrDialog(postId = postId, onDismiss = { showShareDialog = false })
+    }
+
+    if (tryRunHtml != null) {
+        val html = tryRunHtml!!
+        Dialog(onDismissRequest = { tryRunHtml = null }) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(OctopusBackground.pageBrush()),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(OctopusSpacing.md),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("试运行", color = OctopusColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    TextButton(onClick = { tryRunHtml = null }) { Text("关闭", color = OctopusColors.Primary) }
+                }
+                AndroidView(
+                    factory = { ctx ->
+                        android.webkit.WebView(ctx).apply {
+                            settings.javaScriptEnabled = true
+                            loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
         }
     }
 }
@@ -453,7 +616,27 @@ private fun PostBody(post: AgentPost, onOpenAuthor: (String) -> Unit) {
         Text(post.title, color = OctopusColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         // 正文
         if (post.content.isNotBlank()) {
-            Text(post.content, color = OctopusColors.TextPrimary, fontSize = OctopusType.body, lineHeight = 22.sp)
+            val segments = parseCodeSegments(post.content)
+            segments.forEach { seg ->
+                if (seg.isCode) {
+                    Surface(
+                        shape = OctopusShape.small,
+                        color = OctopusColors.SurfaceVariant,
+                        modifier = Modifier.fillMaxWidth().padding(vertical = OctopusSpacing.xs),
+                    ) {
+                        Text(
+                            seg.text,
+                            modifier = Modifier.padding(OctopusSpacing.sm),
+                            color = OctopusColors.TextPrimary,
+                            fontSize = OctopusType.caption,
+                            fontFamily = FontFamily.Monospace,
+                            lineHeight = 18.sp,
+                        )
+                    }
+                } else {
+                    Text(seg.text, color = OctopusColors.TextPrimary, fontSize = OctopusType.body, lineHeight = 22.sp)
+                }
+            }
         }
         // 标签
         if (post.tag.isNotBlank()) {
@@ -470,6 +653,15 @@ private fun PostBody(post: AgentPost, onOpenAuthor: (String) -> Unit) {
                     fontWeight = FontWeight.Bold,
                 )
             }
+        }
+        // Fork 溯源
+        if (post.forkedFrom.isNotBlank()) {
+            Text(
+                "基于他人作品 Fork",
+                color = OctopusColors.TextMuted,
+                fontSize = OctopusType.tag,
+                modifier = Modifier.padding(top = OctopusSpacing.xs),
+            )
         }
     }
 }
@@ -536,7 +728,11 @@ private fun ActionPill(
 }
 
 @Composable
-private fun CommentRow(c: SquarePostApi.CommentDto) {
+private fun CommentRow(
+    c: SquarePostApi.CommentDto,
+    isReply: Boolean = false,
+    onReply: (String) -> Unit = {},
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -545,21 +741,32 @@ private fun CommentRow(c: SquarePostApi.CommentDto) {
     ) {
         Box(
             modifier = Modifier
-                .size(28.dp)
+                .size(if (isReply) 24.dp else 28.dp)
                 .clip(CircleShape)
                 .background(OctopusColors.Primary.copy(alpha = 0.2f)),
             contentAlignment = Alignment.Center,
         ) {
-            Text(c.author.take(1), color = OctopusColors.Primary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Text(c.author.take(1), color = OctopusColors.Primary, fontSize = if (isReply) 10.sp else 12.sp, fontWeight = FontWeight.Bold)
         }
         Spacer(Modifier.width(OctopusSpacing.sm))
         Column(modifier = Modifier.weight(1f)) {
             Text(c.author, color = OctopusColors.TextSecondary, fontSize = OctopusType.caption, fontWeight = FontWeight.SemiBold, maxLines = 1)
             Spacer(Modifier.height(2.dp))
             Text(c.content, color = OctopusColors.TextPrimary, fontSize = OctopusType.body, lineHeight = 20.sp)
-            if (c.createdAt > 0) {
-                Spacer(Modifier.height(2.dp))
-                Text(DATE_FMT.format(Date(c.createdAt)), color = OctopusColors.TextMuted, fontSize = OctopusType.tag, maxLines = 1)
+            Row(
+                modifier = Modifier.padding(top = OctopusSpacing.xs),
+                horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.md),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (c.createdAt > 0) {
+                    Text(DATE_FMT.format(Date(c.createdAt)), color = OctopusColors.TextMuted, fontSize = OctopusType.tag, maxLines = 1)
+                }
+                Text(
+                    "回复",
+                    color = OctopusColors.TextMuted,
+                    fontSize = OctopusType.tag,
+                    modifier = Modifier.clickable { onReply("") },
+                )
             }
         }
     }
@@ -570,6 +777,7 @@ private fun CommentInputBar(
     text: String,
     onTextChange: (String) -> Unit,
     onSend: () -> Unit,
+    placeholder: String? = null,
 ) {
     Surface(
         color = OctopusBackground.cardSurface,
@@ -584,7 +792,7 @@ private fun CommentInputBar(
             OutlinedTextField(
                 value = text,
                 onValueChange = onTextChange,
-                placeholder = { Text(stringResource(R.string.post_detail_comment_hint), color = OctopusColors.TextMuted, fontSize = OctopusType.body) },
+                placeholder = { Text(placeholder ?: stringResource(R.string.post_detail_comment_hint), color = OctopusColors.TextMuted, fontSize = OctopusType.body) },
                 modifier = Modifier.weight(1f),
                 singleLine = true,
                 shape = OctopusShape.medium,
@@ -715,4 +923,81 @@ private fun formatCount(n: Int): String = when {
     n >= 10000 -> String.format(Locale.US, "%.1fw", n / 10000.0)
     n >= 1000 -> String.format(Locale.US, "%.1fk", n / 1000.0)
     else -> n.toString()
+}
+
+/** 帖子分享二维码 Dialog:生成帖子直达链接的 QR。 */
+@Composable
+private fun ShareQrDialog(postId: String, onDismiss: () -> Unit) {
+    val shareUrl = "https://club.octoapk.com/p/$postId"
+    val qrBitmap = remember(shareUrl) { generateQrBitmap(shareUrl, 400) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("分享帖子", color = OctopusColors.TextPrimary) },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                if (qrBitmap != null) {
+                    Image(
+                        bitmap = qrBitmap.asImageBitmap(),
+                        contentDescription = "QR Code",
+                        modifier = Modifier.size(200.dp),
+                    )
+                } else {
+                    Text("二维码生成失败", color = OctopusColors.TextMuted)
+                }
+                Spacer(Modifier.height(OctopusSpacing.md))
+                Text(
+                    shareUrl,
+                    color = OctopusColors.TextSecondary,
+                    fontSize = OctopusType.caption,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("关闭", color = OctopusColors.Primary) }
+        },
+        containerColor = OctopusBackground.cardSurface,
+    )
+}
+
+/** ZXing:把文本编码为二维码 Bitmap(与 SettingsViewModel.generateQrBitmap 同一套)。 */
+private fun generateQrBitmap(content: String, size: Int): android.graphics.Bitmap? {
+    return try {
+        val hints = mapOf(
+            com.google.zxing.EncodeHintType.MARGIN to 1,
+            com.google.zxing.EncodeHintType.CHARACTER_SET to "UTF-8",
+        )
+        val bitMatrix = com.google.zxing.qrcode.QRCodeWriter().encode(content, com.google.zxing.BarcodeFormat.QR_CODE, size, size, hints)
+        val bitmap = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
+        for (x in 0 until size) {
+            for (y in 0 until size) {
+                bitmap.setPixel(x, y, if (bitMatrix[x, y]) android.graphics.Color.BLACK else android.graphics.Color.WHITE)
+            }
+        }
+        bitmap
+    } catch (e: Exception) {
+        null
+    }
+}
+
+private data class CodeSegment(val text: String, val isCode: Boolean)
+
+/** 把正文按 ```code``` 代码块拆成普通文本段和代码段。 */
+private fun parseCodeSegments(content: String): List<CodeSegment> {
+    val segments = mutableListOf<CodeSegment>()
+    val regex = Regex("```(.*?)```", RegexOption.DOT_MATCHES_ALL)
+    var lastEnd = 0
+    for (m in regex.findAll(content)) {
+        if (m.range.first > lastEnd) {
+            segments.add(CodeSegment(content.substring(lastEnd, m.range.first), false))
+        }
+        segments.add(CodeSegment(m.groupValues[1].trim(), true))
+        lastEnd = m.range.last + 1
+    }
+    if (lastEnd < content.length) {
+        segments.add(CodeSegment(content.substring(lastEnd), false))
+    }
+    return segments
 }

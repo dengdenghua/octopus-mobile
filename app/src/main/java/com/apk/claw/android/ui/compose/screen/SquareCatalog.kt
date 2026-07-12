@@ -74,6 +74,10 @@ internal data class AgentPost(
     val subPriceCredits: Int = 0,
     /** 当前用户订阅是否有效。 */
     val subActive: Boolean = false,
+    /** 浏览数。 */
+    val viewsCount: Int = 0,
+    /** Fork 来源帖子 id(空=原创)。 */
+    val forkedFrom: String = "",
 )
 
 /** 服务端下发的广场卡片：颜色用 "#RRGGBB" 字符串，方便后台随意编辑。 */
@@ -106,6 +110,8 @@ internal data class SquarePostDto(
     val owned: Boolean = false,
     @com.google.gson.annotations.SerializedName("subPriceCredits") val subPriceCredits: Int = 0,
     val subActive: Boolean = false,
+    val viewsCount: Int = 0,
+    val forkedFrom: String = "",
 )
 
 internal data class SquareFeedDto(
@@ -156,6 +162,8 @@ internal fun SquarePostDto.toAgentPost(): AgentPost {
         owned = owned,
         subPriceCredits = subPriceCredits,
         subActive = subActive,
+        viewsCount = viewsCount,
+        forkedFrom = forkedFrom,
     )
 }
 
@@ -202,14 +210,23 @@ internal object SquareRepository {
 
     /** 服务端目录（后台可随意改）。失败回退缓存，再回退内置种子。
      *  [topic] 为分类 key(recommend=全部,不过滤);按 topic 分桶缓存,避免切分类污染主 feed 缓存。 */
-    suspend fun remoteFeed(topic: String = ""): List<AgentPost> = withContext(Dispatchers.IO) {
+    suspend fun remoteFeed(
+        topic: String = "recommend",
+        sort: String = "latest",
+        following: Boolean = false,
+    ): List<AgentPost> = withContext(Dispatchers.IO) {
         RemoteConfig.refresh()  // 先取服务端下发的技能中心域名（拿不到则用缓存/默认）
         val filter = topic.trim().takeIf { it.isNotBlank() && it != "recommend" }.orEmpty()
-        val cacheKey = if (filter.isBlank()) CACHE_KEY else "${CACHE_KEY}_$filter"
+        val cacheKey = "SQUARE_FEED_CACHE_JSON_${filter}_${sort}_${if (following) "following" else "all"}"
         val base = AccountConfig.squareBaseUrl.trim().trimEnd('/')
         if (base.isNotBlank()) {
             runCatching {
-                val url = if (filter.isBlank()) "$base/square/feed" else "$base/square/feed?topic=$filter"
+                val params = mutableListOf<String>()
+                if (filter.isNotEmpty()) params.add("topic=$filter")
+                if (sort != "latest") params.add("sort=$sort")
+                if (following) params.add("following=1")
+                val queryString = if (params.isEmpty()) "" else "?" + params.joinToString("&")
+                val url = "$base/square/feed$queryString"
                 val builder = Request.Builder().url(url).get()
                 // 携带登录态:让服务端能返回 liked/favorited/owned 当前用户态(未登录时服务端忽略)
                 val tok = AccountStore.token

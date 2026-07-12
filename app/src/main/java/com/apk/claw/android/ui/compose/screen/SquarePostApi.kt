@@ -12,7 +12,10 @@ import okhttp3.MultipartBody
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
+import org.json.JSONObject
 import java.io.File
+import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 /**
@@ -141,6 +144,29 @@ internal object SquarePostApi {
         @SerializedName("pluginRef") val pluginRef: String = "",
         @SerializedName("expireAt") val expireAt: Long = 0,
         @SerializedName("monthlyPrice") val monthlyPrice: Int = 0,
+    )
+
+    /** 通知条目。type: like|comment|follow|acquire|subscribe|fork|reply。 */
+    data class NotificationDto(
+        val id: String = "",
+        val type: String = "",
+        val actorId: String = "",
+        val actorNickname: String = "",
+        val postId: String = "",
+        val commentId: String = "",
+        val read: Boolean = false,
+        val createdAt: Long = 0,
+    )
+
+    data class NotificationsResult(
+        val notifications: List<NotificationDto> = emptyList(),
+        val unreadCount: Int = 0,
+    )
+
+    data class ForkResult(
+        val ok: Boolean = false,
+        val postId: String = "",
+        val message: String = "",
     )
 
     // ── API 方法 ──────────────────────────────────────────────
@@ -352,6 +378,96 @@ internal object SquarePostApi {
             gson.fromJson(text, SquareFeedDto::class.java).posts
         }
     }
+
+    // ── 通知 / 赞过 / 收藏 / Fork ──────────────────────────────
+
+    /** 拉取通知列表 */
+    suspend fun listNotifications(limit: Int = 20, offset: Int = 0, unreadOnly: Boolean = false): NotificationsResult =
+        withContext(Dispatchers.IO) {
+            val path = if (unreadOnly) "/square/notifications?limit=$limit&offset=$offset&unread_only=1"
+                       else "/square/notifications?limit=$limit&offset=$offset"
+            val req = authedBuilder(path).get().build()
+            http.newCall(req).execute().use { resp ->
+                val body = resp.body?.string() ?: throw IOException("empty response")
+                if (!resp.isSuccessful) throw IOException(serverDetail(body) ?: "HTTP ${resp.code}")
+                val root = JSONObject(body)
+                val arr = root.optJSONArray("notifications") ?: JSONArray()
+                val list = mutableListOf<NotificationDto>()
+                for (i in 0 until arr.length()) {
+                    val n = arr.getJSONObject(i)
+                    list.add(NotificationDto(
+                        id = n.optString("id"),
+                        type = n.optString("type"),
+                        actorId = n.optString("actorId"),
+                        actorNickname = n.optString("actorNickname"),
+                        postId = n.optString("postId"),
+                        commentId = n.optString("commentId"),
+                        read = n.optBoolean("read"),
+                        createdAt = n.optLong("createdAt"),
+                    ))
+                }
+                NotificationsResult(notifications = list, unreadCount = root.optInt("unreadCount"))
+            }
+        }
+
+    /** 标记通知已读(notifId 为 null 时标记全部已读)。 */
+    suspend fun markNotificationsRead(notifId: String? = null): Boolean =
+        withContext(Dispatchers.IO) {
+            val body = JSONObject()
+            if (notifId != null) body.put("id", notifId)
+            val req = authedBuilder("/square/notifications/read").post(body.toString().toRequestBody(JSON)).build()
+            http.newCall(req).execute().use { resp -> resp.isSuccessful }
+        }
+
+    /** 获取用户赞过的帖子 */
+    suspend fun userLikedPosts(opaqueUserId: String, limit: Int = 20, offset: Int = 0): List<SquarePostDto> =
+        withContext(Dispatchers.IO) {
+            val req = authedBuilder("/square/users/$opaqueUserId/liked?limit=$limit&offset=$offset").get().build()
+            http.newCall(req).execute().use { resp ->
+                val body = resp.body?.string() ?: throw IOException("empty response")
+                if (!resp.isSuccessful) throw IOException(serverDetail(body) ?: "HTTP ${resp.code}")
+                val root = JSONObject(body)
+                val arr = root.optJSONArray("posts") ?: JSONArray()
+                val list = mutableListOf<SquarePostDto>()
+                for (i in 0 until arr.length()) {
+                    list.add(parseSquarePostDto(arr.getJSONObject(i)))
+                }
+                list
+            }
+        }
+
+    /** 获取用户收藏的帖子 */
+    suspend fun userFavoritePosts(opaqueUserId: String, limit: Int = 20, offset: Int = 0): List<SquarePostDto> =
+        withContext(Dispatchers.IO) {
+            val req = authedBuilder("/square/users/$opaqueUserId/favorites?limit=$limit&offset=$offset").get().build()
+            http.newCall(req).execute().use { resp ->
+                val body = resp.body?.string() ?: throw IOException("empty response")
+                if (!resp.isSuccessful) throw IOException(serverDetail(body) ?: "HTTP ${resp.code}")
+                val root = JSONObject(body)
+                val arr = root.optJSONArray("posts") ?: JSONArray()
+                val list = mutableListOf<SquarePostDto>()
+                for (i in 0 until arr.length()) {
+                    list.add(parseSquarePostDto(arr.getJSONObject(i)))
+                }
+                list
+            }
+        }
+
+    /** Fork 别人的免费小程序帖 */
+    suspend fun forkPost(postId: String): ForkResult =
+        withContext(Dispatchers.IO) {
+            val req = authedBuilder("/square/posts/$postId/fork").post("{}".toRequestBody(JSON)).build()
+            http.newCall(req).execute().use { resp ->
+                val body = resp.body?.string() ?: throw IOException("empty response")
+                val root = JSONObject(body)
+                if (!resp.isSuccessful) throw IOException(root.optString("detail", "fork failed"))
+                ForkResult(ok = root.optBoolean("ok"), postId = root.optString("postId"), message = root.optString("message", ""))
+            }
+        }
+
+    /** 从 JSONObject 解析 SquarePostDto(复用 Gson,字段映射与 feed 一致)。 */
+    private fun parseSquarePostDto(json: JSONObject): SquarePostDto =
+        gson.fromJson(json.toString(), SquarePostDto::class.java)
 
     /** 拉服务端 detail 文本里的友好错误信息(FastAPI {"detail":"..."})。 */
     private fun serverDetail(body: String): String? = runCatching {

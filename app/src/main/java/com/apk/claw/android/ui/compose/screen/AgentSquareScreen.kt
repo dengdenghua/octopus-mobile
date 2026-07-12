@@ -25,6 +25,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -275,6 +276,31 @@ internal fun AgentPostCard(post: AgentPost, onClick: () -> Unit = {}) {
                             color = Color.White,
                             fontSize = OctopusType.tag,
                             fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
+                // 多图指示器(右下角,images 数量 > 1 时显示)
+                if (post.images.size > 1) {
+                    Row(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(OctopusSpacing.sm)
+                            .background(Color.Black.copy(alpha = 0.5f), OctopusShape.capsule)
+                            .padding(horizontal = OctopusSpacing.sm, vertical = OctopusSpacing.xs),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            Icons.Filled.PhotoLibrary,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(12.dp),
+                        )
+                        Spacer(Modifier.width(2.dp))
+                        Text(
+                            "1/${post.images.size}",
+                            color = Color.White,
+                            fontSize = OctopusType.tag,
+                            fontWeight = FontWeight.SemiBold,
                         )
                     }
                 }

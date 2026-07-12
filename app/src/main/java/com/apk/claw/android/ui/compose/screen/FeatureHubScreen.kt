@@ -52,6 +52,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -202,12 +203,20 @@ private fun ExploreTab(
     onOpenPostDetail: (String) -> Unit,
 ) {
     var selectedTopic by remember { mutableStateOf("recommend") }
-    // 灵感流 = 小红书式 square_posts 瀑布流(服务端 /square/feed?topic=)。切分类即按 topic 重新拉取,
-    // 失败回退缓存/种子;null=加载中。
-    val posts by produceState<List<AgentPost>?>(initialValue = null, selectedTopic) {
-        value = null
-        value = SquareRepository.remoteFeed(selectedTopic)
+    var selectedTab by remember { mutableIntStateOf(0) } // 0=推荐 1=关注 2=热门
+    val tabs = listOf("推荐", "关注", "热门")
+
+    val sort = when (selectedTab) {
+        2 -> "hot"
+        else -> "latest"
     }
+    val following = selectedTab == 1
+
+    val posts by produceState<List<AgentPost>?>(initialValue = null, selectedTopic, selectedTab) {
+        value = null
+        value = SquareRepository.remoteFeed(selectedTopic, sort = sort, following = following)
+    }
+
     LazyVerticalStaggeredGrid(
         columns = StaggeredGridCells.Fixed(2),
         modifier = Modifier.fillMaxSize(),
@@ -229,22 +238,56 @@ private fun ExploreTab(
             )
         }
 
+        // ── 推荐/关注/热门 Tab ──
         item(span = StaggeredGridItemSpan.FullLine) {
-            AgentTopicChips(
-                topics = null,
-                selectedTopic = selectedTopic,
-                onSelect = { selectedTopic = it },
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = OctopusSpacing.sm, vertical = OctopusSpacing.xs),
+                horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.md),
+            ) {
+                tabs.forEachIndexed { index, label ->
+                    val isSelected = index == selectedTab
+                    Surface(
+                        shape = OctopusShape.capsule,
+                        color = if (isSelected) OctopusColors.Primary else OctopusColors.SurfaceDeep.copy(alpha = 0.5f),
+                        border = if (isSelected) null else androidx.compose.foundation.BorderStroke(1.dp, OctopusColors.Border.copy(alpha = 0.6f)),
+                        modifier = Modifier.clickable { selectedTab = index },
+                    ) {
+                        Text(
+                            label,
+                            modifier = Modifier.padding(horizontal = OctopusSpacing.lg, vertical = OctopusSpacing.sm),
+                            color = if (isSelected) OctopusColors.OnPrimary else OctopusColors.TextSecondary,
+                            fontSize = OctopusType.body,
+                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                        )
+                    }
+                }
+            }
+        }
+
+        // ── topic 胶囊(仅推荐/热门 Tab 显示,关注 Tab 不需要分类过滤) ──
+        if (selectedTab != 1) {
+            item(span = StaggeredGridItemSpan.FullLine) {
+                AgentTopicChips(
+                    topics = null,
+                    selectedTopic = selectedTopic,
+                    onSelect = { selectedTopic = it },
+                )
+            }
         }
 
         item(span = StaggeredGridItemSpan.FullLine) {
-            val title = if (selectedTopic == "recommend") stringResource(R.string.agent_trending_now)
-                else stringResource(R.string.agent_topic_inspiration, topicLabel(selectedTopic))
+            val title = when (selectedTab) {
+                1 -> "关注的人"
+                2 -> if (selectedTopic == "recommend") "热门内容" else "热门 · ${topicLabel(selectedTopic)}"
+                else -> if (selectedTopic == "recommend") stringResource(R.string.agent_trending_now)
+                        else stringResource(R.string.agent_topic_inspiration, topicLabel(selectedTopic))
+            }
             SectionHeaderWithAction(title, Icons.Filled.Whatshot, com.apk.claw.android.ui.compose.theme.OctopusTints.Hot)
         }
 
         val data = posts
-        // data==null 表示首次/切换分类加载中,展示 loading 占位,避免空白闪烁。
         if (data == null) {
             item(span = StaggeredGridItemSpan.FullLine) {
                 Row(
@@ -264,6 +307,16 @@ private fun ExploreTab(
                         color = OctopusColors.TextSecondary,
                         fontSize = OctopusType.body,
                     )
+                }
+            }
+        } else if (data.isEmpty()) {
+            item(span = StaggeredGridItemSpan.FullLine) {
+                val msg = if (selectedTab == 1) "还没有关注的人,去推荐页看看吧" else "暂无内容"
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = OctopusSpacing.xl),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(msg, color = OctopusColors.TextMuted, fontSize = OctopusType.body)
                 }
             }
         } else {

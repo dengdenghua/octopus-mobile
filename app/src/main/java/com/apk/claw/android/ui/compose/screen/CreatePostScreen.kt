@@ -45,6 +45,8 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -98,15 +100,29 @@ fun CreatePostScreen(
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    var title by remember { mutableStateOf("") }
-    var content by remember { mutableStateOf("") }
-    var tag by remember { mutableStateOf("") }
-    val imageUris = remember { mutableStateListOf<Uri>() }
-    val uploadedUrls = remember { mutableStateListOf<String>() }
+    var title by rememberSaveable { mutableStateOf("") }
+    var content by rememberSaveable { mutableStateOf("") }
+    var tag by rememberSaveable { mutableStateOf("") }
+    val imageUris = rememberSaveable(
+        saver = listSaver(
+            save = { it.map { uri -> uri.toString() } },
+            restore = { restored ->
+                mutableStateListOf<Uri>().apply {
+                    restored.forEach { add(Uri.parse(it)) }
+                }
+            },
+        ),
+    ) { mutableStateListOf<Uri>() }
+    val uploadedUrls = rememberSaveable(
+        saver = listSaver(
+            save = { it.toList() },
+            restore = { mutableStateListOf<String>().apply { addAll(it) } },
+        ),
+    ) { mutableStateListOf<String>() }
     var publishing by remember { mutableStateOf(false) }
-    var topic by remember { mutableStateOf("recommend") }
-    var appRef by remember { mutableStateOf("") }
-    var priceText by remember { mutableStateOf("") }
+    var topic by rememberSaveable { mutableStateOf("recommend") }
+    var appRef by rememberSaveable { mutableStateOf("") }
+    var priceText by rememberSaveable { mutableStateOf("") }
 
     // Photo Picker:多选,上限 9 张
     val pickMedia = rememberLauncherForActivityResult(
@@ -156,6 +172,15 @@ fun CreatePostScreen(
                 )
                 if (r.ok) {
                     onMessage(r.message.ifBlank { "已提交,审核通过后就会出现在广场" })
+                    // 清空草稿
+                    title = ""
+                    content = ""
+                    tag = ""
+                    imageUris.clear()
+                    uploadedUrls.clear()
+                    topic = "recommend"
+                    appRef = ""
+                    priceText = ""
                     onPublished()
                 } else {
                     onMessage(r.reason.ifBlank { "发布失败" })

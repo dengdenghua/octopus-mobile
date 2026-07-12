@@ -704,6 +704,8 @@ def init_db() -> None:
         c.execute("CREATE INDEX IF NOT EXISTS idx_square_comments_post ON square_comments(post_id, created_at)")
         c.execute("CREATE INDEX IF NOT EXISTS idx_square_follows_followee ON square_follows(followee_id)")
         c.execute("CREATE INDEX IF NOT EXISTS idx_square_favorites_user ON square_favorites(user_id)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_square_likes_user ON square_likes(user_id)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_square_follows_follower ON square_follows(follower_id)")
         # 迁移:给 square_posts 补「可复刻应用 + 付费积分 + 分类」列(幂等)。
         # app_ref 空 = 纯图文帖;非空 = 关联一个可运行物,卡片显示「复刻」。
         for _col in (
@@ -717,6 +719,15 @@ def init_db() -> None:
                 c.execute(f"ALTER TABLE square_posts ADD COLUMN {_col}")
             except sqlite3.OperationalError:
                 pass  # 列已存在
+        # 迁移:给 square_posts 补「浏览量 + 溯源」列(幂等)。
+        for _col in (
+            "views_count INTEGER NOT NULL DEFAULT 0",
+            "forked_from TEXT DEFAULT ''",
+        ):
+            try:
+                c.execute(f"ALTER TABLE square_posts ADD COLUMN {_col}")
+            except sqlite3.OperationalError:
+                pass  # 列已存在
         # 复刻/购买解锁台账:PK(user_id, post_id) 天然幂等,已解锁再下载免费。
         c.execute(
             "CREATE TABLE IF NOT EXISTS square_unlocks("
@@ -725,6 +736,19 @@ def init_db() -> None:
             "PRIMARY KEY(user_id, post_id))"
         )
         c.execute("CREATE INDEX IF NOT EXISTS idx_square_unlocks_post ON square_unlocks(post_id)")
+        # 广场通知台账:点赞/评论/关注/复刻/订阅/fork/回复 等事件通知接收者。
+        c.execute(
+            "CREATE TABLE IF NOT EXISTS square_notifications("
+            "id TEXT PRIMARY KEY, "             # "notif_<hex>"
+            "user_id TEXT NOT NULL, "           # 接收者(帖子作者/被关注者/被回复者)
+            "actor_id TEXT NOT NULL, "          # 触发者
+            "type TEXT NOT NULL, "              # like|comment|follow|acquire|subscribe|fork|reply
+            "post_id TEXT DEFAULT '', "         # 关联帖(关注事件无)
+            "comment_id TEXT DEFAULT '', "      # 关联评论(回复事件有)
+            "read INTEGER NOT NULL DEFAULT 0, " # 0=未读 1=已读
+            "created_at INTEGER NOT NULL)"
+        )
+        c.execute("CREATE INDEX IF NOT EXISTS idx_square_notif_user ON square_notifications(user_id, read, created_at DESC)")
         # 插件按月订阅台账(手动续订):PK(user_id, plugin_ref);plugin_ref = mini-app slug(= square_posts.app_ref)。
         # expire_at 到期即失效(手动续订不自动扣),运行时门控按 plugin_ref 查是否 expire_at>now。
         c.execute(
@@ -2834,6 +2858,7 @@ def square_acquire(post_id: str, u: sqlite3.Row = Depends(actor)) -> dict[str, A
                     _record_credit_txn(c, author_id, creator_earned, source="creator_revenue",
                                        detail=f"帖子「{post['title'][:40]}」复刻分成",
                                        ref_id=f"acquire/{post_id}")
+            _notify(c, post["author_id"], u["user_id"], "acquire", post_id)
             c.commit()
         except HTTPException:
             raise
@@ -2847,6 +2872,46 @@ def square_acquire(post_id: str, u: sqlite3.Row = Depends(actor)) -> dict[str, A
         "ok": True, "owned": True, "appKind": app_kind, "appRef": app_ref,
         "creatorEarned": creator_earned, "balance": balance, "app": payload,
     }
+
+
+@app.post("/square/posts/{post_id}/fork")
+def square_fork_post(post_id: str, u: sqlite3.Row = Depends(actor)) -> dict[str, Any]:
+    """Fork 别人的免费小程序帖为自己的新帖(带溯源 forked_from)。
+    - 仅 mini-app 帖(app_ref 非空)可 fork;付费帖需先 acquire;不能 fork 自己。
+    - 幂等:同人对同源帖已 fork 过则直接返回已有帖 id。
+    - FTS 由 square_posts_fts_ai AFTER INSERT 触发器自动同步,无需手动插入。"""
+    rate_limit(f"square_fork:{u['user_id']}", SQUARE_POST_RATE_PER_MINUTE, 60)
+    with closing(db()) as c:
+        post = c.execute("SELECT * FROM square_posts WHERE id=? AND status='approved'", (post_id,)).fetchone()
+        if not post:
+            raise HTTPException(404, "帖子不存在")
+        if not post["app_ref"]:
+            raise HTTPException(400, "仅关联应用的帖子可 fork")
+        if post["author_id"] == u["user_id"]:
+            raise HTTPException(400, "不能 fork 自己的帖子")
+        if int(post["price_credits"] or 0) > 0:
+            raise HTTPException(400, "付费帖不可 fork,请先复刻")
+        # 幂等:已 fork 过同源帖则直接返回
+        existing = c.execute(
+            "SELECT id FROM square_posts WHERE author_id=? AND forked_from=? LIMIT 1",
+            (u["user_id"], post_id),
+        ).fetchone()
+        if existing:
+            return {"ok": True, "postId": existing["id"], "message": "already forked"}
+        new_id = f"post_{secrets.token_hex(8)}"
+        now = now_ms()
+        c.execute(
+            "INSERT INTO square_posts(id, author_id, title, content, cover_url, images, tag, status, "
+            "likes_count, comments_count, favorites_count, created_at, updated_at, app_ref, app_kind, "
+            "price_credits, topic, sub_price_credits, views_count, forked_from) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, 'approved', 0, 0, 0, ?, ?, ?, ?, 0, ?, 0, 0, ?)",
+            (new_id, u["user_id"], post["title"], post["content"], post["cover_url"],
+             post["images"], post["tag"], now, now, post["app_ref"], post["app_kind"],
+             post["topic"], post_id),
+        )
+        _notify(c, post["author_id"], u["user_id"], "fork", new_id)
+        c.commit()
+        return {"ok": True, "postId": new_id}
 
 
 @app.post("/square/posts/{post_id}/subscribe")
@@ -2919,6 +2984,7 @@ def square_subscribe(post_id: str, body: dict[str, Any], u: sqlite3.Row = Depend
                 c.execute("INSERT INTO plugin_subscriptions(user_id, plugin_ref, post_id, author_id, "
                           "monthly_price, expire_at, created_at, last_renew_at) VALUES(?,?,?,?,?,?,?,?)",
                           (user_id, app_ref, post_id, author_id, price, new_exp, now_ms(), now_ms()))
+            _notify(c, post["author_id"], u["user_id"], "subscribe", post_id)
             c.commit()
         except HTTPException:
             raise
@@ -2961,6 +3027,8 @@ def square_post_detail(post_id: str, request: Request) -> dict[str, Any]:
         r = c.execute("SELECT * FROM square_posts WHERE id=? AND status='approved'", (post_id,)).fetchone()
         if r is None:
             raise HTTPException(404, "帖子不存在或未审核通过")
+        c.execute("UPDATE square_posts SET views_count = views_count + 1 WHERE id = ?", (post_id,))
+        c.commit()
         return {"post": _present_post(c, r, viewer)}
 
 
@@ -2969,7 +3037,7 @@ def square_like_post(post_id: str, u: sqlite3.Row = Depends(actor)) -> dict[str,
     """点赞(幂等:已点过则保持点赞态,不重复加 count)。"""
     rate_limit(f"sq_like:{u['user_id']}", 60, 60)
     with closing(db()) as c:
-        r = c.execute("SELECT id, likes_count FROM square_posts WHERE id=? AND status='approved'", (post_id,)).fetchone()
+        r = c.execute("SELECT id, likes_count, author_id FROM square_posts WHERE id=? AND status='approved'", (post_id,)).fetchone()
         if r is None:
             raise HTTPException(404, "帖子不存在")
         existed = c.execute("SELECT 1 FROM square_likes WHERE post_id=? AND user_id=?", (post_id, u["user_id"])).fetchone()
@@ -2978,6 +3046,7 @@ def square_like_post(post_id: str, u: sqlite3.Row = Depends(actor)) -> dict[str,
             c.execute("INSERT OR IGNORE INTO square_likes(post_id, user_id, created_at) VALUES(?,?,?)",
                       (post_id, u["user_id"], now))
             c.execute("UPDATE square_posts SET likes_count = likes_count + 1, updated_at = ? WHERE id = ?", (now, post_id))
+            _notify(c, r["author_id"], u["user_id"], "like", post_id)
             c.commit()
         return {"ok": True, "liked": True, "likesCount": r["likes_count"] + (0 if existed else 1)}
 
@@ -3067,7 +3136,7 @@ def square_post_comment(
         raise HTTPException(400, "评论内容 1-500 字")
     parent_id = str(body.get("parentId") or "").strip()
     with closing(db()) as c:
-        r = c.execute("SELECT id FROM square_posts WHERE id=? AND status='approved'", (post_id,)).fetchone()
+        r = c.execute("SELECT id, author_id FROM square_posts WHERE id=? AND status='approved'", (post_id,)).fetchone()
         if r is None:
             raise HTTPException(404, "帖子不存在")
         # 简单文本审核(走硬规则,不调 qwen 避免每条评论都花一次推理)
@@ -3080,6 +3149,13 @@ def square_post_comment(
                      VALUES(?,?,?,?,?,?)""",
                   (cid, post_id, u["user_id"], content, parent_id, now))
         c.execute("UPDATE square_posts SET comments_count = comments_count + 1, updated_at = ? WHERE id = ?", (now, post_id))
+        # 通知帖子作者(自己评论自己的帖不通知)
+        _notify(c, r["author_id"], u["user_id"], "comment", post_id, cid)
+        # 回复评论:通知被回复者(回复自己不通知;被回复者=帖作者时上面已通知,这里仍各算一条)
+        if parent_id:
+            prow = c.execute("SELECT user_id FROM square_comments WHERE id=?", (parent_id,)).fetchone()
+            if prow:
+                _notify(c, prow["user_id"], u["user_id"], "reply", post_id, cid)
         c.commit()
         return {"ok": True, "comment": {
             "id": cid, "postId": post_id,
@@ -3119,6 +3195,7 @@ def square_follow_user(user_id: str, u: sqlite3.Row = Depends(actor)) -> dict[st
         if not existed:
             c.execute("INSERT OR IGNORE INTO square_follows(follower_id, followee_id, created_at) VALUES(?,?,?)",
                       (u["user_id"], target, now_ms()))
+            _notify(c, target, u["user_id"], "follow")
             c.commit()
         followers = c.execute("SELECT COUNT(*) AS n FROM square_follows WHERE followee_id=?", (target,)).fetchone()["n"]
     return {"ok": True, "following": True, "followersCount": followers}
@@ -3138,6 +3215,59 @@ def square_unfollow_user(user_id: str, u: sqlite3.Row = Depends(actor)) -> dict[
             c.commit()
         followers = c.execute("SELECT COUNT(*) AS n FROM square_follows WHERE followee_id=?", (target,)).fetchone()["n"]
     return {"ok": True, "following": False, "followersCount": followers}
+
+
+@app.get("/square/notifications")
+def square_notifications(request: Request, limit: int = 20, offset: int = 0, unread_only: int = 0) -> dict[str, Any]:
+    """当前用户的通知列表(点赞/评论/关注/复刻/订阅/fork/回复)。
+    - unread_only=1 仅未读;返回 unreadCount 供角标渲染。"""
+    limit = min(max(1, limit), 50)
+    offset = max(0, offset)
+    viewer = _viewer(request)
+    if not viewer:
+        raise HTTPException(401, "login required")
+    with closing(db()) as c:
+        where = "user_id = ?"
+        params: list[Any] = [viewer]
+        if unread_only:
+            where += " AND read = 0"
+        rows = c.execute(
+            f"SELECT * FROM square_notifications WHERE {where} ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            (*params, limit, offset),
+        ).fetchall()
+        items = []
+        for r in rows:
+            items.append({
+                "id": r["id"],
+                "type": r["type"],
+                "actorId": _opaque_uid(r["actor_id"]),
+                "actorNickname": _display_handle(c, r["actor_id"]) or "用户",
+                "postId": r["post_id"],
+                "commentId": r["comment_id"],
+                "read": bool(r["read"]),
+                "createdAt": r["created_at"],
+            })
+        unread_count = c.execute(
+            "SELECT COUNT(*) FROM square_notifications WHERE user_id = ? AND read = 0",
+            (viewer,),
+        ).fetchone()[0]
+    return {"notifications": items, "unreadCount": unread_count}
+
+
+@app.post("/square/notifications/read")
+def square_mark_notifications_read(body: dict[str, Any] = None, request: Request = None) -> dict[str, Any]:
+    """标记通知已读。body 带 id=单条;不带 id=全部已读。"""
+    viewer = _viewer(request) if request else ""
+    if not viewer:
+        raise HTTPException(401, "login required")
+    with closing(db()) as c:
+        notif_id = (body or {}).get("id", "")
+        if notif_id:
+            c.execute("UPDATE square_notifications SET read = 1 WHERE id = ? AND user_id = ?", (notif_id, viewer))
+        else:
+            c.execute("UPDATE square_notifications SET read = 1 WHERE user_id = ?", (viewer,))
+        c.commit()
+    return {"ok": True}
 
 
 @app.get("/square/users/{user_id}")
@@ -3182,8 +3312,46 @@ def square_user_profile(user_id: str, request: Request) -> dict[str, Any]:
     }
 
 
+@app.get("/square/users/{user_id}/liked")
+def square_user_liked(user_id: str, request: Request, limit: int = 20, offset: int = 0) -> dict[str, Any]:
+    """用户赞过的帖子列表(公开,按点赞时间倒序)。"""
+    limit = min(max(1, limit), 50)
+    offset = max(0, offset)
+    real_uid = _from_opaque_uid(user_id)
+    if not real_uid:
+        raise HTTPException(404, "用户不存在")
+    viewer = _viewer(request)
+    with closing(db()) as c:
+        rows = c.execute(
+            "SELECT p.* FROM square_posts p INNER JOIN square_likes l ON p.id = l.post_id "
+            "WHERE l.user_id = ? AND p.status = 'approved' ORDER BY l.created_at DESC LIMIT ? OFFSET ?",
+            (real_uid, limit, offset),
+        ).fetchall()
+        posts = [_present_post(c, r, viewer) for r in rows]
+    return {"posts": posts}
+
+
+@app.get("/square/users/{user_id}/favorites")
+def square_user_favorites(user_id: str, request: Request, limit: int = 20, offset: int = 0) -> dict[str, Any]:
+    """用户收藏的帖子列表(公开,按收藏时间倒序)。"""
+    limit = min(max(1, limit), 50)
+    offset = max(0, offset)
+    real_uid = _from_opaque_uid(user_id)
+    if not real_uid:
+        raise HTTPException(404, "用户不存在")
+    viewer = _viewer(request)
+    with closing(db()) as c:
+        rows = c.execute(
+            "SELECT p.* FROM square_posts p INNER JOIN square_favorites f ON p.id = f.post_id "
+            "WHERE f.user_id = ? AND p.status = 'approved' ORDER BY f.created_at DESC LIMIT ? OFFSET ?",
+            (real_uid, limit, offset),
+        ).fetchall()
+        posts = [_present_post(c, r, viewer) for r in rows]
+    return {"posts": posts}
+
+
 @app.get("/square/feed")
-def square_feed(request: Request, limit: int = 20, offset: int = 0, q: str = "", topic: str = "") -> dict[str, Any]:
+def square_feed(request: Request, limit: int = 20, offset: int = 0, q: str = "", topic: str = "", sort: str = "latest", following: int = 0) -> dict[str, Any]:
     """广场目录(公开,无需登录)。
 
     改造为数据库驱动:从 square_posts 取已审核通过的图文帖,按创建时间倒序分页。
@@ -3231,9 +3399,20 @@ def square_feed(request: Request, limit: int = 20, offset: int = 0, q: str = "",
         if filter_topic:
             where += " AND topic=?"
             params.append(filter_topic)
+        # following=1 且登录态:只看关注的人的帖(子查询无注入,viewer 走占位符)
+        if following and viewer:
+            where += " AND author_id IN (SELECT followee_id FROM square_follows WHERE follower_id = ?)"
+            params.append(viewer)
+        # 排序:hot=互动加权(赞×2+评×3+藏×1.5+看×0.1)×时间衰减(7天半衰期);否则 created_at DESC
+        # created_at 存毫秒,strftime('%s','now') 返回秒,故除 1000.0 对齐
+        if sort == "hot":
+            order_by = ("(likes_count * 2 + comments_count * 3 + favorites_count * 1.5 + views_count * 0.1) "
+                        "* (1.0 / (1.0 + (strftime('%s','now') - created_at/1000.0) / 86400.0 / 7.0)) DESC")
+        else:
+            order_by = "created_at DESC"
         rows = c.execute(
             f"SELECT * FROM square_posts WHERE {where} "
-            "ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            f"ORDER BY {order_by} LIMIT ? OFFSET ?",
             (*params, limit, offset),
         ).fetchall()
         for r in rows:
@@ -4099,6 +4278,31 @@ def _display_handle(c: sqlite3.Connection, user_id: str) -> str:
     return nick if nick else f"创作者{user_id[-4:]}"
 
 
+def _viewer(request: Request) -> str:
+    """从请求 Bearer token 解出当前用户 user_id;未登录或 token 失效返回空串。"""
+    auth = request.headers.get("authorization") or ""
+    if auth.lower().startswith("bearer "):
+        try:
+            claims = jwt_decode(auth[7:], JWT_SECRET)
+            if claims and claims.get("sub"):
+                return claims["sub"]
+        except Exception:
+            return ""
+    return ""
+
+
+def _notify(c: sqlite3.Connection, user_id: str, actor_id: str, ntype: str,
+            post_id: str = "", comment_id: str = "") -> None:
+    """写入一条广场通知。user_id=接收者,actor_id=触发者。不通知自己。"""
+    if user_id == actor_id:
+        return
+    c.execute(
+        "INSERT INTO square_notifications(id, user_id, actor_id, type, post_id, comment_id, read, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, 0, ?)",
+        (f"notif_{secrets.token_hex(8)}", user_id, actor_id, ntype, post_id, comment_id, int(time.time())),
+    )
+
+
 def _present_post(c: sqlite3.Connection, r: sqlite3.Row, viewer_id: str = "") -> dict[str, Any]:
     """把 square_posts 行组装成客户端可展示的帖子 DTO。
 
@@ -4141,6 +4345,8 @@ def _present_post(c: sqlite3.Connection, r: sqlite3.Row, viewer_id: str = "") ->
         "appKind": (r["app_kind"] if "app_kind" in r.keys() else "") or "",
         "priceCredits": int(r["price_credits"]) if ("price_credits" in r.keys() and r["price_credits"]) else 0,
         "topic": (r["topic"] if "topic" in r.keys() else "") or "recommend",
+        "viewsCount": int(r["views_count"]) if ("views_count" in r.keys() and r["views_count"]) else 0,
+        "forkedFrom": (r["forked_from"] if "forked_from" in r.keys() else "") or "",
         "owned": bool(viewer_id) and c.execute(
             "SELECT 1 FROM square_unlocks WHERE user_id=? AND post_id=?",
             (viewer_id, r["id"]),

@@ -1,5 +1,6 @@
 package com.apk.claw.android.ui.compose.screen
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -33,6 +34,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -82,6 +84,9 @@ fun UserProfileScreen(
     var following by remember { mutableStateOf(false) }
     var followersCount by remember { mutableStateOf(0) }
     var followBusy by remember { mutableStateOf(false) }
+    var selectedTab by remember { mutableIntStateOf(0) } // 0=作品 1=赞过 2=收藏
+    var likedPosts by remember { mutableStateOf<List<AgentPost>?>(null) }
+    var favoritePosts by remember { mutableStateOf<List<AgentPost>?>(null) }
 
     LaunchedEffect(userId) {
         loading = true
@@ -95,6 +100,25 @@ fun UserProfileScreen(
             failed = true
         } finally {
             loading = false
+        }
+    }
+
+    LaunchedEffect(userId, selectedTab) {
+        if (selectedTab == 1 && likedPosts == null) {
+            try {
+                val dtos = SquarePostApi.userLikedPosts(userId)
+                likedPosts = dtos.map { it.toAgentPost() }
+            } catch (e: Exception) {
+                likedPosts = emptyList()
+            }
+        }
+        if (selectedTab == 2 && favoritePosts == null) {
+            try {
+                val dtos = SquarePostApi.userFavoritePosts(userId)
+                favoritePosts = dtos.map { it.toAgentPost() }
+            } catch (e: Exception) {
+                favoritePosts = emptyList()
+            }
         }
     }
 
@@ -143,9 +167,47 @@ fun UserProfileScreen(
                         },
                     )
                 }
-                val posts = profile?.posts?.map { it.toAgentPost() }.orEmpty()
-                if (posts.isEmpty()) {
-                    CenterText(stringResource(R.string.user_profile_no_posts))
+                // ── Tab 切换:作品 / 赞过 / 收藏 ──
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = OctopusSpacing.lg, vertical = OctopusSpacing.sm),
+                    horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.md),
+                ) {
+                    val tabLabels = listOf("作品", "赞过", "收藏")
+                    tabLabels.forEachIndexed { index, label ->
+                        val isSelected = index == selectedTab
+                        Surface(
+                            shape = OctopusShape.capsule,
+                            color = if (isSelected) OctopusColors.Primary else Color.Transparent,
+                            border = if (isSelected) null else BorderStroke(1.dp, OctopusColors.Border),
+                            modifier = Modifier.clickable { selectedTab = index },
+                        ) {
+                            Text(
+                                label,
+                                modifier = Modifier.padding(horizontal = OctopusSpacing.lg, vertical = OctopusSpacing.xs),
+                                color = if (isSelected) OctopusColors.OnPrimary else OctopusColors.TextSecondary,
+                                fontSize = OctopusType.body,
+                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                            )
+                        }
+                    }
+                }
+
+                // ── 内容列表 ──
+                val displayPosts = when (selectedTab) {
+                    0 -> profile?.posts?.map { it.toAgentPost() }.orEmpty()
+                    1 -> likedPosts.orEmpty()
+                    2 -> favoritePosts.orEmpty()
+                    else -> emptyList()
+                }
+                if (displayPosts.isEmpty()) {
+                    val msg = when (selectedTab) {
+                        1 -> "还没有赞过任何内容"
+                        2 -> "还没有收藏任何内容"
+                        else -> stringResource(R.string.user_profile_no_posts)
+                    }
+                    CenterText(msg)
                 } else {
                     LazyVerticalStaggeredGrid(
                         columns = StaggeredGridCells.Fixed(2),
@@ -154,7 +216,7 @@ fun UserProfileScreen(
                         horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.md),
                         verticalItemSpacing = OctopusSpacing.md,
                     ) {
-                        items(posts, key = { it.id }) { post ->
+                        items(displayPosts, key = { "${selectedTab}_${it.id}" }) { post ->
                             ProfilePostCard(post, onClick = { onOpenPost(post.id) })
                         }
                     }
