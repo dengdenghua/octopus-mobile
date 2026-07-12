@@ -3,6 +3,8 @@ package com.apk.claw.android.tool.impl
 import com.apk.claw.android.tool.BaseTool
 import com.apk.claw.android.tool.ToolParameter
 import com.apk.claw.android.tool.ToolResult
+import com.apk.claw.android.utils.XLog
+import java.net.URI
 
 /**
  * HTML 预览工具 —— 把 HTML/CSS/JS 推送到 Web 控制台，用 <iframe> 直接渲染。
@@ -14,6 +16,7 @@ class PreviewHtmlTool : BaseTool() {
 
     companion object {
         private const val MAX_HTML_LEN = 500_000
+        private const val TAG = "PreviewHtmlTool"
     }
 
     override fun getName() = "preview_html"
@@ -31,11 +34,41 @@ class PreviewHtmlTool : BaseTool() {
         if (html.length > MAX_HTML_LEN) {
             return ToolResult.error("HTML 过大(${html.length} > $MAX_HTML_LEN 字符)")
         }
+        // 审计:记录所有外部资源引用的域名,便于追溯数据出口(prompt injection 可通过 <script src> 偷数据)
+        auditExternalHosts(html)
         val height = optionalInt(params, "height", 600).coerceIn(100, 4096)
 
         // 把高度信息注入到 html 里，console-app.js 据此设置 iframe 高度
         val payload = "$height\n$html"
         return ToolResult.successWithHtml("HTML 预览已发送到控制台（${html.length} 字符，高度 ${height}px）", payload)
+    }
+
+    /**
+     * 扫描 HTML 中所有外部资源引用(<script src>/<link href>/<img src>),
+     * 提取域名并写审计日志。不拦截,仅记录,便于安全追溯。
+     */
+    private fun auditExternalHosts(html: String) {
+        val hosts = mutableSetOf<String>()
+        val patterns = listOf(
+            Regex("""<script[^>]*\bsrc\s*=\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE),
+            Regex("""<link[^>]*\bhref\s*=\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE),
+            Regex("""<img[^>]*\bsrc\s*=\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE),
+            Regex("""<source[^>]*\bsrc\s*=\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE),
+        )
+        for (pattern in patterns) {
+            for (m in pattern.findAll(html)) {
+                val url = m.groupValues.getOrNull(1) ?: continue
+                if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("//")) {
+                    runCatching {
+                        val host = URI(if (url.startsWith("//")) "https:$url" else url).host
+                        if (host != null) hosts.add(host)
+                    }
+                }
+            }
+        }
+        if (hosts.isNotEmpty()) {
+            XLog.i(TAG, "preview_html external hosts: ${hosts.sorted().joinToString(", ")}")
+        }
     }
 
     override fun getDescriptionEN() = """

@@ -37,8 +37,9 @@ class GenerateAppTool : BaseTool() {
         private const val CLARIFY_Q_MAX_LEN = 80
 
         private val AGENTIC_TOOL_WHITELIST = setOf(
-            "generate_image", "generate_video", "preview_html",
-            "list_apps", "app_action", "read_app_events",
+            "generate_image", "generate_video", "preview_html", "search_image",
+            "list_apps", "app_action", "read_app_events", "navigate",
+            "browse_files", "search_files", "read_calendar",
             "start_vpn", "stop_vpn", "vpn_status",
         )
     }
@@ -243,6 +244,13 @@ class GenerateAppTool : BaseTool() {
                 "their answers into 'description'. When true, generation proceeds without re-checking.",
             false,
         ),
+        ToolParameter(
+            "update_app_id", "string",
+            "Optional: appId of an existing mini-app to update in-place (overwrite its index.html). " +
+                "When provided, the generated app replaces the existing one instead of creating a new entry. " +
+                "Use this for iterative refinement (e.g. 'change the button color') to avoid app clutter.",
+            false,
+        ),
     )
 
     override fun execute(params: Map<String, Any>): ToolResult {
@@ -361,15 +369,18 @@ class GenerateAppTool : BaseTool() {
 
         val actions = parseActions(html)
         val grantedTools = parseTools(html).filter { it in AGENTIC_TOOL_WHITELIST }
+        val extraFiles = parseExtraFiles(html)
 
         com.apk.claw.android.agent.AgentProgressBus.set("保存小程序中…")
-        val appId = "gen_" + System.currentTimeMillis()
-        val saved = runCatching { persistAsMiniApp(appId, appName, html, actions, grantedTools) }.getOrDefault(false)
+        val updateAppId = optionalString(params, "update_app_id", "").trim()
+        val appId = if (updateAppId.isNotEmpty()) updateAppId else "gen_" + System.currentTimeMillis()
+        val saved = runCatching { persistAsMiniApp(appId, appName, html, actions, grantedTools, extraFiles) }.getOrDefault(false)
         if (saved) {
             ReflexArc.remember(description, appName, html, appId)
         }
         val toolNote = if (grantedTools.isNotEmpty()) "，可调用设备能力：${grantedTools.joinToString("、")}" else ""
-        val savedNote = if (saved) "，已存为小程序「$appName」$toolNote，可在「小程序」里随时重新打开" else ""
+        val updateNote = if (updateAppId.isNotEmpty()) "（更新已有小程序）" else ""
+        val savedNote = if (saved) "，已存为小程序「$appName」$updateNote$toolNote，可在「小程序」里随时重新打开" else ""
         val styleNote = "，风格：${preset.name}"
         val lintNote = when {
             repairRounds == 0 && errors.isEmpty() -> "，自检无控制台错误"
@@ -398,11 +409,22 @@ class GenerateAppTool : BaseTool() {
         html: String,
         actions: List<com.apk.claw.android.plugin.PluginActionDef>,
         allowTools: List<String>,
+        extraFiles: List<ExtraFile> = emptyList(),
     ): Boolean {
         val ctx = ClawApplication.instance
         val dir = File(ctx.filesDir, "generated_apps/$appId")
         if (!dir.exists() && !dir.mkdirs()) return false
+        // 清理旧的多文件产物(更新场景),保留 manifest.json
+        if (extraFiles.isNotEmpty()) {
+            dir.listFiles()?.forEach { if (it.name != "manifest.json") it.deleteRecursively() }
+        }
         File(dir, "index.html").writeText(html)
+        // 写入额外文件(CSS/JS/资源),WebView 用 file:// 加载 index.html 时相对路径自动解析
+        for (f in extraFiles) {
+            val target = File(dir, f.path)
+            target.parentFile?.mkdirs()
+            target.writeText(f.content)
+        }
         val manifest = PluginManifest(
             id = appId,
             name = appName,
@@ -416,6 +438,32 @@ class GenerateAppTool : BaseTool() {
         File(dir, "manifest.json").writeText(Gson().toJson(manifest))
         ctx.pluginManager.refreshNonDexPlugins()
         return true
+    }
+
+    /** 多文件产物中的单个额外文件(相对路径 + 内容)。 */
+    private data class ExtraFile(val path: String, val content: String)
+
+    /**
+     * 从 HTML 注释中解析额外文件声明:
+     * <!--OCTOPUS_FILES:[{"path":"styles.css","content":"..."},{"path":"app.js","content":"..."}]-->
+     * LLM 生成多文件应用时用此注释声明外部 CSS/JS,index.html 用相对路径引用。
+     * 路径限制:只能含字母数字/下划线/连字符/点/斜杠,禁止 .. 和绝对路径,防目录穿越。
+     */
+    private fun parseExtraFiles(html: String): List<ExtraFile> {
+        val m = Regex("""<!--\s*OCTOPUS_FILES:\s*(\[.*?\])\s*-->""", RegexOption.DOT_MATCHES_ALL).find(html)
+            ?: return emptyList()
+        return runCatching {
+            val arr = JSONArray(m.groupValues[1])
+            (0 until arr.length()).mapNotNull { i ->
+                val obj = arr.getJSONObject(i)
+                val path = obj.optString("path").trim()
+                val content = obj.optString("content")
+                // 安全校验:路径必须在 app 目录内,禁止 .. 和绝对路径
+                if (path.isBlank() || path.contains("..") || path.startsWith("/")) return@mapNotNull null
+                if (!Regex("""^[a-zA-Z0-9_\-./]+$""").matches(path)) return@mapNotNull null
+                ExtraFile(path, content)
+            }
+        }.getOrDefault(emptyList())
     }
 
     private fun parseActions(raw: String): List<com.apk.claw.android.plugin.PluginActionDef> {
@@ -674,6 +722,9 @@ ${buildCssBaseline(preset)}
 - 用了哪些callTool工具，在</html>后追加：<!--OCTOPUS_TOOLS:["a","b"]-->
 - 在</html>后追加onAgentAction声明（即使空数组也要写）：
   <!--OCTOPUS_ACTIONS:[{"name":"actionName","description":"一句话","params":[{"name":"p","type":"string","description":"desc","required":false}]}]-->
+- 【可选】多文件支持：复杂应用可把 CSS/JS 拆成外部文件，在</html>后追加：
+  <!--OCTOPUS_FILES:[{"path":"styles.css","content":"..."},{"path":"app.js","content":"..."}]-->
+  然后在 <link href="styles.css"> 或 <script src="app.js"> 中用相对路径引用。路径只能含字母数字/_-./，禁止..和绝对路径。
 """.trimIndent()
 
         val design = designAssetsBlock(assets)
@@ -874,6 +925,25 @@ $lines
         // iframe 标签（警告：需确认 src 可信）
         if (Regex("""<iframe""", RegexOption.IGNORE_CASE).containsMatchIn(html))
             issues.add("uses <iframe> — verify src is trusted (warning)")
+
+        // CSS 质量检查:常见移动端布局陷阱
+        // 100vh 在移动端会包含浏览器地址栏,应改用 100dvh
+        if (Regex("""\bheight\s*:\s*100vh\b""", RegexOption.IGNORE_CASE).containsMatchIn(html))
+            issues.add("uses height:100vh — prefer 100dvh for mobile (avoids browser chrome overlap)")
+        if (Regex("""\bmin-height\s*:\s*100vh\b""", RegexOption.IGNORE_CASE).containsMatchIn(html))
+            issues.add("uses min-height:100vh — prefer 100dvh for mobile")
+
+        // position:fixed 应配 z-index,否则可能被后续元素遮挡
+        val fixedWithoutZ = Regex(
+            """position\s*:\s*fixed[^}]*}""",
+            RegexOption.IGNORE_CASE,
+        ).findAll(html).count { !Regex("""z-index\s*:""", RegexOption.IGNORE_CASE).containsMatchIn(it.value) }
+        if (fixedWithoutZ > 0)
+            issues.add("position:fixed without z-index — may be overlapped by later elements ($fixedWithoutZ occurrences)")
+
+        // body overflow:hidden 会阻止页面滚动,移动端通常不需要
+        if (Regex("""body\s*\{[^}]*overflow\s*:\s*hidden""", RegexOption.IGNORE_CASE).containsMatchIn(html))
+            issues.add("body overflow:hidden — blocks page scroll on mobile, use overflow-x:hidden instead if only hiding horizontal scroll")
 
         return issues
     }

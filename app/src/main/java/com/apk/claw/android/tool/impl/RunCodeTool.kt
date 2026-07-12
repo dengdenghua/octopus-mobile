@@ -35,7 +35,7 @@ class RunCodeTool : BaseTool() {
             "JavaScript to execute in a sandboxed Rhino engine on the device. " +
             "Built-in host APIs: print()/console.log() for output; readFile(path)/writeFile(path,content) " +
             "for file I/O (Download and Documents only); fetch(url, options?) for HTTP; " +
-            "callTool(name, params) to call any registered device tool. " +
+            "callTool(name, params, timeoutMs?) to call any registered device tool (default 10s timeout, max 30s). " +
             "Async is supported: Promise/.then, setTimeout/setInterval/clearTimeout, queueMicrotask — " +
             "the sandbox runs an event loop until all timers/promises settle (bounded by timeout_ms). " +
             "Note: fetch()/readFile()/callTool() are synchronous (return values directly, no await needed); " +
@@ -69,9 +69,15 @@ class RunCodeTool : BaseTool() {
           writeFile("/sdcard/Download/out.txt", "content") — write a file
           fetch("https://api.example.com/data", {method:"POST", body:"...", headers:{...}})
               — synchronous HTTP request, returns {status, ok, body}
-          callTool("tap", {x:500, y:300})       — call any registered device tool
-          callTool("input_text", {text:"hello"})
-          callTool("take_screenshot", {})
+          callTool("tap", {x:500, y:300}, timeoutMs?) — call any registered device tool (default 10s, max 30s)
+
+        Common callTool targets (use list_apps/get_screen_info to discover more):
+          UI: tap/swipe/input_text/scroll_to_find/take_screenshot/get_screen_info/find_node_info
+          Apps: open_app/list_apps/app_action/navigate/press_back/press_home
+          Files: browse_files/search_files/file_ops/edit_file
+          System: send_intent/read_calendar/read_sms/get_usage_stats
+          Media: generate_image/generate_video/search_image
+          Code: run_code/run_python/preview_html/generate_app
 
         Async: Promise/.then, setTimeout/setInterval/clearTimeout, queueMicrotask all work — the
         sandbox drives an event loop until timers and promises settle (within timeout_ms).
@@ -80,7 +86,7 @@ class RunCodeTool : BaseTool() {
 
         Use for: data transforms, file processing, API calls, UI automation scripts,
         calculations, text manipulation, multi-step device interactions.
-        Timeout default 20s (max 60s). Code ≤ 100000 chars. Output ≤ 64KB.
+        Timeout default 20s (max 60s). Code ≤ 100000 chars. Output ≤ 64KB (truncated, not error).
     """.trimIndent()
 
     override fun getDescriptionCN() = """
@@ -91,9 +97,15 @@ class RunCodeTool : BaseTool() {
           writeFile("/sdcard/Download/out.txt", "内容") → 写文件
           fetch("https://api.example.com/data", {method:"POST", body:"...", headers:{...}})
               → 同步 HTTP 请求，返回 {status, ok, body}
-          callTool("tap", {x:500, y:300})          → 调用已注册设备工具
-          callTool("input_text", {text:"你好"})
-          callTool("take_screenshot", {})
+          callTool("tap", {x:500, y:300}, timeoutMs?) → 调用已注册设备工具（默认 10s 超时，上限 30s）
+
+        callTool 可调用的常用工具（完整列表可通过 list_apps/get_screen_info 等探查）:
+          UI: tap/swipe/input_text/scroll_to_find/take_screenshot/get_screen_info/find_node_info
+          应用: open_app/list_apps/app_action/navigate/press_back/press_home
+          文件: browse_files/search_files/file_ops/edit_file
+          系统: send_intent/read_calendar/read_sms/get_usage_stats
+          媒体: generate_image/generate_video/search_image
+          代码: run_code/run_python/preview_html/generate_app
 
         异步支持：Promise/.then、setTimeout/setInterval/clearTimeout、queueMicrotask 均可用——
         沙箱内置事件循环会一直驱动到所有定时器/Promise 结束（受 timeout_ms 约束）。
@@ -101,6 +113,6 @@ class RunCodeTool : BaseTool() {
         fetch/readFile/callTool 是同步的（直接返回，无需 await）。
 
         适用：数据处理、文件读写、接口调用、UI 自动化脚本、计算、多步设备交互。
-        超时默认 20 秒（上限 60 秒），代码 ≤ 100000 字符，输出 ≤ 64KB。
+        超时默认 20 秒（上限 60 秒），代码 ≤ 100000 字符，输出 ≤ 64KB（超限截断不报错）。
     """.trimIndent()
 }

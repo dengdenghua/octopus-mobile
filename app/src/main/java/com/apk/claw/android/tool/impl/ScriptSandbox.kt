@@ -297,9 +297,16 @@ object ScriptSandbox {
         val printFn = jsFunc(scope) { _, args ->
             val output = outputOf(scope)
             val line = args.joinToString(" ") { jsValueToString(it) }
-            if (output.length + line.length + 1 > MAX_OUTPUT_CHARS)
-                hostError("Output exceeded $MAX_OUTPUT_CHARS chars")
-            output.appendLine(line)
+            // 超限后截断而非报错(对齐 Python 沙箱行为),让 LLM 拿到部分结果用于反馈循环
+            if (output.length < MAX_OUTPUT_CHARS) {
+                val remaining = MAX_OUTPUT_CHARS - output.length
+                if (line.length + 1 > remaining) {
+                    output.appendLine(line.take((remaining - 1).coerceAtLeast(0)))
+                    output.append("...(输出已截断,超过 $MAX_OUTPUT_CHARS 字符上限)")
+                } else {
+                    output.appendLine(line)
+                }
+            }
             Undefined.instance
         }
         ScriptableObject.putProperty(scope, "print", printFn)
@@ -460,15 +467,32 @@ object ScriptSandbox {
     }
 
     private fun installToolBridge(scope: Scriptable) {
-        // callTool(name, params?) → data string or throws
+        // callTool(name, params?, timeoutMs?) → data string or throws
+        // timeoutMs 默认 10s(上限 30s):防慢工具(如 generate_video)挂死整个脚本。
+        // 超时抛 EvaluatorException,可被 JS try/catch 捕获,脚本能优雅降级。
         ScriptableObject.putProperty(scope, "callTool", jsFunc(scope) { _, args ->
             val name = args.getOrNull(0)?.let { Context.toString(it) }
                 ?: hostError("callTool: tool name required")
             val params = jsToParams(args.getOrNull(1))
+            val timeoutMs = (args.getOrNull(2) as? Number)?.toLong()?.coerceIn(1_000L, 30_000L) ?: 10_000L
             // JS 沙箱代码视为不可信来源:即使 run_code 本身已被来源闸门放行,
             // 沙箱内调高危工具仍要走来源闸门,防止「批准一次 run_code = 解锁全部高危工具」。
-            val result = ToolRegistry.withUntrustedSource {
-                ToolRegistry.getInstance().executeTool(name, params, null)
+            val task = java.util.concurrent.FutureTask {
+                ToolRegistry.withUntrustedSource {
+                    ToolRegistry.getInstance().executeTool(name, params, null)
+                }
+            }
+            val thread = Thread(task, "callTool-$name").apply { isDaemon = true }
+            thread.start()
+            val result = try {
+                task.get(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
+            } catch (e: java.util.concurrent.TimeoutException) {
+                thread.interrupt()
+                hostError("callTool '$name' timed out after ${timeoutMs}ms")
+            } catch (e: InterruptedException) {
+                hostError("callTool '$name' interrupted")
+            } catch (e: Exception) {
+                hostError("callTool '$name' failed: ${e.message}")
             }
             if (result.isSuccess) {
                 result.data ?: "ok"

@@ -89,7 +89,8 @@ android {
     // Chaquopy —— Android 上的 Python 解释器(17.0.0 已完全开源免费,Maven Central)。
     // 选 Python 3.11 而非 3.12+:3.11 同时支持 32 位(armeabi-v7a)和 64 位(arm64-v8a),
     // 3.12+ 仅支持 64 位,会丢弃 armeabi-v7a 老设备。3.11 生态成熟、纯 Python 包兼容性好。
-    // pip 暂不预装第三方包:run_python 沙箱以标准库为主,需要时由调用方按需 install。
+    // pip 预装 requests/numpy 需构建机有 Python 3.11;当前构建机仅 3.12,暂不预装。
+    // 后续装 Python 3.11 后在 defaultConfig 里加 pip { install("requests"); install("numpy") } 即可。
     chaquopy {
         defaultConfig {
             version = "3.11"
