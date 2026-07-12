@@ -14,6 +14,8 @@ import com.apk.claw.android.octopus_mobile.safety.CircuitBreaker
 import com.apk.claw.android.octopus_mobile.safety.PermissionModeManager
 import com.apk.claw.android.octopus_mobile.safety.PermissionPolicy
 import com.apk.claw.android.octopus_mobile.safety.ApprovalFlow
+import com.apk.claw.android.octopus_mobile.safety.IrreversibleActions
+import com.apk.claw.android.octopus_mobile.safety.UndoWindow
 import com.apk.claw.android.octopus_mobile.ToolAuditLog
 import com.apk.claw.android.octopus_mobile.MobileActionTimeline
 import com.apk.claw.android.octopus_mobile.evolution.TurnScorer
@@ -433,6 +435,22 @@ object ToolRegistry {
                 PermissionPolicy.RiskAction.ALLOW -> {
                     // 放行（不弹窗）
                 }
+            }
+        }
+
+        // ── 不可逆动作·撤销窗口 ──
+        // 补"本地在场用户驱动不可逆外部副作用"的缺口:上面的来源闸门只拦不可信来源,
+        // 本地(trusted)高危动作此前零拦截。这里给发短信/发帖/发文件一个 Gmail undo-send 式可撤销窗:
+        // 默认放行不加确认摩擦,但留数秒可撤销。仅本地来源触发(不可信来源已走 ApprovalFlow,不叠弹窗);
+        // 无前台 Activity/用户关闭 → UndoWindow 内部直接放行,不改无人值守/满血语义。
+        if (IrreversibleActions.isIrreversible(name) && !isUntrustedSource()) {
+            val proceed = UndoWindow.awaitOrProceed(name, IrreversibleActions.describe(name, params))
+            if (!proceed) {
+                eventBus?.publish(EventBus.ToolBlockedEvent(name, "undo_cancelled", "undo_window"))
+                return audited(
+                    ToolResult.error("操作已被撤销（撤销窗口内取消）: $name", ToolErr.PERMISSION),
+                    blockedBy = "undo_window",
+                )
             }
         }
 

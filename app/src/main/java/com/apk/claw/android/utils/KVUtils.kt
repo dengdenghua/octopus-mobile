@@ -502,6 +502,13 @@ object KVUtils {
     fun isAdvancedAutomationMode(): Boolean = getBoolean(KEY_ADVANCED_AUTOMATION, false)
     fun setAdvancedAutomationMode(enabled: Boolean) = putBoolean(KEY_ADVANCED_AUTOMATION, enabled)
 
+    // ── 不可逆动作·撤销窗口 ──
+    // 本机在场时,agent 触发不可逆外部副作用(发短信/发帖/发文件)前给一个可撤销倒计时窗(Gmail undo-send 式)。
+    // 默认开(安全兜底):自动放行不加确认摩擦,但留 N 秒可撤销。无前台/无人值守场景自动跳过,不改满血语义。
+    private const val KEY_UNDO_WINDOW = "KEY_UNDO_WINDOW_ENABLED"
+    fun isUndoWindowEnabled(): Boolean = getBoolean(KEY_UNDO_WINDOW, true)
+    fun setUndoWindowEnabled(enabled: Boolean) = putBoolean(KEY_UNDO_WINDOW, enabled)
+
     // ── 心跳 ACK 超时是否触发强制重连 ──
     // 仅当母体 octopus-agent runtime 确实回 {"method":"heartbeat/ack"} 时才应开启。
     // 默认 false:母体若不回 ack,开启会让每台设备每 ~90s 强制重连一次、自我制造重连风暴。

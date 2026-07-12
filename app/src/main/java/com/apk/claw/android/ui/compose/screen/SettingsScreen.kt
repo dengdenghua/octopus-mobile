@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Hub
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Monitor
@@ -538,6 +539,30 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}, onNavigateToCreatorCenter: 
                                 } else {
                                     ScreenCaptureService.stop(context)
                                 }
+                            },
+                        )
+                    }
+                    SettingsDivider()
+                    // 不可逆动作·撤销窗口:本机在场时,发短信/发帖/发文件前给可撤销倒计时窗(默认开)。
+                    var undoOn by remember { mutableStateOf(KVUtils.isUndoWindowEnabled()) }
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        IconBubble(Icons.Filled.Undo, PrimaryColor)
+                        Spacer(Modifier.width(OctopusSpacing.md))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "不可逆操作 · 撤销窗口",
+                                color = TextPrimary, fontSize = OctopusType.body, fontWeight = FontWeight.SemiBold,
+                            )
+                            Text(
+                                if (undoOn) "开 · 发短信/发帖/发文件前给 5 秒可撤销" else "关 · 不可逆动作直接执行",
+                                fontSize = OctopusType.caption, color = TextMuted,
+                            )
+                        }
+                        Switch(
+                            checked = undoOn,
+                            onCheckedChange = { on ->
+                                undoOn = on
+                                KVUtils.setUndoWindowEnabled(on)
                             },
                         )
                     }
