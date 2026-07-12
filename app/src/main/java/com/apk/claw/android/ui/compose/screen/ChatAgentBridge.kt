@@ -197,7 +197,8 @@ object ChatAgentBridge {
         // withMemoInstruction 只在对话页开:让主模型顺手用 MEMO 行标注用户透露的偏好/事实,
         // onComplete 里 harvestMemos 收割并剥离;渠道路径不开,MEMO 行会原样漏给 IM 用户。
         val lessonSuffix = lessonStore.buildPromptSection()
-        val memorySuffix = memoryStore.buildPromptSection(withMemoInstruction = true)
+        // taskHint=prompt:记忆按与本次任务的相关性排序,记忆多了也只把相关的顶进有限预算(与技能同款)。
+        val memorySuffix = memoryStore.buildPromptSection(withMemoInstruction = true, taskHint = prompt)
         return AgentConfig.Builder()
             .apiKey(eff.apiKey)
             .baseUrl(baseUrl)

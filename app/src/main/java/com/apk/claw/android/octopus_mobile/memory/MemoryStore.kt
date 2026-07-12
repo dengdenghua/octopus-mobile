@@ -17,6 +17,7 @@ import com.google.gson.reflect.TypeToken
  *
  * 只依赖 [KVUtils](MMKV 未初始化时退回内存 map),无 Android 依赖,可纯 JVM 单测。
  */
+@Suppress("TooManyFunctions")   // 记忆增删查/收割/相关性排序本就是一族内聚方法;抽 rankByRelevance 后达阈值
 class MemoryStore {
 
     data class Memory(
@@ -129,13 +130,25 @@ class MemoryStore {
      *   MEMO 行,注入了会原样漏给 IM 用户。
      */
     @JvmOverloads
-    fun buildPromptSection(withMemoInstruction: Boolean = false, charBudget: Int = 1600): String {
+    fun buildPromptSection(
+        withMemoInstruction: Boolean = false,
+        charBudget: Int = 1600,
+        taskHint: String? = null,
+    ): String {
         val now = System.currentTimeMillis()
         val memories = getMemories()
+        // 相关性排序:给了 taskHint 就按「与任务的词项重叠」优先、confidence 次之,让相关记忆顶到
+        // 有限字符预算的前面(记忆一多才不至于把无关的偏好/事实塞进当前任务)。taskHint 为空则完全
+        // 保持原行为——FACT 按 confidence、CONTEXT 原顺序,向后兼容。PREFERENCE 恒按 confidence 在最前。
+        val qk = taskHint?.takeIf { it.isNotBlank() }?.let { TextRelevance.keywords(it) }
         val ranked =
             memories.filter { it.type == MemoryType.PREFERENCE }.sortedByDescending { it.confidence } +
-                memories.filter { it.type == MemoryType.FACT }.sortedByDescending { it.confidence } +
-                memories.filter { it.type == MemoryType.CONTEXT && now - it.lastReferencedAt < CONTEXT_TTL_MS }
+                rankByRelevance(
+                    memories.filter { it.type == MemoryType.FACT }.sortedByDescending { it.confidence }, qk,
+                ) +
+                rankByRelevance(
+                    memories.filter { it.type == MemoryType.CONTEXT && now - it.lastReferencedAt < CONTEXT_TTL_MS }, qk,
+                )
 
         val included = ArrayList<Memory>()
         var used = 0
@@ -170,6 +183,20 @@ class MemoryStore {
         val body = if (sb.isNotEmpty()) "\n\n## 关于用户（跨会话记忆）$sb" else ""
         return if (withMemoInstruction) body + MEMO_INSTRUCTION else body
     }
+
+    /**
+     * 按与任务的相关性重排:[queryKeywords] 为 null(无 taskHint)时原样返回(向后兼容);
+     * 否则按「与 content 的词项重叠」降序、confidence 次之,让相关记忆顶进有限预算的前面。
+     */
+    private fun rankByRelevance(list: List<Memory>, queryKeywords: Set<String>?): List<Memory> =
+        if (queryKeywords == null) {
+            list
+        } else {
+            list.sortedWith(
+                compareByDescending<Memory> { TextRelevance.overlap(queryKeywords, it.content) }
+                    .thenByDescending { it.confidence },
+            )
+        }
 
     /**
      * 「MEMO:」收割:解析 Agent 最终回答里的 MEMO 行入库(source=agent_inferred),
