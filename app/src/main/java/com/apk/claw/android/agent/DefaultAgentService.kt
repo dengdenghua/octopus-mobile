@@ -80,6 +80,9 @@ class DefaultAgentService : AgentService {
         var FILE_LOGGING_ENABLED = false
         @JvmField
         var FILE_LOGGING_CACHE_DIR: File? = null
+
+        /** 流式连续超时 N 次后降级到非流式(某些代理/CDN 不支持 SSE). */
+        private const val STREAMING_DEGRADE_THRESHOLD = 2
     }
 
     private lateinit var config: AgentConfig
@@ -91,6 +94,14 @@ class DefaultAgentService : AgentService {
     private val running = AtomicBoolean(false)
     @Volatile
     private var cancelToken: CancellationToken = CancellationToken()
+
+    /**
+     * 流式降级:连续 [STREAMING_DEGRADE_THRESHOLD] 次流式超时后,后续调用全部降级到非流式.
+     * 某些代理/CDN 不支持 SSE,反复流式超时浪费时间.降级是单向的(本次任务内不恢复).
+     */
+    @Volatile
+    private var streamingDegraded = false
+    private val streamingTimeoutCount = java.util.concurrent.atomic.AtomicInteger(0)
 
     override fun initialize(config: AgentConfig) {
         this.config = config
@@ -409,22 +420,38 @@ class DefaultAgentService : AgentService {
 
     private fun chatWithRetry(messages: List<ChatMessage>, callback: AgentCallback, iteration: Int): LlmResponse {
         var lastException: Exception? = null
+        AgentMetrics.llmCall()
         for (attempt in 0 until MAX_API_RETRIES) {
             if (cancelToken.isCancelled()) throw RuntimeException(ClawApplication.instance.getString(R.string.agent_task_cancelled))
             try {
-                val response = if (config.streaming) {
-                    llmClient.chatStreaming(messages, toolSpecs, object : StreamingListener {
-                        override fun onPartialText(token: String) {
-                            callback.onContent(iteration, token)
+                // 流式降级:连续超时后改走非流式(某些代理/CDN 不支持 SSE)
+                val useStreaming = config.streaming && !streamingDegraded
+                val response = if (useStreaming) {
+                    try {
+                        llmClient.chatStreaming(messages, toolSpecs, object : StreamingListener {
+                            override fun onPartialText(token: String) {
+                                callback.onContent(iteration, token)
+                            }
+                            override fun onComplete(response: LlmResponse) {}
+                            override fun onError(error: Throwable) {}
+                        }, cancelToken)
+                    } catch (e: java.util.concurrent.TimeoutException) {
+                        // 流式超时:计数并判断是否降级
+                        val count = streamingTimeoutCount.incrementAndGet()
+                        if (count >= STREAMING_DEGRADE_THRESHOLD && !streamingDegraded) {
+                            streamingDegraded = true
+                            AgentMetrics.streamingDegraded()
+                            XLog.w(TAG, "Streaming degraded to non-streaming after $count timeouts")
                         }
-                        override fun onComplete(response: LlmResponse) {}
-                        override fun onError(error: Throwable) {}
-                    }, cancelToken)
+                        throw e
+                    }
                 } else {
                     // 非流式 chat 不接受 CancellationToken,用 FutureTask + 独立线程包装,
                     // poll 等待以便在 cancelToken 取消时 future.cancel(true) 中断底层 HTTP 调用。
                     chatWithCancellation(messages)
                 }
+                // 流式成功,重置超时计数
+                streamingTimeoutCount.set(0)
                 // 网关上游 5xx 常表现为 HTTP 200、但流式 body 是 {"error":...}，被解析层吞成"空回复"
                 // （无正文、无工具调用）。把它当作可重试的瞬时错误，复用下方分类重试，而不是误判为"任务已完成"。
                 if (response.text.isNullOrEmpty() && !response.hasToolExecutionRequests()) {
@@ -725,6 +752,8 @@ class DefaultAgentService : AgentService {
         var loopWarningCount = 0
         val loopHistory = LinkedList<RoundFingerprint>()
         var lastScreenHash = 0
+        /** 上一轮自动截图的 bitmap hash,用于检测屏幕是否变化(省流). */
+        var lastScreenshotHash = 0
         /** 剩余目标修复轮数（VLM 判未达成时消耗）。 */
         var goalRepairsLeft = MAX_GOAL_REPAIRS
         /** 任务是否成功完成:仅 LLM 正常 finish 或目标校验通过时置 true,finishLoop 据此决定是否 commit 动作录制。 */
@@ -811,10 +840,46 @@ class DefaultAgentService : AgentService {
         val fullSystemPrompt = config.systemPrompt + buildDeviceContext() +
             config.dynamicPromptSuffix + config.memoryPromptSuffix +
             (if (guiLessons.isNotBlank()) "\n\n$guiLessons" else "")
-        return mutableListOf(
+        val msgs = mutableListOf<ChatMessage>(
             SystemMessage.from(fullSystemPrompt),
-            UserMessage.from(userPrompt),
         )
+        // few-shot: 标准工具调用流程示范(帮小模型快速对齐格式,~100 token 开销)
+        // 展示 User → Assistant(tool_calls) → ToolResult → Assistant(完成) 的完整闭环
+        msgs.add(UserMessage.from("[示例] 帮我打开设置"))
+        msgs.add(AiMessage.from(
+            dev.langchain4j.agent.tool.ToolExecutionRequest.builder()
+                .id("ex1")
+                .name("open_app")
+                .arguments("{\"package\":\"com.android.settings\"}")
+                .build()
+        ))
+        msgs.add(ToolExecutionResultMessage.from("ex1", "open_app", "{\"isSuccess\":true,\"data\":\"ok\"}"))
+        msgs.add(AiMessage.from("已打开设置。"))
+        msgs.add(UserMessage.from(userPrompt))
+        return msgs
+    }
+
+    /**
+     * 快速计算 bitmap 的降采样 hash:缩到 16x16 算 pixel 求和.
+     * 用于检测屏幕是否变化,不追求精确(只做粗粒度去重).
+     */
+    private fun bitmapHash(bitmap: Bitmap): Int {
+        val scaled = try {
+            Bitmap.createScaledBitmap(bitmap, 16, 16, true)
+        } catch (e: Exception) {
+            return bitmap.width * 31 + bitmap.height
+        }
+        return try {
+            var hash = 0
+            for (y in 0 until 16) {
+                for (x in 0 until 16) {
+                    hash = hash * 31 + scaled.getPixel(x, y)
+                }
+            }
+            hash
+        } finally {
+            if (scaled !== bitmap) scaled.recycle()
+        }
     }
 
     /**
@@ -825,6 +890,16 @@ class DefaultAgentService : AgentService {
     private fun AgentLoopState.injectAutoScreenshot() {
         val service = ClawAccessibilityService.getInstance() ?: return
         val bitmap = service.takeScreenshot(5000) ?: return
+
+        // 截图变化检测:计算 bitmap hash,与上一轮比较;相同则跳过注入(省 30-50KB 流量 + 上千 token)
+        val currentHash = bitmapHash(bitmap)
+        if (currentHash != 0 && currentHash == lastScreenshotHash) {
+            AgentMetrics.screenUnchanged()
+            bitmap.recycle()
+            messages.add(UserMessage.from("[自动截屏] 屏幕与上一轮相同,未重新截图。如需详细分析请调 look_at_screen。"))
+            return
+        }
+        lastScreenshotHash = currentHash
 
         var scaledBitmap: Bitmap? = null
         try {
@@ -888,6 +963,7 @@ class DefaultAgentService : AgentService {
     }
 
     private fun AgentLoopState.runSingleIteration(callback: AgentCallback): IterationOutcome {
+        AgentMetrics.iteration()
         injectPerception()
         val llmResponse = callLlm(callback) ?: return IterationOutcome.TERMINATE
         if (handleLlmResponse(llmResponse, callback)) return IterationOutcome.TERMINATE
@@ -914,6 +990,7 @@ class DefaultAgentService : AgentService {
         return try {
             chatWithRetry(messages, callback, iterations)
         } catch (e: Exception) {
+            AgentMetrics.llmFailure()
             XLog.e(TAG, "LLM API call failed after retries", e)
             callback.onError(
                 iterations,
@@ -964,7 +1041,13 @@ class DefaultAgentService : AgentService {
         callback.onToolCall(iterations, toolName, displayName, toolArgs)
 
         val params = parseToolArgs(toolName, toolArgs) ?: run {
-            val errorResult = ToolResult.error("参数解析失败（详见日志）。原始参数: $toolArgs")
+            // 附上工具参数 schema,让 LLM 知道正确格式,减少重复格式错误
+            val schema = formatToolSchema(toolName)
+            val errorResult = ToolResult.error(
+                "参数解析失败:JSON 格式有误。原始参数: $toolArgs" +
+                (if (schema.isNotEmpty()) "\n正确参数格式: $schema" else "") +
+                "\n请按此格式重新调用。"
+            )
             appendToolResult(toolRequest, errorResult)
             callback.onToolResult(iterations, toolName, displayName, toolArgs, errorResult)
             return ToolHandleResult.CONTINUE
@@ -989,7 +1072,9 @@ class DefaultAgentService : AgentService {
 
         // ── 动作录制：工具执行前抓锚点（点击后屏幕就变了，只能在点之前抓）──
         actionRecorder?.onToolCall(toolName, toolArgs)
+        AgentMetrics.toolCall()
         val rawResult = execTool(toolName, params)
+        if (!rawResult.isSuccess) AgentMetrics.toolFailure()
         // ── 动作录制：工具执行后记录成功/失败 ──
         actionRecorder?.onToolResult(toolName, rawResult.isSuccess)
 
@@ -1077,6 +1162,28 @@ class DefaultAgentService : AgentService {
         }
     }
 
+    /** 从 toolSpecs 里提取工具参数 schema,格式化为 LLM 可读的 JSON 示例. */
+    private fun formatToolSchema(toolName: String): String {
+        val spec = toolSpecs.find { it.name() == toolName } ?: return ""
+        val params = spec.parameters() ?: return ""
+        return runCatching {
+            val props = params.properties()
+            val required = params.required()
+            val example = LinkedHashMap<String, String>()
+            for ((key, schema) in props) {
+                val typeHint = when (schema) {
+                    is dev.langchain4j.model.chat.request.json.JsonStringSchema -> "string"
+                    is dev.langchain4j.model.chat.request.json.JsonIntegerSchema -> "integer"
+                    is dev.langchain4j.model.chat.request.json.JsonNumberSchema -> "number"
+                    is dev.langchain4j.model.chat.request.json.JsonBooleanSchema -> "boolean"
+                    else -> "value"
+                }
+                example[key] = if (key in required) "<$typeHint required>" else "<$typeHint optional>"
+            }
+            GSON.toJson(example)
+        }.getOrDefault("")
+    }
+
     /**
      * 序列化工具结果给 LLM 观测(排除 imageBase64 省 token)。errorCode/errorLine 仅在有值时带上——
      * 给自动修复循环一个机器可读的判据(参数错/超时/脚本第几行崩),而不必去正则解析人类文本。
@@ -1145,6 +1252,7 @@ class DefaultAgentService : AgentService {
         }
 
         loopWarningCount++
+        AgentMetrics.loopWarning()
         XLog.w(TAG, "Dead loop detected at iteration $iterations (warning $loopWarningCount/$MAX_LOOP_WARNINGS)")
 
         if (loopWarningCount >= MAX_LOOP_WARNINGS) {
@@ -1186,6 +1294,7 @@ class DefaultAgentService : AgentService {
             ClawAccessibilityService.getInstance()?.takeScreenshot(5000)
         }.getOrNull() ?: return null
 
+        AgentMetrics.goalVerify()
         val verdict = try {
             // 在独立线程跑 VLM 校验,executor 线程用 poll 等待 —— 这样 cancelToken 能在
             // VLM 网络挂起时及时终止等待,不再被 runBlocking 阻塞到 35s 超时才检查取消。
@@ -1201,6 +1310,7 @@ class DefaultAgentService : AgentService {
         if (verdict == null || verdict.achieved) return null
 
         goalRepairsLeft--
+        AgentMetrics.goalRepair()
         XLog.i(TAG, "Goal not achieved (repairs left=$goalRepairsLeft): ${verdict.reason}")
         callback.onContent(iterations, "[目标校验] 目标尚未达成：${verdict.reason}")
         return "[目标校验] 经看屏确认，目标尚未达成：${verdict.reason}。" +
@@ -1280,6 +1390,11 @@ class DefaultAgentService : AgentService {
         if (!config.skipCheckpoint) {
             flushCheckpointExecutor()
             TaskCheckpoint.clear()
+        }
+        // 持久化 AgentMetrics 并输出汇总报告
+        runCatching {
+            AgentMetrics.persist()
+            XLog.i(TAG, "AgentMetrics: ${AgentMetrics.report()}")
         }
         // ── 动作录制：仅在任务真正成功完成时才提交快路径缓存 ──
         // 旧逻辑用 iterations < maxIterations 判断"正常完成",但 LLM 报错提前终止也满足该条件,

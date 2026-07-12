@@ -1,5 +1,10 @@
 package com.apk.claw.android.agent
 
+import dev.langchain4j.agent.tool.ToolExecutionRequest
+import dev.langchain4j.data.message.AiMessage
+import dev.langchain4j.data.message.ChatMessage
+import dev.langchain4j.data.message.ToolExecutionResultMessage
+import dev.langchain4j.data.message.UserMessage
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -105,5 +110,94 @@ class DefaultAgentServiceTest {
         // 5 个相同指纹（超过窗口大小 4），应触发
         repeat(5) { history.add(createFingerprint(777, "observe:get_screen_info")) }
         assertTrue(invokeIsStuckInLoop(service, history))
+    }
+
+    // ==================== compressHistoryForSend 测试 ====================
+
+    /** 通过反射调用私有方法 compressHistoryForSend */
+    private fun invokeCompressHistoryForSend(service: DefaultAgentService, messages: MutableList<ChatMessage>) {
+        val method = DefaultAgentService::class.java
+            .getDeclaredMethod("compressHistoryForSend", MutableList::class.java)
+        method.isAccessible = true
+        method.invoke(service, messages)
+    }
+
+    @Test
+    fun `compress replaces old get_screen_info with placeholder`() {
+        val service = DefaultAgentService()
+        val messages = mutableListOf<ChatMessage>(
+            ToolExecutionResultMessage.from(
+                ToolExecutionRequest.builder().id("t1").name("get_screen_info").arguments("{}").build(),
+                "{\"isSuccess\":true,\"data\":\"screen data 1\"}"
+            ),
+            ToolExecutionResultMessage.from(
+                ToolExecutionRequest.builder().id("t2").name("get_screen_info").arguments("{}").build(),
+                "{\"isSuccess\":true,\"data\":\"screen data 2\"}"
+            ),
+            ToolExecutionResultMessage.from(
+                ToolExecutionRequest.builder().id("t3").name("get_screen_info").arguments("{}").build(),
+                "{\"isSuccess\":true,\"data\":\"screen data 3\"}"
+            ),
+        )
+        invokeCompressHistoryForSend(service, messages)
+
+        // 前两条替换为占位符,最后一条完整保留
+        assertEquals("[屏幕信息已省略]", (messages[0] as ToolExecutionResultMessage).text())
+        assertEquals("[屏幕信息已省略]", (messages[1] as ToolExecutionResultMessage).text())
+        assertEquals(
+            "{\"isSuccess\":true,\"data\":\"screen data 3\"}",
+            (messages[2] as ToolExecutionResultMessage).text()
+        )
+    }
+
+    @Test
+    fun `compress replaces old auto-screenshots with placeholder`() {
+        val service = DefaultAgentService()
+        val messages = mutableListOf<ChatMessage>(
+            UserMessage.from("[自动截屏] 这是当前屏幕状态，请据此决策。"),
+            UserMessage.from("[自动截屏] 这是当前屏幕状态，请据此决策。"),
+            UserMessage.from("[自动截屏] 这是当前屏幕状态，请据此决策。"),
+        )
+        invokeCompressHistoryForSend(service, messages)
+
+        // 前两条替换为占位符,最后一条完整保留
+        assertEquals("[早期自动截屏已省略]", (messages[0] as UserMessage).singleText())
+        assertEquals("[早期自动截屏已省略]", (messages[1] as UserMessage).singleText())
+        assertEquals("[自动截屏] 这是当前屏幕状态，请据此决策。", (messages[2] as UserMessage).singleText())
+    }
+
+    @Test
+    fun `compress keeps recent 3 rounds intact`() {
+        val service = DefaultAgentService()
+        val messages = mutableListOf<ChatMessage>()
+        val originalResults = mutableListOf<String>()
+
+        // 构造 5 轮 AiMessage + ToolResult(使用 tap 工具,避免被 get_screen_info 全局替换逻辑干扰)
+        repeat(5) { i ->
+            messages.add(AiMessage.from("Round ${i + 1} thinking"))
+            val req = ToolExecutionRequest.builder()
+                .id("t${i + 1}")
+                .name("tap")
+                .arguments("{\"x\":100,\"y\":200}")
+                .build()
+            // 构造 >100 字符的结果,确保 compressToolResultMessage 会实际压缩
+            val longData = "d".repeat(150)
+            val resultJson = "{\"isSuccess\":true,\"data\":\"$longData\"}"
+            originalResults.add(resultJson)
+            messages.add(ToolExecutionResultMessage.from(req, resultJson))
+        }
+        invokeCompressHistoryForSend(service, messages)
+
+        // 保护区外(第 1、2 轮)的 ToolResult 应被压缩为摘要
+        val compressed1 = (messages[1] as ToolExecutionResultMessage).text()
+        val compressed2 = (messages[3] as ToolExecutionResultMessage).text()
+        assertNotEquals(originalResults[0], compressed1)
+        assertNotEquals(originalResults[1], compressed2)
+        assertTrue(compressed1.startsWith("✓ "))
+
+        // 保护区(最近 3 轮)的 ToolResult 应保持不变
+        assertEquals(originalResults[2], (messages[5] as ToolExecutionResultMessage).text())
+        assertEquals(originalResults[3], (messages[7] as ToolExecutionResultMessage).text())
+        assertEquals(originalResults[4], (messages[9] as ToolExecutionResultMessage).text())
     }
 }

@@ -25,6 +25,39 @@ object VisionAnalyzer {
     /** JPEG 压缩质量。 */
     private const val JPEG_QUALITY = 50
 
+    /**
+     * VLM 结果短 TTL 缓存:同一屏幕 + 同一问题在短时间(10s)内直接返回上次结果,
+     * 避免连续 look_at_screen 调用重复花 VLM token.
+     * key = (screenHash, question),value = 分析结果.
+     */
+    private data class CacheEntry(val screenHash: Int, val question: String, val result: String, val ts: Long)
+    @Volatile
+    private var cache: CacheEntry? = null
+    private const val CACHE_TTL_MS = 10_000L
+
+    /**
+     * 快速计算 bitmap 的降采样 hash:缩到 16x16 算 pixel 求和.
+     * 用于判断屏幕是否变化,不追求精确(10s 内同一问题复用,变化检测只需粗粒度).
+     */
+    private fun bitmapHash(bitmap: Bitmap): Int {
+        val scaled = try {
+            Bitmap.createScaledBitmap(bitmap, 16, 16, true)
+        } catch (e: Exception) {
+            return bitmap.width * 31 + bitmap.height
+        }
+        return try {
+            var hash = 0
+            for (y in 0 until 16) {
+                for (x in 0 until 16) {
+                    hash = hash * 31 + scaled.getPixel(x, y)
+                }
+            }
+            hash
+        } finally {
+            if (scaled !== bitmap) scaled.recycle()
+        }
+    }
+
     /** 是否已配置可用的视觉能力（视觉 key 或主 key 任一非空）。 */
     fun isConfigured(): Boolean =
         KVUtils.getVisionApiKey().isNotBlank() || KVUtils.getLlmApiKey().isNotBlank()
@@ -42,6 +75,16 @@ object VisionAnalyzer {
     }
 
     suspend fun analyze(bitmap: Bitmap, question: String): String {
+        // 缓存命中:同一屏幕 hash + 同一问题,10s 内直接返回上次结果
+        val hash = bitmapHash(bitmap)
+        val now = System.currentTimeMillis()
+        cache?.let { e ->
+            if (e.screenHash == hash && e.question == question && now - e.ts < CACHE_TTL_MS) {
+                com.apk.claw.android.agent.AgentMetrics.vlmCacheHit()
+                return e.result
+            }
+        }
+
         val origW = bitmap.width
         val origH = bitmap.height
         val base64 = encodeScaledJpeg(bitmap)
@@ -59,7 +102,11 @@ object VisionAnalyzer {
             imageBase64 = base64,
         )
         val resp = client.chat(listOf(system, user), emptyList())
-        return resp.content?.trim().orEmpty().ifEmpty { "(视觉模型没有返回内容)" }
+        val result = resp.content?.trim().orEmpty().ifEmpty { "(视觉模型没有返回内容)" }
+
+        // 写入缓存
+        cache = CacheEntry(hash, question, result, now)
+        return result
     }
 
     /** 解析视觉模型配置：视觉项优先，留空回退主模型。 */
