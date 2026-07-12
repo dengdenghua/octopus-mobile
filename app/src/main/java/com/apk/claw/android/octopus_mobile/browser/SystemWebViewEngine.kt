@@ -188,6 +188,23 @@ class SystemWebViewEngine : BrowserEngine {
             }
         }
 
+        // 下载监听:WebView 自身不处理下载,把 url/mime/size 透出给 UI 层走系统 DownloadManager。
+        // 此前 DownloadStart 事件已声明但 setDownloadListener 从未调用 —— 此处补齐接通。
+        webView.setDownloadListener { url, userAgent, contentDisposition, mimetype, contentLength ->
+            val filename = android.webkit.URLUtil.guessFileName(
+                url, contentDisposition, mimetype
+            )
+            _events.tryEmit(
+                EngineEvent.DownloadStart(
+                    url = url,
+                    suggestedFilename = filename,
+                    mimeType = mimetype ?: "",
+                    contentLength = contentLength,
+                    userAgent = userAgent ?: "",
+                )
+            )
+        }
+
         activeWebView = webView
         return webView
     }

@@ -510,6 +510,7 @@
     <string name="browser_bookmarks_button">书签</string>
     <string name="browser_ai_sheet_title">问 AI · 关于此页</string>
     <string name="browser_accessibility_warning">需开启无障碍服务才能读取页面内容</string>
+    <string name="browser_reading_page">正在读取页面内容…</string>
     <string name="browser_ask_page_hint">问这个页面…</string>
     <string name="browser_chip_summarize">总结此页</string>
     <string name="browser_chip_key_points">提取要点</string>
@@ -527,6 +528,7 @@
     <string name="browser_error_message">出错：%1$s</string>
     <string name="browser_load_error">加载错误: %1$s</string>
     <string name="browser_download_notification">下载: %1$s</string>
+    <string name="browser_download_started">开始下载：%1$s</string>
     <string name="browser_remove_bookmark">取消收藏当前页</string>
     <string name="browser_bookmark_current">☆ 收藏当前页</string>
     <string name="browser_add_common_site">＋ 添加到主页常用</string>
@@ -986,7 +988,7 @@
     <string name="browser_ai_prompt_translate">把这个网页的主要内容翻译成中文。</string>
     <string name="browser_chrome_filter">X,浏览器,GeckoView,停止,问,执行,✨,刷新,关闭,切换搜索引擎,问 AI,后退,前进,首页,书签,扩展,搜索或输入网址,加载中,加载中…,搜索或输入</string>
     <string name="browser_page_cmd_markers">帮我,这页,此页,这个页面,本页,点一下,点击,填写,填一下,加入购物车,加购,下单,结算,登录这,勾选,提交表单</string>
-    <string name="browser_agent_prompt">在当前网页上完成以下操作（用 get_screen_info 查看页面元素及坐标，用 tap / input_text 等工具操作）：%1$s</string>
+    <string name="browser_agent_prompt">你正在 App 内嵌浏览器中操作当前网页。优先使用 browser_* 系列工具：browser_get_dom 获取页面内容、browser_click 点击元素(CSS 选择器)、browser_type 在输入框输入文本、browser_evaluate 执行任意 JS、browser_navigate 跳转 URL、browser_screenshot 截图。仅当 browser_* 工具不可用或失败时，才回退到无障碍路径(get_screen_info 查看坐标 + tap/input_text 操作)。\n\n任务：%1$s</string>
     <string name="browser_ai_system_prompt">你是网页阅读助手。请只依据下方网页内容回答，不要调用任何工具。\n用户问题：%1$s%2$s</string>
     <string name="browser_installing_extension_toast">正在安装扩展…</string>
 

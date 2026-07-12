@@ -38,6 +38,10 @@ object SearchEngines {
         SearchEngine("bing", "Bing", "b", "https://www.bing.com/search?q=", "https://www.bing.com"),
         SearchEngine("baidu", "百度", "百", "https://www.baidu.com/s?wd=", "https://www.baidu.com"),
         SearchEngine("duckduckgo", "DuckDuckGo", "D", "https://duckduckgo.com/?q=", "https://duckduckgo.com"),
+        // AI 搜索引擎:对话式回答 + 引用来源,适合复杂问题。
+        SearchEngine("perplexity", "Perplexity", "P", "https://www.perplexity.ai/search?q=", "https://www.perplexity.ai"),
+        SearchEngine("kimi", "Kimi", "K", "https://kimi.moonshot.cn/search?q=", "https://kimi.moonshot.cn"),
+        SearchEngine("tongyi", "通义千问", "通", "https://tongyi.aliyun.com/qianwen?query=", "https://tongyi.aliyun.com"),
     )
 
     val DEFAULT = ALL[0]

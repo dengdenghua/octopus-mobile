@@ -1,5 +1,6 @@
 package com.apk.claw.android.ui.browser
 
+import android.app.DownloadManager
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -15,19 +16,19 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Launch
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -36,8 +37,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -50,7 +54,6 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.apk.claw.android.R
 import com.apk.claw.android.octopus_mobile.browser.BrowserEngine
@@ -58,13 +61,24 @@ import com.apk.claw.android.octopus_mobile.browser.BrowserEngineFactory
 import com.apk.claw.android.octopus_mobile.browser.EngineEvent
 import com.apk.claw.android.octopus_mobile.browser.SearchEngines
 import com.apk.claw.android.tool.ToolRegistry
-import com.apk.claw.android.ui.compose.screen.DiscoverScreen
+import com.apk.claw.android.ui.compose.theme.OctopusBackground
 import com.apk.claw.android.ui.compose.theme.OctopusColors
 import com.apk.claw.android.ui.compose.theme.OctopusShape
+import com.apk.claw.android.ui.compose.theme.OctopusSpacing
 import com.apk.claw.android.utils.KVUtils
 import java.util.Locale
 
 private const val TAG = "BrowserScreen"
+
+private val URL_REGEX = Regex("https?://[\\w\\-._~:/?#\\[\\]@!$&'()*+,;=%]+")
+
+sealed class BrowserPage {
+    object Home : BrowserPage()
+    data class Result(val query: String) : BrowserPage()
+    object Webview : BrowserPage()
+}
+
+data class HistoryEntry(val title: String, val url: String)
 
 @Composable
 fun BrowserScreen(
@@ -76,22 +90,27 @@ fun BrowserScreen(
 
     val engine = remember { BrowserEngineFactory.selectBest(context) }
 
-    // 浏览器状态
-    var isHomeVisible by rememberSaveable { mutableStateOf(initialUrl.isNullOrEmpty()) }
+    var pageState by remember { mutableStateOf<BrowserPage>(if (initialUrl.isNullOrEmpty()) BrowserPage.Home else BrowserPage.Webview) }
     var urlText by rememberSaveable { mutableStateOf("") }
     var currentUrl by rememberSaveable { mutableStateOf("") }
     var pageTitle by rememberSaveable { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
     var progress by remember { mutableIntStateOf(0) }
-    var aiMode by rememberSaveable { mutableStateOf(true) }
 
-    // Sheet 显示状态
-    var showSettings by remember { mutableStateOf(false) }
-    var showWindows by remember { mutableStateOf(false) }
+    var answerText by remember { mutableStateOf("") }
+    var sources by remember { mutableStateOf<List<String>>(emptyList()) }
+    var thinking by remember { mutableStateOf(false) }
+
+    var showMenu by remember { mutableStateOf(false) }
+    var showTimeline by remember { mutableStateOf(false) }
     var showAi by remember { mutableStateOf(false) }
     var showBookmark by remember { mutableStateOf(false) }
+    var showReader by remember { mutableStateOf(false) }
+    var readerText by remember { mutableStateOf("") }
+    var addressExpanded by remember { mutableStateOf(false) }
+    var darkMode by rememberSaveable { mutableStateOf(false) }
 
-    // TTS
+    val history = remember { mutableStateListOf<HistoryEntry>() }
     val tts = remember { mutableStateOf<TextToSpeech?>(null) }
 
     DisposableEffect(lifecycleOwner) {
@@ -113,13 +132,11 @@ fun BrowserScreen(
         }
     }
 
-    // 注册为当前浏览器引擎
     LaunchedEffect(engine) {
         ToolRegistry.setBrowserEngine(engine)
         BrowserTabsStore.ensureAtLeastOne(context.getString(R.string.browser_new_tab))
     }
 
-    // 引擎事件监听
     LaunchedEffect(engine, lifecycleOwner) {
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
             engine.events().collect { event ->
@@ -135,6 +152,10 @@ fun BrowserScreen(
                         pageTitle = event.title
                         urlText = SearchEngines.extractQuery(event.url) ?: event.url
                         BrowserTabsStore.updateCurrent(event.url, event.title.ifBlank { event.url })
+                        if (event.url.startsWith("http")) {
+                            history.add(0, HistoryEntry(event.title.ifBlank { event.url }, event.url))
+                            while (history.size > 10) history.removeAt(history.size - 1)
+                        }
                     }
                     is EngineEvent.ProgressChanged -> {
                         progress = event.percent
@@ -148,36 +169,34 @@ fun BrowserScreen(
                         ).show()
                     }
                     is EngineEvent.DownloadStart -> {
-                        Toast.makeText(
-                            context,
-                            context.getString(R.string.browser_download_notification, event.suggestedFilename),
-                            Toast.LENGTH_SHORT,
-                        ).show()
+                        DownloadHelper.enqueueDownload(
+                            context = context,
+                            url = event.url,
+                            mimeType = event.mimeType,
+                            suggestedFilename = event.suggestedFilename,
+                            userAgent = event.userAgent,
+                        )
                     }
                     is EngineEvent.ConsoleMessage -> {
                         Log.d(TAG, "[${event.level}] ${event.message}")
                     }
-                    is EngineEvent.JsAlert -> {
-                        // JS alert 在 Compose 层处理较繁琐，先保持默认由引擎内部处理
-                    }
+                    is EngineEvent.JsAlert -> {}
                 }
             }
         }
     }
 
-    // 初始 URL
     LaunchedEffect(initialUrl) {
         if (!initialUrl.isNullOrEmpty()) {
             navigateTo(engine, initialUrl) { navUrl ->
                 urlText = SearchEngines.extractQuery(navUrl) ?: navUrl
             }
-            isHomeVisible = false
+            pageState = BrowserPage.Webview
         }
     }
 
-    // 导航函数
     val navigate: (String) -> Unit = { input ->
-        isHomeVisible = false
+        pageState = BrowserPage.Webview
         val url = if (input.contains(".") && !input.contains(" ")) {
             if (input.startsWith("http://") || input.startsWith("https://")) input else "https://$input"
         } else {
@@ -188,87 +207,124 @@ fun BrowserScreen(
         engine.navigate(url)
     }
 
-    // 返回手势
+    val submitHome: (String) -> Unit = { input ->
+        val t = input.trim()
+        if (t.isNotEmpty()) {
+            if (isUrlLike(t)) {
+                navigate(t)
+            } else {
+                pageState = BrowserPage.Result(t)
+                answerText = ""
+                sources = emptyList()
+                thinking = true
+                runAiSearch(context, t,
+                    onAnswer = { full -> answerText = full },
+                    onDone = { finalText ->
+                        thinking = false
+                        sources = URL_REGEX.findAll(finalText).map { it.value }.distinct().take(5).toList()
+                    },
+                )
+            }
+        }
+    }
+
     BackHandler {
-        if (isHomeVisible) {
-            onClose()
-        } else {
-            engine.evaluateJs("window.history.length") { len ->
-                val n = len?.trim()?.trim('"')?.toIntOrNull() ?: 1
-                if (n > 1) engine.evaluateJs("window.history.back()") else isHomeVisible = true
+        when (pageState) {
+            is BrowserPage.Home -> onClose()
+            is BrowserPage.Result -> pageState = BrowserPage.Home
+            is BrowserPage.Webview -> {
+                engine.evaluateJs("window.history.length") { len ->
+                    val n = len?.trim()?.trim('"')?.toIntOrNull() ?: 1
+                    if (n > 1) engine.evaluateJs("window.history.back()")
+                    else pageState = BrowserPage.Home
+                }
             }
         }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // 背景
         BrowserWallpaper()
 
-        // 内容层:网页在上,地址栏移到底部(手机习惯)
         Column(modifier = Modifier.fillMaxSize()) {
-            BrowserWebViewWithHome(
-                engine = engine,
-                isHomeVisible = isHomeVisible,
-                onOpenUrl = { url -> url?.takeIf { it.isNotBlank() }?.let { navigate(it) } },
-                onClose = onClose,
-                modifier = Modifier.weight(1f).statusBarsPadding(),
-            )
+            Box(modifier = Modifier.weight(1f).statusBarsPadding()) {
+                BrowserWebViewContainer(engine = engine)
 
-            // 进度条(贴在底部地址栏上方)
-            if (isLoading) {
+                when (pageState) {
+                    is BrowserPage.Home -> BrowserHomeOverlay(
+                        onSubmit = submitHome,
+                        onClose = onClose,
+                    )
+                    is BrowserPage.Result -> BrowserResultOverlay(
+                        query = (pageState as BrowserPage.Result).query,
+                        answer = answerText,
+                        sources = sources,
+                        thinking = thinking,
+                        onBack = { pageState = BrowserPage.Home },
+                        onSuggestion = { s -> submitHome(s) },
+                        onOpenSource = { url -> navigate(url) },
+                    )
+                    is BrowserPage.Webview -> {}
+                }
+            }
+
+            if (isLoading && pageState is BrowserPage.Webview) {
                 LinearProgressIndicator(
                     progress = { progress.coerceIn(0, 100) / 100f },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(2.dp),
+                    modifier = Modifier.fillMaxWidth().height(2.dp),
                     color = OctopusColors.Primary,
                     trackColor = Color.Transparent,
                 )
             }
 
-            // 底部地址栏 —— 含 菜单/窗口(合并了原浮动底栏)
-            BrowserTopBar(
-                urlText = urlText,
-                onUrlTextChange = { urlText = it },
-                aiMode = aiMode,
-                onToggleAiMode = { aiMode = !aiMode },
-                isLoading = isLoading,
-                onClose = onClose,
-                onHomeClick = { isHomeVisible = !isHomeVisible },
-                onRefreshClick = {
-                    if (isLoading) engine.evaluateJs("window.stop()") else engine.navigate(currentUrl)
-                },
-                onSubmit = {
-                    val t = urlText.trim()
-                    if (t.isNotEmpty()) {
-                        if (aiMode && isPageCommand(context, t)) {
-                            Toast.makeText(context, context.getString(R.string.browser_ai_operate_toast), Toast.LENGTH_SHORT).show()
-                            runAgentOnPage(context, t)
-                        } else {
-                            navigate(t)
+            if (pageState is BrowserPage.Webview) {
+                BrowserWebviewTopBar(
+                    urlText = urlText,
+                    onUrlTextChange = { urlText = it },
+                    currentUrl = currentUrl,
+                    addressExpanded = addressExpanded,
+                    onAddressClick = { addressExpanded = true },
+                    onAddressDismiss = { addressExpanded = false },
+                    isLoading = isLoading,
+                    onBack = {
+                        engine.evaluateJs("window.history.length") { len ->
+                            val n = len?.trim()?.trim('"')?.toIntOrNull() ?: 1
+                            if (n > 1) engine.evaluateJs("window.history.back()")
+                            else pageState = BrowserPage.Home
                         }
-                    }
-                },
-                onSettingsClick = { showSettings = true },
-                onWindowsClick = { showWindows = true },
-                windowCount = BrowserTabsStore.count().coerceAtLeast(1),
-                modifier = Modifier.navigationBarsPadding(),
-            )
+                    },
+                    onBackLongPress = { showTimeline = true },
+                    onReader = {
+                        engine.evaluateJs("document.body.innerText") { result ->
+                            val text = result?.trim('"')?.replace("\\n", "\n") ?: ""
+                            readerText = text
+                            showReader = true
+                        }
+                    },
+                    onRefresh = {
+                        if (isLoading) engine.evaluateJs("window.stop()") else engine.navigate(currentUrl)
+                    },
+                    onMenu = { showMenu = true },
+                    onSubmit = {
+                        val t = urlText.trim()
+                        if (t.isNotEmpty()) { navigate(t); addressExpanded = false }
+                    },
+                    modifier = Modifier.navigationBarsPadding(),
+                )
+            }
         }
 
-        // 悬浮 AI 气泡:取代底栏里的「问 AI」按钮,右下、抬高一点,浮在网页内容上
         AnimatedVisibility(
-            visible = !isHomeVisible,
+            visible = pageState is BrowserPage.Webview,
             enter = fadeIn(),
             exit = fadeOut(),
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .navigationBarsPadding()
-                .padding(end = 18.dp, bottom = 96.dp),
+                .padding(end = OctopusSpacing.lg, bottom = 72.dp),
         ) {
             Box(
                 modifier = Modifier
-                    .size(54.dp)
+                    .size(48.dp)
                     .shadow(10.dp, CircleShape)
                     .clip(CircleShape)
                     .background(OctopusColors.Primary)
@@ -277,57 +333,65 @@ fun BrowserScreen(
             ) {
                 Text(
                     text = "AI",
-                    fontSize = 17.sp,
+                    fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
                     color = OctopusColors.OnPrimary,
                 )
             }
         }
 
-        // 各种 Sheet / Dialog
-        if (showSettings) {
-            BrowserSettingsSheet(
-                onDismiss = { showSettings = false },
-                onRefresh = { engine.navigate(currentUrl) },
+        if (showMenu) {
+            BrowserMenuSheet(
+                onDismiss = { showMenu = false },
+                onDownloads = {
+                    runCatching { context.startActivity(Intent(DownloadManager.ACTION_VIEW_DOWNLOADS)) }
+                },
+                onShare = {
+                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_TEXT, currentUrl)
+                    }
+                    runCatching { context.startActivity(Intent.createChooser(shareIntent, context.getString(R.string.browser_share_chooser))) }
+                },
+                onToggleDark = {
+                    darkMode = !darkMode
+                    val js = if (darkMode) {
+                        "(function(){var s=document.documentElement.style;s.filter='invert(1) hue-rotate(180deg)';})()"
+                    } else {
+                        "(function(){var s=document.documentElement.style;s.filter='none';})()"
+                    }
+                    engine.evaluateJs(js)
+                },
+                onTranslate = {
+                    val translateUrl = "https://translate.google.com/translate?sl=auto&tl=zh-CN&u=" + Uri.encode(currentUrl)
+                    engine.navigate(translateUrl)
+                },
                 onBookmarks = { showBookmark = true },
-                onCopyLink = {
-                    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    cm.setPrimaryClip(ClipData.newPlainText("url", currentUrl))
-                    Toast.makeText(context, context.getString(R.string.browser_link_copied), Toast.LENGTH_SHORT).show()
+                onToggleDesktop = {
+                    val newMode = !KVUtils.getBrowserDesktopMode()
+                    KVUtils.setBrowserDesktopMode(newMode)
+                    engine.navigate(currentUrl)
+                    Toast.makeText(context, if (newMode) context.getString(R.string.browser_desktop_mode_on) else context.getString(R.string.browser_desktop_mode_off), Toast.LENGTH_SHORT).show()
                 },
-                onOpenInSystem = {
-                    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(currentUrl))) }
-                },
-                onEngineSettings = {
-                    runCatching { context.startActivity(Intent(context, com.apk.claw.android.ui.featurescreens.BrowserSettingsActivity::class.java)) }
-                },
+                darkMode = darkMode,
+                desktopMode = KVUtils.getBrowserDesktopMode(),
             )
         }
 
-        if (showWindows) {
-            BrowserWindowsSheet(
-                onDismiss = { showWindows = false },
-                onSwitch = { tab ->
-                    if (tab.url.isBlank()) isHomeVisible = true else navigate(tab.url)
-                },
-                onClose = { tab ->
-                    BrowserTabsStore.close(tab.id, context.getString(R.string.browser_new_tab))
-                    if (tab.id == BrowserTabsStore.currentId.value) {
-                        BrowserTabsStore.current()?.let { if (it.url.isBlank()) isHomeVisible = true else navigate(it.url) }
-                    }
-                },
-                onNewWindow = {
-                    BrowserTabsStore.newTab(context.getString(R.string.browser_new_tab))
-                    isHomeVisible = true
-                },
+        if (showTimeline) {
+            BrowserTimelineSheet(
+                history = history.toList(),
+                onDismiss = { showTimeline = false },
+                onOpen = { url -> navigate(url) },
             )
         }
 
         if (showAi) {
             BrowserAiSheet(
+                engine = engine,
                 onDismiss = { showAi = false },
                 onRunAi = { question, onAnswer ->
-                    runAi(context, question, onAnswer)
+                    runAi(context, engine, question, onAnswer)
                 },
                 onRunAgent = { task ->
                     showAi = false
@@ -347,152 +411,19 @@ fun BrowserScreen(
                 onNavigate = { url -> navigate(url) },
             )
         }
+
+        if (showReader) {
+            BrowserReaderSheet(
+                text = readerText,
+                onDismiss = { showReader = false },
+            )
+        }
     }
 }
 
 @Composable
 private fun BrowserWallpaper() {
     Box(modifier = Modifier.fillMaxSize().background(OctopusColors.Background))
-}
-
-@Composable
-@Suppress("LongMethod")
-private fun BrowserTopBar(
-    urlText: String,
-    onUrlTextChange: (String) -> Unit,
-    aiMode: Boolean,
-    onToggleAiMode: () -> Unit,
-    isLoading: Boolean,
-    onClose: () -> Unit,
-    onHomeClick: () -> Unit,
-    onRefreshClick: () -> Unit,
-    onSubmit: () -> Unit,
-    onSettingsClick: () -> Unit,
-    onWindowsClick: () -> Unit,
-    windowCount: Int,
-    modifier: Modifier = Modifier,
-) {
-    val textColor = OctopusColors.TextPrimary
-    val mutedColor = OctopusColors.TextSecondary
-
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(OctopusColors.Surface)
-            .padding(horizontal = 6.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        // 关闭
-        BrowserCapsuleButton(
-            onClick = onClose,
-            modifier = Modifier.size(36.dp),
-        ) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.advanced_action_close), tint = mutedColor, modifier = Modifier.size(20.dp))
-        }
-
-        Spacer(Modifier.width(6.dp))
-
-        // 菜单(设置)—— 合并自原浮动底栏
-        BrowserCapsuleButton(onClick = onSettingsClick, modifier = Modifier.size(36.dp)) {
-            Icon(
-                Icons.Filled.Menu,
-                contentDescription = stringResource(R.string.browser_settings_title),
-                tint = mutedColor,
-                modifier = Modifier.size(20.dp),
-            )
-        }
-
-        Spacer(Modifier.width(6.dp))
-
-        // 地址栏
-        Row(
-            modifier = Modifier
-                .weight(1f)
-                .height(40.dp)
-                .clip(OctopusShape.capsule)
-                .background(OctopusColors.SurfaceVariant)
-                .border(
-                    width = 1.dp,
-                    color = OctopusColors.Border,
-                    shape = OctopusShape.capsule,
-                )
-                .padding(start = 8.dp, end = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(28.dp)
-                    .clip(CircleShape)
-                    .clickable { onToggleAiMode() },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = if (aiMode) "AI" else "URL",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = OctopusColors.Primary,
-                )
-            }
-
-            BasicTextField(
-                value = urlText,
-                onValueChange = onUrlTextChange,
-                singleLine = true,
-                textStyle = TextStyle(fontSize = 13.sp, color = textColor),
-                cursorBrush = SolidColor(OctopusColors.Primary),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
-                keyboardActions = KeyboardActions(onGo = { onSubmit() }),
-                decorationBox = { innerTextField ->
-                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
-                        if (urlText.isEmpty()) {
-                            Text(
-                                text = stringResource(if (aiMode) R.string.browser_url_hint else R.string.browser_input_url),
-                                fontSize = 13.sp,
-                                color = mutedColor,
-                            )
-                        }
-                        innerTextField()
-                    }
-                },
-                modifier = Modifier.weight(1f).padding(horizontal = 4.dp),
-            )
-
-            BrowserCapsuleButton(
-                onClick = onRefreshClick,
-                modifier = Modifier.size(28.dp),
-            ) {
-                Icon(
-                    imageVector = if (isLoading) Icons.Filled.Close else Icons.Filled.Refresh,
-                    contentDescription = stringResource(R.string.browser_refresh_button),
-                    tint = mutedColor,
-                    modifier = Modifier.size(18.dp),
-                )
-            }
-        }
-
-        Spacer(Modifier.width(6.dp))
-
-        // 首页
-        BrowserCapsuleButton(onClick = onHomeClick, modifier = Modifier.size(36.dp)) {
-            Icon(Icons.Filled.Home, contentDescription = stringResource(R.string.browser_home_button), tint = mutedColor, modifier = Modifier.size(20.dp))
-        }
-
-        Spacer(Modifier.width(6.dp))
-
-        // 窗口数 —— 合并自原浮动底栏
-        BrowserCapsuleButton(
-            onClick = onWindowsClick,
-            modifier = Modifier.size(36.dp),
-            backgroundColor = OctopusColors.SurfaceVariant,
-        ) {
-            Text(
-                text = windowCount.toString(),
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-                color = OctopusColors.Primary,
-            )
-        }
-    }
 }
 
 @Composable
@@ -521,64 +452,405 @@ private fun BrowserWebViewContainer(engine: BrowserEngine) {
     )
 }
 
-@Composable
-private fun BrowserWebViewWithHome(
-    engine: BrowserEngine,
-    isHomeVisible: Boolean,
-    onOpenUrl: (String?) -> Unit,
-    onClose: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Box(modifier = modifier.fillMaxSize()) {
-        BrowserWebViewContainer(engine = engine)
+// ── P1-1: 首页极简化 ──
 
-        AnimatedVisibility(
-            visible = isHomeVisible,
-            enter = fadeIn(),
-            exit = fadeOut(),
-            modifier = Modifier.fillMaxSize(),
+@Composable
+private fun BrowserHomeOverlay(
+    onSubmit: (String) -> Unit,
+    onClose: () -> Unit,
+) {
+    var text by remember { mutableStateOf("") }
+    val focusRequester = remember { FocusRequester() }
+    var focusSignal by remember { mutableIntStateOf(0) }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(OctopusColors.Background)
+            .padding(horizontal = OctopusSpacing.lg),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.fillMaxWidth(),
         ) {
-            BrowserHomeLayer(
-                onOpenUrl = onOpenUrl,
-                onClose = onClose,
+            BasicTextField(
+                value = text,
+                onValueChange = { text = it },
+                singleLine = true,
+                textStyle = TextStyle(
+                    fontSize = 16.sp,
+                    color = OctopusColors.TextPrimary,
+                ),
+                cursorBrush = SolidColor(OctopusColors.Primary),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
+                keyboardActions = KeyboardActions(onGo = { onSubmit(text) }),
+                decorationBox = { innerTextField ->
+                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
+                        if (text.isEmpty()) {
+                            Text(
+                                text = stringResource(R.string.browser_home_search_hint),
+                                fontSize = 16.sp,
+                                color = OctopusColors.TextMuted,
+                            )
+                        }
+                        innerTextField()
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp)
+                    .clip(OctopusShape.large)
+                    .background(OctopusBackground.solidSurface)
+                    .padding(horizontal = OctopusSpacing.lg)
+                    .focusRequester(focusRequester),
             )
+
+            Spacer(Modifier.height(OctopusSpacing.xl))
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.md),
+            ) {
+                QuickChip("查", stringResource(R.string.browser_chip_search)) { text = "帮我查一下 "; focusSignal++ }
+                QuickChip("买", stringResource(R.string.browser_chip_buy)) { text = "帮我比一下价格 "; focusSignal++ }
+                QuickChip("读", stringResource(R.string.browser_chip_read)) { text = "帮我读一下这篇 "; focusSignal++ }
+                QuickChip("下", stringResource(R.string.browser_chip_download)) { text = "帮我下载 "; focusSignal++ }
+            }
+        }
+    }
+
+    LaunchedEffect(focusSignal) {
+        if (focusSignal > 0) focusRequester.requestFocus()
+    }
+}
+
+@Composable
+private fun QuickChip(char: String, label: String, onClick: () -> Unit) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .clip(OctopusShape.large)
+            .background(OctopusBackground.solidSurface)
+            .clickable(onClick = onClick)
+            .padding(horizontal = OctopusSpacing.lg, vertical = OctopusSpacing.md),
+    ) {
+        Text(
+            text = char,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold,
+            color = OctopusColors.Primary,
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            text = label,
+            fontSize = 10.sp,
+            color = OctopusColors.TextSecondary,
+        )
+    }
+}
+
+// ── P1-2: 结果页答案优先 ──
+
+@Composable
+private fun BrowserResultOverlay(
+    query: String,
+    answer: String,
+    sources: List<String>,
+    thinking: Boolean,
+    onBack: () -> Unit,
+    onSuggestion: (String) -> Unit,
+    onOpenSource: (String) -> Unit,
+) {
+    var sourcesExpanded by remember { mutableStateOf(false) }
+
+    Column(modifier = Modifier.fillMaxSize().background(OctopusColors.Background)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = OctopusSpacing.sm, vertical = OctopusSpacing.sm),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            BrowserCapsuleButton(onClick = onBack, modifier = Modifier.size(36.dp)) {
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = stringResource(R.string.advanced_action_close),
+                    tint = OctopusColors.TextSecondary,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+            Text(
+                text = query,
+                fontSize = 14.sp,
+                color = OctopusColors.TextPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f).padding(horizontal = OctopusSpacing.sm),
+            )
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = OctopusSpacing.lg),
+        ) {
+            Surface(
+                shape = OctopusShape.large,
+                color = OctopusBackground.solidSurface,
+                contentColor = OctopusColors.TextPrimary,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    text = if (thinking && answer.isBlank()) stringResource(R.string.browser_thinking_status) else answer,
+                    fontSize = 14.sp,
+                    color = OctopusColors.TextPrimary,
+                    lineHeight = 22.sp,
+                    modifier = Modifier.padding(OctopusSpacing.lg),
+                )
+            }
+
+            if (sources.isNotEmpty()) {
+                Spacer(Modifier.height(OctopusSpacing.md))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(OctopusShape.medium)
+                        .background(OctopusColors.SurfaceVariant)
+                        .clickable { sourcesExpanded = !sourcesExpanded }
+                        .padding(OctopusSpacing.md),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        Icons.Filled.Language,
+                        contentDescription = null,
+                        tint = OctopusColors.TextSecondary,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Spacer(Modifier.width(OctopusSpacing.sm))
+                    Text(
+                        text = stringResource(R.string.browser_sources_count, sources.size),
+                        fontSize = 13.sp,
+                        color = OctopusColors.TextSecondary,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Icon(
+                        if (sourcesExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                        contentDescription = null,
+                        tint = OctopusColors.TextSecondary,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+                if (sourcesExpanded) {
+                    sources.forEach { url ->
+                        Text(
+                            text = url,
+                            fontSize = 12.sp,
+                            color = OctopusColors.Primary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onOpenSource(url) }
+                                .padding(horizontal = OctopusSpacing.md, vertical = OctopusSpacing.sm),
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(OctopusSpacing.lg))
+            Text(
+                text = stringResource(R.string.browser_follow_up_title),
+                fontSize = 13.sp,
+                color = OctopusColors.TextMuted,
+            )
+            Spacer(Modifier.height(OctopusSpacing.sm))
+            val detailText = stringResource(R.string.browser_follow_up_detail)
+            val exampleText = stringResource(R.string.browser_follow_up_example)
+            val summaryText = stringResource(R.string.browser_follow_up_summary)
+            Row(horizontalArrangement = Arrangement.spacedBy(OctopusSpacing.sm)) {
+                SuggestionChip(detailText) { onSuggestion(detailText) }
+                SuggestionChip(exampleText) { onSuggestion(exampleText) }
+                SuggestionChip(summaryText) { onSuggestion(summaryText) }
+            }
+            Spacer(Modifier.height(OctopusSpacing.xxl))
         }
     }
 }
 
 @Composable
-private fun BrowserHomeLayer(
-    onOpenUrl: (String?) -> Unit,
-    onClose: () -> Unit,
-) {
-    Box(modifier = Modifier.fillMaxSize()) {
-        DiscoverScreen(onOpenUrl = onOpenUrl)
+private fun SuggestionChip(text: String, onClick: () -> Unit) {
+    Text(
+        text = text,
+        fontSize = 13.sp,
+        color = OctopusColors.Primary,
+        modifier = Modifier
+            .clip(OctopusShape.capsule)
+            .background(OctopusColors.Primary.copy(alpha = 0.15f))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = OctopusSpacing.sm),
+    )
+}
 
-        // 右上角关闭
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(top = 40.dp, end = 12.dp)
-                .size(36.dp)
-                .clip(OctopusShape.large)
+// ── P1-3: 网页模式全屏沉浸 ──
+
+@Composable
+private fun BrowserWebviewTopBar(
+    urlText: String,
+    onUrlTextChange: (String) -> Unit,
+    currentUrl: String,
+    addressExpanded: Boolean,
+    onAddressClick: () -> Unit,
+    onAddressDismiss: () -> Unit,
+    isLoading: Boolean,
+    onBack: () -> Unit,
+    onBackLongPress: () -> Unit,
+    onReader: () -> Unit,
+    onRefresh: () -> Unit,
+    onMenu: () -> Unit,
+    onSubmit: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val mutedColor = OctopusColors.TextSecondary
+
+    if (addressExpanded) {
+        Row(
+            modifier = modifier
+                .fillMaxWidth()
                 .background(OctopusColors.Surface)
-                .clickable { onClose() },
-            contentAlignment = Alignment.Center,
+                .padding(horizontal = OctopusSpacing.sm, vertical = OctopusSpacing.sm),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("×", fontSize = 20.sp, color = OctopusColors.TextPrimary)
+            BrowserCapsuleButton(onClick = onAddressDismiss, modifier = Modifier.size(36.dp)) {
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = stringResource(R.string.advanced_action_close),
+                    tint = mutedColor,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+            Spacer(Modifier.width(OctopusSpacing.sm))
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(40.dp)
+                    .clip(OctopusShape.capsule)
+                    .background(OctopusColors.SurfaceVariant)
+                    .padding(start = OctopusSpacing.md, end = OctopusSpacing.xs),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                BasicTextField(
+                    value = urlText,
+                    onValueChange = onUrlTextChange,
+                    singleLine = true,
+                    textStyle = TextStyle(fontSize = 13.sp, color = OctopusColors.TextPrimary),
+                    cursorBrush = SolidColor(OctopusColors.Primary),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
+                    keyboardActions = KeyboardActions(onGo = { onSubmit() }),
+                    decorationBox = { innerTextField ->
+                        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
+                            if (urlText.isEmpty()) {
+                                Text(
+                                    text = stringResource(R.string.browser_url_hint),
+                                    fontSize = 13.sp,
+                                    color = mutedColor,
+                                )
+                            }
+                            innerTextField()
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                )
+                BrowserCapsuleButton(onClick = onRefresh, modifier = Modifier.size(28.dp)) {
+                    Icon(
+                        imageVector = if (isLoading) Icons.Filled.Close else Icons.Filled.Refresh,
+                        contentDescription = stringResource(R.string.browser_refresh_button),
+                        tint = mutedColor,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+            }
+        }
+    } else {
+        Row(
+            modifier = modifier
+                .fillMaxWidth()
+                .background(OctopusColors.Surface)
+                .padding(horizontal = OctopusSpacing.sm, vertical = OctopusSpacing.sm),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(OctopusShape.capsule)
+                    .combinedClickable(onClick = onBack, onLongClick = onBackLongPress),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = stringResource(R.string.browser_back_button),
+                    tint = mutedColor,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+
+            Spacer(Modifier.width(OctopusSpacing.sm))
+
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(36.dp)
+                    .clip(OctopusShape.capsule)
+                    .background(OctopusColors.SurfaceVariant)
+                    .clickable { onAddressClick() }
+                    .padding(horizontal = OctopusSpacing.md),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                Text(
+                    text = domainOf(currentUrl).ifBlank { stringResource(R.string.browser_url_hint) },
+                    fontSize = 13.sp,
+                    color = mutedColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+
+            Spacer(Modifier.width(OctopusSpacing.sm))
+
+            BrowserCapsuleButton(onClick = onReader, modifier = Modifier.size(36.dp)) {
+                Icon(
+                    Icons.AutoMirrored.Filled.MenuBook,
+                    contentDescription = stringResource(R.string.browser_reader_button),
+                    tint = mutedColor,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+            Spacer(Modifier.width(OctopusSpacing.xs))
+            BrowserCapsuleButton(onClick = onRefresh, modifier = Modifier.size(36.dp)) {
+                Icon(
+                    imageVector = if (isLoading) Icons.Filled.Close else Icons.Filled.Refresh,
+                    contentDescription = stringResource(R.string.browser_refresh_button),
+                    tint = mutedColor,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+            Spacer(Modifier.width(OctopusSpacing.xs))
+            BrowserCapsuleButton(onClick = onMenu, modifier = Modifier.size(36.dp)) {
+                Icon(
+                    Icons.Filled.MoreVert,
+                    contentDescription = stringResource(R.string.browser_settings_title),
+                    tint = mutedColor,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
         }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun BrowserSettingsSheet(
+private fun BrowserReaderSheet(
+    text: String,
     onDismiss: () -> Unit,
-    onRefresh: () -> Unit,
-    onBookmarks: () -> Unit,
-    onCopyLink: () -> Unit,
-    onOpenInSystem: () -> Unit,
-    onEngineSettings: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(
@@ -589,53 +861,46 @@ private fun BrowserSettingsSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 16.dp)
-                .padding(bottom = 24.dp),
+                .padding(horizontal = OctopusSpacing.lg, vertical = OctopusSpacing.lg)
+                .padding(bottom = OctopusSpacing.xxl),
         ) {
             Text(
-                text = stringResource(R.string.browser_settings_title),
+                text = stringResource(R.string.browser_reader_title),
                 fontSize = 17.sp,
                 fontWeight = FontWeight.Bold,
                 color = OctopusColors.TextPrimary,
             )
-            Spacer(Modifier.height(12.dp))
-            SettingsRow(stringResource(R.string.browser_refresh_page)) { onDismiss(); onRefresh() }
-            SettingsRow(stringResource(R.string.browser_engine_settings)) { onDismiss(); onEngineSettings() }
-            SettingsRow(stringResource(R.string.browser_bookmarks_button)) { onDismiss(); onBookmarks() }
-            SettingsRow(stringResource(R.string.browser_copy_link)) { onDismiss(); onCopyLink() }
-            SettingsRow(stringResource(R.string.browser_open_in_system)) { onDismiss(); onOpenInSystem() }
+            Spacer(Modifier.height(OctopusSpacing.md))
+            Text(
+                text = text.ifBlank { stringResource(R.string.browser_reader_empty) },
+                fontSize = 15.sp,
+                color = OctopusColors.TextPrimary,
+                lineHeight = 24.sp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 400.dp)
+                    .verticalScroll(rememberScrollState()),
+            )
         }
     }
 }
 
-@Composable
-private fun SettingsRow(title: String, onClick: () -> Unit) {
-    Text(
-        text = title,
-        fontSize = 15.sp,
-        color = OctopusColors.TextPrimary,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp)
-            .clip(OctopusShape.large)
-            .background(OctopusColors.SurfaceVariant)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 14.dp),
-    )
-}
+// ── P1-4: 时间线 + 菜单精简 ──
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun BrowserWindowsSheet(
+private fun BrowserMenuSheet(
     onDismiss: () -> Unit,
-    onSwitch: (BrowserTabsStore.Tab) -> Unit,
-    onClose: (BrowserTabsStore.Tab) -> Unit,
-    onNewWindow: () -> Unit,
+    onDownloads: () -> Unit,
+    onShare: () -> Unit,
+    onToggleDark: () -> Unit,
+    onTranslate: () -> Unit,
+    onBookmarks: () -> Unit,
+    onToggleDesktop: () -> Unit,
+    darkMode: Boolean,
+    desktopMode: Boolean,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val tabs by BrowserTabsStore.tabs.collectAsState()
-    val curId by BrowserTabsStore.currentId.collectAsState()
-
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
@@ -644,78 +909,101 @@ private fun BrowserWindowsSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 16.dp)
-                .padding(bottom = 24.dp),
+                .padding(horizontal = OctopusSpacing.lg, vertical = OctopusSpacing.lg)
+                .padding(bottom = OctopusSpacing.xxl),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            MenuRow(stringResource(R.string.browser_menu_downloads), Icons.Filled.Download) { onDismiss(); onDownloads() }
+            MenuRow(stringResource(R.string.browser_menu_share), Icons.Filled.Share) { onDismiss(); onShare() }
+            MenuRow(
+                stringResource(if (darkMode) R.string.browser_menu_light_mode else R.string.browser_menu_dark_mode),
+                Icons.Filled.DarkMode,
+            ) { onDismiss(); onToggleDark() }
+            MenuRow(stringResource(R.string.browser_menu_translate), Icons.Filled.Translate) { onDismiss(); onTranslate() }
+            MenuRow(stringResource(R.string.browser_bookmarks_button), Icons.Filled.Bookmark) { onDismiss(); onBookmarks() }
+            MenuRow(
+                stringResource(if (desktopMode) R.string.browser_menu_mobile_mode else R.string.browser_menu_desktop_mode),
+                Icons.Filled.DesktopWindows,
+            ) { onDismiss(); onToggleDesktop() }
+        }
+    }
+}
+
+@Composable
+private fun MenuRow(title: String, icon: ImageVector, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(OctopusShape.medium)
+            .clickable(onClick = onClick)
+            .padding(horizontal = OctopusSpacing.md, vertical = OctopusSpacing.md),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = title, tint = OctopusColors.TextSecondary, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(OctopusSpacing.md))
+        Text(title, fontSize = 15.sp, color = OctopusColors.TextPrimary)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun BrowserTimelineSheet(
+    history: List<HistoryEntry>,
+    onDismiss: () -> Unit,
+    onOpen: (String) -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = OctopusColors.Surface,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = OctopusSpacing.lg, vertical = OctopusSpacing.lg)
+                .padding(bottom = OctopusSpacing.xxl),
+        ) {
+            Text(
+                text = stringResource(R.string.browser_timeline_title),
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold,
+                color = OctopusColors.TextPrimary,
+            )
+            Spacer(Modifier.height(OctopusSpacing.md))
+            if (history.isEmpty()) {
                 Text(
-                    text = stringResource(R.string.browser_windows_count, tabs.size),
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = OctopusColors.TextPrimary,
-                    modifier = Modifier.weight(1f),
-                )
-                Text(
-                    text = stringResource(R.string.browser_new_window),
+                    text = stringResource(R.string.browser_timeline_empty),
                     fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = OctopusColors.OnPrimary,
-                    modifier = Modifier
-                        .clip(OctopusShape.large)
-                        .background(OctopusColors.Primary)
-                        .clickable { onDismiss(); onNewWindow() }
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    color = OctopusColors.TextMuted,
                 )
-            }
-            Spacer(Modifier.height(12.dp))
-            tabs.forEach { tab ->
-                val active = tab.id == curId
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp)
-                        .clip(OctopusShape.large)
-                        .background(
-                            if (active) OctopusColors.Primary.copy(alpha = 0.15f)
-                            else OctopusColors.SurfaceVariant
-                        )
-                        .border(
-                            width = 1.dp,
-                            color = if (active) OctopusColors.Primary else OctopusColors.Border,
-                            shape = OctopusShape.large,
-                        )
-                        .clickable { onDismiss(); onSwitch(tab) }
-                        .padding(horizontal = 12.dp, vertical = 12.dp),
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = tab.title.ifBlank { stringResource(R.string.browser_new_tab) },
-                            fontSize = 14.sp,
-                            color = OctopusColors.TextPrimary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            text = tab.url.ifBlank { "—" },
-                            fontSize = 11.sp,
-                            color = OctopusColors.TextSecondary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                    Box(
+            } else {
+                history.forEach { entry ->
+                    Row(
                         modifier = Modifier
-                            .size(32.dp)
-                            .clip(CircleShape)
-                            .clickable { onClose(tab) },
-                        contentAlignment = Alignment.Center,
+                            .fillMaxWidth()
+                            .padding(vertical = OctopusSpacing.xs)
+                            .clip(OctopusShape.large)
+                            .background(OctopusColors.SurfaceVariant)
+                            .clickable { onDismiss(); onOpen(entry.url) }
+                            .padding(horizontal = OctopusSpacing.md, vertical = OctopusSpacing.md),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(
-                            text = "×",
-                            fontSize = 18.sp,
-                            color = OctopusColors.TextSecondary,
-                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = entry.title.ifBlank { entry.url },
+                                fontSize = 14.sp,
+                                color = OctopusColors.TextPrimary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = domainOf(entry.url),
+                                fontSize = 11.sp,
+                                color = OctopusColors.TextSecondary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                     }
                 }
             }
@@ -723,9 +1011,12 @@ private fun BrowserWindowsSheet(
     }
 }
 
+// ── AI Sheet (保留 P0: DOM 问答) ──
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun BrowserAiSheet(
+    engine: BrowserEngine,
     onDismiss: () -> Unit,
     onRunAi: (String, (String) -> Unit) -> Unit,
     onRunAgent: (String) -> Unit,
@@ -739,9 +1030,14 @@ private fun BrowserAiSheet(
     var answer by remember { mutableStateOf("") }
     var thinking by remember { mutableStateOf(false) }
 
-    val pageText = remember {
-        com.apk.claw.android.service.ClawAccessibilityService.getInstance()
-            ?.let { runCatching { it.screenTree }.getOrNull() }
+    // P0-2: 优先用 DOM (document.body.innerText) 取页面文本,无障碍树作为 fallback。
+    var pageText by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        engine.evaluateJs("(function(){try{return document.body&&document.body.innerText||''}catch(e){return ''}})()") { result ->
+            val domText = result?.trim('"')?.replace("\\n", "\n")?.takeIf { it.isNotBlank() }
+            pageText = domText ?: com.apk.claw.android.service.ClawAccessibilityService.getInstance()
+                ?.let { runCatching { it.screenTree }.getOrNull() }
+        }
     }
 
     ModalBottomSheet(
@@ -752,8 +1048,8 @@ private fun BrowserAiSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 16.dp)
-                .padding(bottom = 24.dp),
+                .padding(horizontal = OctopusSpacing.lg, vertical = OctopusSpacing.lg)
+                .padding(bottom = OctopusSpacing.xxl),
         ) {
             Text(
                 text = stringResource(R.string.browser_ai_sheet_title),
@@ -766,26 +1062,25 @@ private fun BrowserAiSheet(
                     text = stringResource(R.string.browser_accessibility_warning),
                     fontSize = 11.sp,
                     color = OctopusColors.Warning,
-                    modifier = Modifier.padding(top = 8.dp),
+                    modifier = Modifier.padding(top = OctopusSpacing.sm),
                 )
             }
 
-            // 快捷 chips
-            Row(modifier = Modifier.padding(top = 12.dp)) {
+            Row(modifier = Modifier.padding(top = OctopusSpacing.md)) {
                 AiChip(stringResource(R.string.browser_chip_summarize)) {
                     thinking = true
                     onRunAi(context.getString(R.string.browser_ai_prompt_summarize)) {
                         answer = it; thinking = false
                     }
                 }
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(OctopusSpacing.sm))
                 AiChip(stringResource(R.string.browser_chip_key_points)) {
                     thinking = true
                     onRunAi(context.getString(R.string.browser_ai_prompt_key_points)) {
                         answer = it; thinking = false
                     }
                 }
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(OctopusSpacing.sm))
                 AiChip(stringResource(R.string.browser_chip_translate)) {
                     thinking = true
                     onRunAi(context.getString(R.string.browser_ai_prompt_translate)) {
@@ -793,16 +1088,15 @@ private fun BrowserAiSheet(
                     }
                 }
             }
-            Row(modifier = Modifier.padding(top = 8.dp)) {
+            Row(modifier = Modifier.padding(top = OctopusSpacing.sm)) {
                 AiChip(stringResource(R.string.browser_chip_reader)) { onDismiss(); onReader(pageText) }
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(OctopusSpacing.sm))
                 AiChip(stringResource(R.string.browser_chip_speak)) { onDismiss(); onSpeak(pageText, tts) }
             }
 
-            // 输入框
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(top = 16.dp),
+                modifier = Modifier.padding(top = OctopusSpacing.lg),
             ) {
                 BasicTextField(
                     value = question,
@@ -830,9 +1124,9 @@ private fun BrowserAiSheet(
                         .height(44.dp)
                         .clip(OctopusShape.capsule)
                         .background(OctopusColors.SurfaceVariant)
-                        .padding(horizontal = 16.dp),
+                        .padding(horizontal = OctopusSpacing.lg),
                 )
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(OctopusSpacing.sm))
                 Text(
                     text = stringResource(R.string.browser_ask_button),
                     fontSize = 13.sp,
@@ -847,9 +1141,9 @@ private fun BrowserAiSheet(
                                 onRunAi(question) { answer = it; thinking = false }
                             }
                         }
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                        .padding(horizontal = OctopusSpacing.lg, vertical = 10.dp),
                 )
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(OctopusSpacing.sm))
                 Text(
                     text = stringResource(R.string.browser_execute_button),
                     fontSize = 13.sp,
@@ -863,13 +1157,13 @@ private fun BrowserAiSheet(
                                 onDismiss(); onRunAgent(question)
                             }
                         }
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                        .padding(horizontal = OctopusSpacing.lg, vertical = 10.dp),
                 )
             }
 
             if (thinking) {
                 CircularProgressIndicator(
-                    modifier = Modifier.padding(top = 16.dp).size(20.dp),
+                    modifier = Modifier.padding(top = OctopusSpacing.lg).size(20.dp),
                     color = OctopusColors.Primary,
                 )
             } else if (answer.isNotBlank()) {
@@ -882,7 +1176,7 @@ private fun BrowserAiSheet(
                         .fillMaxWidth()
                         .heightIn(min = 0.dp, max = 220.dp)
                         .verticalScroll(rememberScrollState())
-                        .padding(top = 16.dp),
+                        .padding(top = OctopusSpacing.lg),
                 )
             }
         }
@@ -899,7 +1193,7 @@ private fun AiChip(label: String, onClick: () -> Unit) {
             .clip(OctopusShape.large)
             .background(OctopusColors.Primary.copy(alpha = 0.15f))
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
+            .padding(horizontal = 14.dp, vertical = OctopusSpacing.sm),
     )
 }
 
@@ -952,7 +1246,7 @@ private fun BrowserBookmarkDialog(
                                     }
                                 }
                             }
-                            .padding(vertical = 12.dp),
+                            .padding(vertical = OctopusSpacing.md),
                     )
                 }
             }
@@ -976,6 +1270,14 @@ private fun navigateTo(engine: BrowserEngine, input: String, onUrl: ((String) ->
     engine.navigate(url)
 }
 
+private fun isUrlLike(input: String): Boolean =
+    input.startsWith("http://") || input.startsWith("https://") ||
+        (input.contains(".") && !input.contains(" "))
+
+private fun domainOf(url: String): String {
+    return try { Uri.parse(url).host ?: url } catch (e: Exception) { url }
+}
+
 private fun isPageCommand(context: Context, s: String): Boolean {
     if (s.startsWith("http") || (s.contains(".") && !s.contains(" "))) return false
     val t = s.lowercase()
@@ -992,23 +1294,59 @@ private fun runAgentOnPage(context: Context, task: String) {
     com.apk.claw.android.ui.compose.screen.ChatAgentBridge.run(prompt, onTool = { _, _, _, _ -> }, onText = {}, onDone = {}, onError = {})
 }
 
-private fun runAi(context: Context, question: String, onAnswer: (String) -> Unit) {
+private fun runAi(context: Context, engine: BrowserEngine, question: String, onAnswer: (String) -> Unit) {
     if (!com.apk.claw.android.ui.compose.screen.ChatAgentBridge.isConfigured()) {
         onAnswer(context.getString(R.string.browser_configure_api_key_text))
         return
     }
-    val pageText = com.apk.claw.android.service.ClawAccessibilityService.getInstance()
-        ?.let { runCatching { it.screenTree }.getOrNull() }
-    val ctx = if (pageText.isNullOrBlank()) "" else "\n\n【当前网页内容】\n" + pageText.take(4000)
-    val prompt = context.getString(R.string.browser_ai_system_prompt, question, ctx)
+    onAnswer(context.getString(R.string.browser_thinking_status))
+    // P0-2: DOM 优先,无障碍树兜底。evaluateJs 异步回调里组装 prompt 并启动 Agent。
+    engine.evaluateJs("(function(){try{return document.body&&document.body.innerText||''}catch(e){return ''}})()") { result ->
+        val domText = result?.trim('"')?.replace("\\n", "\n")?.takeIf { it.isNotBlank() }
+        val pageText = domText ?: com.apk.claw.android.service.ClawAccessibilityService.getInstance()
+            ?.let { runCatching { it.screenTree }.getOrNull() }
+        val ctx = if (pageText.isNullOrBlank()) "" else "\n\n【当前网页内容】\n" + pageText.take(4000)
+        val prompt = context.getString(R.string.browser_ai_system_prompt, question, ctx)
+        val sb = StringBuilder()
+        com.apk.claw.android.ui.compose.screen.ChatAgentBridge.run(
+            prompt,
+            onTool = { _, _, _, _ -> },
+            onText = { t -> sb.append(t); onAnswer(sb.toString()) },
+            onDone = { d -> onAnswer(if (sb.isNotEmpty()) sb.toString() else d) },
+            onError = { e -> onAnswer(context.getString(R.string.browser_error_message, e)) },
+        )
+    }
+}
+
+private fun runAiSearch(
+    context: Context,
+    question: String,
+    onAnswer: (String) -> Unit,
+    onDone: (String) -> Unit,
+) {
+    if (!com.apk.claw.android.ui.compose.screen.ChatAgentBridge.isConfigured()) {
+        val msg = context.getString(R.string.browser_configure_api_key_text)
+        onAnswer(msg)
+        onDone(msg)
+        return
+    }
+    val prompt = context.getString(R.string.browser_search_prompt, question)
     val sb = StringBuilder()
     onAnswer(context.getString(R.string.browser_thinking_status))
     com.apk.claw.android.ui.compose.screen.ChatAgentBridge.run(
         prompt,
         onTool = { _, _, _, _ -> },
         onText = { t -> sb.append(t); onAnswer(sb.toString()) },
-        onDone = { d -> onAnswer(if (sb.isNotEmpty()) sb.toString() else d) },
-        onError = { e -> onAnswer(context.getString(R.string.browser_error_message, e)) },
+        onDone = { d ->
+            val final = if (sb.isNotEmpty()) sb.toString() else d
+            onAnswer(final)
+            onDone(final)
+        },
+        onError = { e ->
+            val msg = context.getString(R.string.browser_error_message, e)
+            onAnswer(msg)
+            onDone(msg)
+        },
     )
 }
 
@@ -1018,7 +1356,6 @@ private fun showReader(context: Context, pageText: String?) {
         Toast.makeText(context, context.getString(R.string.browser_cannot_read_content), Toast.LENGTH_SHORT).show()
         return
     }
-    // 阅读模式先用 AlertDialog 简单承载；后续可升级为独立页面
     androidx.appcompat.app.AlertDialog.Builder(context)
         .setMessage(readable)
         .setPositiveButton(android.R.string.ok, null)

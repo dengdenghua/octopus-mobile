@@ -863,7 +863,7 @@
     <string name="browser_ai_prompt_translate">このページの主要内容を中国語に翻訳してください。</string>
     <string name="browser_chrome_filter">X,ブラウザ,GeckoView,停止,質問,実行,✨,更新,閉じる,検索エンジン切替,AIに聞く,戻る,進む,ホーム,ブックマーク,拡張,URLを入力,読み込み中,読み込み中…,入力</string>
     <string name="browser_page_cmd_markers">手伝って,このページ,クリック,入力,カートに追加,ログイン,送信,チェック</string>
-    <string name="browser_agent_prompt">現在のページで次の操作を完了してください（get_screen_infoでページ要素と座標を確認し、tap / input_textなどで操作）：%1$s</string>
+    <string name="browser_agent_prompt">App 内蔵ブラウザで現在のウェブページを操作しています。browser_* 系ツールを優先使用：browser_get_dom で内容取得、browser_click で要素クリック(CSS セレクタ)、browser_type で入力、browser_evaluate で任意 JS 実行、browser_navigate で URL 遷移、browser_screenshot でスクリーンショット。browser_* が利用不可または失敗時のみ get_screen_info + tap/input_text のアクセシビリティ経路にフォールバック。\n\nタスク：%1$s</string>
     <string name="browser_ai_system_prompt">あなたはウェブページ読み取りアシスタントです。下記のページ内容に基づいてのみ回答し、ツールは呼び出さないでください。\nユーザーの質問：%1$s%2$s</string>
     <string name="browser_installing_extension_toast">拡張機能をインストール中…</string>
     <string name="browser_home_favorites">お気に入りタグ</string>

@@ -121,7 +121,13 @@ sealed class EngineEvent {
     data class PageFinished(val url: String, val title: String) : EngineEvent()
     data class ProgressChanged(val percent: Int) : EngineEvent()
     data class ConsoleMessage(val level: String, val message: String) : EngineEvent()
-    data class DownloadStart(val url: String, val suggestedFilename: String) : EngineEvent()
+    data class DownloadStart(
+        val url: String,
+        val suggestedFilename: String,
+        val mimeType: String = "",
+        val contentLength: Long = 0L,
+        val userAgent: String = "",
+    ) : EngineEvent()
     data class JsAlert(val message: String, val onResult: (Boolean) -> Unit) : EngineEvent()
     data class Error(val errorCode: Int, val description: String) : EngineEvent()
 }

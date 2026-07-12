@@ -510,6 +510,7 @@ Shizuku 是安全、开源的本地辅助工具。</string>
     <string name="browser_bookmarks_button">书签</string>
     <string name="browser_ai_sheet_title">问问当前页面</string>
     <string name="browser_accessibility_warning">开启无障碍服务后才能读取页面内容</string>
+    <string name="browser_reading_page">正在读取页面内容…</string>
     <string name="browser_ask_page_hint">询问当前页面...</string>
     <string name="browser_chip_summarize">总结页面</string>
     <string name="browser_chip_key_points">提取要点</string>
@@ -527,6 +528,7 @@ Shizuku 是安全、开源的本地辅助工具。</string>
     <string name="browser_error_message">错误：%1$s</string>
     <string name="browser_load_error">加载错误：%1$s</string>
     <string name="browser_download_notification">下载：%1$s</string>
+    <string name="browser_download_started">开始下载：%1$s</string>
     <string name="browser_remove_bookmark">移除书签</string>
     <string name="browser_bookmark_current">☆ 收藏当前页面</string>
     <string name="browser_add_common_site">＋ 添加到主页常用</string>
@@ -544,6 +546,32 @@ Shizuku 是安全、开源的本地辅助工具。</string>
     <string name="browser_install_success">安装成功：%1$s v%2$s</string>
     <string name="browser_install_failed">安装失败：%1$s</string>
     <string name="browser_install_error">安装错误：%1$s</string>
+    <string name="browser_home_search_hint">说说你想做什么…</string>
+    <string name="browser_chip_search">查资料</string>
+    <string name="browser_chip_buy">比价格</string>
+    <string name="browser_chip_read">读文章</string>
+    <string name="browser_chip_download">下载文件</string>
+    <string name="browser_sources_count">%1$d 个来源</string>
+    <string name="browser_follow_up_title">追问</string>
+    <string name="browser_follow_up_detail">更详细一些</string>
+    <string name="browser_follow_up_example">举个实际例子</string>
+    <string name="browser_follow_up_summary">总结成要点</string>
+    <string name="browser_reader_button">阅读模式</string>
+    <string name="browser_reader_title">阅读模式</string>
+    <string name="browser_reader_empty">暂无可读内容</string>
+    <string name="browser_menu_downloads">下载管理</string>
+    <string name="browser_menu_share">分享</string>
+    <string name="browser_menu_dark_mode">夜间模式</string>
+    <string name="browser_menu_light_mode">日间模式</string>
+    <string name="browser_menu_translate">翻译</string>
+    <string name="browser_menu_mobile_mode">移动模式</string>
+    <string name="browser_menu_desktop_mode">桌面模式</string>
+    <string name="browser_timeline_title">访问历史</string>
+    <string name="browser_timeline_empty">暂无历史</string>
+    <string name="browser_share_chooser">分享</string>
+    <string name="browser_desktop_mode_on">已切换桌面模式</string>
+    <string name="browser_desktop_mode_off">已切换移动模式</string>
+    <string name="browser_search_prompt">你是智能搜索助手。请简洁回答用户问题，如需最新信息可使用浏览器工具搜索。\n用户问题：%1$s</string>
     <string name="screen_cast_status_title">投屏状态</string>
     <string name="screen_cast_not_casting">● 未投屏</string>
     <string name="screen_cast_stop_button">停止投屏</string>
@@ -1016,7 +1044,7 @@ Shizuku 是安全、开源的本地辅助工具。</string>
     <string name="browser_ai_prompt_translate">将当前页面主要内容翻译成中文。</string>
     <string name="browser_chrome_filter">X,Browser,GeckoView,Stop,Ask,Execute,✨,Refresh,Close,Switch search engine,Ask AI,Back,Forward,Home,Bookmarks,Extensions,Search or enter URL,Loading,Loading…,Search or enter</string>
     <string name="browser_page_cmd_markers">help me,this page,click,fill,add to cart,log in,submit,check the</string>
-    <string name="browser_agent_prompt">在当前页面完成以下操作（可用 get_screen_info 查看页面元素和坐标，用 tap / input_text 等工具操作）：%1$s</string>
+    <string name="browser_agent_prompt">你正在 App 内嵌浏览器中操作当前网页。优先使用 browser_* 系列工具：browser_get_dom 获取页面内容、browser_click 点击元素(CSS 选择器)、browser_type 在输入框输入文本、browser_evaluate 执行任意 JS、browser_navigate 跳转 URL、browser_screenshot 截图。仅当 browser_* 工具不可用或失败时，才回退到无障碍路径(get_screen_info 查看坐标 + tap/input_text 操作)。\n\n任务：%1$s</string>
     <string name="browser_ai_system_prompt">你是网页阅读助手。请只基于下面的网页内容回答，不要调用任何工具。\n用户问题：%1$s%2$s</string>
     <string name="browser_installing_extension_toast">正在安装扩展…</string>
 

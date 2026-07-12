@@ -127,8 +127,22 @@
             android:configChanges="orientation|screenSize|keyboardHidden" />
         <activity
             android:name=".ui.browser.BrowserActivity"
-            android:exported="false"
-            android:configChanges="orientation|screenSize|keyboardHidden" />
+            android:exported="true"
+            android:configChanges="orientation|screenSize|keyboardHidden">
+            <!-- 接管 http/https 链接(可被设为系统默认浏览器) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="http" />
+                <data android:scheme="https" />
+            </intent-filter>
+            <!-- 响应系统搜索意图(长按 Home → 搜索 / Assistant 文字搜索) -->
+            <intent-filter>
+                <action android:name="android.intent.action.WEB_SEARCH" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
         <activity
             android:name=".ui.cast.ScreenCastActivity"
             android:exported="false" />
