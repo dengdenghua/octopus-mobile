@@ -3,6 +3,7 @@
 package com.apk.claw.android.octopus_mobile.memory
 
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -50,5 +51,26 @@ class MemoryRelevanceTest {
         store.addMemory(fact("用户常去北京出差订机票"))     // 后插
         val out = store.buildPromptSection()   // 无 hint → 同 confidence 稳定排序保持插入序
         assertTrue("无 taskHint 时保持原序:咖啡在前", out.indexOf("咖啡") < out.indexOf("北京"))
+    }
+
+    @Test
+    fun `addUserFact then removeMemory roundtrip`() {
+        store.addUserFact("我住在北京朝阳区")
+        val after = store.getMemories()
+        assertEquals(1, after.size)
+        assertTrue(after[0].content.contains("朝阳区"))
+        assertEquals(MemoryStore.MemoryType.FACT, after[0].type)
+
+        store.removeMemory(after[0].id)
+        assertEquals(0, store.getMemories().size)
+    }
+
+    @Test
+    fun `addUserFact blank is ignored and dedups`() {
+        store.addUserFact("   ")
+        assertEquals(0, store.getMemories().size)
+        store.addUserFact("我对花生过敏")
+        store.addUserFact("我对花生过敏")   // 去重
+        assertEquals(1, store.getMemories().size)
     }
 }

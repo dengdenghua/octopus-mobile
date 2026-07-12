@@ -118,6 +118,28 @@ class MemoryStore {
     }
 
     /**
+     * 用户手动记一条(信任中心「记一条」)。source=user_explicit、满置信度;
+     * 去重(完全相同/互为包含)由 [addMemory] 处理。空内容忽略。
+     */
+    fun addUserFact(content: String, type: MemoryType = MemoryType.FACT) {
+        val text = content.trim()
+        if (text.isBlank()) return
+        val now = System.currentTimeMillis()
+        addMemory(
+            Memory(
+                id = "user_" + Integer.toHexString(text.hashCode()),
+                content = text,
+                type = type,
+                source = "user_explicit",
+                createdAt = now,
+                lastReferencedAt = now,
+                referenceCount = 0,
+                confidence = 1.0,
+            ),
+        )
+    }
+
+    /**
      * 生成注入到 System Prompt 的记忆文本。
      *
      * 排序与预算:偏好(行为规则)最优先、其次事实(按置信度)、最后 24h 内上下文;

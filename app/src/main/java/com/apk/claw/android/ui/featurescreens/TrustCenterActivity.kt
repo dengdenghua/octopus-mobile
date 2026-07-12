@@ -48,6 +48,7 @@ import com.apk.claw.android.R
 import com.apk.claw.android.octopus_mobile.ControlTarget
 import com.apk.claw.android.octopus_mobile.EvolutionMetrics
 import com.apk.claw.android.octopus_mobile.InteractionLedger
+import com.apk.claw.android.octopus_mobile.memory.MemoryStore
 import com.apk.claw.android.octopus_mobile.SetupReadiness
 import com.apk.claw.android.server.ConfigServerManager
 import com.apk.claw.android.service.ClawAccessibilityService
@@ -322,6 +323,9 @@ fun TrustCenterScreen(onBack: () -> Unit) {
             FSectionTitle("操作经验 · 这台设备学到的")
             InteractionLessonsCard(tick) { tick++ }
 
+            FSectionTitle("关于你的记忆 · Agent 记住的")
+            UserMemoryCard(tick) { tick++ }
+
             FSectionTitle(stringResource(R.string.trustcenter_section_target))
             FCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -570,6 +574,93 @@ private fun InteractionLessonsCard(tick: Int, onReset: () -> Unit) {
                 TextButton(onClick = {
                     InteractionLedger.addManualRule(draft); showAdd = false; onReset()
                 }) { Text("保存") }
+            },
+            dismissButton = { TextButton(onClick = { showAdd = false }) { Text("取消") } },
+        )
+    }
+}
+
+/**
+ * Agent 记住的关于用户的事(跨会话记忆)—— 数据来自 [MemoryStore](KVUtils 固定 key,任意实例共享)。
+ * 这些是隐私敏感的 PII(偏好/事实/上下文),用户应看得见、删得掉、也能主动「记一条」。只存本机。
+ */
+@Composable
+@Suppress("LongMethod")   // Compose 卡片:记忆列表 + 记一条入口 + 弹窗,声明式 UI 天然偏长
+private fun UserMemoryCard(tick: Int, onReset: () -> Unit) {
+    val store = remember { MemoryStore() }
+    var showAdd by remember { mutableStateOf(false) }
+    var draft by remember { mutableStateOf("") }
+    val memories = remember(tick) { store.getMemories() }
+    FCard {
+        if (memories.isEmpty()) {
+            Text(
+                "Agent 还没记住关于你的事。它会在对话里留意你透露的偏好/事实(常用 App、饮食忌口、称呼、" +
+                    "住址等)记下来;你也可以「记一条」直接告诉它。这些只存在本机,随时可删。",
+                color = FMuted, fontSize = 11.sp, lineHeight = 15.sp,
+            )
+        } else {
+            memories.forEachIndexed { i, m ->
+                if (i > 0) Spacer(Modifier.height(10.dp))
+                val label = when (m.type) {
+                    MemoryStore.MemoryType.PREFERENCE -> "偏好"
+                    MemoryStore.MemoryType.FACT -> "事实"
+                    MemoryStore.MemoryType.CONTEXT -> "近期"
+                }
+                Row(verticalAlignment = Alignment.Top) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(m.content, color = FText, fontSize = 13.sp, lineHeight = 17.sp)
+                        Text("$label · 来源 ${m.source}", color = FMuted, fontSize = 10.sp)
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        "删除", color = FWarning, fontSize = 11.sp,
+                        modifier = Modifier
+                            .clickable { store.removeMemory(m.id); onReset() }
+                            .padding(4.dp),
+                    )
+                }
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                "＋ 记一条", color = FPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .clickable { draft = ""; showAdd = true }
+                    .padding(horizontal = 6.dp, vertical = 4.dp),
+            )
+            if (memories.isNotEmpty()) {
+                Text(
+                    "清空记忆", color = FWarning, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier
+                        .clickable { store.clearAll(); onReset() }
+                        .padding(horizontal = 6.dp, vertical = 4.dp),
+                )
+            }
+        }
+    }
+    if (showAdd) {
+        AlertDialog(
+            onDismissRequest = { showAdd = false },
+            title = { Text("记一条关于你的事") },
+            text = {
+                Column {
+                    Text(
+                        "告诉 Agent 一条要长期记住的偏好或事实,后续任务会据此调整。例:我用饿了么点外卖;对花生过敏;称呼我老王。",
+                        color = FMuted, fontSize = 11.sp, lineHeight = 15.sp,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = draft, onValueChange = { draft = it },
+                        placeholder = { Text("输入一条…") },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { store.addUserFact(draft); showAdd = false; onReset() }) { Text("保存") }
             },
             dismissButton = { TextButton(onClick = { showAdd = false }) { Text("取消") } },
         )
