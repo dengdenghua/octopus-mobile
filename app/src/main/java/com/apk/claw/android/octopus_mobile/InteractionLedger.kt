@@ -167,6 +167,25 @@ object InteractionLedger {
     /** 当前教训数(供度量/测试)。 */
     fun size(): Int = synchronized(lessons) { lessons.size }
 
+    /** 展示用视图:一条学到的操作经验(给信任中心可视化,让隐形学习看得见)。 */
+    data class LessonView(val title: String, val count: Int, val mitigation: String)
+
+    /** 按分(时效×频次)降序返回前 [limit] 条教训的展示视图。纯读,无副作用。 */
+    fun snapshot(limit: Int = 8): List<LessonView> = synchronized(lessons) {
+        val now = System.currentTimeMillis()
+        lessons.sortedByDescending { score(it, now) }
+            .take(limit)
+            .map { LessonView(it.title, it.count, it.mitigation) }
+    }
+
+    /** UI 安全清空:清空并持久化,但保留 loaded/storageDir(区别于测试用 [reset],后者会废掉账本)。 */
+    fun clearLessons() {
+        synchronized(lessons) {
+            lessons.clear()
+            save()
+        }
+    }
+
     /** 清空(测试隔离用)。 */
     fun reset() {
         synchronized(lessons) {

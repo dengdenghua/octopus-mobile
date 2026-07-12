@@ -97,4 +97,25 @@ class InteractionLedgerTest {
         assertFalse(InteractionLedger.isGuiTool("generate_app"))
         assertFalse(InteractionLedger.isGuiTool("run_code"))
     }
+
+    @Test
+    fun `snapshot returns recorded lessons for display`() {
+        InteractionLedger.recordFailure("tap", "", "找不到节点")
+        InteractionLedger.recordFailure("open_app", "", "系统弹窗遮挡")
+        val snap = InteractionLedger.snapshot()
+        assertEquals(2, snap.size)
+        assertTrue("展示项含标题", snap.any { it.title.contains("目标控件") })
+        assertTrue("展示项含规避策略", snap.all { it.mitigation.isNotBlank() })
+    }
+
+    @Test
+    fun `clearLessons empties but keeps ledger usable`() {
+        InteractionLedger.recordFailure("tap", "", "找不到节点")
+        assertEquals(1, InteractionLedger.size())
+        InteractionLedger.clearLessons()
+        assertEquals(0, InteractionLedger.size())
+        // 清空后仍可继续记录(区别于 reset 会废掉账本)
+        InteractionLedger.recordFailure("swipe", "", "加载超时")
+        assertEquals(1, InteractionLedger.size())
+    }
 }

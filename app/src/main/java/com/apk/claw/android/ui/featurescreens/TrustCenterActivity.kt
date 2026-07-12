@@ -1,3 +1,5 @@
+@file:Suppress("TooManyFunctions")   // 信任中心屏由多个小卡片 composable 组成,加操作经验卡后达阈值
+
 package com.apk.claw.android.ui.featurescreens
 
 import android.content.Context
@@ -42,6 +44,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.apk.claw.android.R
 import com.apk.claw.android.octopus_mobile.ControlTarget
 import com.apk.claw.android.octopus_mobile.EvolutionMetrics
+import com.apk.claw.android.octopus_mobile.InteractionLedger
 import com.apk.claw.android.octopus_mobile.SetupReadiness
 import com.apk.claw.android.server.ConfigServerManager
 import com.apk.claw.android.service.ClawAccessibilityService
@@ -313,6 +316,9 @@ fun TrustCenterScreen(onBack: () -> Unit) {
             FSectionTitle("自进化引擎 · 实测效果")
             EvolutionMetricsCard(tick) { tick++ }
 
+            FSectionTitle("操作经验 · 这台设备学到的")
+            InteractionLessonsCard(tick) { tick++ }
+
             FSectionTitle(stringResource(R.string.trustcenter_section_target))
             FCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -469,5 +475,40 @@ private fun MetricRow(label: String, value: String, sub: String) {
             Text(sub, color = FMuted, fontSize = 10.sp, lineHeight = 14.sp)
         }
         FPill(value, FPrimary)
+    }
+}
+
+/** 这台设备从界面操作失败里学到的规避经验 —— 数据来自 [InteractionLedger]，让 #2 的隐形学习看得见。 */
+@Composable
+private fun InteractionLessonsCard(tick: Int, onReset: () -> Unit) {
+    val lessons = remember(tick) { InteractionLedger.snapshot() }
+    FCard {
+        if (lessons.isEmpty()) {
+            Text(
+                "暂无——这台设备还没在界面操作里踩过坑,或已重置。跑几个自动化任务后,遇到的坑" +
+                    "(找不到节点/弹窗遮挡/加载超时…)会在这里沉淀成规避经验,下次自动避开。",
+                color = FMuted, fontSize = 11.sp, lineHeight = 15.sp,
+            )
+        } else {
+            lessons.forEachIndexed { i, l ->
+                if (i > 0) Spacer(Modifier.height(10.dp))
+                Row(verticalAlignment = Alignment.Top) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(l.title, color = FText, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        Text("规避:${l.mitigation}", color = FMuted, fontSize = 10.sp, lineHeight = 14.sp)
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    FPill("×${l.count}", FPrimary)
+                }
+            }
+            Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.End) {
+                Text(
+                    "重置经验", color = FWarning, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier
+                        .clickable { InteractionLedger.clearLessons(); onReset() }
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                )
+            }
+        }
     }
 }
