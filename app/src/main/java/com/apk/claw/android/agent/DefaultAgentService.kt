@@ -14,6 +14,8 @@ import com.apk.claw.android.agent.llm.LlmClientFactory
 import com.apk.claw.android.agent.llm.LlmResponse
 import com.apk.claw.android.agent.llm.StreamingListener
 import com.apk.claw.android.service.ClawAccessibilityService
+import com.apk.claw.android.octopus_mobile.ControlTarget
+import com.apk.claw.android.utils.KVUtils
 import com.apk.claw.android.octopus_mobile.GoalVerifier
 import com.apk.claw.android.octopus_mobile.VisionAnalyzer
 import com.apk.claw.android.octopus_mobile.ActionRecorder
@@ -853,12 +855,40 @@ class DefaultAgentService : AgentService {
         }
     }
 
+    /**
+     * 每轮感知注入:VLM 主力感知每轮把当前屏喂给 LLM。
+     * 仅在模型支持视觉 + enableVision + enableAutoScreenshot 均为 true 时生效。
+     * 省流模式 + 本机无障碍树够丰富 → 注入树文字替代截图(省 token);否则回退 vision 截图。
+     */
+    private fun AgentLoopState.injectPerception() {
+        if (!(config.enableAutoScreenshot && config.enableVision && llmClient.supportsVision)) return
+        if (KVUtils.isFrugalPerceptionMode() && tryInjectAccessibilityTree()) return
+        injectAutoScreenshot()
+    }
+
+    /**
+     * 省流感知:注入当前屏无障碍树文字替代 vision 截图。成功注入返回 true(本轮跳过截图);
+     * 远程目标 / 树太稀疏(游戏/Canvas/空窗)/服务未运行 → 返回 false,由调用方回退截图。
+     */
+    @Suppress("ReturnCount")   // 4 个都是守卫式提前返回,拆开反而更绕
+    private fun AgentLoopState.tryInjectAccessibilityTree(): Boolean {
+        if (ControlTarget.remoteTarget() != null) return false   // 远程仍走对端截图路径
+        val service = ClawAccessibilityService.getInstance() ?: return false
+        val tree = runCatching { service.screenTree }.getOrNull()
+        if (!FrugalPerception.isTreeRichEnough(tree)) return false
+        messages.add(
+            UserMessage.from(
+                TextContent.from(
+                    "[当前屏幕·无障碍树] 省流模式,以下为当前屏幕结构,据此决策;" +
+                        "需核对视觉细节(颜色/图标/游戏画面)时再调 look_at_screen:\n$tree"
+                )
+            )
+        )
+        return true
+    }
+
     private fun AgentLoopState.runSingleIteration(callback: AgentCallback): IterationOutcome {
-        // VLM 主力感知：每轮自动注入当前屏幕截图，让 LLM 直接看到屏幕状态。
-        // 仅在模型支持视觉 + enableVision + enableAutoScreenshot 均为 true 时生效。
-        if (config.enableAutoScreenshot && config.enableVision && llmClient.supportsVision) {
-            injectAutoScreenshot()
-        }
+        injectPerception()
         val llmResponse = callLlm(callback) ?: return IterationOutcome.TERMINATE
         if (handleLlmResponse(llmResponse, callback)) return IterationOutcome.TERMINATE
 

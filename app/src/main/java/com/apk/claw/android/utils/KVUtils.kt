@@ -509,6 +509,13 @@ object KVUtils {
     fun isUndoWindowEnabled(): Boolean = getBoolean(KEY_UNDO_WINDOW, true)
     fun setUndoWindowEnabled(enabled: Boolean) = putBoolean(KEY_UNDO_WINDOW, enabled)
 
+    // ── 省流感知模式 ──
+    // 开:每轮若本机无障碍树够丰富,注入树文字替代 vision 截图(约省 10× token)。稀疏树/远程回退截图。
+    // 成本换可靠性的显式取舍(纯文本弱于视觉),默认关;适合群控/无人值守省流。
+    private const val KEY_FRUGAL_PERCEPTION = "KEY_FRUGAL_PERCEPTION_MODE"
+    fun isFrugalPerceptionMode(): Boolean = getBoolean(KEY_FRUGAL_PERCEPTION, false)
+    fun setFrugalPerceptionMode(enabled: Boolean) = putBoolean(KEY_FRUGAL_PERCEPTION, enabled)
+
     // ── 心跳 ACK 超时是否触发强制重连 ──
     // 仅当母体 octopus-agent runtime 确实回 {"method":"heartbeat/ack"} 时才应开启。
     // 默认 false:母体若不回 ack,开启会让每台设备每 ~90s 强制重连一次、自我制造重连风暴。

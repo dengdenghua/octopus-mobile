@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Hub
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Undo
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Monitor
@@ -563,6 +564,30 @@ fun SettingsScreen(onMessage: (String) -> Unit = {}, onNavigateToCreatorCenter: 
                             onCheckedChange = { on ->
                                 undoOn = on
                                 KVUtils.setUndoWindowEnabled(on)
+                            },
+                        )
+                    }
+                    SettingsDivider()
+                    // 省流感知模式:本机树够用时注入树文字替代 vision 截图,省 token(默认关)。
+                    var frugalOn by remember { mutableStateOf(KVUtils.isFrugalPerceptionMode()) }
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        IconBubble(Icons.Filled.Bolt, PrimaryColor)
+                        Spacer(Modifier.width(OctopusSpacing.md))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "省流感知模式",
+                                color = TextPrimary, fontSize = OctopusType.body, fontWeight = FontWeight.SemiBold,
+                            )
+                            Text(
+                                if (frugalOn) "开 · 树够用时用文字替代截图,省 token" else "关 · 每轮走 vision 截图(更准)",
+                                fontSize = OctopusType.caption, color = TextMuted,
+                            )
+                        }
+                        Switch(
+                            checked = frugalOn,
+                            onCheckedChange = { on ->
+                                frugalOn = on
+                                KVUtils.setFrugalPerceptionMode(on)
                             },
                         )
                     }
