@@ -2,5 +2,5 @@ fastapi>=0.110
 uvicorn[standard]>=0.29
 httpx>=0.27
 python-multipart>=0.0.9   # 广场图文帖图片上传(Form/File)运行时依赖;缺它 FastAPI 启动即崩
-Pillow>=10.0.0            # 图片上传安全:重编码剥离EXIF/校验尺寸,防图片马和恶意polyglot文件
+Pillow>=12.3.0            # 图片上传安全:重编码剥离EXIF/校验尺寸,防图片马和恶意polyglot文件
 websockets>=12.0         # 实时语音代理:连上游 DashScope Qwen-Omni-Realtime WS(server 持 key 中转)
